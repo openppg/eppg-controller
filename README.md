@@ -8,6 +8,8 @@ Arduino based logic for OpenPPG Throttle Controller
 
 > For batch 3 (non-telemetry) controllers please see the [batch-3 branch](https://github.com/openppg/eppg-controller/tree/batch-3).
 
+> For Single Prop (Beta) controllers please see the [SP140 branch](https://github.com/glydrfreak/eppg-controller/tree/SP140).
+
 ## MacOS
 
 Tested on MacOS Mojave (10.14)
