@@ -1,7 +1,0 @@
-{
-    "sketch": "eppg-controller.ino",
-    "port": "/dev/cu.usbmodem14201",
-    "board": "arduino:samd:arduino_zero_edbg",
-    "output": "../build",
-    "programmer": "AVR ISP"
-}
