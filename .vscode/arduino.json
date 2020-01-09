@@ -1,7 +1,8 @@
 {
     "sketch": "eppg-controller.ino",
     "port": "/dev/cu.usbmodem14201",
-    "board": "arduino:samd:arduino_zero_edbg",
+    "board": "adafruit:samd:adafruit_feather_m0",
     "output": "../build",
-    "programmer": "AVR ISP"
+    "programmer": "AVR ISP",
+    "configuration": "usbstack=tinyusb,debug=off"
 }

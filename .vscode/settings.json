@@ -1,5 +1,7 @@
 {
   "files.associations": {
-    "crc.c": "cpp"
+    "crc.c": "cpp",
+    "__locale": "cpp",
+    "locale": "cpp"
   }
 }

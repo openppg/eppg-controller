@@ -2,11 +2,13 @@
 
 Arduino based logic for OpenPPG Throttle Controller
 
-#### This branch is only for the batch 4 OpenPPG hardware
+#### This branch is only for the batch 4 and 5 OpenPPG hardware
 
-> For batch 2 (Arduino nano based) controllers please see the [batch-2 branch](https://github.com/openppg/eppg-controller/tree/batch-2).
+> For batch 4 controllers please see the [batch-4 branch](https://github.com/openppg/eppg-controller/tree/batch-4).
 
 > For batch 3 (non-telemetry) controllers please see the [batch-3 branch](https://github.com/openppg/eppg-controller/tree/batch-3).
+
+> For batch 2 (Arduino nano based) controllers please see the [batch-2 branch](https://github.com/openppg/eppg-controller/tree/batch-2).
 
 ## MacOS
 
@@ -30,9 +32,12 @@ The Batch 3+ OpenPPG controller is powered by Atmel’s SAMD21G18A MCU, featurin
 - `AceButton`
 - `Adafruit GFX Library`
 - `Adafruit_DRV2605`
+- `ArduinoJson`
 - `Adafruit_SSD1306`
 - `Adafruit SleepyDog`
+- `Adafruit_TinyUSB`
 - `ArduinoThread`
+- `extEEPROM`
 - `ResponsiveAnalogRead`
 - `Time`(search "Timekeeping")
 
@@ -40,9 +45,9 @@ The Batch 3+ OpenPPG controller is powered by Atmel’s SAMD21G18A MCU, featurin
 
 1. First make sure the code compiles by hitting the check button in the top right name "Verify"
 2. Connect the controller to your computer by using the micro USB port on the bottom of the controller
-3. Select the proper port (Tools -> Port). It should show up as something like `COM5 (Arduino/Genuino Zero (Native USB port))` or `/dev/cu.usbmodem14201`
-4. Select the proper board (Tools -> Board -> Arduino/Genuino Zero (Native USB Port)).
-5. Click the right arrow in the top right named "Upload"
-6. Wait for the code to flash and the Arduino IDE to say "Done" at the bottom. Success!
+3. Under the Tools menu select "Adafruit Feather M0" for the board and "TinyUSB" for the stack
+4. Select the proper port (Tools -> Port). It should show up as something like `COM5 (Arduino/Genuino Zero (Native USB port))` or `Feather M0` or `/dev/cu.usbmodem14201`
+6. Click the right arrow in the top right named "Upload"
+7. Wait for the code to flash and the Arduino IDE to say "Done" at the bottom. Success!
 
 ## Windows Instructions Coming Soon
