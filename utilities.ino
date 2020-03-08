@@ -3,10 +3,6 @@
 
 #define LAST_PAGE 3  // starts at 0
 
-#define DBL_TAP_PTR ((volatile uint32_t *)(HMCRAMC0_ADDR + HMCRAMC0_SIZE - 4))
-#define DBL_TAP_MAGIC 0xf01669ef // Randomly selected, adjusted to have first and last bit set
-#define DBL_TAP_MAGIC_QUICK_BOOT 0xf02669ef
-
 // Map float values
 double mapf(double x, double in_min, double in_max, double out_min, double out_max) {
   return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
@@ -106,14 +102,3 @@ String chipId() {
   sprintf(id_buf, "%8x%8x%8x%8x", val1, val2, val3, val4);
   return String(id_buf);
 }
-
-// reboot/reset controller
-void(* resetFunc) (void) = 0;  // declare reset function @ address 0
-
-// sets the magic pointer to trigger a reboot to the bootloader for updating
-void rebootBootloader() {
-  *DBL_TAP_PTR = DBL_TAP_MAGIC;
-
-  resetFunc();
-}
-

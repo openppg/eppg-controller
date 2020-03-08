@@ -86,7 +86,7 @@ void parse_usb_serial() {
   deserializeJson(doc, usb_web);
 
   if (doc["command"] && doc["command"] == "rbl"){
-    rebootBootloader();
+    // TODO Reboot
     return; // run only the command
   }
 

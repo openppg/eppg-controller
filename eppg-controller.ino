@@ -15,7 +15,7 @@
 #include <SPI.h>
 #include <StaticThreadController.h>
 #include <Thread.h>   // run tasks at different intervals
-#include <TimeLib.h>  // convert time to hours mins etc
+//#include <TimeLib.h>  // convert time to hours mins etc
 #include <Wire.h>
 #include <extEEPROM.h>  // https://github.com/PaoloP74/extEEPROM
 
@@ -63,8 +63,8 @@ void setup() {
   usb_web.setLineStateCallback(line_state_callback);
 
   Serial.begin(115200);
-  Serial5.begin(115200);
-  Serial5.setTimeout(5);
+  //Serial5.begin(115200);
+  //Serial5.setTimeout(5);
 
   Serial.print(F("Booting up (USB) V"));
   Serial.print(VERSION_MAJOR + "." + VERSION_MINOR);
@@ -200,8 +200,8 @@ void sendToHub(int throttle_val) {
   controlData.crc = crc16((uint8_t*)&controlData, sizeof(STR_CTRL2HUB_MSG) - 2);
 
   digitalWrite(RX_TX_TOGGLE, HIGH);
-  Serial5.write((uint8_t*)&controlData, 8);  // send to hub
-  Serial5.flush();
+  //Serial5.write((uint8_t*)&controlData, 8);  // send to hub
+  //Serial5.flush();
   digitalWrite(RX_TX_TOGGLE, LOW);
 }
 
@@ -210,12 +210,13 @@ void handleHubResonse() {
   int readSize = sizeof(STR_HUB2CTRL_MSG_V2);
   uint8_t serialData[readSize];
 
-  while (Serial5.available() > 0) {
+  while (false) //Serial5.available() > 0) 
+  {
     memset(serialData, 0, sizeof(serialData));
-    int size = Serial5.readBytes(serialData, sizeof(STR_HUB2CTRL_MSG_V2));
+    int size = 0;// Serial5.readBytes(serialData, sizeof(STR_HUB2CTRL_MSG_V2));
     receiveHubData(serialData, size);
   }
-  Serial5.flush();
+  //Serial5.flush();
 }
 
 // convert hub data packets into readable structs
@@ -375,7 +376,7 @@ void updateDisplay() {
 // displays number of minutes and seconds (since armed)
 void displayTime(int val) {
   int minutes = val / 60;  // numberOfMinutes(val);
-  int seconds = numberOfSeconds(val);
+  int seconds = 33;
 
   display.print(convertToDigits(minutes));
   display.print(F(":"));
