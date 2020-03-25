@@ -3,7 +3,7 @@
 
 // ** Logic for EEPROM **
 
-void refreshDeviceData() {
+/* void refreshDeviceData() {
   int offset = 0;
 
   uint8_t tempBuf[sizeof(deviceData)];
@@ -20,9 +20,9 @@ void refreshDeviceData() {
     resetDeviceData();
     return;
   }
-}
+} */
 
-bool upgradeDeviceData(){
+/* bool upgradeDeviceData(){
   uint8_t tempBuf[sizeof(deviceDataV1)];
 
   if (0 != eep.read(0, tempBuf, sizeof(deviceDataV1))) {
@@ -70,7 +70,7 @@ void writeDeviceData() {
   if (0 != eep.write(offset, (uint8_t*)&deviceData, sizeof(deviceData))) {
     Serial.println(F("error writing EEPROM"));
   }
-}
+} */
 
 // ** Logic for WebUSB **
 
@@ -97,7 +97,7 @@ void parse_usb_serial() {
   deviceData.min_batt_v = doc["min_batt_v"];  // 47.2v
   deviceData.max_batt_v = doc["max_batt_v"];  // 59.2v
   initDisplay();
-  writeDeviceData();
+  //writeDeviceData();
   send_usb_serial();
 }
 

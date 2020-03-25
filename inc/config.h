@@ -1,12 +1,11 @@
 // Arduino Pins
-#define BUTTON_TOP    6   // arm/disarm button_top
-#define BUTTON_SIDE   7   // secondary button_top
+#define BUTTON_TOP    7   // arm/disarm button_top
+#define BUTTON_SIDE   1//7   // secondary button_top
 #define BUZZER_PIN    5   // output for buzzer speaker
 #define LED_SW        9   // output for LED on button_top switch
 #define LED_2         0   // output for LED 2
-#define LED_3         38  // output for LED 3
+#define LED_3         3  // output for LED 3
 #define THROTTLE_PIN  A0  // throttle pot input
-#define RX_TX_TOGGLE  11  // RS485
 
 #define CTRL_VER 0x00
 #define CTRL2HUB_ID 0x10
@@ -23,8 +22,8 @@
 // Calibration
 #define MAMP_OFFSET 200
 
-#define VERSION_MAJOR 4
-#define VERSION_MINOR 1
+#define VERSION_MAJOR 5
+#define VERSION_MINOR 0
 
 #define CRUISE_GRACE 2  // 2 sec period to get off throttle
 #define CRUISE_MAX 300  // 5 min max cruising
