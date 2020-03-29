@@ -6,6 +6,7 @@
 #define LED_2         0   // output for LED 2
 #define LED_3         3  // output for LED 3
 #define THROTTLE_PIN  A0  // throttle pot input
+#define VBAT_PIN      A1  // battery voltage divider
 
 #define CTRL_VER 0x00
 #define CTRL2HUB_ID 0x10

@@ -8,7 +8,6 @@
 #include <bluefruit.h>
 #include <Adafruit_DRV2605.h>    // haptic controller
 #include <Adafruit_SSD1306.h>    // screen
-#include <Adafruit_SleepyDog.h>  // watchdog
 #include "Adafruit_TinyUSB.h"
 #include <AdjustableButtonConfig.h>
 #include <ArduinoJson.h>
@@ -81,8 +80,6 @@ void setup() {
   usb_web.setLineStateCallback(line_state_callback);
 
   Serial.begin(115200);
-  //Serial5.begin(115200);
-  //Serial5.setTimeout(5);
 
   Serial.print(F("Booting up (USB) V"));
   Serial.print(VERSION_MAJOR + "." + VERSION_MINOR);
@@ -111,7 +108,6 @@ void setup() {
   throttleThread.onRun(handleThrottle);
   throttleThread.setInterval(100);
 
-  int countdownMS = Watchdog.enable(4000);
   InternalFS.begin();
   refreshDeviceData();
 
@@ -207,7 +203,6 @@ void echo_all(char chr) {  // from adafruit example
 
 // main loop - everything runs in threads
 void loop() {
-  Watchdog.reset();
   // from WebUSB to both Serial & webUSB
   if (usb_web.available()) parse_usb_serial();
   // From Serial to both Serial & webUSB
@@ -230,7 +225,7 @@ byte getBatteryPercent() {
 }
 
 int getInternalBatteryPercent() {
-  float measuredvbat = analogRead(VBATPIN);
+  float measuredvbat = analogRead(VBAT_PIN);
   measuredvbat *= 2;     // we divided by 2, so multiply back
   measuredvbat *= 3.3;   // Multiply by 3.3V, our reference voltage
   measuredvbat /= 1024;  // convert to voltage
@@ -238,7 +233,7 @@ int getInternalBatteryPercent() {
   // TODO(zach): LiPo curve
   float percent = mapf(measuredvbat, 3.3, 4.2, 0, 100);
   percent = constrain(percent, 0, 100);
-  int rounded = round(percent)
+  int rounded = round(percent);
   blebas.write(rounded);
 
   return rounded;
@@ -311,9 +306,6 @@ void sendToHub(int throttle_val) {
   controlData.throttlePercent = throttle_val;
   controlData.crc = crc16((uint8_t*)&controlData, sizeof(STR_CTRL2HUB_MSG) - 2);
 
-  //Serial5.write((uint8_t*)&controlData, 8);  // send to hub
-  //Serial5.flush();
-
   Serial.println("sending to hub");
 
   if ( bleuart.notifyEnabled() ) {
@@ -322,7 +314,7 @@ void sendToHub(int throttle_val) {
     Serial.println("sent to mobile");
   }
   if ( clientUart.discovered() ) {
-    clientUart.write((uint8_t*)&controlData, 8);
+    clientUart.write((uint8_t*)&controlData, 8); // send to hub
     Serial.println("sent to hub");
   }
 }
@@ -332,13 +324,11 @@ void handleHubResonse() {
   int readSize = sizeof(STR_HUB2CTRL_MSG_V2);
   uint8_t serialData[readSize];
 
-  while (false) //Serial5.available() > 0)
-  {
+  while (clientUart.available() > 0) {
     memset(serialData, 0, sizeof(serialData));
-    int size = 0;// Serial5.readBytes(serialData, sizeof(STR_HUB2CTRL_MSG_V2));
+    int size = clientUart.readBytes(serialData, sizeof(STR_HUB2CTRL_MSG_V2));
     receiveHubData(serialData, size);
   }
-  //Serial5.flush();
 }
 
 // convert hub data packets into readable structs
