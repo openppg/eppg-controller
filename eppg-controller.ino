@@ -228,9 +228,9 @@ void disarmSystem() {
   //runVibe(disarm_vibes, 3);
   playMelody(disarm_melody, 3);
   // update armed_time
-  //refreshDeviceData();
+  refreshDeviceData();
   deviceData.armed_time += round(armedSecs / 60);  // convert to mins
-  //writeDeviceData();
+  writeDeviceData();
 
   delay(1500);  // dont allow immediate rearming
 }
@@ -360,7 +360,7 @@ bool armSystem() {
 
   //runVibe(arm_vibes, 3);
   setLEDs(HIGH);
-  //playMelody(arm_melody, 3);
+  playMelody(arm_melody, 3);
   return true;
 }
 

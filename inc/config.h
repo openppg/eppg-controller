@@ -1,6 +1,6 @@
 // Arduino Pins
 #define BUTTON_TOP    7   // arm/disarm button_top
-#define BUTTON_SIDE   1//7   // secondary button_top
+#define BUTTON_SIDE   1   // secondary button_top
 #define BUZZER_PIN    5   // output for buzzer speaker
 #define LED_SW        9   // output for LED on button_top switch
 #define LED_2         0   // output for LED 2

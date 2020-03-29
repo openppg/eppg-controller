@@ -41,7 +41,7 @@ void writeDeviceData() {
 
   Serial.print("Open " FILENAME " file to write ... ");
 
-  if( file.open(FILENAME, FILE_O_WRITE) ) {
+  if (file.open(FILENAME, FILE_O_WRITE)) {
     Serial.println("OK");
     file.write((uint8_t*)&deviceData, sizeof(deviceData));
     file.close();
@@ -65,8 +65,8 @@ void parse_usb_serial() {
   deserializeJson(doc, usb_web);
 
   if (doc["command"] && doc["command"] == "rbl") {
-    // TODO Reboot
-    return; // run only the command
+    enterUf2Dfu();
+    return;
   }
 
   deviceData.screen_rotation = doc["screen_rot"];  // "2/0"
@@ -76,7 +76,7 @@ void parse_usb_serial() {
   deviceData.min_batt_v = doc["min_batt_v"];  // 47.2v
   deviceData.max_batt_v = doc["max_batt_v"];  // 59.2v
   initDisplay();
-  //writeDeviceData();
+  writeDeviceData();
   send_usb_serial();
 }
 
