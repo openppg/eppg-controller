@@ -67,6 +67,9 @@ BLEUart bleuart;
 // Central uart client
 BLEClientUart clientUart;
 
+BLEBas  blebas;  // battery
+BLEDis  bledis;  // device information
+
 #pragma message "Warning: OpenPPG software is in beta"
 
 // the setup function runs once when you press reset or power the board
@@ -88,7 +91,7 @@ void setup() {
   pinMode(LED_2, OUTPUT);       // set up the internal LED2 pin
   pinMode(LED_3, OUTPUT);       // set up the internal LED3 pin
 
-  analogReadResolution(12);     // M0 chip provides 12bit resolution
+  analogReadResolution(12);     // chip provides 12bit resolution
   pot.setAnalogResolution(4096);
   unsigned int startup_vibes[] = { 27, 27, 0 };
   //runVibe(startup_vibes, 3);
@@ -122,6 +125,10 @@ void setupBluetooth() {
   Bluefruit.setTxPower(4);    // Check bluefruit.h for supported values
   Bluefruit.setName("OpenPPG Controller");
 
+  bledis.setManufacturer("OpenPPG");
+  bledis.setModel("Controller V2");
+  bledis.begin();
+
   // Callbacks for Peripheral
   Bluefruit.Periph.setConnectCallback(prph_connect_callback);
   Bluefruit.Periph.setDisconnectCallback(prph_disconnect_callback);
@@ -141,6 +148,10 @@ void setupBluetooth() {
   clientUart.begin();
   clientUart.setRxCallback(cent_bleuart_rx_callback);
 
+  // Start BLE Battery Service
+  blebas.begin();
+  blebas.write(50);
+
   /* Start Central Scanning
    * - Enable auto scan if disconnected
    * - Interval = 100 ms, window = 80 ms
@@ -150,10 +161,10 @@ void setupBluetooth() {
    */
   Bluefruit.Scanner.setRxCallback(scan_callback);
   Bluefruit.Scanner.restartOnDisconnect(true);
-  Bluefruit.Scanner.setInterval(160, 80); // in unit of 0.625 ms
+  Bluefruit.Scanner.setInterval(160, 80);  // in unit of 0.625 ms
   Bluefruit.Scanner.filterUuid(bleuart.uuid);
   Bluefruit.Scanner.useActiveScan(false);
-  Bluefruit.Scanner.start(0);                   // 0 = Don't stop scanning after n seconds
+  Bluefruit.Scanner.start(0);   // 0 = Don't stop scanning after n seconds
 
   // Set up and start advertising
   startAdv();
@@ -181,9 +192,9 @@ void startAdv(void) {
    * https://developer.apple.com/library/content/qa/qa1931/_index.html
    */
   Bluefruit.Advertising.restartOnDisconnect(true);
-  Bluefruit.Advertising.setInterval(32, 244);    // in unit of 0.625 ms
-  Bluefruit.Advertising.setFastTimeout(30);      // number of seconds in fast mode
-  Bluefruit.Advertising.start(0);                // 0 = Don't stop advertising after n seconds
+  Bluefruit.Advertising.setInterval(32, 244);  // in unit of 0.625 ms
+  Bluefruit.Advertising.setFastTimeout(30);    // number of seconds in fast mode
+  Bluefruit.Advertising.start(0);              // 0 = Don't stop advertising after n seconds
 }
 
 // function to echo to both Serial and WebUSB
@@ -216,6 +227,21 @@ byte getBatteryPercent() {
   percent = constrain(percent, 0, 100);
 
   return round(percent);
+}
+
+int getInternalBatteryPercent() {
+  float measuredvbat = analogRead(VBATPIN);
+  measuredvbat *= 2;     // we divided by 2, so multiply back
+  measuredvbat *= 3.3;   // Multiply by 3.3V, our reference voltage
+  measuredvbat /= 1024;  // convert to voltage
+
+  // TODO(zach): LiPo curve
+  float percent = mapf(measuredvbat, 3.3, 4.2, 0, 100);
+  percent = constrain(percent, 0, 100);
+  int rounded = round(percent)
+  blebas.write(rounded);
+
+  return rounded;
 }
 
 void disarmSystem() {

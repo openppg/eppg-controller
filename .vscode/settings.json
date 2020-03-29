@@ -4,6 +4,7 @@
     "__locale": "cpp",
     "locale": "cpp",
     "istream": "cpp",
-    "*.tcc": "cpp"
+    "*.tcc": "cpp",
+    "cstddef": "cpp"
   }
 }
