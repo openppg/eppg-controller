@@ -1,41 +1,29 @@
 // Copyright 2020 <Zach Whitehead>
 // OpenPPG
 
-// ** Logic for EEPROM **
-
-/* void refreshDeviceData() {
-  int offset = 0;
-
+// ** Logic for Saved Data **
+void refreshDeviceData() {
   uint8_t tempBuf[sizeof(deviceData)];
-  if (0 != eep.read(offset, tempBuf, sizeof(deviceData))) {
-    //Serial.println(F("error reading EEPROM"));
-  }
-  memcpy((uint8_t*)&deviceData, tempBuf, sizeof(deviceData));
-  uint16_t crc = crc16((uint8_t*)&deviceData, sizeof(deviceData) - 2);
-  if(deviceData.version_major == 4 && deviceData.version_minor == 0){
-    bool upgraded = upgradeDeviceData();
-    // TODO: add upgrade complete melody
-  } else if (crc != deviceData.crc) {
-    //Serial.print(F("Memory CRC mismatch. Resetting"));
+
+  file.open(FILENAME, FILE_O_READ);
+  // file existed
+  if ( file ) {
+    Serial.println(FILENAME " file exists. reading");
+
+    uint32_t readlen;
+    readlen = file.read(tempBuf, sizeof(deviceData));
+    file.close();
+    tempBuf[readlen] = 0;
+    memcpy((uint8_t*)&deviceData, tempBuf, sizeof(deviceData));
+    Serial.println("read into memory");
+  } else {
     resetDeviceData();
-    return;
-  }
-} */
-
-/* bool upgradeDeviceData(){
-  uint8_t tempBuf[sizeof(deviceDataV1)];
-
-  if (0 != eep.read(0, tempBuf, sizeof(deviceDataV1))) {
-    return false;
-  }
-  memcpy((uint8_t*)&deviceDataV1, tempBuf, sizeof(deviceDataV1));
-  uint16_t crc = crc16((uint8_t*)&deviceDataV1, sizeof(deviceDataV1) - 2);
-  if (crc != deviceData.crc) {
-    //Serial.print(F("Memory CRC mismatch. Resetting"));
-    resetDeviceData();
-    return false;
   }
 
+  Serial.println("Done");
+}
+
+void resetDeviceData() {
   deviceData = STR_DEVICE_DATA_V2();
   deviceData.version_major = VERSION_MAJOR;
   deviceData.version_minor = VERSION_MINOR;
@@ -43,34 +31,25 @@
   deviceData.sea_pressure = DEFAULT_SEA_PRESSURE;  // 1013.25 mbar
   deviceData.metric_temp = true;
   deviceData.metric_alt = true;
-
-  deviceData.armed_time = deviceDataV1.armed_time;
-
+  deviceData.min_batt_v = BATT_MIN_V;
+  deviceData.max_batt_v = BATT_MAX_V;
   writeDeviceData();
-
-  return true;
-}
-void resetDeviceData(){
-    deviceData = STR_DEVICE_DATA_V2();
-    deviceData.version_major = VERSION_MAJOR;
-    deviceData.version_minor = VERSION_MINOR;
-    deviceData.screen_rotation = 2;
-    deviceData.sea_pressure = DEFAULT_SEA_PRESSURE;  // 1013.25 mbar
-    deviceData.metric_temp = true;
-    deviceData.metric_alt = true;
-    deviceData.min_batt_v = BATT_MIN_V;
-    deviceData.max_batt_v = BATT_MAX_V;
-    writeDeviceData();
 }
 
 void writeDeviceData() {
   deviceData.crc = crc16((uint8_t*)&deviceData, sizeof(deviceData) - 2);
-  int offset = 0;
 
-  if (0 != eep.write(offset, (uint8_t*)&deviceData, sizeof(deviceData))) {
-    Serial.println(F("error writing EEPROM"));
+  Serial.print("Open " FILENAME " file to write ... ");
+
+  if( file.open(FILENAME, FILE_O_WRITE) ) {
+    Serial.println("OK");
+    file.write((uint8_t*)&deviceData, sizeof(deviceData));
+    file.close();
+    Serial.println("Written");
+  } else {
+    Serial.println("Failed!");
   }
-} */
+}
 
 // ** Logic for WebUSB **
 
@@ -85,7 +64,7 @@ void parse_usb_serial() {
   DynamicJsonDocument doc(capacity);
   deserializeJson(doc, usb_web);
 
-  if (doc["command"] && doc["command"] == "rbl"){
+  if (doc["command"] && doc["command"] == "rbl") {
     // TODO Reboot
     return; // run only the command
   }

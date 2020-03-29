@@ -2,6 +2,8 @@
   "files.associations": {
     "crc.c": "cpp",
     "__locale": "cpp",
-    "locale": "cpp"
+    "locale": "cpp",
+    "istream": "cpp",
+    "*.tcc": "cpp"
   }
 }

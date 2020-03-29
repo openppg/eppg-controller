@@ -12,6 +12,8 @@
 #include "Adafruit_TinyUSB.h"
 #include <AdjustableButtonConfig.h>
 #include <ArduinoJson.h>
+#include <Adafruit_LittleFS.h>
+#include <InternalFileSystem.h>
 #include <ResponsiveAnalogRead.h>  // smoothing for throttle
 #include <SPI.h>
 #include <StaticThreadController.h>
@@ -21,6 +23,9 @@
 #include <extEEPROM.h>  // https://github.com/PaoloP74/extEEPROM
 
 using namespace ace_button;
+using namespace Adafruit_LittleFS_Namespace;
+
+#define FILENAME  "/openppg.bin"
 
 Adafruit_SSD1306 display(128, 64, &Wire, 4);
 Adafruit_DRV2605 vibe;
@@ -33,7 +38,7 @@ ResponsiveAnalogRead pot(THROTTLE_PIN, false);
 AceButton button_top(BUTTON_TOP);
 AceButton button_side(BUTTON_SIDE);
 AdjustableButtonConfig buttonConfig;
-//extEEPROM eep(kbits_64, 1, 64);
+File file(InternalFS);
 
 const int bgInterval = 100;  // background updates (milliseconds)
 
@@ -104,13 +109,13 @@ void setup() {
   throttleThread.setInterval(100);
 
   int countdownMS = Watchdog.enable(4000);
-  //uint8_t eepStatus = eep.begin(eep.twiClock100kHz);
-  //refreshDeviceData();
+  InternalFS.begin();
+  refreshDeviceData();
 
   setupBluetooth();
 }
 
-void setupBluetooth(){
+void setupBluetooth() {
   // Initialize Bluefruit with max concurrent connections as Peripheral = 1, Central = 1
   // SRAM usage required by SoftDevice will increase with number of connections
   Bluefruit.begin(1, 1);
@@ -135,7 +140,7 @@ void setupBluetooth(){
   // Init BLE Central Uart Serivce
   clientUart.begin();
   clientUart.setRxCallback(cent_bleuart_rx_callback);
- 
+
   /* Start Central Scanning
    * - Enable auto scan if disconnected
    * - Interval = 100 ms, window = 80 ms
@@ -154,8 +159,7 @@ void setupBluetooth(){
   startAdv();
 }
 
-void startAdv(void)
-{
+void startAdv(void) {
   // Advertising packet
   Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
   Bluefruit.Advertising.addTxPower();
@@ -286,14 +290,12 @@ void sendToHub(int throttle_val) {
 
   Serial.println("sending to hub");
 
-  if ( bleuart.notifyEnabled() )
-  {
+  if ( bleuart.notifyEnabled() ) {
     // Forward data from our peripheral to Mobile
     bleuart.write((uint8_t*)&controlData, 8);
     Serial.println("sent to mobile");
   }
-  if ( clientUart.discovered() )
-  {
+  if ( clientUart.discovered() ) {
     clientUart.write((uint8_t*)&controlData, 8);
     Serial.println("sent to hub");
   }
@@ -304,7 +306,7 @@ void handleHubResonse() {
   int readSize = sizeof(STR_HUB2CTRL_MSG_V2);
   uint8_t serialData[readSize];
 
-  while (false) //Serial5.available() > 0) 
+  while (false) //Serial5.available() > 0)
   {
     memset(serialData, 0, sizeof(serialData));
     int size = 0;// Serial5.readBytes(serialData, sizeof(STR_HUB2CTRL_MSG_V2));
@@ -320,10 +322,6 @@ void receiveHubData(uint8_t *buf, uint32_t size) {
     memcpy((uint8_t*)&hubData, buf, sizeof(STR_HUB2CTRL_MSG_V2));
     crc = crc16((uint8_t*)&hubData, sizeof(STR_HUB2CTRL_MSG_V2) - 2);
     use_hub_v2 = true;
-  } else if (size == sizeof(STR_HUB2CTRL_MSG_V1)) {
-    memcpy((uint8_t*)&hubData, buf, sizeof(STR_HUB2CTRL_MSG_V1));
-    crc = crc16((uint8_t*)&hubData, sizeof(STR_HUB2CTRL_MSG_V1) - 2);
-    use_hub_v2 = false;
   } else {
     Serial.print("wrong size ");
     Serial.print(size);
@@ -377,8 +375,7 @@ void handleButtonEvent(AceButton *button, uint8_t eventType, uint8_t btnState) {
   case AceButton::kEventDoubleClicked:
     if (pin == BUTTON_SIDE) {
       Serial.println("side double");
-    }
-    else if (pin == BUTTON_TOP) {
+    } else if (pin == BUTTON_TOP) {
       Serial.println("top double");
       if (armed) {
         disarmSystem();
@@ -580,8 +577,7 @@ void displayVersions() {
 /*------------------------------------------------------------------*/
 /* Peripheral
  *------------------------------------------------------------------*/
-void prph_connect_callback(uint16_t conn_handle)
-{
+void prph_connect_callback(uint16_t conn_handle) {
   // Get the reference to current connection
   BLEConnection* connection = Bluefruit.Connection(conn_handle);
 
@@ -592,8 +588,7 @@ void prph_connect_callback(uint16_t conn_handle)
   Serial.println(peer_name);
 }
 
-void prph_disconnect_callback(uint16_t conn_handle, uint8_t reason)
-{
+void prph_disconnect_callback(uint16_t conn_handle, uint8_t reason) {
   (void) conn_handle;
   (void) reason;
 
@@ -601,22 +596,19 @@ void prph_disconnect_callback(uint16_t conn_handle, uint8_t reason)
   Serial.println("[Prph] Disconnected");
 }
 
-void prph_bleuart_rx_callback(uint16_t conn_handle)
-{
+void prph_bleuart_rx_callback(uint16_t conn_handle) {
   (void) conn_handle;
-  
+
   // Forward data from Mobile to our peripheral
   char str[20+1] = { 0 };
   bleuart.read(str, 20);
 
   Serial.print("[Prph] RX: ");
-  Serial.println(str);  
+  Serial.println(str);
 
-  if ( clientUart.discovered() )
-  {
+  if ( clientUart.discovered() ) {
     clientUart.print(str);
-  }else
-  {
+  } else {
     bleuart.println("[Prph] Central role not connected");
   }
 }
@@ -624,16 +616,14 @@ void prph_bleuart_rx_callback(uint16_t conn_handle)
 /*------------------------------------------------------------------*/
 /* Central
  *------------------------------------------------------------------*/
-void scan_callback(ble_gap_evt_adv_report_t* report)
-{
+void scan_callback(ble_gap_evt_adv_report_t* report) {
   // Since we configure the scanner with filterUuid()
-  // Scan callback only invoked for device with bleuart service advertised  
-  // Connect to the device with bleuart service in advertising packet  
+  // Scan callback only invoked for device with bleuart service advertised
+  // Connect to the device with bleuart service in advertising packet
   Bluefruit.Central.connect(report);
 }
 
-void cent_connect_callback(uint16_t conn_handle)
-{
+void cent_connect_callback(uint16_t conn_handle) {
   // Get the reference to current connection
   BLEConnection* connection = Bluefruit.Connection(conn_handle);
 
@@ -641,47 +631,41 @@ void cent_connect_callback(uint16_t conn_handle)
   connection->getPeerName(peer_name, sizeof(peer_name));
 
   Serial.print("[Cent] Connected to ");
-  Serial.println(peer_name);;
+  Serial.println(peer_name);
 
-  if ( clientUart.discover(conn_handle) )
-  {
+  if ( clientUart.discover(conn_handle) ) {
     // Enable TXD's notify
     clientUart.enableTXD();
-  }else
-  {
+  } else {
     // disconnect since we couldn't find bleuart service
     Bluefruit.disconnect(conn_handle);
-  }  
+  }
 }
 
-void cent_disconnect_callback(uint16_t conn_handle, uint8_t reason)
-{
+void cent_disconnect_callback(uint16_t conn_handle, uint8_t reason) {
   (void) conn_handle;
   (void) reason;
-  
+
   Serial.println("[Cent] Disconnected");
 }
 
 /**
  * Callback invoked when uart received data
- * @param cent_uart Reference object to the service where the data 
+ * @param cent_uart Reference object to the service where the data
  * arrived. In this example it is clientUart
  */
-void cent_bleuart_rx_callback(BLEClientUart& cent_uart)
-{
+void cent_bleuart_rx_callback(BLEClientUart& cent_uart) {
   char str[20+1] = { 0 };
   cent_uart.read(str, 20);
-      
+
   Serial.print("[Cent] RX: ");
   Serial.println(str);
 
-  if ( bleuart.notifyEnabled() )
-  {
+  if ( bleuart.notifyEnabled() ) {
     // Forward data from our peripheral to Mobile
-    bleuart.print( str );
-  }else
-  {
+    bleuart.print(str);
+  } else {
     // response with no prph message
     clientUart.println("[Cent] Peripheral role not connected");
-  }  
+  }
 }
