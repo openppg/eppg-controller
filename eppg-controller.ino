@@ -24,7 +24,7 @@
 using namespace ace_button;
 using namespace Adafruit_LittleFS_Namespace;
 
-#define FILENAME  "/openppg.json"
+#define FILENAME "/openppg2.bin"
 
 Adafruit_SSD1306 display(128, 64, &Wire, 4);
 Adafruit_DRV2605 vibe;

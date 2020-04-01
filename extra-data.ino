@@ -13,7 +13,7 @@ void refreshDeviceData() {
 
     file.open(FILENAME, FILE_O_READ);
 
-    DeserializationError error = deserializeJson(doc, file);
+    DeserializationError error = deserializeMsgPack(doc, file);
     file.close();
 
     if (error) {
@@ -54,7 +54,7 @@ void writeDeviceData() {
 
   if (file.open(FILENAME, FILE_O_WRITE)) {
     Serial.println("OK");
-    serializeJson(doc, file);
+    serializeMsgPack(doc, file);
     file.close();
     Serial.println("Written");
   } else {

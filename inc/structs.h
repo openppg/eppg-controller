@@ -36,7 +36,7 @@ typedef struct {
   float max_batt_v;  // 59.2v
   bool metric_temp;    // true
   bool metric_alt;     // false
-  uint16_t unused;     // for future use
+  uint16_t max_alt;     // in meters
   uint16_t crc;        // error check
 }STR_DEVICE_DATA_V2;
 #pragma pack(pop)
