@@ -24,7 +24,7 @@
 using namespace ace_button;
 using namespace Adafruit_LittleFS_Namespace;
 
-#define FILENAME  "/openppg.bin"
+#define FILENAME  "/openppg.json"
 
 Adafruit_SSD1306 display(128, 64, &Wire, 4);
 Adafruit_DRV2605 vibe;
@@ -80,9 +80,10 @@ void setup() {
   usb_web.setLineStateCallback(line_state_callback);
 
   Serial.begin(115200);
+  while ( !Serial ) delay(10);   // for nrf52840 with native usb
 
   Serial.print(F("Booting up (USB) V"));
-  Serial.print(VERSION_MAJOR + "." + VERSION_MINOR);
+  Serial.println(VERSION_MAJOR + "." + VERSION_MINOR);
 
   pinMode(LED_SW, OUTPUT);      // set up the external LED pin
   pinMode(LED_2, OUTPUT);       // set up the internal LED2 pin
@@ -99,8 +100,8 @@ void setup() {
   ledBlinkThread.onRun(blinkLED);
   ledBlinkThread.setInterval(500);
 
-  //displayThread.onRun(updateDisplay);
-  //displayThread.setInterval(100);
+  displayThread.onRun(updateDisplay);
+  displayThread.setInterval(100);
 
   butttonThread.onRun(checkButtons);
   butttonThread.setInterval(25);
@@ -250,7 +251,9 @@ void disarmSystem() {
   playMelody(disarm_melody, 3);
   // update armed_time
   refreshDeviceData();
-  deviceData.armed_time += round(armedSecs / 60);  // convert to mins
+  Serial.println("disarming");
+  Serial.println(armedSecs);
+  deviceData.armed_time += round(armedSecs);  // convert to mins // TODO
   writeDeviceData();
 
   delay(1500);  // dont allow immediate rearming
@@ -305,8 +308,6 @@ void sendToHub(int throttle_val) {
   controlData.armed = armed;
   controlData.throttlePercent = throttle_val;
   controlData.crc = crc16((uint8_t*)&controlData, sizeof(STR_CTRL2HUB_MSG) - 2);
-
-  Serial.println("sending to hub");
 
   if ( bleuart.notifyEnabled() ) {
     // Forward data from our peripheral to Mobile
@@ -378,6 +379,18 @@ bool armSystem() {
   setLEDs(HIGH);
   playMelody(arm_melody, 3);
   return true;
+}
+
+void formatMemory(){
+  InternalFS.begin();
+
+  Serial.print("Formating ... ");
+  delay(1);  // for message appear on monitor
+
+  // Format
+  InternalFS.format();
+
+  Serial.println("Done");
 }
 
 // The event handler for the the buttons
