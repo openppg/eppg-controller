@@ -80,7 +80,7 @@ void setup() {
   usb_web.setLineStateCallback(line_state_callback);
 
   Serial.begin(115200);
-  while ( !Serial ) delay(10);   // for nrf52840 with native usb
+  // while ( !Serial ) delay(10);   // for nrf52840 with native usb
 
   Serial.print(F("Booting up (USB) V"));
   Serial.println(VERSION_MAJOR + "." + VERSION_MINOR);
@@ -107,7 +107,7 @@ void setup() {
   butttonThread.setInterval(25);
 
   throttleThread.onRun(handleThrottle);
-  throttleThread.setInterval(100);
+  throttleThread.setInterval(50);
 
   InternalFS.begin();
   refreshDeviceData();
@@ -256,7 +256,7 @@ void disarmSystem() {
   deviceData.armed_time += round(armedSecs);  // convert to mins // TODO
   writeDeviceData();
 
-  delay(1500);  // dont allow immediate rearming
+  delay(500);  // dont allow immediate rearming
 }
 
 // inital button setup and config
@@ -309,11 +309,6 @@ void sendToHub(int throttle_val) {
   controlData.throttlePercent = throttle_val;
   controlData.crc = crc16((uint8_t*)&controlData, sizeof(STR_CTRL2HUB_MSG) - 2);
 
-  if ( bleuart.notifyEnabled() ) {
-    // Forward data from our peripheral to Mobile
-    bleuart.write((uint8_t*)&controlData, 8);
-    Serial.println("sent to mobile");
-  }
   if ( clientUart.discovered() ) {
     clientUart.write((uint8_t*)&controlData, 8); // send to hub
     Serial.println("sent to hub");

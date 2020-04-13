@@ -8,7 +8,7 @@
 #define THROTTLE_PIN  A0  // throttle pot input
 #define VBAT_PIN      A1  // battery voltage divider
 
-#define CTRL_VER 0x00
+#define CTRL_VER 0x10
 #define CTRL2HUB_ID 0x10
 #define HUB2CTRL_ID 0x20
 
