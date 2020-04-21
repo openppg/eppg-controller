@@ -8,6 +8,7 @@
 #include <bluefruit.h>
 #include <Adafruit_DRV2605.h>    // haptic controller
 #include <Adafruit_SSD1306.h>    // screen
+#include <Adafruit_SleepyDog.h>
 #include "Adafruit_TinyUSB.h"
 #include <AdjustableButtonConfig.h>
 #include <ArduinoJson.h>
@@ -141,7 +142,7 @@ BLEDis  bledis;  // device information
 
 // the setup function runs once when you press reset or power the board
 void setup() {
-  pinMode(LED_SW, OUTPUT);
+  Watchdog.enable(4000);
 
   usb_web.begin();
   usb_web.setLandingPage(&landingPage);
@@ -181,6 +182,7 @@ void setup() {
   refreshDeviceData();
 
   setupBluetooth();
+  
 }
 
 void setupBluetooth() {
