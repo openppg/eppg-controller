@@ -46,8 +46,8 @@ The Batch 3+ OpenPPG controller is powered by Atmel’s SAMD21G18A MCU, featurin
 
 1. First make sure the code compiles by hitting the check button in the top right name "Verify"
 2. Connect the controller to your computer by using the micro USB port on the bottom of the controller
-3. Under the Tools menu select "Adafruit Feather M0" for the board and "TinyUSB" for the stack
-4. Select the proper port (Tools -> Port). It should show up as something like `COM5 (Arduino/Genuino Zero (Native USB port))` or `Feather M0` or `/dev/cu.usbmodem14201`
+3. Under the Tools menu select "Adafruit Feather nRF52840 Express" for the board
+4. Select the proper port (Tools -> Port). It should show up as something like or `Feather nRF52840 Express` or `/dev/cu.usbmodem14201
 6. Click the right arrow in the top right named "Upload"
 7. Wait for the code to flash and the Arduino IDE to say "Done" at the bottom. Success!
 
@@ -55,5 +55,5 @@ The Batch 3+ OpenPPG controller is powered by Atmel’s SAMD21G18A MCU, featurin
 
 ## Boootloader
 
-The latest batches of OpenPPG X4 controllers use the UF2 bootloader (compatible with Arduino).
-Learn more here https://github.com/openppg/uf2-samdx1
+The latest batches of OpenPPG controllers use the UF2 bootloader (compatible with Arduino).
+Learn more here https://github.com/adafruit/Adafruit_nRF52_Bootloader
