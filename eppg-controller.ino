@@ -127,13 +127,8 @@ byte getBatteryPercent() {
   float voltage = hubData.voltage / VOLTAGE_DIVIDE;  //TODO move divide to shared function
   voltage = constrain(voltage, deviceData.min_batt_v, deviceData.max_batt_v);
   int voltage_curved = battery_sigmoidal(voltage, deviceData.min_batt_v, deviceData.max_batt_v);
-  Serial.print("curved = ");
-  Serial.print(voltage_curved);
-  Serial.print(" flat = ");
-  float percent = mapf(voltage, deviceData.min_batt_v, deviceData.max_batt_v, 0, 100);
-  Serial.println(percent);
 
-  return round(percent);
+  return round(voltage_curved);
   // TODO handle low battery
 }
 
