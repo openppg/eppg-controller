@@ -126,10 +126,17 @@ void checkButtons() {
 byte getBatteryPercent() {
   float voltage = hubData.voltage / VOLTAGE_DIVIDE;
   // TODO(zach): LiPo curve
+  voltage = constrain(voltage, deviceData.min_batt_v, deviceData.max_batt_v);
+  int voltage_curved = sigmoidal(voltage, deviceData.min_batt_v, deviceData.max_batt_v);
+  Serial.print("curved = ");
+  Serial.print(voltage_curved);
+  Serial.print(" flat = ");
   float percent = mapf(voltage, deviceData.min_batt_v, deviceData.max_batt_v, 0, 100);
-  percent = constrain(percent, 0, 100);
+  Serial.println(percent);
 
   return round(percent);
+
+  // TODO handle low battery
 }
 
 void disarmSystem() {
@@ -474,4 +481,16 @@ void displayVersions() {
   display.print(F(" h:m"));
   // addVSpace();
   // display.print(chipId()); // TODO: trim down
+}
+
+uint8_t sigmoidal(uint16_t voltage, uint16_t minVoltage, uint16_t maxVoltage) {
+	// slow
+	// uint8_t result = 110 - (110 / (1 + pow(1.468 * (voltage - minVoltage)/(maxVoltage - minVoltage), 6)));
+
+	// steep
+	// uint8_t result = 102 - (102 / (1 + pow(1.621 * (voltage - minVoltage)/(maxVoltage - minVoltage), 8.1)));
+
+	// normal
+	uint8_t result = 105 - (105 / (1 + pow(1.724 * (voltage - minVoltage)/(maxVoltage - minVoltage), 5.5)));
+	return result >= 100 ? 100 : result;
 }
