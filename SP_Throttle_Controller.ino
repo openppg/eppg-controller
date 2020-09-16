@@ -210,7 +210,7 @@ void handleThrottle() {
 
 
 void updateDisplay(){
-  dispValue(volts, prevVolts, 4, 1, 96, 42, 2, BLACK, WHITE);
+  dispValue(volts, prevVolts, 5, 1, 84, 42, 2, BLACK, WHITE);
   tft.print("V");
   
   dispValue(amps, prevAmps, 3, 0, 108, 70, 2, BLACK, WHITE);
