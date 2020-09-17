@@ -346,20 +346,20 @@ void dispValue(float &value, float &prevVal, int maxDigits, int precision, int x
   tft.setCursor(x,y);
   
   // PRINT LEADING SPACES TO RIGHT-ALIGN:
+  tft.setTextColor(background);
   for(int i=0; i<(maxDigits-numDigits); i++){
-    tft.setTextColor(background);
     tft.print(char(218));
-    tft.setTextColor(textColor);
   }
+  tft.setTextColor(textColor);
   
   // ERASE ONLY THE NESSESARY DIGITS:
   for(int i=0; i<numDigits; i++){
     if(digit[i]!=prevDigit[i]){
       tft.setTextColor(background);
       tft.print(char(218));
-      tft.setTextColor(textColor);
     }
     else{
+      tft.setTextColor(textColor);
       tft.print(digit[i]);
     }
   }
@@ -368,11 +368,11 @@ void dispValue(float &value, float &prevVal, int maxDigits, int precision, int x
   tft.setCursor(x,y);
 
   // ADVANCE THE CURSOR TO THE PROPER LOCATION:
+  tft.setTextColor(background);
   for(int i=0; i<(maxDigits-numDigits); i++){
-    tft.setTextColor(background);
     tft.print(char(218));
-    tft.setTextColor(textColor);
   }
+  tft.setTextColor(textColor);
 
   // PRINT THE DIGITS THAT NEED UPDATING
   for(int i=0; i<numDigits; i++){
