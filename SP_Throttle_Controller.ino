@@ -23,7 +23,7 @@
 #define RED                   ST77XX_RED
 #define BLUE                  ST77XX_BLUE
 #define DIGIT_ARRAY_SIZE      7
-#define ESC_BAUD_RATE         256000
+#define ESC_BAUD_RATE         115200
 #define ESC_DATA_SIZE         20
 #define READ_INTERVAL         0
 #define ESC_TIMEOUT           10
@@ -126,7 +126,7 @@ void setup() {
   drv.setMode(DRV2605_MODE_INTTRIG);
   if(ENABLE_VIB) vibrateNotify();
   eepInit();
-  //setFlightHours(12.6);    // uncomment to set flight log hours (0.0 to 9999.9)
+  //setFlightHours(12.6);    // uncomment to set flight log hours (0.0 to 9999.9)... MUST re-comment and re-upload!
   delay(1000);
 }
 
@@ -141,7 +141,8 @@ void loop() {
     readMillis = millis();
     prepareSerialRead();
     Serial5.readBytes(escData, ESC_DATA_SIZE);
-    //enforceChecksum();  //TODO when feature becomes available
+    //enforceChecksum():
+    enforceFletcher16();
     printRawSentence();
     parseData(); 
     readBMP();
@@ -586,6 +587,43 @@ void tftInit(){
 void prepareSerialRead(){  
   while(Serial5.available()>0){
     byte t = Serial5.read();
+  }
+}
+
+
+void enforceFletcher16(){
+  //Check checksum, revert to previous data if bad:
+  word checksum = (unsigned short)(word(escData[19], escData[18]));
+  unsigned char sum1 = 0;
+  unsigned char sum2 = 0;
+  unsigned short sum = 0;
+  for(int i=0; i<ESC_DATA_SIZE-2; i++){
+    sum1 = (unsigned char)(sum1 + escData[i]);
+    sum2 = (unsigned char)(sum2 + sum1);
+  }
+  sum = (unsigned char)(sum1 - sum2);
+  sum = sum << 8;
+  sum |= (unsigned char)(sum2 - 2*sum1);
+  Serial.print(F("     SUM: "));
+  Serial.println(sum);
+  Serial.print(sum1,HEX);
+  Serial.print(" ");
+  Serial.println(sum2,HEX);
+  Serial.print(F("CHECKSUM: "));
+  Serial.println(checksum);
+  if(sum != checksum){
+    Serial.println(F("_________________________________________________CHECKSUM FAILED!"));
+    failed++;
+    if(failed>=1000) {  // keep track of how reliable the transmission is
+      transmitted = 1;
+      failed = 0;
+    }
+    for(int i=0; i<ESC_DATA_SIZE; i++){  // revert to previous data
+      escData[i] = prevData[i];
+    }
+  }
+  for(int i=0; i<ESC_DATA_SIZE; i++){
+    prevData[i] = escData[i];
   }
 }
 
