@@ -110,7 +110,6 @@ STR_DEVICE_DATA_V2 jsonToDeviceData(DynamicJsonDocument doc, bool sanitize = tru
 void parse_usb_serial() {
   const size_t capacity = JSON_OBJECT_SIZE(11) + 112;
   DynamicJsonDocument doc(capacity);
-  deserializeJson(doc, usb_web);
 
   if (doc["command"] && doc["command"] == "rbl") {
     enterUf2Dfu();
@@ -120,7 +119,6 @@ void parse_usb_serial() {
   deviceData = jsonToDeviceData(doc, true);
   initDisplay();
   writeDeviceData();
-  send_usb_serial();
 }
 
 void send_usb_serial() {
@@ -128,6 +126,4 @@ void send_usb_serial() {
   DynamicJsonDocument doc(capacity);
 
   doc = deviceDataToJson(deviceData);
-  serializeJson(doc, usb_web);
-  usb_web.println();
 }

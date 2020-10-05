@@ -8,8 +8,6 @@
 #include <bluefruit.h>
 #include <Adafruit_DRV2605.h>    // haptic controller
 #include <Adafruit_SSD1306.h>    // screen
-#include <Adafruit_SleepyDog.h>
-#include "Adafruit_TinyUSB.h"
 #include <AdjustableButtonConfig.h>
 #include <ArduinoJson.h>
 #include <Adafruit_LittleFS.h>
@@ -98,10 +96,6 @@ const GFXfont Symbol18 PROGMEM = {
 Adafruit_SSD1306 display(128, 64, &Wire, 4);
 Adafruit_DRV2605 vibe;
 
-// USB WebUSB object
-Adafruit_USBD_WebUSB usb_web;
-WEBUSB_URL_DEF(landingPage, 1 /*https*/, "openppg.github.io/openppg-config");
-
 ResponsiveAnalogRead pot(THROTTLE_PIN, false);
 AceButton button_top(BUTTON_TOP);
 AceButton button_side(BUTTON_SIDE);
@@ -142,11 +136,6 @@ BLEDis  bledis;  // device information
 
 // the setup function runs once when you press reset or power the board
 void setup() {
-  Watchdog.enable(4000);
-
-  usb_web.begin();
-  usb_web.setLandingPage(&landingPage);
-  usb_web.setLineStateCallback(line_state_callback);
 
   Serial.begin(115200);
   // while ( !Serial ) delay(10);   // for nrf52840 with native usb
@@ -268,17 +257,13 @@ void echo_all(char chr) {  // from adafruit example
   Serial.write(chr);
   if ( chr == '\r' ) Serial.write('\n');
 
-  usb_web.write(chr);
 }
 
 // main loop - everything runs in threads
 void loop() {
-  // from WebUSB to both Serial & webUSB
-  if (usb_web.available()) parse_usb_serial();
   // From Serial to both Serial & webUSB
   if (Serial.available())  echo_all(Serial.read());
   threads.run();
-  Watchdog.reset();
 }
 
 void checkButtons() {
