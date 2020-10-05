@@ -124,12 +124,12 @@ void checkButtons() {
 }
 
 byte getBatteryPercent() {
-  float voltage = hubData.voltage / VOLTAGE_DIVIDE;
-  // TODO(zach): LiPo curve
-  float percent = mapf(voltage, deviceData.min_batt_v, deviceData.max_batt_v, 0, 100);
-  percent = constrain(percent, 0, 100);
+  float voltage = hubData.voltage / VOLTAGE_DIVIDE;  //TODO move divide to shared function
+  voltage = constrain(voltage, deviceData.min_batt_v, deviceData.max_batt_v);
+  int voltage_curved = battery_sigmoidal(voltage, deviceData.min_batt_v, deviceData.max_batt_v);
 
-  return round(percent);
+  return round(voltage_curved);
+  // TODO handle low battery
 }
 
 void disarmSystem() {
@@ -474,4 +474,11 @@ void displayVersions() {
   display.print(F(" h:m"));
   // addVSpace();
   // display.print(chipId()); // TODO: trim down
+}
+
+// inspired by https://github.com/rlogiacco/BatterySense/
+// https://www.desmos.com/calculator/7m9lu26vpy
+uint8_t battery_sigmoidal(uint16_t voltage, uint16_t minVoltage, uint16_t maxVoltage) {
+  uint8_t result = 105 - (105 / (1 + pow(1.724 * (voltage - minVoltage)/(maxVoltage - minVoltage), 5.5)));
+  return result >= 100 ? 100 : result;
 }
