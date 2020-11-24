@@ -32,10 +32,10 @@
 #define ENABLE_BUZ            true    // enable buzzer
 #define ENABLE_VIB            true    // enable vibration
 #define ENABLE_VIB_LOW_BAT    true    // vibrate if armed and battery voltage sags below min volts. Gets pilot's attention.
-#define MINIMUM_VOLTAGE       76.8    // 24 * 3.2V per cell
+#define MINIMUM_VOLTAGE       60      // 24 * 2.5V per cell
 #define MAXIMUM_VOLTAGE       100.8   // 24 * 4.2V per cell
 #define ALTITUDE_AGL          1       // [1] Zero altitude when armed, [0] Measure MSL altitude
-#define LEFT_HAND_THROTTLE    false   // true for left handed throttle
+#define LEFT_HAND_THROTTLE    true    // true for left handed throttle
 
 byte escData[ESC_DATA_SIZE];
 byte prevData[ESC_DATA_SIZE];
@@ -44,8 +44,10 @@ unsigned long transmitted = 0;
 unsigned long failed = 0;
 bool receiving = false;
 bool armed = false;
+bool cruising = false;
 unsigned long displayMillis = 0;
 int potLvl = 0;
+int cruiseLvl = 0;
 int throttlePWM = 0;
 float throttlePercent = 0;
 float prevThrotPercent = 0;
@@ -57,6 +59,8 @@ float prevBatteryPercent = 0;
 bool batteryFlag = true;
 float armingIn = 0;
 float prevArmingIn = 0;
+float cruisingIn = 0;
+float prevCruisingIn = 0;
 bool throttledFlag = true;
 bool throttled = false;
 unsigned long throttledAtMillis = 0;
@@ -126,7 +130,7 @@ void setup() {
   drv.setMode(DRV2605_MODE_INTTRIG);
   if(ENABLE_VIB) vibrateNotify();
   eepInit();
-  //setFlightHours(12.6);    // uncomment to set flight log hours (0.0 to 9999.9)... MUST re-comment and re-upload!
+  //setFlightHours(0);    // uncomment to set flight log hours (0.0 to 9999.9)... MUST re-comment and re-upload!
   delay(1000);
 }
 
@@ -199,7 +203,9 @@ void setAltiOffset(){
 void handleThrottle() {
   pot.update();
   potLvl = pot.getValue();
-  throttlePWM = mapf(potLvl, 0, 4095, 1110, 2000); // mapping val to minimum and maximum
+  handleCruise();  // activate or deactivate cruise
+  if(cruising){ throttlePWM = mapf(cruiseLvl, 0, 4095, 1110, 2000); }
+  else{ throttlePWM = mapf(potLvl, 0, 4095, 1110, 2000); } // mapping val to minimum and maximum
   throttlePercent = mapf(throttlePWM, 1112,2000, 0,100);
   if(throttlePercent<0){
     throttlePercent = 0;
@@ -217,8 +223,23 @@ void updateDisplay(){
   dispValue(amps, prevAmps, 3, 0, 108, 70, 2, BLACK, WHITE);
   tft.print("A");
 
-  dispValue(kilowatts, prevKilowatts, 4, 1, 10, 55, 2, BLACK, WHITE);
+  dispValue(kilowatts, prevKilowatts, 4, 1, 10, /*42*/55, 2, BLACK, WHITE);
   tft.print("kW");
+
+  if(cruising){
+    tft.setCursor(10, 80);
+    tft.setTextSize(1);
+    tft.setTextColor(RED);
+    tft.print("CRUISE");
+    tft.setTextColor(BLACK);
+  }
+  else{
+    tft.setCursor(10, 80);
+    tft.setTextSize(1);
+    tft.setTextColor(WHITE);
+    tft.print("CRUISE");
+    tft.setTextColor(BLACK);
+  }
 
   if(batteryPercent>66){
     tft.fillRect(0, 0, map(batteryPercent, 0,100, 0,108), 36, GREEN);
@@ -384,8 +405,64 @@ void dispValue(float &value, float &prevVal, int maxDigits, int precision, int x
 }
 
 
+void handleCruise(){
+  // Activate Cruise:
+  if(!cruising && digitalRead(BTN_PIN)==LOW && potLvl>=(0.15*4096)){
+    Serial.println("****************************************************************");
+    cruiseLvl = potLvl;
+    bool cruiseReady = false;
+    tft.fillScreen(WHITE);
+    tft.setTextColor(BLACK);
+    tft.setCursor(4,10);
+    if(!cruising) {tft.print(F("Cruising In:"));}
+    tft.setCursor(10,105);
+    tft.setTextSize(1);
+    tft.print(F("Release Throttle"));
+    unsigned long prePressMillis = millis();
+    while(digitalRead(BTN_PIN)==LOW && !cruiseReady){
+      delay(100);
+      cruisingIn = 2-((millis()-prePressMillis)/1000);
+      dispValue(cruisingIn, prevCruisingIn, 2, 0, 20, 40, 7, BLUE, WHITE);
+      if(cruisingIn<1){
+        cruiseReady = true;
+      }
+      if(cruiseReady || digitalRead(BTN_PIN)==HIGH){
+        tft.fillScreen(WHITE);
+      }
+    }
+    unsigned long postPressMillis = millis();
+    if(postPressMillis-prePressMillis>2000){
+      cruising = true;
+      if(ENABLE_VIB){
+        vibrateNotify();
+        //delay(500);
+      }
+      if(ENABLE_BUZ){
+        tone(BUZ_PIN, 900, 100);
+        delay(250);
+        tone(BUZ_PIN, 900, 100);
+      }
+    }
+  }
+
+  // Deactivate Cruise
+  else if(cruising && digitalRead(BTN_PIN)==HIGH && potLvl>=(0.15*4096)){
+    cruising = false;
+    if(ENABLE_VIB) {
+      vibrateNotify();
+      //delay(500);
+    }
+    if(ENABLE_BUZ){
+      tone(BUZ_PIN, 500, 100);
+      delay(250);
+      tone(BUZ_PIN, 500, 100);
+    }
+  }
+}
+
+
 void handleArming(int textColor, int background){
-  if(digitalRead(BTN_PIN)==LOW){
+  if(digitalRead(BTN_PIN)==LOW && potLvl<(0.15*4096)){
     bool armReady = false;
     tft.fillScreen(background);
     tft.setTextColor(textColor);
@@ -419,6 +496,7 @@ void handleArming(int textColor, int background){
       }
       else if(armed){
         disarmSystem();
+        cruising = false;
       }
     }
   }
