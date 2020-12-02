@@ -120,26 +120,6 @@ uint32_t cruisedAtMilis = 0;
 unsigned int armedSecs = 0;
 unsigned int last_throttle = 0;
 
-// OTA DFU service
-BLEDfu bledfu;
-
-// Peripheral uart service
-BLEUart bleuart;
-
-// Central uart client
-BLEClientUart clientUart;
-
-/* UUID string: 627645ca-8e29-47f1-9f1c-d3cf2399911b */
-uint8_t suuid_byte_array[16u] = {0x62,0x76,0x45,0xca,0x8e,0x29,0x47,0xf1,0x9f,0x1c,0xd3,0xcf,0x23,0x99,0x91,0x1b}; 
-//627645CA8E2947F19F1CD3CF2399911B
-
-/* UUID string: 22ADC041-7ECC-41C2-917F-52E288F58F70 */
-uint8_t cuuid_byte_array[16u] = {0x22,0xAD,0xC0,0x41,0x7E,0xCC,0x41,0xC2,0x91,0x7F,0x52,0xE2,0x88,0xF5,0x8F,0x70};
-
-BLEClientService        ppgc(suuid_byte_array);
-BLEClientCharacteristic ctrlc(cuuid_byte_array);
-BLEClientCharacteristic bslc(UUID16_CHR_BODY_SENSOR_LOCATION);
-
 BLEBas  blebas;  // battery
 BLEDis  bledis;  // device information
 
@@ -181,110 +161,8 @@ void setup() {
   InternalFS.begin();
   refreshDeviceData();
 
-  setupBluetooth();
+  setupBle();
 }
-
-void setupBluetooth() {
-  // Initialize Bluefruit with max concurrent connections as Peripheral = 1, Central = 1
-  // SRAM usage required by SoftDevice will increase with number of connections
-  Bluefruit.begin(1, 1);
-  Bluefruit.setTxPower(4);    // Check bluefruit.h for supported values
-  Bluefruit.setName("OpenPPG Controller");
-
-  bledis.setManufacturer("OpenPPG");
-  bledis.setModel("Controller V2");
-  bledis.begin();
-
-  // Callbacks for Peripheral
-  //Bluefruit.Periph.setConnectCallback(prph_connect_callback);
-  //Bluefruit.Periph.setDisconnectCallback(prph_disconnect_callback);
-
-  // Callbacks for Central
-  //Bluefruit.Central.setConnectCallback(cent_connect_callback);
-  //Bluefruit.Central.setDisconnectCallback(cent_disconnect_callback);
-
-  // Callbacks for Central ppgc
-  Bluefruit.Central.setDisconnectCallback(disconnect_callback);
-  Bluefruit.Central.setConnectCallback(connect_callback);
-
-  // To be consistent OTA DFU should be added first if it exists
-  bledfu.begin();
-
-  // Configure and Start BLE Uart Service
-  bleuart.begin();
-  bleuart.setRxCallback(prph_bleuart_rx_callback);
-
-  // Initialize ppg client
-  ppgc.begin();
-
-  // Initialize client characteristics of ppg.
-  // Note: Client Char will be added to the last service that is begin()ed.
-  bslc.begin();
-
-  // set up callback for receiving measurement
-  ctrlc.setNotifyCallback(ppg_notify_callback);
-  ctrlc.begin();
-
-  // Init BLE Central Uart Serivce
-  clientUart.begin();
-  clientUart.setRxCallback(cent_bleuart_rx_callback);
-
-  // Start BLE Battery Service
-  blebas.begin();
-  blebas.write(50);
-
-  /* Start Central Scanning
-   * - Enable auto scan if disconnected
-   * - Interval = 100 ms, window = 80 ms
-   * - Filter only accept bleuart service
-   * - Don't use active scan
-   * - Start(timeout) with timeout = 0 will scan forever (until connected)
-   */
-  Bluefruit.Scanner.setRxCallback(scan_callback);
-  Bluefruit.Scanner.restartOnDisconnect(true);
-  Bluefruit.Scanner.setInterval(160, 80);  // in unit of 0.625 ms
-  uint8_t uuid[16];
-  ppgc.uuid.get(uuid);
-  Serial.print("UUID ");
-  for(int i=0; i<sizeof(uuid); i++){
-    printHex(uuid[i]);
- }
-  Bluefruit.Scanner.filterUuid(ppgc.uuid);
-  //Bluefruit.Scanner.filterUuid(bleuart.uuid);
-  Bluefruit.Scanner.useActiveScan(false);
-  Bluefruit.Scanner.start(0);   // 0 = Don't stop scanning after n seconds
-
-  // Set up and start advertising
-  startAdv();
-}
-
-void startAdv(void) {
-  // Advertising packet
-  Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
-  Bluefruit.Advertising.addTxPower();
-
-  // Include bleuart 128-bit uuid
-  Bluefruit.Advertising.addService(bleuart);
-
-  // Secondary Scan Response packet (optional)
-  // Since there is no room for 'Name' in Advertising packet
-  Bluefruit.ScanResponse.addName();
-
-  /* Start Advertising
-   * - Enable auto advertising if disconnected
-   * - Interval:  fast mode = 20 ms, slow mode = 152.5 ms
-   * - Timeout for fast mode is 30 seconds
-   * - Start(timeout) with timeout = 0 will advertise forever (until connected)
-   *
-   * For recommended advertising interval
-   * https://developer.apple.com/library/content/qa/qa1931/_index.html
-   */
-  Bluefruit.Advertising.restartOnDisconnect(true);
-  Bluefruit.Advertising.setInterval(32, 244);  // in unit of 0.625 ms
-  Bluefruit.Advertising.setFastTimeout(30);    // number of seconds in fast mode
-  Bluefruit.Advertising.start(0);              // 0 = Don't stop advertising after n seconds
-}
-
 
 void printHex(uint8_t num) {
   char hexCar[2];
@@ -297,7 +175,6 @@ void printHex(uint8_t num) {
 void echo_all(char chr) {  // from adafruit example
   Serial.write(chr);
   if ( chr == '\r' ) Serial.write('\n');
-
 }
 
 // main loop - everything runs in threads
@@ -305,6 +182,7 @@ void loop() {
   // From Serial to both Serial & webUSB
   if (Serial.available())  echo_all(Serial.read());
   threads.run();
+  bleLoop();
 }
 
 void checkButtons() {
@@ -404,11 +282,6 @@ void sendToHub(int throttle_val) {
   controlData.armed = armed;
   controlData.throttlePercent = throttle_val;
   controlData.crc = crc16((uint8_t*)&controlData, sizeof(STR_CTRL2HUB_MSG) - 2);
-
-  if ( clientUart.discovered() ) {
-    clientUart.write((uint8_t*)&controlData, 8); // send to hub
-    Serial.println("sent to hub");
-  }
 }
 
 // read hub data if available and have it converted
@@ -416,11 +289,6 @@ void handleHubResonse() {
   int readSize = sizeof(STR_HUB2CTRL_MSG_V2);
   uint8_t serialData[readSize];
 
-  while (clientUart.available() > 0) {
-    memset(serialData, 0, sizeof(serialData));
-    int size = clientUart.readBytes(serialData, sizeof(STR_HUB2CTRL_MSG_V2));
-    receiveHubData(serialData, size);
-  }
 }
 
 // convert hub data packets into readable structs
@@ -694,212 +562,6 @@ void displayVersions() {
   display.print(F(" h:m"));
   // addVSpace();
   // display.print(chipId()); // TODO: trim down
-}
-
-
-/*------------------------------------------------------------------*/
-/* Peripheral
- *------------------------------------------------------------------*/
-void prph_connect_callback(uint16_t conn_handle) {
-  // Get the reference to current connection
-  BLEConnection* connection = Bluefruit.Connection(conn_handle);
-
-  char peer_name[32] = { 0 };
-  connection->getPeerName(peer_name, sizeof(peer_name));
-
-  Serial.print("[Prph] Connected to ");
-  Serial.println(peer_name);
-}
-
-void prph_disconnect_callback(uint16_t conn_handle, uint8_t reason) {
-  (void) conn_handle;
-  (void) reason;
-
-  Serial.println();
-  Serial.println("[Prph] Disconnected");
-}
-
-void prph_bleuart_rx_callback(uint16_t conn_handle) {
-  (void) conn_handle;
-
-  // Forward data from Mobile to our peripheral
-  char str[20+1] = { 0 };
-  bleuart.read(str, 20);
-
-  Serial.print("[Prph] RX: ");
-  Serial.println(str);
-
-  if ( clientUart.discovered() ) {
-    clientUart.print(str);
-  } else {
-    bleuart.println("[Prph] Central role not connected");
-  }
-}
-
-/*------------------------------------------------------------------*/
-/* Central
- *------------------------------------------------------------------*/
-void scan_callback(ble_gap_evt_adv_report_t* report) {
-  // Since we configure the scanner with filterUuid()
-  // Scan callback only invoked for device with bleuart service advertised
-  // Connect to the device with bleuart service in advertising packet
-  Bluefruit.Central.connect(report);
-}
-
-// For ppgc
-/**
- * Callback invoked when an connection is established
- * @param conn_handle
- */
-void connect_callback(uint16_t conn_handle)
-{
-  Serial.println("Connected");
-  Serial.print("Discovering ctrl Service ... ");
-
-  // If ppg is not found, disconnect and return
-  if ( !ppgc.discover(conn_handle) )
-  {
-    Serial.println("Found NONE");
-
-    // disconnect since we couldn't find ppg service
-    Bluefruit.disconnect(conn_handle);
-
-    return;
-  }
-
-  // Once ppg service is found, we continue to discover its characteristic
-  Serial.println("Found it");
-  
-  Serial.print("Discovering Measurement characteristic ... ");
-  if ( !ctrlc.discover() )
-  {
-    // Measurement chr is mandatory, if it is not found (valid), then disconnect
-    Serial.println("not found !!!");  
-    Serial.println("Measurement characteristic is mandatory but not found");
-    Bluefruit.disconnect(conn_handle);
-    return;
-  }
-  Serial.println("Found it");
-
-  // Measurement is found, continue to look for option Body Sensor Location
-  // https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.characteristic.body_sensor_location.xml
-  // Body Sensor Location is optional, print out the location in text if present
-  Serial.print("Discovering Body Sensor Location characteristic ... ");
-  if ( bslc.discover() )
-  {
-    Serial.println("Found it");
-    
-    // Body sensor location value is 8 bit
-    const char* body_str[] = { "Other", "Chest", "Wrist", "Finger", "Hand", "Ear Lobe", "Foot" };
-
-    // Read 8-bit BSLC value from peripheral
-    uint8_t loc_value = bslc.read8();
-    
-    Serial.print("Body Location Sensor: ");
-    Serial.println(body_str[loc_value]);
-  }else
-  {
-    Serial.println("Found NONE");
-  }
-
-  // Reaching here means we are ready to go, let's enable notification on measurement chr
-  if ( ctrlc.enableNotify() )
-  {
-    Serial.println("Ready to receive ppg Measurement value");
-  }else
-  {
-    Serial.println("Couldn't enable notify for ppg Measurement. Increase DEBUG LEVEL for troubleshooting");
-  }
-}
-
-
-/**
- * Callback invoked when a connection is dropped
- * @param conn_handle
- * @param reason is a BLE_HCI_STATUS_CODE which can be found in ble_hci.h
- */
-void disconnect_callback(uint16_t conn_handle, uint8_t reason)
-{
-  (void) conn_handle;
-  (void) reason;
-
-  Serial.print("Disconnected, reason = 0x"); Serial.println(reason, HEX);
-}
-
-void cent_connect_callback(uint16_t conn_handle) {
-  // Get the reference to current connection
-  BLEConnection* connection = Bluefruit.Connection(conn_handle);
-
-  char peer_name[32] = { 0 };
-  connection->getPeerName(peer_name, sizeof(peer_name));
-
-  Serial.print("[Cent] Connected to ");
-  Serial.println(peer_name);
-
-  if ( clientUart.discover(conn_handle) ) {
-    // Enable TXD's notify
-    clientUart.enableTXD();
-  } else {
-    // disconnect since we couldn't find bleuart service
-    Bluefruit.disconnect(conn_handle);
-  }
-}
-
-void cent_disconnect_callback(uint16_t conn_handle, uint8_t reason) {
-  (void) conn_handle;
-  (void) reason;
-
-  Serial.println("[Cent] Disconnected");
-}
-
-
-/**
- * Hooked callback that triggered when a measurement value is sent from peripheral
- * @param chr   Pointer client characteristic that even occurred,
- *              in this example it should be ctrlc
- * @param data  Pointer to received data
- * @param len   Length of received data
- */
-void ppg_notify_callback(BLEClientCharacteristic* chr, uint8_t* data, uint16_t len)
-{
-  // https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.characteristic.heart_rate_measurement.xml
-  // Measurement contains of control byte0 and measurement (8 or 16 bit) + optional field
-  // if byte0's bit0 is 0 --> measurement is 8 bit, otherwise 16 bit.
-
-  Serial.print("ppg Measurement: ");
-
-  if ( data[0] & bit(0) )
-  {
-    uint16_t value;
-    memcpy(&value, data+1, 2);
-
-    Serial.println(value);
-  }
-  else
-  {
-    Serial.println(data[1]);
-  }
-}
-
-/**
- * Callback invoked when uart received data
- * @param cent_uart Reference object to the service where the data
- * arrived. In this example it is clientUart
- */
-void cent_bleuart_rx_callback(BLEClientUart& cent_uart) {
-  char str[20+1] = { 0 };
-  cent_uart.read(str, 20);
-
-  Serial.print("[Cent] RX: ");
-  Serial.println(str);
-
-  if ( bleuart.notifyEnabled() ) {
-    // Forward data from our peripheral to Mobile
-    bleuart.print(str);
-  } else {
-    // response with no prph message
-    clientUart.println("[Cent] Peripheral role not connected");
-  }
 }
 
 void drawSymbol(uint16_t x, uint16_t y, uint8_t c, uint16_t color, uint16_t bg, uint8_t char_size) {
