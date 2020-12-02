@@ -5,7 +5,7 @@
 #define LED_SW        9   // output for LED on button_top switch
 #define LED_2         0   // output for LED 2
 #define LED_3         3  // output for LED 3
-#define THROTTLE_PIN  A0  // throttle pot input
+#define THROTTLE_PIN  A4  // throttle pot input
 #define VBAT_PIN      A1  // battery voltage divider
 
 #define CTRL_VER 0x10

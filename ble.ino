@@ -9,7 +9,7 @@ BLECharacteristic bslc = BLECharacteristic(UUID16_CHR_BODY_SENSOR_LOCATION);
 
 BLEDfu bledfu;
 
-uint8_t  bps = 0;
+uint16_t bps = 0;
 
 void setupBle(){
   while ( !Serial ) delay(10);   // for nrf52840 with native usb
@@ -121,7 +121,7 @@ void setupHRM(void)
   hrmc.setCccdWriteCallback(cccd_callback);  // Optionally capture CCCD updates
   hrmc.begin();
   uint8_t hrmdata[2] = { 0b00000110, 0x40 }; // Set the characteristic to use 8-bit values, with the sensor connected and detected
-  hrmc.write(hrmdata, 2);
+  hrmc.write16(5);
 
   // Configure the Body Sensor Location characteristic
   // See: https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.characteristic.body_sensor_location.xml
@@ -182,22 +182,24 @@ void cccd_callback(uint16_t conn_hdl, BLECharacteristic* chr, uint16_t cccd_valu
     // this handler is used for multiple CCCD records.
     if (chr->uuid == hrmc.uuid) {
         if (chr->notifyEnabled(conn_hdl)) {
-            Serial.println("Heart Rate Measurement 'Notify' enabled");
+            Serial.println("Measurement 'Notify' enabled");
         } else {
-            Serial.println("Heart Rate Measurement 'Notify' disabled");
+            Serial.println(" Measurement 'Notify' disabled");
         }
     }
 }
 
-void bleLoop(){
+void throttleBleLoop(int throttleVal){
+  Serial.print("throttle is2 ");
+  Serial.println(throttleVal);
   if ( Bluefruit.connected() ) {
-    uint8_t hrmdata[2] = { 0b00000110, bps++ };           // Sensor connected, increment BPS value
-    
+    //uint8_t hrmdata[2] = { 0b00000110, (uint8_t*)throttleVal };           // Sensor connected, increment BPS value
+    //uint8_t hrmdata[2] = { 0b00000110, bps++ };            // Sensor connected, increment BPS value
     // Note: We use .notify instead of .write!
     // If it is connected but CCCD is not enabled
     // The characteristic's value is still updated although notification is not sent
-    if ( hrmc.notify(hrmdata, sizeof(hrmdata)) ){
-      Serial.print("Heart Rate Measurement updated to: "); Serial.println(bps); 
+    if ( hrmc.notify16((uint16_t)throttleVal)){
+      Serial.print("Measurement updated to: "); Serial.println((uint16_t)throttleVal); 
     }else{
       Serial.println("ERROR: Notify not set in the CCCD or not connected!");
     }
@@ -206,8 +208,4 @@ void bleLoop(){
   {
     Serial.println("NC");
   }
-  
-
-  // Only send update once per second
-  delay(100);
 }

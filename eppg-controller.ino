@@ -107,9 +107,9 @@ const int bgInterval = 100;  // background updates (milliseconds)
 Thread ledBlinkThread = Thread();
 Thread displayThread = Thread();
 Thread throttleThread = Thread();
-Thread butttonThread = Thread();
+Thread buttonThread = Thread();
 StaticThreadController<4> threads(&ledBlinkThread, &displayThread,
-                                  &throttleThread, &butttonThread);
+                                  &throttleThread, &buttonThread);
 
 bool armed = false;
 bool use_hub_v2 = true;
@@ -152,11 +152,11 @@ void setup() {
   displayThread.onRun(updateDisplay);
   displayThread.setInterval(100);
 
-  butttonThread.onRun(checkButtons);
-  butttonThread.setInterval(25);
+  buttonThread.onRun(checkButtons);
+  buttonThread.setInterval(25);
 
   throttleThread.onRun(handleThrottle);
-  throttleThread.setInterval(50);
+  throttleThread.setInterval(200);
 
   InternalFS.begin();
   refreshDeviceData();
@@ -182,7 +182,6 @@ void loop() {
   // From Serial to both Serial & webUSB
   if (Serial.available())  echo_all(Serial.read());
   threads.run();
-  bleLoop();
 }
 
 void checkButtons() {
@@ -268,8 +267,13 @@ void handleThrottle() {
   handleHubResonse();
   pot.update();
   int rawval = pot.getValue();
-  int val = map(rawval, 0, 4095, 0, 1000);  // mapping val to min and max
-  sendToHub(val);
+  // int val = map(rawval, 0, 4095, 0, 1000); // mapping val to min and max
+  sendToHub(rawval);
+
+  // print out the value you read:
+  Serial.print("throttle is1 ");
+  Serial.println(rawval);
+  throttleBleLoop(rawval);
 }
 
 // format and transmit data to hub
