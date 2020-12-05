@@ -16,7 +16,7 @@ BLEDfu bledfu;
 uint16_t bps = 0;
 
 void setupBle() {
-  while ( !Serial ) delay(10);   // for nrf52840 with native usb
+  //while ( !Serial ) delay(10);   // for nrf52840 with native usb
 
   Serial.println("Setting up Ble");
 
@@ -91,11 +91,11 @@ void setupThrottleBle(void) {
 
   t2ctc.setProperties(CHR_PROPS_NOTIFY);
   t2ctc.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS);
-  t2ctc.setFixedLen(2);
+  t2ctc.setFixedLen(sizeof(STR_BLE_TCTRL2REC_MSG));
   t2ctc.setCccdWriteCallback(cccd_callback);  // Optionally capture CCCD updates
   t2ctc.begin();
-  uint8_t hrmdata[2] = { 0b00000110, 0x40 }; // Set the characteristic to use 8-bit values, with the sensor connected and detected
-  t2ctc.write16(0);
+  // uint8_t hrmdata[2] = { 0b00000110, 0x40 }; // Set the characteristic to use 8-bit values, with the sensor connected and detected
+  t2ctc.write((uint8_t*)&controlData, sizeof(STR_BLE_TCTRL2REC_MSG));
 }
 
 void connect_callback(uint16_t conn_handle) {
@@ -139,15 +139,15 @@ void cccd_callback(uint16_t conn_hdl, BLECharacteristic* chr, uint16_t cccd_valu
     }
 }
 
-void throttleBleLoop(int throttleVal) {
-  Serial.print("throttle is2 ");
-  Serial.println(throttleVal);
+void throttleBleLoop(STR_BLE_TCTRL2REC_MSG data) {
+  Serial.print("sending ");
+  Serial.println(data.throttlePercent);
   if ( Bluefruit.connected() ) {
     // Note: We use .notify instead of .write!
     // If it is connected but CCCD is not enabled
     // The characteristic's value is still updated although notification is not sent
-    if ( t2ctc.notify16((uint16_t)throttleVal) ) {
-      Serial.print("Measurement updated to: "); Serial.println((uint16_t)throttleVal);
+    if ( t2ctc.notify((uint8_t*)&data, sizeof(STR_BLE_TCTRL2REC_MSG)) ) {
+      Serial.println("Data updated");
     } else {
       Serial.println("ERROR: Notify not set in the CCCD or not connected!");
     }

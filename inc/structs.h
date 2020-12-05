@@ -39,8 +39,13 @@ typedef struct {
   uint16_t max_alt;     // in meters
   uint16_t crc;        // error check
 }STR_DEVICE_DATA_V2;
+typedef struct {
+  uint8_t version;  // packet struct version
+  uint8_t armed;    // 0/1 (bool)
+  uint16_t throttlePercent;  // 0 to 1000
+}STR_BLE_TCTRL2REC_MSG;
 #pragma pack(pop)
 
-static STR_CTRL2HUB_MSG controlData;
+static STR_BLE_TCTRL2REC_MSG controlData;
 static STR_HUB2CTRL_MSG_V2 hubData;
 static STR_DEVICE_DATA_V2 deviceData;

@@ -1,7 +1,7 @@
 // Arduino Pins
 #define BUTTON_TOP    7   // arm/disarm button_top
 #define BUTTON_SIDE   1   // secondary button_top
-#define BUZZER_PIN    5   // output for buzzer speaker
+#define BUZZER_PIN    11   // output for buzzer speaker
 #define LED_SW        9   // output for LED on button_top switch
 #define LED_2         0   // output for LED 2
 #define LED_3         3  // output for LED 3
@@ -9,6 +9,7 @@
 #define VBAT_PIN      A1  // battery voltage divider
 
 #define CTRL_VER 0x10
+#define BLE_CTRL_VER 0x10
 #define CTRL2HUB_ID 0x10
 #define HUB2CTRL_ID 0x20
 

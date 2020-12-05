@@ -229,7 +229,7 @@ void disarmSystem() {
   deviceData.armed_time += round(armedSecs);  // convert to mins // TODO
   writeDeviceData();
 
-  delay(500);  // dont allow immediate rearming
+  //delay(500); //TODO // dont allow immediate rearming
 }
 
 // inital button setup and config
@@ -264,35 +264,31 @@ void initDisplay() {
 
 // read throttle and send to hub
 void handleThrottle() {
-  handleHubResonse();
+  // handleHubResonse();
   pot.update();
   int rawval = pot.getValue();
-  // int val = map(rawval, 0, 4095, 0, 1000); // mapping val to min and max
-  sendToHub(rawval);
-
   // print out the value you read:
-  Serial.print("throttle is1 ");
-  Serial.println(rawval);
-  throttleBleLoop(rawval);
+  Serial.print("throttle % is ");
+  int val = map(rawval, 0, 4095, 0, 1000);  // mapping val to minimum and maximum
+  Serial.println(val);
+
+  sendToHub(val);
 }
 
 // format and transmit data to hub
 void sendToHub(int throttle_val) {
-  memset((uint8_t*)&controlData, 0, sizeof(STR_CTRL2HUB_MSG));
+  memset((uint8_t*)&controlData, 0, sizeof(STR_BLE_TCTRL2REC_MSG));
 
-  controlData.version = CTRL_VER;
-  controlData.id = CTRL2HUB_ID;
-  controlData.length = sizeof(STR_CTRL2HUB_MSG);
+  controlData.version = BLE_CTRL_VER;
   controlData.armed = armed;
   controlData.throttlePercent = throttle_val;
-  controlData.crc = crc16((uint8_t*)&controlData, sizeof(STR_CTRL2HUB_MSG) - 2);
+  throttleBleLoop(controlData);
 }
 
 // read hub data if available and have it converted
 void handleHubResonse() {
   int readSize = sizeof(STR_HUB2CTRL_MSG_V2);
   uint8_t serialData[readSize];
-
 }
 
 // convert hub data packets into readable structs
