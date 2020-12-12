@@ -127,7 +127,6 @@ BLEDis  bledis;  // device information
 
 // the setup function runs once when you press reset or power the board
 void setup() {
-
   Serial.begin(115200);
   //while ( !Serial ) delay(10);   // for nrf52840 with native usb
 
@@ -137,6 +136,10 @@ void setup() {
   pinMode(LED_SW, OUTPUT);      // set up the external LED pin
   pinMode(LED_2, OUTPUT);       // set up the internal LED2 pin
   pinMode(LED_3, OUTPUT);       // set up the internal LED3 pin
+  pinMode(LED_TESTING, OUTPUT);       // set up the internal LED3 pin
+
+  pinMode(PIN_BSTAT1, INPUT_PULLUP);
+  pinMode(PIN_BSTAT2, INPUT_PULLUP);
 
   analogReadResolution(12);     // chip provides 12bit resolution
   pot.setAnalogResolution(4096);
@@ -182,6 +185,7 @@ void loop() {
   // From Serial to both Serial & webUSB
   if (Serial.available())  echo_all(Serial.read());
   threads.run();
+  checkBatt();
 }
 
 void checkButtons() {
@@ -199,7 +203,7 @@ byte getBatteryPercent() {
 }
 
 int getInternalBatteryPercent() {
-  float measuredvbat = analogRead(VBAT_PIN);
+  float measuredvbat = analogRead(PIN_VBAT);
   measuredvbat *= 2;     // we divided by 2, so multiply back
   measuredvbat *= 3.3;   // Multiply by 3.3V, our reference voltage
   measuredvbat /= 1024;  // convert to voltage
@@ -237,6 +241,10 @@ void initButtons() {
   pinMode(BUTTON_TOP, INPUT_PULLUP);
   pinMode(BUTTON_SIDE, INPUT_PULLUP);
 
+  pinMode(BUTTON_PWR, INPUT_PULLUP); // PWR
+  pinMode(PIN_BSTAT1, INPUT_PULLUP); // Stat 1
+  pinMode(PIN_BSTAT1, INPUT_PULLUP); // Stat 2
+
   button_side.setButtonConfig(&buttonConfig);
   button_top.setButtonConfig(&buttonConfig);
   buttonConfig.setEventHandler(handleButtonEvent);
@@ -268,9 +276,9 @@ void handleThrottle() {
   pot.update();
   int rawval = pot.getValue();
   // print out the value you read:
-  Serial.print("throttle % is ");
+  //Serial.print("throttle % is ");
   int val = map(rawval, 0, 4095, 0, 1000);  // mapping val to minimum and maximum
-  Serial.println(val);
+  //Serial.println(val);
 
   sendToHub(val);
 }

@@ -6,7 +6,10 @@
 #define LED_2         0   // output for LED 2
 #define LED_3         3  // output for LED 3
 #define THROTTLE_PIN  A4  // throttle pot input
-#define VBAT_PIN      A1  // battery voltage divider
+#define PIN_VBAT      A6  // battery voltage divider
+#define BUTTON_PWR    2  // power button
+#define PIN_BSTAT1    12  // battery stat1
+#define PIN_BSTAT2    13  // battery stat2
 
 #define CTRL_VER 0x10
 #define BLE_CTRL_VER 0x10
