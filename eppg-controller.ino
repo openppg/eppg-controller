@@ -23,7 +23,7 @@
 using namespace ace_button;
 using namespace Adafruit_LittleFS_Namespace;
 
-#define FILENAME "/openppg2.bin"
+#define FILENAME "/openppg.bin"
 
 #include <Adafruit_GFX.h>
 #include <gfxfont.h>
@@ -136,7 +136,7 @@ void setup() {
   pinMode(LED_SW, OUTPUT);      // set up the external LED pin
   pinMode(LED_2, OUTPUT);       // set up the internal LED2 pin
   pinMode(LED_3, OUTPUT);       // set up the internal LED3 pin
-  pinMode(LED_TESTING, OUTPUT);       // set up the internal LED3 pin
+  //pinMode(LED_TESTING, OUTPUT);       // set up the internal LED3 pin
 
   pinMode(PIN_BSTAT1, INPUT_PULLUP);
   pinMode(PIN_BSTAT2, INPUT_PULLUP);
@@ -572,14 +572,3 @@ void displayVersions() {
   // display.print(chipId()); // TODO: trim down
 }
 
-void drawSymbol(uint16_t x, uint16_t y, uint8_t c, uint16_t color, uint16_t bg, uint8_t char_size) {
-  if ( ( c >= 32 ) && ( c <= 126 ) ) { // If it's 33-126 then use standard mono 18 font
-      display.setFont();
-  } else {
-    display.setFont(&Symbol18);  // Otherwise use special symbol font
-    if ( c > 126 ) {  // Remap anything above 126 to be in the range 32 and upwards
-      c-=(127-32);
-    }
-  }
-  display.drawChar(x, y, c, color, bg, char_size);
-}

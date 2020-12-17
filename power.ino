@@ -1,3 +1,6 @@
+#include <nrf_sdm.h>
+#include <nrf_soc.h>
+#include <WInterrupts.h>
 
 enum batteryStates {
   NOT_CHARGING,
@@ -31,4 +34,15 @@ void checkBatt(){
     }
     Serial.print("status: ");
     Serial.println(batteryStatus);
+}
+
+void powerOff() {
+  uint8_t check;
+  sd_softdevice_is_enabled(&check);
+
+  if (check == 1) {
+    sd_power_system_off();
+  } else {
+    NRF_POWER->SYSTEMOFF = 1;
+  }
 }
