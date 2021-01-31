@@ -45,10 +45,13 @@ unsigned long failed = 0;
 bool receiving = false;
 bool armed = false;
 bool cruising = false;
+bool beginner = false;
 unsigned long displayMillis = 0;
 int potLvl = 0;
+int prevPotLvl = 0;
 int cruiseLvl = 0;
-int throttlePWM = 0;
+float throttlePWM = 0;
+float prevThrotPWM = 0;
 float throttlePercent = 0;
 float prevThrotPercent = 0;
 bool buttonState = 1;
@@ -130,8 +133,59 @@ void setup() {
   drv.setMode(DRV2605_MODE_INTTRIG);
   if(ENABLE_VIB) vibrateNotify();
   eepInit();
+  if(!digitalRead(BTN_PIN)){
+    // Switch modes
+    bool mode = eep.read(6); 
+    eep.write(6, !mode); // 0=BEGINNER 1=EXPERT
+  }
+  beginner = eep.read(6);
   //setFlightHours(0);    // uncomment to set flight log hours (0.0 to 9999.9)... MUST re-comment and re-upload!
   delay(1000);
+  if(!digitalRead(BTN_PIN) && beginner){
+    tft.setCursor(10, 20);
+    tft.setTextSize(2);
+    tft.setTextColor(BLUE);
+    tft.print("BEGINNER");
+    tft.setCursor(10, 36);
+    tft.print("MODE");
+    tft.setCursor(10, 52);
+    tft.print("ACTIVATED");
+    tft.setTextColor(BLACK);
+  }
+  if(!digitalRead(BTN_PIN) && !beginner){
+    tft.setCursor(10, 20);
+    tft.setTextSize(2);
+    tft.setTextColor(RED);
+    tft.print("EXPERT");
+    tft.setCursor(10, 36);
+    tft.print("MODE");
+    tft.setCursor(10, 52);
+    tft.print("ACTIVATED");
+    tft.setTextColor(BLACK);
+  }
+  while(!digitalRead(BTN_PIN));  
+  if(beginner){  // Erase Text
+    tft.setCursor(10, 20);
+    tft.setTextSize(2);
+    tft.setTextColor(WHITE);
+    tft.print("BEGINNER");
+    tft.setCursor(10, 36);
+    tft.print("MODE");
+    tft.setCursor(10, 52);
+    tft.print("ACTIVATED");
+    tft.setTextColor(BLACK);
+  }
+  if(!beginner){  // Erase Text
+    tft.setCursor(10, 20);
+    tft.setTextSize(2);
+    tft.setTextColor(WHITE);
+    tft.print("EXPERT");
+    tft.setCursor(10, 36);
+    tft.print("MODE");
+    tft.setCursor(10, 52);
+    tft.print("ACTIVATED");
+    tft.setTextColor(BLACK);
+  }
 }
 
 void loop() {
@@ -200,12 +254,34 @@ void setAltiOffset(){
 }
 
 
+int limitedThrottle(int current, int last, int threshold) {
+  prevPotLvl = current;
+
+  if (current > last) {  // accelerating
+    if (current - last >= threshold) {  // acccelerating too fast. limit
+      int limitedThrottle = last + threshold;
+      prevPotLvl = limitedThrottle;
+      return limitedThrottle;
+    } else {
+      return current;
+    }
+  } else {  // deccelerating / maintaining
+    return current;
+  }
+}
+
+
 void handleThrottle() {
+  int maxPWM = 2000;
   pot.update();
   potLvl = pot.getValue();
+  if(beginner){
+    potLvl = limitedThrottle(potLvl, prevPotLvl, 300);
+    maxPWM = 1778;  // 75% interpolated from 1112 to 2000
+  }
   handleCruise();  // activate or deactivate cruise
-  if(cruising){ throttlePWM = mapf(cruiseLvl, 0, 4095, 1110, 2000); }
-  else{ throttlePWM = mapf(potLvl, 0, 4095, 1110, 2000); } // mapping val to minimum and maximum
+  if(cruising){ throttlePWM = mapf(cruiseLvl, 0, 4095, 1110, maxPWM); }
+  else{ throttlePWM = mapf(potLvl, 0, 4095, 1110, maxPWM); } // mapping val to minimum and maximum
   throttlePercent = mapf(throttlePWM, 1112,2000, 0,100);
   if(throttlePercent<0){
     throttlePercent = 0;
@@ -241,6 +317,21 @@ void updateDisplay(){
     tft.setTextColor(BLACK);
   }
 
+  if(beginner){
+    tft.setCursor(10, 40);
+    tft.setTextSize(1);
+    tft.setTextColor(BLUE);
+    tft.print("BEGINNER");
+    tft.setTextColor(BLACK);
+  }
+  else{
+    tft.setCursor(10, 40);
+    tft.setTextSize(1);
+    tft.setTextColor(RED);
+    tft.print("EXPERT");
+    tft.setTextColor(BLACK);
+  }
+
   if(batteryPercent>66){
     tft.fillRect(0, 0, map(batteryPercent, 0,100, 0,108), 36, GREEN);
   }
@@ -267,6 +358,13 @@ void updateDisplay(){
   }
   dispValue(batteryPercent, prevBatteryPercent, 3, 0, 108, 10, 2, BLACK, WHITE);
   tft.print("%");
+
+  // For Debugging Throttle:
+//  tft.fillRect(0, 0, map(throttlePercent, 0,100, 0,108), 36, BLUE);
+//  tft.fillRect(map(throttlePercent, 0,100, 0,108), 0, map(throttlePercent, 0,100, 108,0), 36, WHITE);
+//  //dispValue(throttlePWM, prevThrotPWM, 4, 0, 108, 10, 2, BLACK, WHITE);
+//  dispValue(throttlePercent, prevThrotPercent, 3, 0, 108, 10, 2, BLACK, WHITE);
+//  tft.print("%");
 
   tft.fillRect(0, 36, 160, 1, BLACK);
   tft.fillRect(108, 0, 1, 36, BLACK);
