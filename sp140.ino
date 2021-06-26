@@ -104,7 +104,7 @@ void dispValue(float value, float &prevVal, int maxDigits, int precision, int x,
 }
 
 void initBmp() {
-  bmp.begin();
+  bmp.begin_I2C();
   bmp.setTemperatureOversampling(BMP3_OVERSAMPLING_8X);
   bmp.setPressureOversampling(BMP3_OVERSAMPLING_4X);
   bmp.setIIRFilterCoeff(BMP3_IIR_FILTER_COEFF_3);
