@@ -150,7 +150,7 @@ void disarmSystem() {
   esc.writeMicroseconds(ESC_DISARMED_PWM);
   //Serial.println(F("disarmed"));
 
-  unsigned int disarm_melody[] = { 2093, 1976, 880 };
+  unsigned int disarm_melody[] = { 1760, 880, 660 };
   unsigned int disarm_vibes[] = { 70, 33, 0 };
 
   armed = false;
