@@ -36,7 +36,7 @@ ResponsiveAnalogRead pot(THROTTLE_PIN, false);
 AceButton button_top(BUTTON_TOP);
 ButtonConfig* buttonConfig = button_top.getButtonConfig();
 extEEPROM eep(kbits_64, 1, 64);
-CircularBuffer<float, 50> voltageBuffer;
+CircularBuffer<float, 100> voltageBuffer;
 CircularBuffer<int, 5> potBuffer;
 
 Thread ledBlinkThread = Thread();
@@ -100,7 +100,7 @@ void setup() {
   counterThread.onRun(trackPower);
   counterThread.setInterval(500);
 
-  int countdownMS = Watchdog.enable(5000);
+  Watchdog.enable(5000);
   uint8_t eepStatus = eep.begin(eep.twiClock100kHz);
   refreshDeviceData();
   setup140();

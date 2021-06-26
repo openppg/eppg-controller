@@ -125,7 +125,7 @@ void buzzInit(bool enableBuz) {
   }
 }
 
-void prepareSerialRead() {
+void prepareSerialRead() {  // TODO needed?
   while (Serial5.available() > 0) {
     byte t = Serial5.read();
   }
@@ -214,7 +214,7 @@ void printRawSentence() {
 
 void parseData() {
   // LSB First
-  //TODO is this being called even with no ESC?
+  // TODO is this being called even with no ESC?
 
   _volts = word(escData[1], escData[0]);
   //_volts = ((unsigned int)escData[1] << 8) + escData[0];
@@ -224,8 +224,9 @@ void parseData() {
     telemetryData.volts += 1.5;  // calibration
   }
 
-  voltageBuffer.push(telemetryData.volts);
-
+  if (telemetryData.volts > 1) {  // ignore empty data
+    voltageBuffer.push(telemetryData.volts);
+  }
   // Serial.print(F("Volts: "));
   // Serial.println(telemetryData.volts);
 
