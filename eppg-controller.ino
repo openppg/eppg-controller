@@ -180,6 +180,7 @@ void initButtons() {
   buttonConfig->setFeature(ButtonConfig::kFeatureLongPress);
   buttonConfig->setFeature(ButtonConfig::kFeatureSuppressAfterDoubleClick);
   buttonConfig->setFeature(ButtonConfig::kFeatureSuppressAfterLongPress);
+  buttonConfig->setDoubleClickDelay(300);  // default is 400ms
   buttonConfig->setLongPressDelay(2500);
 }
 
