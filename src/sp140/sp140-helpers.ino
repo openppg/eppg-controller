@@ -136,60 +136,26 @@ void handleTelemetry() {
   prepareSerialRead();
   byte stopbyte = 255;
   byte res = Serial5.readBytes(escData, ESC_DATA_SIZE);
-  if (escData[20] != stopbyte || escData[21] != stopbyte){
+  Serial.println(res);
+  printRawSentence();
+
+  if (escData[20] != stopbyte || escData[21] != stopbyte) {
     Serial.println("not valid stops");
     Serial5.flush();
     return;
   }
-  Serial.println(res);
-  printRawSentence();
 
-  uint16_t fletchy = fletcher16(escData, ESC_DATA_SIZE-4);
-  Serial.print("fletcher: ");
-  Serial.println(fletchy);
+  uint16_t check_calc = word(escData[19], escData[18]);
 
-  uint16_t check = word(escData[19], escData[18]);
-
-  Serial.print("old: ");
-  Serial.println(check);
-
+  if (validFletcher16(escData, ESC_DATA_SIZE-4, check_calc)) {
+    parseData();
+  } else {
+    Serial.println("checksum failed");
+  }
   Serial5.flush();
-  // enforceChecksum();
-  parseData();
-  // printRawSentence();
 }
 
-// run checksum and return true if valid
-bool enforceFletcher16() {
-  // Check checksum
-  word checksum = (unsigned short)(word(escData[19], escData[18]));
-  unsigned char sum1 = 0;
-  unsigned char sum2 = 0;
-  unsigned short sum = 0;
-  for (int i = 0; i < ESC_DATA_SIZE-4; i++) {  // 2 for stop + 2 for checksum
-    sum1 = (unsigned char)(sum1 + escData[i]);
-    sum2 = (unsigned char)(sum2 + sum1);
-  }
-  sum = (unsigned char)(sum1 - sum2);
-  sum = sum << 8;
-  sum |= (unsigned char)(sum2 - 2*sum1);
-  // Serial.print(F("     SUM: "));
-  // Serial.println(sum);
-  // Serial.print(sum1,HEX);
-  // Serial.print(" ");
-  // Serial.println(sum2,HEX);
-  // Serial.print(F("CHECKSUM: "));
-  // Serial.println(checksum);
-  if (sum != checksum) {
-    //Serial.println(checksum);
-   // Serial.println(sum);
-
-    return false;
-  }
-  return true;
-}
-
-uint16_t fletcher16(uint8_t *data, int limit) {
+bool validFletcher16(uint8_t *data, int limit, uint16_t parsed_sum) {
   uint16_t sum1 = 0;
   uint16_t sum2 = 0;
 
@@ -198,35 +164,8 @@ uint16_t fletcher16(uint8_t *data, int limit) {
     sum2 = (sum2 + sum1) % 255;
   }
 
-  return (sum2 << 8) | sum1;
-}
-
-// Not used
-void enforceChecksum() {
-  // Check checksum, revert to previous data if bad:
-  word checksum = word(escData[19], escData[18]);
-  int sum = 0;
-  for (int i=0; i<ESC_DATA_SIZE-2; i++) {
-    sum += escData[i];
-  }
-  Serial.print(F("     SUM: "));
-  Serial.println(sum);
-  Serial.print(F("CHECKSUM: "));
-  Serial.println(checksum);
-  if (sum != checksum) {
-    Serial.println(F("__________________________CHECKSUM FAILED!"));
-    failed++;
-    if (failed >= 1000) {  // keep track of how reliable the transmission is
-      transmitted = 1;
-      failed = 0;
-    }
-    for (int i=0; i<ESC_DATA_SIZE; i++) {  // revert to previous data
-      escData[i] = prevData[i];
-    }
-  }
-  for (int i=0; i<ESC_DATA_SIZE; i++) {
-    prevData[i] = escData[i];
-  }
+  uint16_t calculated = (sum2 << 8) | sum1;
+  return calculated == parsed_sum;
 }
 
 // for debugging
@@ -258,7 +197,6 @@ void parseData() {
   if (telemetryData.volts > 1) {  // ignore empty data
     voltageBuffer.push(telemetryData.volts);
   }
-
 
   // batteryPercent = mapf(telemetryData.volts, BATT_MIN_V, BATT_MAX_V, 0.0, 100.0); // flat line
 
