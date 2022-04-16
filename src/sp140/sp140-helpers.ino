@@ -134,11 +134,18 @@ void prepareSerialRead() {  // TODO needed?
 
 void handleTelemetry() {
   prepareSerialRead();
-  Serial5.readBytes(escData, ESC_DATA_SIZE);
-  // enforceChecksum();
-  if (enforceFletcher16()) {
-    parseData();
+  byte stopbyte = 255;
+  byte res = Serial5.readBytes(escData, ESC_DATA_SIZE);
+  if (escData[20] != stopbyte || escData[21] != stopbyte){
+    Serial.println("not valid stops");
+    Serial5.flush();
+    return;
   }
+  Serial.println(res);
+  printRawSentence();
+  Serial5.flush();
+  // enforceChecksum();
+  parseData();
   // printRawSentence();
 }
 
@@ -222,6 +229,9 @@ void parseData() {
   //_volts = ((unsigned int)escData[1] << 8) + escData[0];
   telemetryData.volts = _volts / 100.0;
 
+  //Serial.print(F("Volts: "));
+  //Serial.println(_volts);
+
   if (telemetryData.volts > BATT_MIN_V) {
     telemetryData.volts += 1.5;  // calibration
   }
@@ -230,8 +240,6 @@ void parseData() {
     voltageBuffer.push(telemetryData.volts);
   }
 
-  // Serial.print(F("Volts: "));
-  // Serial.println(telemetryData.volts);
 
   // batteryPercent = mapf(telemetryData.volts, BATT_MIN_V, BATT_MAX_V, 0.0, 100.0); // flat line
 
@@ -244,8 +252,8 @@ void parseData() {
   _amps = word(escData[5], escData[4]);
   telemetryData.amps = _amps;
 
-  // Serial.print(F("Amps: "));
-  // Serial.println(amps);
+  //Serial.print(F("Amps: "));
+  //Serial.println(_amps);
 
   watts = telemetryData.amps * telemetryData.volts;
 

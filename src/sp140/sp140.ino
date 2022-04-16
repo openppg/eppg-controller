@@ -96,7 +96,7 @@ void setup() {
   throttleThread.setInterval(22);
 
   telemetryThread.onRun(handleTelemetry);
-  telemetryThread.setInterval(50);
+  telemetryThread.setInterval(100);
 
   counterThread.onRun(trackPower);
   counterThread.setInterval(250);
