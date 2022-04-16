@@ -136,8 +136,7 @@ void handleTelemetry() {
   prepareSerialRead();
   byte stopbyte = 255;
   byte res = Serial5.readBytes(escData, ESC_DATA_SIZE);
-  Serial.println(res);
-  printRawSentence();
+  //printRawSentence();
 
   if (escData[20] != stopbyte || escData[21] != stopbyte) {
     Serial.println("not valid stops");
@@ -190,11 +189,9 @@ void parseData() {
   //Serial.print(F("Volts: "));
   //Serial.println(_volts);
 
-  if (telemetryData.volts > BATT_MIN_V) {
-    telemetryData.volts += 1.5;  // calibration
-  }
+  telemetryData.volts += VOLT_OFFSET;  // calibration
 
-  if (telemetryData.volts > 1) {  // ignore empty data
+  if (telemetryData.volts > 10) {  // ignore empty data
     voltageBuffer.push(telemetryData.volts);
   }
 
@@ -207,7 +204,7 @@ void parseData() {
   // Serial.println(temperatureC);
 
   _amps = word(escData[5], escData[4]);
-  telemetryData.amps = _amps;
+  telemetryData.amps = constrain(_amps / 12.5, 0, 500);
 
   //Serial.print(F("Amps: "));
   //Serial.println(_amps);

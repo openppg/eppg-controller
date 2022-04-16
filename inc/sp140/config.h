@@ -16,7 +16,7 @@
 
 // Calibration
 #define MAMP_OFFSET 200
-#define VOLT_OFFSET 1.5
+#define VOLT_OFFSET 1.8
 
 #define VERSION_MAJOR 5
 #define VERSION_MINOR 4
@@ -59,7 +59,7 @@
 #define ESC_BAUD_RATE         115200
 #define ESC_DATA_SIZE         22
 #define READ_INTERVAL         0
-#define ESC_TIMEOUT           100
+#define ESC_TIMEOUT           50
 #define ENABLE_BUZ            true    // enable buzzer
 #define ENABLE_VIB            true    // enable vibration
 #define ENABLE_VIB_LOW_BAT    false   // vibrate if armed and battery voltage sags below min volts. Gets pilot's attention.
