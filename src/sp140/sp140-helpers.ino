@@ -135,7 +135,10 @@ void prepareSerialRead() {  // TODO needed?
 void handleTelemetry() {
   prepareSerialRead();
   byte stopbyte = 255;
-  byte res = Serial5.readBytes(escData, ESC_DATA_SIZE);
+  if (Serial5.available() < ESC_DATA_SIZE) {
+    return; // not enough data so wait for more
+  }
+  Serial5.readBytes(escData, ESC_DATA_SIZE);
   //printRawSentence();
 
   if (escData[20] != stopbyte || escData[21] != stopbyte) {
