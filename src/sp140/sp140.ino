@@ -9,6 +9,7 @@
 #endif
 
 #include "../../inc/sp140/structs.h"         // data structs
+#include "../../lib/esc.h"         // ESC library
 #include <AceButton.h>           // button clicks
 #include <Adafruit_BMP3XX.h>     // barometer
 #include <Adafruit_DRV2605.h>    // haptic controller

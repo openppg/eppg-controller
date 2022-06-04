@@ -5,17 +5,6 @@
 #pragma pack(push, 1)
 
 typedef struct {
-  float volts;
-  float temperatureC;
-  float amps;
-  float eRPM;
-  float inPWM;
-  float outPWM;
-  uint8_t status_flags;
-  word checksum;
-}STR_ESC_TELEMETRY_140;
-
-typedef struct {
   uint8_t version_major;  // 5
   uint8_t version_minor;  // 1
   uint16_t armed_time;    // minutes (think Hobbs)
@@ -29,7 +18,5 @@ typedef struct {
   uint16_t crc;        // error check
 }STR_DEVICE_DATA_140_V1;
 #pragma pack(pop)
-
-static STR_ESC_TELEMETRY_140 telemetryData;
 
 #endif  // INC_SP140_STRUCTS_H_
