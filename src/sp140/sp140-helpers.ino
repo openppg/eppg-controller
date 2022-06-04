@@ -157,6 +157,7 @@ void prepareSerialRead() {  // TODO needed?
 }
 
 void handleTelemetry() {
+  // esc.update();
   prepareSerialRead();
   SerialESC.readBytes(escData, ESC_DATA_SIZE);
   if (enforceFletcher16()) {
@@ -216,6 +217,7 @@ void parseData() {
   _volts = word(escData[1], escData[0]);
   //_volts = ((unsigned int)escData[1] << 8) + escData[0];
   telemetryData.volts = _volts / 100.0;
+  //telemetryData.volts = esc.getVoltage();
 
   if (telemetryData.volts > BATT_MIN_V) {
     telemetryData.volts += 1.5;  // calibration

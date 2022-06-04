@@ -2,7 +2,6 @@
 #ifndef INC_SP140_GLOBALS_H_
 #define INC_SP140_GLOBALS_H_
 
-byte escData[ESC_DATA_SIZE];
 unsigned long cruisedAtMilis = 0;
 unsigned long transmitted = 0;
 unsigned long failed = 0;
