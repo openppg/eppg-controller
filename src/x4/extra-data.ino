@@ -71,8 +71,25 @@ void line_state_callback(bool connected) {
 }
 
 
-DynamicJsonDocument deviceDataToJson(STR_DEVICE_DATA_V2 data) {
-  const size_t capacity = JSON_OBJECT_SIZE(11) + 112;
+  if (doc["command"] && doc["command"] == "rbl"){
+    displayMessage("BL - UF2");
+    rebootBootloader();
+    return; // run only the command
+  }
+
+  deviceData.screen_rotation = doc["screen_rot"];  // "2/0"
+  deviceData.sea_pressure = doc["sea_pressure"];  // 1013.25 mbar
+  deviceData.metric_temp = doc["metric_temp"];  // true/false
+  deviceData.metric_alt = doc["metric_alt"];  // true/false
+  deviceData.min_batt_v = doc["min_batt_v"];  // 47.2v
+  deviceData.max_batt_v = doc["max_batt_v"];  // 59.2v
+  initDisplay();
+  writeDeviceData();
+  send_usb_serial();
+}
+
+void send_usb_serial() {
+  const size_t capacity = JSON_OBJECT_SIZE(11) + 90;
   DynamicJsonDocument doc(capacity);
 
   doc["major_v"] = VERSION_MAJOR;
@@ -85,45 +102,8 @@ DynamicJsonDocument deviceDataToJson(STR_DEVICE_DATA_V2 data) {
   doc["max_batt_v"] = data.max_batt_v;
   doc["sea_pressure"] = data.sea_pressure;
   doc["device_id"] = chipId();
-  doc["crc"] = crc16((uint8_t*)&data, sizeof(data) - 2);
-  return doc;
-}
 
-STR_DEVICE_DATA_V2 jsonToDeviceData(DynamicJsonDocument doc, bool sanitize = true) {
-  STR_DEVICE_DATA_V2 data = STR_DEVICE_DATA_V2();
-
-  data.screen_rotation = doc["screen_rot"];  // "2/0"
-  data.sea_pressure = doc["sea_pressure"];  // 1013.25 mbar
-  data.metric_temp = doc["metric_temp"];  // true/false
-  data.metric_alt = doc["metric_alt"];  // true/false
-  data.min_batt_v = doc["min_batt_v"];  // 47.2v
-  data.max_batt_v = doc["max_batt_v"];  // 59.2v
-  if (!sanitize) {
-    data.armed_time = doc["armed_time"];
-    data.version_major = doc["major_v"];
-    data.version_minor = doc["minor_v"];
-  }
-  data.crc = crc16((uint8_t*)&data, sizeof(data) - 2);
-  return data;
-}
-
-void parse_usb_serial() {
-  const size_t capacity = JSON_OBJECT_SIZE(11) + 112;
-  DynamicJsonDocument doc(capacity);
-
-  if (doc["command"] && doc["command"] == "rbl") {
-    enterUf2Dfu();
-    return;
-  }
-
-  deviceData = jsonToDeviceData(doc, true);
-  initDisplay();
-  writeDeviceData();
-}
-
-void send_usb_serial() {
-  const size_t capacity = JSON_OBJECT_SIZE(11) + 112;
-  DynamicJsonDocument doc(capacity);
-
-  doc = deviceDataToJson(deviceData);
+  char output[256];
+  serializeJson(doc, output);
+  usb_web.println(output);
 }

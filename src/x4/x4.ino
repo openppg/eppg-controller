@@ -1,9 +1,9 @@
 // Copyright 2020 <Zach Whitehead>
 // OpenPPG
 
-#include "libraries/crc.c"       // packet error checking
-#include "inc/config.h"          // device config
-#include "inc/structs.h"         // data structs
+#include "../../lib/crc.c"       // packet error checking
+#include "../../inc/x4/config.h"          // device config
+#include "../../inc/x4/structs.h"         // data structs
 #include <AceButton.h>           // button clicks
 #include <bluefruit.h>
 #include <Adafruit_DRV2605.h>    // haptic controller
@@ -174,16 +174,11 @@ void printHex(uint8_t num) {
   Serial.print(hexCar);
 }
 
-// function to echo to both Serial and WebUSB
-void echo_all(char chr) {  // from adafruit example
-  Serial.write(chr);
-  if ( chr == '\r' ) Serial.write('\n');
-}
-
 // main loop - everything runs in threads
 void loop() {
-  // From Serial to both Serial & webUSB
-  if (Serial.available())  echo_all(Serial.read());
+  Watchdog.reset();
+  // from WebUSB to both Serial & webUSB
+  if (usb_web.available()) parse_usb_serial();
   threads.run();
   checkBatt();
 }
@@ -572,3 +567,11 @@ void displayVersions() {
   // display.print(chipId()); // TODO: trim down
 }
 
+// display hidden page (firmware version and total armed time)
+void displayMessage(char *message) {
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.setTextSize(2);
+  display.println(message);
+  display.display();
+}

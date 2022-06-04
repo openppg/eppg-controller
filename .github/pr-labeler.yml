@@ -1,0 +1,21 @@
+feature:
+  - 'feature/*'
+enhancement:
+  - 'improvement/*'
+  - 'improve/*'
+  - 'enhancement/*'
+  - 'enhance/*'
+fix:
+  - 'fix/*'
+  - 'bug/*'
+  - 'bugfix/*'
+  - 'hotfix/*'
+  - 'hot-fix/*'
+tech-debt:
+  - 'techdebt/*'
+  - 'refactor/*'
+maintenance:
+  - 'chore/*'
+  - 'cleanup/*'
+  - 'maint/*'
+  - 'maintenance/*'

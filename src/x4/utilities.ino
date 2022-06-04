@@ -87,5 +87,27 @@ void printDeviceData() {
 
 // get chip serial number (for nrf52)
 String chipId() {
-  return getMcuUniqueID();
+  volatile uint32_t val1, val2, val3, val4;
+  volatile uint32_t *ptr1 = (volatile uint32_t *)0x0080A00C;
+  val1 = *ptr1;
+  volatile uint32_t *ptr = (volatile uint32_t *)0x0080A040;
+  val2 = *ptr;
+  ptr++;
+  val3 = *ptr;
+  ptr++;
+  val4 = *ptr;
+
+  char id_buf[33];
+  sprintf(id_buf, "%8x%8x%8x%8x", val1, val2, val3, val4);
+  return String(id_buf);
+}
+
+// reboot/reset controller
+void(* resetFunc) (void) = 0;  // declare reset function @ address 0
+
+// sets the magic pointer to trigger a reboot to the bootloader for updating
+void rebootBootloader() {
+  *DBL_TAP_PTR = DBL_TAP_MAGIC;
+
+  resetFunc();
 }

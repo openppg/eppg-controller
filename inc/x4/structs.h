@@ -1,4 +1,6 @@
 // Copyright 2020 <Zach Whitehead>
+#ifndef INC_X4_STRUCTS_H_
+#define INC_X4_STRUCTS_H_
 
 #pragma pack(push, 1)
 typedef struct {
@@ -49,3 +51,5 @@ typedef struct {
 static STR_BLE_TCTRL2REC_MSG controlData;
 static STR_HUB2CTRL_MSG_V2 hubData;
 static STR_DEVICE_DATA_V2 deviceData;
+
+#endif  // INC_X4_STRUCTS_H_

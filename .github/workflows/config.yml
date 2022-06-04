@@ -4,13 +4,24 @@ on:
   - pull_request
 
 jobs:
+  cpplint:
+    name: CPP Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.x
+      - run: pip install cpplint
+      - run: cpplint --linelength 140 --filter=-runtime/int,-build/include_subdir --recursive ./inc/ ./lib/ ./src/
   pio-build:
     name: PlatformIO Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@master
+      - uses: actions/checkout@v2
       - name: Setup Python
-        uses: actions/setup-python@master
+        uses: actions/setup-python@v2
         with:
           python-version: 3.x
       - name: Install Platform IO
@@ -19,3 +30,33 @@ jobs:
           pip install -U platformio adafruit-nrfutil
       - name: Build
         run: platformio run
+      - name: Archive bin
+        uses: actions/upload-artifact@v2
+        with:
+          name: bins
+          path: .pio/build/**/firmware.bin
+  generate-uf2:
+    name: Generate uf2
+    needs: pio-build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        device: [OpenPPG-CM0-SP140, OpenPPG-CM0-X4]
+      fail-fast: false
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v2
+      - name: Checkout Microsoft uf2 repo
+        uses: actions/checkout@v2
+        with:
+          repository: microsoft/uf2
+      - name: Download built binary
+        uses: actions/download-artifact@v2
+        with:
+          name: bins
+      - name: Run uf2 conversion
+        run: python3 utils/uf2conv.py ${{ matrix.device }}/firmware.bin -c -o ${{ matrix.device }}.uf2
+      - uses: actions/upload-artifact@v2
+        with:
+          name: ${{ matrix.device }}.uf2
+          path: ${{ matrix.device }}.uf2
