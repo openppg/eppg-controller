@@ -9,7 +9,6 @@
 #define BUTTON_SIDE   7   // secondary button_top
 #define BUZZER_PIN    10  // output for buzzer speaker
 #define LED_SW        12  // output for LED
-#define LED_2         -1  // FIXME   // output for LED 2
 #define THROTTLE_PIN  A0  // throttle pot input
 
 #define SerialESC  Serial1  // ESC UART connection

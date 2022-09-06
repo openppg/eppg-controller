@@ -29,12 +29,11 @@
 #ifdef M0_PIO
   #include <Adafruit_SleepyDog.h>  // watchdog
   #include <extEEPROM.h>  // https://github.com/PaoloP74/extEEPROM
-#endif
-
-#ifdef RP2040_PIO
+#elif RP_PIO
   // rp2040 specific libraries here
   #include <EEPROM.h>
   #include "hardware/watchdog.h"
+  #include "pico/unique_id.h"
 #endif
 
 #include <Fonts/FreeSansBold12pt7b.h>
@@ -84,10 +83,6 @@ unsigned int last_throttle = 0;
 
 // the setup function runs once when you press reset or power the board
 void setup() {
-  #if defined(RP_PIO) && defined(USE_TINYUSB)
-    // Manual begin() is required on core without built-in support for TinyUSB such as mbed rp2040
-    TinyUSB_Device_Init(0);
-  #endif
 
   Serial.begin(115200);
   SerialESC.begin(ESC_BAUD_RATE);
@@ -107,8 +102,6 @@ void setup() {
   analogReadResolution(12);     // M0 family chip provides 12bit resolution
   pot.setAnalogResolution(4096);
   unsigned int startup_vibes[] = { 27, 27, 0 };
-  runVibe(startup_vibes, 3);
-
   initButtons();
 
   ledBlinkThread.onRun(blinkLED);
@@ -132,9 +125,8 @@ void setup() {
 #ifdef M0_PIO
   Watchdog.enable(5000);
   uint8_t eepStatus = eep.begin(eep.twiClock100kHz);
-#endif
-#ifdef RP2040_PIO
-  watchdog_enable(8000, 1);
+#elif RP_PIO
+  watchdog_enable(5000, 1);
   EEPROM.begin(512);
 #endif
   refreshDeviceData();
@@ -143,6 +135,7 @@ void setup() {
   Watchdog.reset();
 #endif
   initDisplay();
+  modeSwitch();
 }
 
 void setup140() {
@@ -150,8 +143,6 @@ void setup140() {
   esc.writeMicroseconds(ESC_DISARMED_PWM);
 
   initBuzz();
-  modeSwitch();
-
   initBmp();
   getAltitudeM();  // throw away first value
   initVibe();
@@ -161,9 +152,7 @@ void setup140() {
 void loop() {
 #ifdef M0_PIO
   Watchdog.reset();
-#endif
-
-#ifdef RP2040_PIO
+#elif RP_PIO
   watchdog_update();
 #endif
 
@@ -174,6 +163,23 @@ void loop() {
 
   threads.run();
 }
+
+#ifdef RP_PIO
+// set up the second core. Nothing to do for now
+void setup1() {}
+
+// automatically runs on the second core of the RP2040
+void loop1() {
+  if (rp2040.fifo.available() > 0) {
+    STR_NOTE noteData;
+    uint32_t note_msg = rp2040.fifo.pop();  // get note from fifo queue
+    memcpy((uint32_t*)&noteData, &note_msg, sizeof(noteData));
+    tone(BUZZER_PIN, noteData.freq);
+    delay(noteData.duration);
+    noTone(BUZZER_PIN);
+  }
+}
+#endif
 
 void checkButtons() {
   button_top.check();
@@ -189,8 +195,8 @@ void disarmSystem() {
   potBuffer.clear();
   prevPotLvl = 0;
 
-  unsigned int disarm_melody[] = { 2093, 1976, 880 };
-  unsigned int disarm_vibes[] = { 70, 33, 0 };
+  u_int16_t disarm_melody[] = { 2093, 1976, 880 };
+  unsigned int disarm_vibes[] = { 100, 0 };
 
   armed = false;
   removeCruise(false);
@@ -319,7 +325,7 @@ void handleThrottle() {
 
 // get the PPG ready to fly
 bool armSystem() {
-  unsigned int arm_melody[] = { 1760, 1976, 2093 };
+  uint16_t arm_melody[] = { 1760, 1976, 2093 };
   unsigned int arm_vibes[] = { 70, 33, 0 };
 
   armed = true;
@@ -551,7 +557,7 @@ void setCruise() {
     display.setTextColor(RED);
     display.print(F("CRUISE"));
 
-    unsigned int notify_melody[] = { 900, 900 };
+    uint16_t notify_melody[] = { 900, 900 };
     playMelody(notify_melody, 2);
 
     bottom_bg_color = YELLOW;
@@ -580,9 +586,8 @@ void removeCruise(bool alert) {
     vibrateNotify();
 
     if (ENABLE_BUZ) {
-      tone(BUZZER_PIN, 500, 100);
-      delay(250);
-      tone(BUZZER_PIN, 500, 100);
+      uint16_t notify_melody[] = { 500, 500 };
+      playMelody(notify_melody, 2);
     }
   }
 }

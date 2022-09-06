@@ -15,7 +15,7 @@ See stable releases [here](https://github.com/openppg/eppg-controller/releases)
 
 ## Build and flash firmware
 
-OpenPPG supports flashing the firmware PlatformIO. Older versions were also compatible with Arduino IDE
+OpenPPG supports flashing the firmware PlatformIO. Older versions were also compatible with Arduino IDE.
 
 ## Using PlatformIO
 
@@ -25,15 +25,16 @@ Suitable for Mac, Windows, and Linux
 
 1. Follow the instructions here for using with VSCode https://platformio.org/install/ide?install=vscode
 2. Extract the downloaded code from the repo [here](https://github.com/openppg/eppg-controller/archive/master.zip) (or `git clone` it)
-3. Open the folder using the PlatformIO "open project" option inside of VSCode
+3. Open the folder using the PlatformIO "open project" option inside of VSCode.
 
 ### Flash the OpenPPG Code
 
-1. Click the "PlatformIO Build" button inside of VSCode or enter `platformio run --target upload` in the command line. PlatformIO will automatically download libraries the first time it runs
+1. Click the "PlatformIO Build" button inside of VSCode or enter `platformio run --target upload` in the command line. PlatformIO will automatically download libraries the first time it runs.
 
 #### Install the driver
 
-Batch 3+ OpenPPG controllers and all SP140 controllers are powered by Atmel’s SAMD21G18A MCU, featuring a 32-bit ARM Cortex® M0+ core. On some operating systems you may need extra drivers to communicate with it.
+Batch 3+ OpenPPG controllers and early SP140 controllers are powered by Atmel’s SAMD21G18A MCU, featuring a 32-bit ARM Cortex® M0+ core. On some operating systems you may need extra drivers to communicate with it.
+Newer SP140 controllers feature the RP2040 MCU which is a dual-core variant of the ARM Cortex® M0+. 
 
 #### Download and Prepare OpenPPG Code
 
@@ -41,9 +42,9 @@ Batch 3+ OpenPPG controllers and all SP140 controllers are powered by Atmel’s 
 
 #### Flash the OpenPPG Code
 
-1. First make sure the code compiles by hitting the check button in the bottom left "Build"
-2. Connect the controller to your computer by using the micro USB port on the bottom of the controller
-3. Flash the firmware by clicking "Upload" in the bottom left
+1. First make sure the code compiles by hitting the check button in the bottom left "Build".
+2. Connect the controller to your computer by using the USB port on the bottom of the controller.
+3. Flash the firmware by clicking "Upload" in the bottom left.
 
 ## Bootloader
 
@@ -53,7 +54,7 @@ Learn more here https://github.com/openppg/uf2-samdx1
 
 ### Building .uf2 update file
 
-The uf2 bootloader can update firmware with a .uf2 binary file built from a complied .bin firmware file. The .bin file is automatically built when "verifying" the firmware in either Ardion IDE or PIO.
+The uf2 bootloader can update firmware with a .uf2 binary file built from a complied .bin firmware file. The .bin file is automatically built when "verifying" the firmware in either Arduino IDE or PIO.
 Using the uf2-samdx repo above python tool the command to build a compatible .uf2 file should look something like:
 
 ```bash

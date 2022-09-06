@@ -146,7 +146,7 @@ void modeSwitch() {
     deviceData.performance_mode = 0;
   }
   writeDeviceData();
-  unsigned int notify_melody[] = { 900, 1976 };
+  uint16_t notify_melody[] = { 900, 1976 };
   playMelody(notify_melody, 2);
 }
 

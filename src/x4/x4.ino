@@ -123,7 +123,7 @@ byte getBatteryPercent() {
 }
 
 void disarmSystem() {
-  unsigned int disarm_melody[] = { 2093, 1976, 880 };
+  uint16_t disarm_melody[] = { 2093, 1976, 880 };
   unsigned int disarm_vibes[] = { 70, 33, 0 };
 
   armed = false;
@@ -236,7 +236,7 @@ void receiveHubData(uint8_t *buf, uint32_t size) {
 
 // get the PPG ready to fly
 bool armSystem() {
-  unsigned int arm_melody[] = { 1760, 1976, 2093 };
+  uint16_t arm_melody[] = { 1760, 1976, 2093 };
   unsigned int arm_vibes[] = { 70, 33, 0 };
   unsigned int arm_fail_vibes[] = { 14, 3, 0 };
 

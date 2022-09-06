@@ -63,29 +63,47 @@ void blinkLED() {
 bool runVibe(unsigned int sequence[], int siz) {
   if (!ENABLE_VIB) { return false; }
 
-  vibe.begin();
-  for (int thisNote = 0; thisNote < siz; thisNote++) {
-    vibe.setWaveform(thisNote, sequence[thisNote]);
+  for (int thisVibe = 0; thisVibe < siz; thisVibe++) {
+    vibe.setWaveform(thisVibe, sequence[thisVibe]);
   }
   vibe.go();
   return true;
 }
 
-bool playMelody(unsigned int melody[], int siz) {
+bool playMelody(uint16_t melody[], int siz) {
   if (!ENABLE_BUZ) { return false; }
-
   for (int thisNote = 0; thisNote < siz; thisNote++) {
     // quarter note = 1000 / 4, eigth note = 1000/8, etc.
     int noteDuration = 125;
-    tone(BUZZER_PIN, melody[thisNote]);
-    delay(noteDuration);  // to distinguish the notes, delay between them
+    playNote(melody[thisNote], noteDuration);
   }
-  noTone(BUZZER_PIN);
   return true;
 }
 
+#ifdef RP_PIO
+// non-blocking tone function that uses second core
+void playNote(uint16_t note, uint16_t duration) {
+    STR_NOTE noteData;
+    // fifo uses 32 bit messages so package up the note and duration
+    uint32_t note_msg;
+    noteData.duration = duration;
+    noteData.freq = note;
+
+    memcpy((uint32_t*)&note_msg, &noteData, sizeof(noteData));
+    rp2040.fifo.push_nb(note_msg);  // send note to second core via fifo queue
+}
+#else
+// blocking tone function that delays for notes
+void playNote(uint16_t note, uint16_t duration) {
+  // quarter note = 1000 / 4, eigth note = 1000/8, etc.
+  tone(BUZZER_PIN, note);
+  delay(duration);  // to distinguish the notes, delay between them
+  noTone(BUZZER_PIN);
+}
+#endif
+
 void handleArmFail() {
-  unsigned int arm_fail_melody[] = { 820, 640 };
+  uint16_t arm_fail_melody[] = { 820, 640 };
   playMelody(arm_fail_melody, 2);
 }
 
@@ -101,6 +119,7 @@ void printDeviceData() {
   Serial.println(deviceData.crc);
 }
 
+#ifdef M0_PIO
 // get chip serial number (for SAMD21)
 String chipId() {
   volatile uint32_t val1, val2, val3, val4;
@@ -117,6 +136,14 @@ String chipId() {
   sprintf(id_buf, "%8x%8x%8x%8x", val1, val2, val3, val4);
   return String(id_buf);
 }
+#elif RP_PIO
+String chipId() {
+  int len = 2 * PICO_UNIQUE_BOARD_ID_SIZE_BYTES + 1;
+  uint8_t buff[len] = "";
+  pico_get_unique_board_id_string((char *)buff, len);
+  return String((char *)buff);
+}
+#endif // M0_PIO/RP_PIO
 
 #ifdef M0_PIO
 // reboot/reset controller
@@ -129,11 +156,13 @@ void rebootBootloader() {
   resetFunc();
 }
 
-#else
+#elif RP_PIO
 
 // reboot/reset controller
 void rebootBootloader() {
-  //TinyUSB_Port_EnterDFU();
+#ifdef USE_TINYUSB
+  TinyUSB_Port_EnterDFU();
+#endif
 }
 #endif
 

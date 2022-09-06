@@ -62,7 +62,7 @@ void runVibe(unsigned int sequence[], int siz) {
   vibe.go();
 }
 
-void playMelody(unsigned int melody[], int siz) {
+void playMelody(uint16_t melody[], int siz) {
   for (int thisNote = 0; thisNote < siz; thisNote++) {
     // quarter note = 1000 / 4, eigth note = 1000/8, etc.
     int noteDuration = 125;
@@ -73,7 +73,7 @@ void playMelody(unsigned int melody[], int siz) {
 }
 
 void handleArmFail() {
-  unsigned int arm_fail_melody[] = { 820, 640 };
+  uint16_t arm_fail_melody[] = { 820, 640 };
   playMelody(arm_fail_melody, 2);
 }
 
