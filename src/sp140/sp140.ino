@@ -67,8 +67,10 @@ Thread throttleThread = Thread();
 Thread buttonThread = Thread();
 Thread telemetryThread = Thread();
 Thread counterThread = Thread();
-StaticThreadController<6> threads(&ledBlinkThread, &displayThread, &throttleThread,
-                                  &buttonThread, &telemetryThread, &counterThread);
+Thread warningCheckThread = Thread();
+StaticThreadController<7> threads(&ledBlinkThread, &displayThread, &throttleThread,
+                                  &buttonThread, &telemetryThread, &counterThread,
+                                  &warningCheckThread);
 
 bool armed = false;
 bool use_hub_v2 = true;
@@ -76,6 +78,9 @@ int page = 0;
 float armAltM = 0;
 uint32_t armedAtMilis = 0;
 uint32_t cruisedAtMilisMilis = 0;
+uint32_t alertedAtMillis = 0;
+bool alert_mode = false;
+
 unsigned int armedSecs = 0;
 unsigned int last_throttle = 0;
 
@@ -121,6 +126,9 @@ void setup() {
 
   counterThread.onRun(trackPower);
   counterThread.setInterval(250);
+
+  warningCheckThread.onRun(telemetryWarningCheck);
+  warningCheckThread.setInterval(250);
 
 #ifdef M0_PIO
   Watchdog.enable(5000);
@@ -377,10 +385,14 @@ void updateDisplay() {
     display.fillScreen(WHITE);
     screen_wiped = true;
   }
+  Serial.println(telemetryData.temperatureC);
+
+  if (!alert_mode ) {
+    displayPage0();
+  }
   //Serial.print("v: ");
   //Serial.println(volts);
 
-  displayPage0();
   //dispValue(kWatts, prevKilowatts, 4, 1, 10, /*42*/55, 2, BLACK, DEFAULT_BG_COLOR);
   //display.print("kW");
 
@@ -423,9 +435,10 @@ void updateDisplay() {
   //display.fillRect(102, 0, 6, 9, BLACK);
   //display.fillRect(102, 27, 6, 10, BLACK);
 
-  display.fillRect(0, 36, 160, 1, BLACK);
-  display.fillRect(108, 0, 1, 36, BLACK);
-  display.fillRect(0, 92, 160, 1, BLACK);
+  //these are really just 1px thick lines
+  display.fillRect(0, 36, 160, 1, BLACK); // top 1/3
+  display.fillRect(108, 0, 1, 36, BLACK); // top right
+  display.fillRect(0, 92, 160, 1, BLACK); // bottom 1/3
 
   displayAlt();
 
@@ -436,6 +449,39 @@ void updateDisplay() {
   displayTime(throttleSecs, 8, 102, bottom_bg_color);
 
   //dispPowerCycles(104,100,2);
+}
+
+void displayAlert(bool critical) {
+  // show alert for 5 seconds
+  if (((millis() - alertedAtMillis) / 1000) < 5){
+    alert_mode = true; 
+    Serial.println("showing alert");
+  } else {
+    Serial.println("will be done showing alert");
+    alert_mode = false;
+  };
+
+  uint16_t alert_bg_color = critical ? RED : ORANGE;
+  static int middle_top_y = 37;
+  static int middle_height = 55;
+
+  display.fillRect(0, middle_top_y, 160, middle_height, alert_bg_color); // middle 1/3 
+  display.setTextColor(WHITE);
+  display.setTextSize(2);
+  display.setCursor(60, middle_top_y + (middle_height / 5));
+
+  if (critical){
+    display.print(F("CRIT:"));
+
+  } else {
+    display.print(F("WARN:"));
+  }
+
+  display.setCursor(30, middle_top_y + (3 *(middle_height / 5)));
+
+  display.print("HIGH TEMP");
+
+  alertedAtMillis = millis(); // save last time we alerted
 }
 
 // display first page (voltage and current)
@@ -470,6 +516,7 @@ void displayPage0() {
 }
 
 // display second page (mAh and armed time)
+// not used currently for sp140
 void displayPage1() {
   dispValue(telemetryData.volts, prevVolts, 5, 1, 84, 42, 2, BLACK, DEFAULT_BG_COLOR);
   display.print("V");

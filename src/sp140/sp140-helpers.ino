@@ -20,6 +20,16 @@ void handleFlightTime() {
   }
 }
 
+void telemetryWarningCheck(){
+  //Serial.println(telemetryData.temperatureC);
+  //TODO smooth out temp readings?
+
+  if (telemetryData.temperatureC > 110.0){
+    bool criticalTemp = (telemetryData.temperatureC > 125.0) ? true : false; 
+    displayAlert(criticalTemp);
+  }
+}
+
 // TODO (bug) rolls over at 99mins
 void displayTime(int val, int x, int y, uint16_t bg_color) {
   // displays number of minutes and seconds (since armed and throttled)
