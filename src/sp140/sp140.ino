@@ -469,19 +469,18 @@ void displayAlert(bool critical) {
   display.fillRect(0, middle_top_y, 160, middle_height, alert_bg_color); // middle 1/3 
   display.setTextColor(WHITE);
   display.setTextSize(2);
-  display.setCursor(60, middle_top_y + (middle_height / 5));
+  display.setCursor(45, middle_top_y + (middle_height / 5));
 
   if (critical){
     display.print(F("CRIT:"));
-
   } else {
     display.print(F("WARN:"));
   }
 
-  display.setCursor(30, middle_top_y + (3 *(middle_height / 5)));
+  display.setCursor(45, middle_top_y + (3 *(middle_height / 5)));
 
   display.print("HIGH TEMP");
-  display.drawBitmap(63, 40, lcd_bitmap_triangle_exclamation_solid, 40, 40, WHITE);
+  display.drawBitmap(4, 48, lcd_bitmap_triangle_exclamation_solid, 35, 35, WHITE);
 
   delay(200);
 
