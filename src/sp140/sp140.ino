@@ -9,6 +9,7 @@
 #endif
 
 #include "../../inc/sp140/structs.h"         // data structs
+#include "../../inc/sp140/glyphs.h"         // 
 #include <AceButton.h>           // button clicks
 #include <Adafruit_BMP3XX.h>     // barometer
 #include <Adafruit_DRV2605.h>    // haptic controller
@@ -480,6 +481,9 @@ void displayAlert(bool critical) {
   display.setCursor(30, middle_top_y + (3 *(middle_height / 5)));
 
   display.print("HIGH TEMP");
+  display.drawBitmap(63, 40, lcd_bitmap_triangle_exclamation_solid, 40, 40, WHITE);
+
+  delay(200);
 
   alertedAtMillis = millis(); // save last time we alerted
 }
