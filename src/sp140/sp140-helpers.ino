@@ -136,9 +136,7 @@ void initVibe() {
 }
 
 // on boot check for button to switch mode
-void modeSwitch() {
-  if (!button_top.isPressedRaw()) { return; }
-
+void modeSwitch(bool update_display) {
   // 0=CHILL 1=SPORT 2=LUDICROUS?!
   if (deviceData.performance_mode == 0) {
     deviceData.performance_mode = 1;
@@ -146,8 +144,19 @@ void modeSwitch() {
     deviceData.performance_mode = 0;
   }
   writeDeviceData();
+  if (update_display) { // clear out old text
+    clearModeDisplay();
+  }
   uint16_t notify_melody[] = { 900, 1976 };
   playMelody(notify_melody, 2);
+}
+
+void clearModeDisplay() {
+  String prevMode = (deviceData.performance_mode == 0) ? "SPORT" : "CHILL";
+  display.setCursor(30, 60);
+  display.setTextSize(1);
+  display.setTextColor(DEFAULT_BG_COLOR);
+  display.print(prevMode);
 }
 
 void prepareSerialRead() {  // TODO needed?
