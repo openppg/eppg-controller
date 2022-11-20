@@ -35,7 +35,7 @@ String convertToDigits(byte digits) {
  * @return the number of next page
  */
 int nextPage() {
-  display.fillRect(0, 37, 160, 54, DEFAULT_BG_COLOR);
+  gfx->fillRect(0, 37, 160, 54, DEFAULT_BG_COLOR);
 
   if (page >= LAST_PAGE) {
     return page = 0;
@@ -44,8 +44,8 @@ int nextPage() {
 }
 
 void addVSpace() {
-  display.setTextSize(1);
-  display.println(" ");
+  gfx->setTextSize(1);
+  gfx->println(" ");
 }
 
 void setLEDs(byte state) {
@@ -167,17 +167,16 @@ void rebootBootloader() {
 #endif
 
 void displayMeta() {
-  display.setFont(&FreeSansBold12pt7b);
-  display.setTextColor(BLACK);
-  display.setCursor(25, 30);
-  display.println("OpenPPG");
-  display.setFont();
-  display.setTextSize(2);
-  display.setCursor(60, 60);
-  display.print("v" + String(VERSION_MAJOR) + "." + String(VERSION_MINOR));
+  gfx->setTextColor(BLACK);
+  gfx->setCursor(25, 30);
+  gfx->println("OpenPPG");
+  gfx->setFont();
+  gfx->setTextSize(2);
+  gfx->setCursor(60, 60);
+  gfx->print("v" + String(VERSION_MAJOR) + "." + String(VERSION_MINOR));
 #ifdef RP_PIO
-  display.print("R");
+  gfx->print("R");
 #endif
-  display.setCursor(54, 90);
+  gfx->setCursor(54, 90);
   displayTime(deviceData.armed_time);
 }

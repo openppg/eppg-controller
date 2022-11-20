@@ -67,7 +67,7 @@ void parse_usb_serial() {
   deserializeJson(doc, usb_web);
 
   if (doc["command"] && doc["command"] == "rbl") {
-    display.fillScreen(DEFAULT_BG_COLOR);
+    gfx->fillScreen(DEFAULT_BG_COLOR);
     displayMessage("BL - UF2");
     rebootBootloader();
     return;  // run only the command

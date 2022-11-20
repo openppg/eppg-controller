@@ -23,21 +23,21 @@ void handleFlightTime() {
 // TODO (bug) rolls over at 99mins
 void displayTime(int val, int x, int y, uint16_t bg_color) {
   // displays number of minutes and seconds (since armed and throttled)
-  display.setCursor(x, y);
-  display.setTextSize(2);
-  display.setTextColor(BLACK);
+  gfx->setCursor(x, y);
+  gfx->setTextSize(2);
+  gfx->setTextColor(BLACK);
   minutes = val / 60;
   seconds = numberOfSeconds(val);
   if (minutes < 10) {
-    display.setCursor(x, y);
-    display.print("0");
+    gfx->setCursor(x, y);
+    gfx->print("0");
   }
   dispValue(minutes, prevMinutes, 2, 0, x, y, 2, BLACK, bg_color);
-  display.setCursor(x+24, y);
-  display.print(":");
-  display.setCursor(x+36, y);
+  gfx->setCursor(x+24, y);
+  gfx->print(":");
+  gfx->setCursor(x+36, y);
   if (seconds < 10) {
-    display.print("0");
+    gfx->print("0");
   }
   dispValue(seconds, prevSeconds, 2, 0, x+36, y, 2, BLACK, bg_color);
 }
@@ -74,40 +74,40 @@ void dispValue(float value, float &prevVal, int maxDigits, int precision, int x,
     }
   }
 
-  display.setTextSize(textSize);
-  display.setCursor(x, y);
+  gfx->setTextSize(textSize);
+  gfx->setCursor(x, y);
 
   // PRINT LEADING SPACES TO RIGHT-ALIGN:
-  display.setTextColor(background);
+  gfx->setTextColor(background);
   for(int i=0; i<(maxDigits-numDigits); i++){
-    display.print(static_cast<char>(218));
+    gfx->print(static_cast<char>(218));
   }
-  display.setTextColor(textColor);
+  gfx->setTextColor(textColor);
 
   // ERASE ONLY THE NESSESARY DIGITS:
   for (int i=0; i<numDigits; i++) {
     if (digit[i]!=prevDigit[i]) {
-      display.setTextColor(background);
-      display.print(static_cast<char>(218));
+      gfx->setTextColor(background);
+      gfx->print(static_cast<char>(218));
     } else {
-      display.setTextColor(textColor);
-      display.print(digit[i]);
+      gfx->setTextColor(textColor);
+      gfx->print(digit[i]);
     }
   }
 
   // BACK TO THE BEGINNING:
-  display.setCursor(x, y);
+  gfx->setCursor(x, y);
 
   // ADVANCE THE CURSOR TO THE PROPER LOCATION:
-  display.setTextColor(background);
+  gfx->setTextColor(background);
   for (int i=0; i<(maxDigits-numDigits); i++) {
-    display.print(static_cast<char>(218));
+    gfx->print(static_cast<char>(218));
   }
-  display.setTextColor(textColor);
+  gfx->setTextColor(textColor);
 
   // PRINT THE DIGITS THAT NEED UPDATING
   for(int i=0; i<numDigits; i++){
-    display.print(digit[i]);
+    gfx->print(digit[i]);
   }
 
   prevVal = value;

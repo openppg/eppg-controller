@@ -24,18 +24,19 @@
 #define ESC_MIN_PWM           1030  // ESC min is 1050
 #define ESC_MAX_PWM           1990  // ESC max 1950
 
-#define BLACK                 ST77XX_BLACK
-#define WHITE                 ST77XX_WHITE
-#define GREEN                 ST77XX_GREEN
-#define YELLOW                ST77XX_YELLOW
-#define RED                   ST77XX_RED
-#define BLUE                  ST77XX_BLUE
-#define ORANGE                ST77XX_ORANGE
-#define PURPLE                0x780F
+#define BLACK                     0x0000
+#define WHITE                     0xFFFF
+#define GFX_GREEN                 0x07E0
+#define GFX_YELLOW                0x07FF
+#define GFX_RED                   0x001F
+#define GFX_BLUE                  0xF800
+#define GFX_ORANGE                0xFC00
+#define GFX_MAGENTA               0xF81F
+#define GFX_CYAN                  0xFFE0
 
 #define DEFAULT_BG_COLOR      WHITE
-#define ARMED_BG_COLOR        ST77XX_CYAN
-#define CRUISE_BG_COLOR       YELLOW
+#define ARMED_BG_COLOR        GFX_CYAN
+#define CRUISE_BG_COLOR       GFX_YELLOW
 
 #define DIGIT_ARRAY_SIZE      7
 #define ESC_BAUD_RATE         115200

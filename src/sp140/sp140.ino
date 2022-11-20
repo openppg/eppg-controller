@@ -12,7 +12,6 @@
 #include <AceButton.h>           // button clicks
 #include <Adafruit_BMP3XX.h>     // barometer
 #include <Adafruit_DRV2605.h>    // haptic controller
-#include <Adafruit_ST7735.h>     // screen
 #include <ArduinoJson.h>
 #include <CircularBuffer.h>      // smooth out readings
 #include <ResponsiveAnalogRead.h>  // smoothing for throttle
@@ -25,6 +24,7 @@
 #ifdef USE_TINYUSB
   #include "Adafruit_TinyUSB.h"
 #endif
+#include <Arduino_GFX_Library.h>
 
 #ifdef M0_PIO
   #include <Adafruit_SleepyDog.h>  // watchdog
@@ -36,13 +36,12 @@
   #include "pico/unique_id.h"
 #endif
 
-#include <Fonts/FreeSansBold12pt7b.h>
-
 #include "../../inc/sp140/globals.h"  // device config
 
 using namespace ace_button;
 
-Adafruit_ST7735 display = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
+Arduino_DataBus *bus = new Arduino_HWSPI(TFT_DC /* DC */, TFT_CS /* CS */);
+Arduino_GFX *gfx = new Arduino_ST7735(bus, TFT_RST /* RST */, 0 /* rotation */);
 Adafruit_DRV2605 vibe;
 
 // USB WebUSB object
@@ -206,7 +205,7 @@ void disarmSystem() {
   playMelody(disarm_melody, 3);
 
   bottom_bg_color = DEFAULT_BG_COLOR;
-  display.fillRect(0, 93, 160, 40, bottom_bg_color);
+  gfx->fillRect(0, 93, 160, 40, bottom_bg_color);
   updateDisplay();
 
   // update armed_time
@@ -259,7 +258,8 @@ void initButtons() {
 
 // inital screen setup and config
 void initDisplay() {
-  display.initR(INITR_BLACKTAB);  // Init ST7735S chip, black tab
+  gfx->begin();
+  gfx->fillScreen(BLACK);
 
   pinMode(TFT_LITE, OUTPUT);
   resetDisplay();
@@ -269,13 +269,13 @@ void initDisplay() {
 }
 
 void resetDisplay() {
-  display.fillScreen(DEFAULT_BG_COLOR);
-  display.setTextColor(BLACK);
-  display.setCursor(0, 0);
-  display.setTextSize(1);
-  display.setTextWrap(true);
+  gfx->fillScreen(DEFAULT_BG_COLOR);
+  gfx->setTextColor(BLACK);
+  gfx->setCursor(0, 0);
+  gfx->setTextSize(1);
+  gfx->setTextWrap(true);
 
-  display.setRotation(deviceData.screen_rotation);  // 1=right hand, 3=left hand
+  gfx->setRotation(deviceData.screen_rotation);  // 1=right hand, 3=left hand
 }
 
 // read throttle and send to hub
@@ -340,7 +340,7 @@ bool armSystem() {
   playMelody(arm_melody, 3);
 
   bottom_bg_color = ARMED_BG_COLOR;
-  display.fillRect(0, 93, 160, 40, bottom_bg_color);
+  gfx->fillRect(0, 93, 160, 40, bottom_bg_color);
 
   return true;
 }
@@ -348,6 +348,7 @@ bool armSystem() {
 
 // Returns true if the throttle/pot is below the safe threshold
 bool throttleSafe() {
+  return true; // TODO REMOVE
   pot.update();
   if (pot.getValue() < POT_SAFE_LEVEL) {
     return true;
@@ -374,7 +375,7 @@ bool screen_wiped = false;
 // show data on screen and handle different pages
 void updateDisplay() {
   if (!screen_wiped) {
-    display.fillScreen(WHITE);
+    gfx->fillScreen(WHITE);
     screen_wiped = true;
   }
   //Serial.print("v: ");
@@ -382,55 +383,55 @@ void updateDisplay() {
 
   displayPage0();
   //dispValue(kWatts, prevKilowatts, 4, 1, 10, /*42*/55, 2, BLACK, DEFAULT_BG_COLOR);
-  //display.print("kW");
+  //gfx->print("kW");
 
-  display.setTextColor(BLACK);
+  gfx->setTextColor(BLACK);
   float avgVoltage = getBatteryVoltSmoothed();
   batteryPercent = getBatteryPercent(avgVoltage);  // multi-point line
   // change battery color based on charge
   int batt_width = map((int)batteryPercent, 0, 100, 0, 108);
-  display.fillRect(0, 0, batt_width, 36, batt2color(batteryPercent));
+  gfx->fillRect(0, 0, batt_width, 36, batt2color(batteryPercent));
 
   if (avgVoltage < BATT_MIN_V) {
     if (batteryFlag) {
       batteryFlag = false;
-      display.fillRect(0, 0, 108, 36, DEFAULT_BG_COLOR);
+      gfx->fillRect(0, 0, 108, 36, DEFAULT_BG_COLOR);
     }
-    display.setCursor(12, 3);
-    display.setTextSize(2);
-    display.setTextColor(RED);
-    display.println("BATTERY");
+    gfx->setCursor(12, 3);
+    gfx->setTextSize(2);
+    gfx->setTextColor(0x001F);
+    gfx->println("BATTERY");
 
     if ( avgVoltage < 10 ) {
-      display.print(" ERROR");
+      gfx->print(" ERROR");
     } else {
-      display.print(" DEAD");
+      gfx->print(" DEAD");
     }
   } else {
     batteryFlag = true;
-    display.fillRect(map(batteryPercent, 0,100, 0,108), 0, map(batteryPercent, 0,100, 108,0), 36, DEFAULT_BG_COLOR);
+    gfx->fillRect(map(batteryPercent, 0,100, 0,108), 0, map(batteryPercent, 0,100, 108,0), 36, DEFAULT_BG_COLOR);
   }
   // cross out battery box if battery is dead
   if (batteryPercent <= 5) {
-    display.drawLine(0, 1, 106, 36, RED);
-    display.drawLine(0, 0, 108, 36, RED);
-    display.drawLine(1, 0, 110, 36, RED);
+    gfx->drawLine(0, 1, 106, 36, GFX_RED);
+    gfx->drawLine(0, 0, 108, 36, GFX_RED);
+    gfx->drawLine(1, 0, 110, 36, GFX_RED);
   }
   dispValue(batteryPercent, prevBatteryPercent, 3, 0, 108, 10, 2, BLACK, DEFAULT_BG_COLOR);
-  display.print("%");
+  gfx->print("%");
 
   // battery shape end
-  //display.fillRect(102, 0, 6, 9, BLACK);
-  //display.fillRect(102, 27, 6, 10, BLACK);
+  //gfx->fillRect(102, 0, 6, 9, BLACK);
+  //gfx->fillRect(102, 27, 6, 10, BLACK);
 
-  display.fillRect(0, 36, 160, 1, BLACK);
-  display.fillRect(108, 0, 1, 36, BLACK);
-  display.fillRect(0, 92, 160, 1, BLACK);
+  gfx->fillRect(0, 36, 160, 1, BLACK);
+  gfx->fillRect(108, 0, 1, 36, BLACK);
+  gfx->fillRect(0, 92, 160, 1, BLACK);
 
   displayAlt();
 
   //dispValue(ambientTempF, prevAmbTempF, 3, 0, 10, 100, 2, BLACK, DEFAULT_BG_COLOR);
-  //display.print("F");
+  //gfx->print("F");
 
   handleFlightTime();
   displayTime(throttleSecs, 8, 102, bottom_bg_color);
@@ -443,52 +444,52 @@ void displayPage0() {
   float avgVoltage = getBatteryVoltSmoothed();
 
   dispValue(avgVoltage, prevVolts, 5, 1, 84, 42, 2, BLACK, DEFAULT_BG_COLOR);
-  display.print("V");
+  gfx->print("V");
 
   dispValue(telemetryData.amps, prevAmps, 3, 0, 108, 71, 2, BLACK, DEFAULT_BG_COLOR);
-  display.print("A");
+  gfx->print("A");
 
   float kWatts = watts / 1000.0;
   kWatts = constrain(kWatts, 0, 50);
 
   dispValue(kWatts, prevKilowatts, 4, 1, 10, 42, 2, BLACK, DEFAULT_BG_COLOR);
-  display.print("kW");
+  gfx->print("kW");
 
   float kwh = wattsHoursUsed / 1000;
   dispValue(kwh, prevKwh, 4, 1, 10, 71, 2, BLACK, DEFAULT_BG_COLOR);
-  display.print("kWh");
+  gfx->print("kWh");
 
-  display.setCursor(30, 60);
-  display.setTextSize(1);
+  gfx->setCursor(30, 60);
+  gfx->setTextSize(1);
   if (deviceData.performance_mode == 0) {
-    display.setTextColor(BLUE);
-    display.print("CHILL");
+    gfx->setTextColor(GFX_BLUE);
+    gfx->print("CHILL");
   } else {
-    display.setTextColor(RED);
-    display.print("SPORT");
+    gfx->setTextColor(GFX_RED);
+    gfx->print("SPORT");
   }
 }
 
 // display second page (mAh and armed time)
 void displayPage1() {
   dispValue(telemetryData.volts, prevVolts, 5, 1, 84, 42, 2, BLACK, DEFAULT_BG_COLOR);
-  display.print("V");
+  gfx->print("V");
 
   dispValue(telemetryData.amps, prevAmps, 3, 0, 108, 71, 2, BLACK, DEFAULT_BG_COLOR);
-  display.print("A");
+  gfx->print("A");
 
   float kwh = wattsHoursUsed / 1000;
   dispValue(kwh, prevKilowatts, 4, 1, 10, 71, 2, BLACK, DEFAULT_BG_COLOR);
-  display.print("kWh");
+  gfx->print("kWh");
 
-  display.setCursor(30, 60);
-  display.setTextSize(1);
+  gfx->setCursor(30, 60);
+  gfx->setTextSize(1);
   if (deviceData.performance_mode == 0) {
-    display.setTextColor(BLUE);
-    display.print("CHILL");
+    gfx->setTextColor(GFX_BLUE);
+    gfx->print("CHILL");
   } else {
-    display.setTextColor(RED);
-    display.print("SPORT");
+    gfx->setTextColor(GFX_RED);
+    gfx->print("SPORT");
   }
 }
 
@@ -497,9 +498,9 @@ void displayTime(int val) {
   int minutes = val / 60;  // numberOfMinutes(val);
   int seconds = numberOfSeconds(val);
 
-  display.print(convertToDigits(minutes));
-  display.print(":");
-  display.print(convertToDigits(seconds));
+  gfx->print(convertToDigits(minutes));
+  gfx->print(":");
+  gfx->print(convertToDigits(seconds));
 }
 
 // display altitude data on screen
@@ -517,51 +518,51 @@ void displayAlt() {
 
   dispValue(alt, lastAltM, 5, 0, 70, 102, 2, BLACK, bottom_bg_color);
 
-  display.print(deviceData.metric_alt ? F("m") : F("ft"));
+  gfx->print(deviceData.metric_alt ? F("m") : F("ft"));
   lastAltM = alt;
 }
 
 // display hidden page (firmware version and total armed time)
 void displayVersions() {
-  display.setTextSize(2);
-  display.print(F("v"));
-  display.print(VERSION_MAJOR);
-  display.print(F("."));
-  display.println(VERSION_MINOR);
+  gfx->setTextSize(2);
+  gfx->print(F("v"));
+  gfx->print(VERSION_MAJOR);
+  gfx->print(F("."));
+  gfx->println(VERSION_MINOR);
   addVSpace();
-  display.setTextSize(2);
+  gfx->setTextSize(2);
   displayTime(deviceData.armed_time);
-  display.print(F(" h:m"));
+  gfx->print(F(" h:m"));
   // addVSpace();
-  // display.print(chipId()); // TODO: trim down
+  // gfx->print(chipId()); // TODO: trim down
 }
 
 // display hidden page (firmware version and total armed time)
 void displayMessage(char *message) {
-  display.setCursor(0, 0);
-  display.setTextSize(2);
-  display.println(message);
+  gfx->setCursor(0, 0);
+  gfx->setTextSize(2);
+  gfx->println(message);
 }
 
 void setCruise() {
   // IDEA: fill a "cruise indicator" as long press activate happens
-  // or gradually change color from blue to yellow with time
+  // or gradually change color from GFX_BLUE to yellow with time
   if (!throttleSafe()) {  // using pot/throttle
     cruisedPotVal = pot.getValue();  // save current throttle val
     cruising = true;
     vibrateNotify();
 
     // update display to show cruise
-    display.setCursor(70, 60);
-    display.setTextSize(1);
-    display.setTextColor(RED);
-    display.print(F("CRUISE"));
+    gfx->setCursor(70, 60);
+    gfx->setTextSize(1);
+    gfx->setTextColor(GFX_RED);
+    gfx->print(F("CRUISE"));
 
     uint16_t notify_melody[] = { 900, 900 };
     playMelody(notify_melody, 2);
 
     bottom_bg_color = YELLOW;
-    display.fillRect(0, 93, 160, 40, bottom_bg_color);
+    gfx->fillRect(0, 93, 160, 40, bottom_bg_color);
 
     cruisedAtMilis = millis();  // start timer
   }
@@ -573,14 +574,14 @@ void removeCruise(bool alert) {
   // update bottom bar
   bottom_bg_color = DEFAULT_BG_COLOR;
   if (armed) { bottom_bg_color = ARMED_BG_COLOR; }
-  display.fillRect(0, 93, 160, 40, bottom_bg_color);
+  gfx->fillRect(0, 93, 160, 40, bottom_bg_color);
 
   // update text status
-  display.setCursor(70, 60);
-  display.setTextSize(1);
-  display.setTextColor(DEFAULT_BG_COLOR);
-  display.print(F("CRUISE"));  // overwrite in bg color to remove
-  display.setTextColor(BLACK);
+  gfx->setCursor(70, 60);
+  gfx->setTextSize(1);
+  gfx->setTextColor(DEFAULT_BG_COLOR);
+  gfx->print(F("CRUISE"));  // overwrite in bg color to remove
+  gfx->setTextColor(BLACK);
 
   if (alert) {
     vibrateNotify();
