@@ -24,6 +24,7 @@
 #ifdef USE_TINYUSB
   #include "Adafruit_TinyUSB.h"
 #endif
+#include <U8g2lib.h>
 #include <Arduino_GFX_Library.h>
 
 #ifdef M0_PIO
@@ -398,7 +399,7 @@ void updateDisplay() {
       gfx->fillRect(0, 0, 108, 36, DEFAULT_BG_COLOR);
     }
     gfx->setCursor(12, 3);
-    gfx->setTextSize(2);
+    gfx->setTextSize(1);
     gfx->setTextColor(0x001F);
     gfx->println("BATTERY");
 
@@ -461,6 +462,7 @@ void displayPage0() {
 
   gfx->setCursor(30, 60);
   gfx->setTextSize(1);
+  gfx->setFont(u8g2_font_helvR08_tf);
   if (deviceData.performance_mode == 0) {
     gfx->setTextColor(GFX_BLUE);
     gfx->print("CHILL");
@@ -468,6 +470,7 @@ void displayPage0() {
     gfx->setTextColor(GFX_RED);
     gfx->print("SPORT");
   }
+  gfx->setFont(u8g2_font_helvR14_tf);
 }
 
 // display second page (mAh and armed time)
