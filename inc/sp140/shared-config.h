@@ -4,6 +4,7 @@
 
 // Batt setting now configurable by user. Read from device data
 #define BATT_MIN_V 60.0  // 24 * 2.5V per cell
+#define CELL_CAPACITY_WH 15.5
 
 // Calibration
 #define MAMP_OFFSET 200
@@ -16,6 +17,10 @@
 #define POT_SAFE_LEVEL 0.05 * 4096  // 5% or less
 
 #define DEFAULT_SEA_PRESSURE 1013.25
+
+// Initial SOC estimation analysis period
+#define BATTERY_ANALYSIS_START 1000
+#define BATTERY_ANALYSIS_END 30000
 
 // Library config
 #define NO_ADAFRUIT_SSD1306_COLOR_COMPATIBILITY

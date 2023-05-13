@@ -1,6 +1,37 @@
 // Copyright 2021 <Zach Whitehead>
 // OpenPPG
 
+void updateBatteryPercent() {
+  if (millis() < BATTERY_ANALYSIS_END) {
+    batteryPercent = analyzeInitialBatteryPercent();
+  }
+  else {
+    // set initial battery energy only once
+    if (analysisFlag) {
+      initialBatteryEnergy = batteryPercent / 100 * exactCapacityWh;
+      analysisFlag = false;
+    }
+    float newEnergy = initialBatteryEnergy - wattsHoursUsed;
+    batteryPercent = newEnergy / exactCapacityWh * 100;
+  }
+  batteryPercent = constrain(batteryPercent, 0, 100);
+}
+
+// get initial battery percent and update moving average
+float analyzeInitialBatteryPercent() {
+  // use voltage curve to estimate SOC
+  float avgVoltage = getBatteryVoltSmoothed();
+  float batteryPercent = getBatteryPercent(avgVoltage);
+
+  // wait a little before calculating moving average (due to potential voltage drop from starting the motor)
+  if (millis() > BATTERY_ANALYSIS_START) {
+    initialSOCMovingAvg = (initialSOCMovingAvg * numInitialSOCReadings + batteryPercent) / (numInitialSOCReadings + 1);
+    numInitialSOCReadings++;
+    return initialSOCMovingAvg;
+  }
+  return batteryPercent;
+}
+
 // simple set of data points from load testing
 // maps voltage to battery percentage
 float getBatteryPercent(float voltage) {

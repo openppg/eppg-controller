@@ -456,3 +456,16 @@ float getBatteryVoltSmoothed() {
   }
   return avg;
 }
+
+// Update battery information
+void updateBatteryInfo() {
+  cellsInSeries = 24;
+  if (deviceData.batt_size == 2000) {
+    cellsInParallel = 6;
+  }
+  // default to battery size of 4000Wh
+  else {
+    cellsInParallel = 10;
+  }
+  exactCapacityWh = cellsInSeries * cellsInParallel * CELL_CAPACITY_WH;
+}

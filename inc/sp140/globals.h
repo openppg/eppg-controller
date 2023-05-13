@@ -24,6 +24,8 @@ float seconds = 0;
 float prevSeconds = 0;
 float hours = 0;  // logged flight hours
 float wattsHoursUsed = 0;
+float initialBatteryEnergy = 0;
+bool analysisFlag = true;
 
 // sensor states
 bool bmpPresent = false;
@@ -35,6 +37,11 @@ int16_t _amps = 0;
 uint32_t _eRPM = 0;
 uint16_t _inPWM = 0;
 uint16_t _outPWM = 0;
+
+// Battery information
+unsigned int cellsInSeries = 0;
+unsigned int cellsInParallel = 0;
+unsigned int exactCapacityWh = 0;
 
 // ESC Telemetry
 float prevVolts = 0;

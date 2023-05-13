@@ -79,6 +79,9 @@ uint32_t cruisedAtMilisMilis = 0;
 unsigned int armedSecs = 0;
 unsigned int last_throttle = 0;
 
+float initialSOCMovingAvg = 0;
+unsigned int numInitialSOCReadings = 0;
+
 #pragma message "Warning: OpenPPG software is in beta"
 
 // the setup function runs once when you press reset or power the board
@@ -392,12 +395,14 @@ void updateDisplay() {
   //display.print("kW");
 
   display.setTextColor(BLACK);
-  float avgVoltage = getBatteryVoltSmoothed();
-  batteryPercent = getBatteryPercent(avgVoltage);  // multi-point line
+  updateBatteryPercent();
+
   // change battery color based on charge
   int batt_width = map((int)batteryPercent, 0, 100, 0, 108);
   display.fillRect(0, 0, batt_width, 36, batt2color(batteryPercent));
 
+  // check voltage to see if battery is dead (more reliable than percent)
+  float avgVoltage = getBatteryVoltSmoothed();
   if (avgVoltage < BATT_MIN_V) {
     if (batteryFlag) {
       batteryFlag = false;
@@ -611,6 +616,6 @@ void trackPower() {
   prevPwrMillis = currentPwrMillis;
 
   if (armed) {
-    wattsHoursUsed += round(watts/60/60*msec_diff)/1000.0;
+    wattsHoursUsed += (watts/60/60*msec_diff)/1000.0;
   }
 }
