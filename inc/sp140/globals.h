@@ -36,6 +36,11 @@ uint32_t _eRPM = 0;
 uint16_t _inPWM = 0;
 uint16_t _outPWM = 0;
 
+// Battery information
+unsigned int cellsInSeries = 0;
+unsigned int cellsInParallel = 0;
+unsigned int exactCapacityWh = 0;
+
 // ESC Telemetry
 float prevVolts = 0;
 float prevAmps = 0;

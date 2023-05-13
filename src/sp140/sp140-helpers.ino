@@ -1,4 +1,5 @@
 // Copyright 2020 <Zach Whitehead>
+#include "../../inc/sp140/shared-config.h"
 
 // track flight timer
 void handleFlightTime() {
@@ -447,12 +448,31 @@ int limitedThrottle(int current, int last, int threshold) {
 // ring buffer for voltage readings
 float getBatteryVoltSmoothed() {
   float avg = 0.0;
-
-  if (voltageBuffer.isEmpty()) { return avg; }
-
   using index_t = decltype(voltageBuffer)::index_t;
   for (index_t i = 0; i < voltageBuffer.size(); i++) {
     avg += voltageBuffer[i] / voltageBuffer.size();
   }
   return avg;
+}
+
+float getBatteryPercentSmoothed() {
+  float avg = 0.0;
+  using index_t = decltype(batteryPercentBuffer)::index_t;
+  for (index_t i = 0; i < batteryPercentBuffer.size(); i++) {
+    avg += batteryPercentBuffer[i] / batteryPercentBuffer.size();
+  }
+  return avg;
+}
+
+// Update battery information
+void updateBatteryInfo() {
+  cellsInSeries = 24;
+  if (deviceData.batt_size == 2000) {
+    cellsInParallel = 6;
+  }
+  // default to battery size of 4000Wh
+  else {
+    cellsInParallel = 10;
+  }
+  exactCapacityWh = cellsInSeries * cellsInParallel * CELL_CAPACITY_WH;
 }

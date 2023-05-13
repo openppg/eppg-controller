@@ -4,6 +4,7 @@
 
 // Batt setting now configurable by user. Read from device data
 #define BATT_MIN_V 60.0  // 24 * 2.5V per cell
+#define CELL_CAPACITY_WH 15.5
 
 // Calibration
 #define MAMP_OFFSET 200

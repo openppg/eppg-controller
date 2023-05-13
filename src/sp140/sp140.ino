@@ -59,6 +59,7 @@ ButtonConfig* buttonConfig = button_top.getButtonConfig();
 #endif
 
 CircularBuffer<float, 50> voltageBuffer;
+CircularBuffer<float, 10> batteryPercentBuffer;
 CircularBuffer<int, 8> potBuffer;
 
 Thread ledBlinkThread = Thread();
@@ -131,6 +132,7 @@ void setup() {
 #endif
   refreshDeviceData();
   setup140();
+  updateBatteryInfo();
 #ifdef M0_PIO
   Watchdog.reset();
 #endif
@@ -393,7 +395,9 @@ void updateDisplay() {
 
   display.setTextColor(BLACK);
   float avgVoltage = getBatteryVoltSmoothed();
-  batteryPercent = getBatteryPercent(avgVoltage);  // multi-point line
+  float currentBatteryPercent = getBatteryPercent(avgVoltage);
+  batteryPercentBuffer.push(currentBatteryPercent);
+  batteryPercent = getBatteryPercentSmoothed();
   // change battery color based on charge
   int batt_width = map((int)batteryPercent, 0, 100, 0, 108);
   display.fillRect(0, 0, batt_width, 36, batt2color(batteryPercent));
