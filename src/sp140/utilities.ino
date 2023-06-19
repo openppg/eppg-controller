@@ -138,10 +138,7 @@ String chipId() {
 }
 #elif RP_PIO
 String chipId() {
-  int len = 2 * PICO_UNIQUE_BOARD_ID_SIZE_BYTES + 1;
-  uint8_t buff[len] = "";
-  pico_get_unique_board_id_string((char *)buff, len);
-  return String((char *)buff);
+  return String(rp2040.getChipID()); // eg "E4613D11A7134234"
 }
 #endif // M0_PIO/RP_PIO
 
