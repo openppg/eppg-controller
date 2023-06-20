@@ -277,9 +277,7 @@ void initDisplay() {
     display.init();
     display.setRotation(1);
     display.fillScreen(TFT_BLACK);
-    display.setTextSize(1);
-    display.setTextColor(TFT_YELLOW, TFT_BLACK);
-    display.println("OpenPPG");
+    display.setTextSize(1);  
 #endif
   // display.setSPISpeed(40000000);  // 40MHz SPI speed
 
