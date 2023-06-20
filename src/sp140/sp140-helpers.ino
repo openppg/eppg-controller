@@ -22,24 +22,19 @@ void handleFlightTime() {
 
 // TODO (bug) rolls over at 99mins
 void displayTime(int val, int x, int y, uint16_t bg_color) {
-  // displays number of minutes and seconds (since armed and throttled)
   display.setCursor(x, y);
-  display.setTextSize(2);
-  display.setTextColor(BLACK);
-  minutes = val / 60;
-  seconds = numberOfSeconds(val);
-  if (minutes < 10) {
-    display.setCursor(x, y);
-    display.print("0");
-  }
-  dispValue(minutes, prevMinutes, 2, 0, x, y, 2, BLACK, bg_color);
-  display.setCursor(x+24, y);
+  int minutes = val / 60;  // numberOfMinutes(val);
+  int seconds = numberOfSeconds(val);
+  display.setTextSize(1);
+  display.setTextFont(4);
+  display.setTextColor(BLACK, WHITE);
+
+  display.print(convertToDigits(minutes));
   display.print(":");
-  display.setCursor(x+36, y);
-  if (seconds < 10) {
-    display.print("0");
-  }
-  dispValue(seconds, prevSeconds, 2, 0, x+36, y, 2, BLACK, bg_color);
+  display.print(convertToDigits(seconds));
+  display.setTextFont(1);
+  display.setTextSize(2);
+
 }
 
 // maps battery percentage to a display color
