@@ -165,11 +165,13 @@ void rebootBootloader() {
 
 void displayMeta() {
   //display.setFont(&FreeSansBold12pt7b);
-  display.setTextColor(BLACK);
+  display.setTextSize(1);
+  display.setTextFont(4);
+  display.setTextColor(TEXT_COLOR, DEFAULT_BG_COLOR);
   display.setCursor(25, 30);
-  display.println("OpenPPG");
+  display.print("OpenPPG");
   //display.setFont();
-  display.setTextSize(2);
+  display.setTextFont(2);
   display.setCursor(60, 60);
   display.print("v" + String(VERSION_MAJOR) + "." + String(VERSION_MINOR));
 #ifdef RP_PIO
