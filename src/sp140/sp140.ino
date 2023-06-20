@@ -48,6 +48,7 @@ using namespace ace_button;
 #ifdef M0_PIO
 Adafruit_ST7735 display = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 #elif RP_PIO
+#include "../../inc/sp140/freefonts.h"  // free fonts
 TFT_eSPI display = TFT_eSPI();
 #endif
 

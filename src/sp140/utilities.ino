@@ -164,13 +164,12 @@ void rebootBootloader() {
 #endif
 
 void displayMeta() {
-  //display.setFont(&FreeSansBold12pt7b);
   display.setTextSize(1);
-  display.setTextFont(4);
+  display.setFreeFont(FSSB12);
+  //display.setTextFont(4);
   display.setTextColor(TEXT_COLOR, DEFAULT_BG_COLOR);
   display.setCursor(25, 30);
   display.print("OpenPPG");
-  //display.setFont();
   display.setTextFont(2);
   display.setCursor(60, 60);
   display.print("v" + String(VERSION_MAJOR) + "." + String(VERSION_MINOR));
@@ -178,5 +177,6 @@ void displayMeta() {
   display.print("R");
 #endif
   display.setCursor(54, 90);
+  display.setFreeFont(NULL); // Set font to GLCD
   displayTime(deviceData.armed_time);
 }
