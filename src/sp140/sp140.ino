@@ -421,14 +421,15 @@ void updateDisplay() {
       display.fillRect(0, 0, 108, 36, DEFAULT_BG_COLOR);
     }
     display.setCursor(12, 3);
-    display.setTextSize(2);
+    display.setTextFont(2);
     display.setTextColor(RED);
-    display.println("BATTERY");
+    display.print("BATTERY");
+    display.setCursor(12, 20);
 
     if ( avgVoltage < 10 ) {
-      display.print(" ERROR");
+      display.print("ERROR");
     } else {
-      display.print(" DEAD");
+      display.print("DEAD");
     }
   } else {
     batteryFlag = true;
@@ -440,7 +441,11 @@ void updateDisplay() {
     display.drawLine(0, 0, 108, 36, RED);
     display.drawLine(1, 0, 110, 36, RED);
   }
-  dispValue(batteryPercent, prevBatteryPercent, 3, 0, 108, 10, 2, BLACK, DEFAULT_BG_COLOR);
+  display.setCursor(108, 10);
+  display.setTextFont(4);
+  display.setTextColor(TEXT_COLOR, BG_COLOR);
+  display.print(batteryPercent, 0);
+  //dispValue(batteryPercent, prevBatteryPercent, 3, 0, 108, 10, 2, BLACK, DEFAULT_BG_COLOR);
   display.print("%");
 
   // battery shape end
@@ -466,21 +471,35 @@ void updateDisplay() {
 void displayPage0() {
   float avgVoltage = getBatteryVoltSmoothed();
 
-  dispValue(avgVoltage, prevVolts, 5, 1, 84, 42, 2, BLACK, DEFAULT_BG_COLOR);
+  display.setCursor(84, 38);
+  display.setTextSize(1);
+  display.setTextFont(4);
+  display.setTextColor(TEXT_COLOR, BG_COLOR);
+  display.print(avgVoltage, 1);
+
   display.print("V");
 
-  dispValue(telemetryData.amps, prevAmps, 3, 0, 108, 71, 2, BLACK, DEFAULT_BG_COLOR);
+  display.setCursor(108, 71);
+  display.print(telemetryData.amps, 0);
+
   display.print("A");
 
   float kWatts = watts / 1000.0;
   kWatts = constrain(kWatts, 0, 50);
 
-  dispValue(kWatts, prevKilowatts, 4, 1, 10, 42, 2, BLACK, DEFAULT_BG_COLOR);
+  display.setCursor(10, 38);
+  display.print(kWatts, 1);
+
   display.print("kW");
 
   float kwh = wattsHoursUsed / 1000;
-  dispValue(kwh, prevKwh, 4, 1, 10, 71, 2, BLACK, DEFAULT_BG_COLOR);
+
+  display.setCursor(10, 71);
+  display.print(kwh, 1);
+
   display.print("kWh");
+  display.setTextFont(1);
+  display.setTextSize(2);
   displyMode();
 }
 
