@@ -27,14 +27,13 @@ void displayTime(int val, int x, int y, uint16_t bg_color) {
   int seconds = numberOfSeconds(val);
   display.setTextSize(1);
   display.setTextFont(4);
-  display.setTextColor(BLACK, WHITE);
+  display.setTextColor(TEXT_COLOR, BG_COLOR);
 
   display.print(convertToDigits(minutes));
   display.print(":");
   display.print(convertToDigits(seconds));
   display.setTextFont(1);
   display.setTextSize(2);
-
 }
 
 // maps battery percentage to a display color

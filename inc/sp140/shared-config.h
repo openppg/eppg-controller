@@ -33,6 +33,9 @@
 #define ORANGE                TFT_ORANGE
 #define PURPLE                0x780F
 
+#define TEXT_COLOR      BLACK
+#define BG_COLOR      WHITE
+
 #define DEFAULT_BG_COLOR      WHITE
 #define ARMED_BG_COLOR        TFT_CYAN
 #define CRUISE_BG_COLOR       YELLOW

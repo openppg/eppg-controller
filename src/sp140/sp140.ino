@@ -542,11 +542,18 @@ void displayAlt() {
 
   // convert to ft if not using metric
   float alt = deviceData.metric_alt ? altM : (round(altM * 3.28084));
-
-  dispValue(alt, lastAltM, 5, 0, 70, 102, 2, BLACK, bottom_bg_color);
+  display.setCursor(80, 102);
+  display.setTextSize(1);
+  display.setTextFont(4);
+  display.setTextColor(TEXT_COLOR, BG_COLOR);
+  display.setTextDatum(TR_DATUM);
+  display.print(alt, 0);
 
   display.print(deviceData.metric_alt ? F("m") : F("ft"));
-  lastAltM = alt;
+  display.setTextFont(1);
+  display.setTextSize(2);
+  display.setTextDatum(TL_DATUM);
+
 }
 
 // display hidden page (firmware version and total armed time)
