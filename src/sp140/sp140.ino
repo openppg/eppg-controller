@@ -452,9 +452,9 @@ void updateDisplay() {
   //display.fillRect(102, 0, 6, 9, BLACK);
   //display.fillRect(102, 27, 6, 10, BLACK);
 
-  display.fillRect(0, 36, 160, 1, BLACK);
-  display.fillRect(108, 0, 1, 36, BLACK);
-  display.fillRect(0, 92, 160, 1, BLACK);
+  display.drawFastHLine(0, 36, 160, BLACK); // horizontal top
+  display.drawFastVLine(108, 0, 36, BLACK); // vertical by battery
+  display.drawFastHLine(0, 92, 160, BLACK); // horizontal bottom
 
   displayAlt();
 
