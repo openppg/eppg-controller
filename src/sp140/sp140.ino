@@ -4,7 +4,13 @@
 #include "../../lib/crc.c"       // packet error checking
 #ifdef M0_PIO
   #include "../../inc/sp140/m0-config.h"          // device config
+  #include <Adafruit_ST7735.h>     // screen
+  #include <Fonts/FreeSansBold12pt7b.h>
+
 #else
+  #include <FS.h> 
+  #include <LittleFS.h>
+  #include <TFT_eSPI.h> // Graphics and font library for ST7735 driver chip
   #include "../../inc/sp140/rp2040-config.h"         // device config
 #endif
 
@@ -12,7 +18,6 @@
 #include <AceButton.h>           // button clicks
 #include <Adafruit_BMP3XX.h>     // barometer
 #include <Adafruit_DRV2605.h>    // haptic controller
-#include <Adafruit_ST7735.h>     // screen
 #include <ArduinoJson.h>
 #include <CircularBuffer.h>      // smooth out readings
 #include <ResponsiveAnalogRead.h>  // smoothing for throttle
@@ -36,13 +41,16 @@
   #include "pico/unique_id.h"
 #endif
 
-#include <Fonts/FreeSansBold12pt7b.h>
 
 #include "../../inc/sp140/globals.h"  // device config
 
 using namespace ace_button;
-
+#ifdef M0_PIO
 Adafruit_ST7735 display = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
+#elif RP_PIO
+TFT_eSPI display = TFT_eSPI();
+#endif
+
 Adafruit_DRV2605 vibe;
 
 // USB WebUSB object
@@ -263,7 +271,16 @@ void initButtons() {
 
 // inital screen setup and config
 void initDisplay() {
+  #ifdef M0_PIO
   display.initR(INITR_BLACKTAB);  // Init ST7735S chip, black tab
+#elif RP_PIO
+    display.init();
+    display.setRotation(1);
+    display.fillScreen(TFT_BLACK);
+    display.setTextSize(1);
+    display.setTextColor(TFT_YELLOW, TFT_BLACK);
+    display.println("OpenPPG");
+#endif
   // display.setSPISpeed(40000000);  // 40MHz SPI speed
 
   pinMode(TFT_LITE, OUTPUT);
