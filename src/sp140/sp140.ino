@@ -111,7 +111,6 @@ void setup() {
   displayThread.setInterval(250);
 
   buttonThread.onRun(checkButtons);
-  buttonThread.setInterval(3);
 
   throttleThread.onRun(handleThrottle);
   throttleThread.setInterval(22);
@@ -242,18 +241,42 @@ void toggleCruise() {
   }
 }
 
-// The event handler for the the buttons
-void handleButtonEvent(AceButton* /* btn */, uint8_t eventType, uint8_t /* st */) {
+// Variable to track if a button was clicked
+bool wasClicked = false;
+
+// Timestamp when the button was released
+unsigned long releaseTime = 0;
+
+// Time threshold for LongClick after release (in milliseconds)
+const unsigned long longClickThreshold = 3500; // adjust as necessary
+
+void handleButtonEvent(AceButton* btn, uint8_t eventType, uint8_t /* st */) {
   switch (eventType) {
-  case AceButton::kEventPressed:
+  case AceButton::kEventClicked:
+    wasClicked = true;
+    Serial.println("Button Clicked");
+    break;
+  case AceButton::kEventReleased:
+    if (wasClicked) {
+      releaseTime = millis();
+      wasClicked = false;
+      Serial.println("Button Released after Click");
+    }
     break;
   case AceButton::kEventDoubleClicked:
     toggleArm();
+    Serial.println("Button Double Clicked");
     break;
   case AceButton::kEventLongPressed:
-    toggleCruise();
-    break;
-  case AceButton::kEventLongReleased:
+    if (!wasClicked && (millis() - releaseTime <= longClickThreshold)) {
+      // This is a long press that followed a click and release
+      // Put your code here
+      Serial.println("Long Press after Click and Release");
+    }
+    else {
+      toggleCruise();
+      Serial.println("Long Press");
+    }
     break;
   }
 }
