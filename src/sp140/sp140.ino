@@ -111,6 +111,7 @@ void setup() {
   displayThread.setInterval(250);
 
   buttonThread.onRun(checkButtons);
+  buttonThread.setInterval(4);
 
   throttleThread.onRun(handleThrottle);
   throttleThread.setInterval(22);
@@ -182,8 +183,12 @@ void loop1() {
 }
 #endif
 
+long last_btn_check = 0;
+
 void checkButtons() {
   button_top.check();
+  //Serial.println(millis() - last_btn_check);
+  last_btn_check = millis();
 }
 
 // disarm, remove cruise, alert, save updated stats
@@ -254,7 +259,6 @@ void handleButtonEvent(AceButton* btn, uint8_t eventType, uint8_t /* st */) {
   switch (eventType) {
   case AceButton::kEventClicked:
     wasClicked = true;
-    Serial.println("Button Clicked");
     break;
   case AceButton::kEventReleased:
     if (wasClicked) {
@@ -264,13 +268,10 @@ void handleButtonEvent(AceButton* btn, uint8_t eventType, uint8_t /* st */) {
     }
     break;
   case AceButton::kEventDoubleClicked:
-    toggleArm();
-    Serial.println("Button Double Clicked");
     break;
   case AceButton::kEventLongPressed:
     if (!wasClicked && (millis() - releaseTime <= longClickThreshold)) {
-      // This is a long press that followed a click and release
-      // Put your code here
+      toggleArm(); //
       Serial.println("Long Press after Click and Release");
     }
     else {
@@ -291,7 +292,9 @@ void initButtons() {
   buttonConfig->setFeature(ButtonConfig::kFeatureSuppressAfterDoubleClick);
   buttonConfig->setFeature(ButtonConfig::kFeatureSuppressAfterLongPress);
   buttonConfig->setLongPressDelay(2500);
-  buttonConfig->setDoubleClickDelay(600);
+  buttonConfig->setClickDelay(300);
+  //buttonConfig->setDoubleClickDelay(900);
+  //buttonConfig->setDebounceDelay(100);
 }
 
 // inital screen setup and config
