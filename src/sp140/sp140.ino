@@ -111,7 +111,7 @@ void setup() {
   displayThread.setInterval(250);
 
   buttonThread.onRun(checkButtons);
-  buttonThread.setInterval(5);
+  buttonThread.setInterval(3);
 
   throttleThread.onRun(handleThrottle);
   throttleThread.setInterval(22);
@@ -218,17 +218,23 @@ void disarmSystem() {
   delay(1000);  // TODO just disable button thread // dont allow immediate rearming
 }
 
+void toggleArm() {
+  if (armed) {
+    disarmSystem();
+  } else if (throttleSafe()) {
+    armSystem();
+  } else {
+    handleArmFail();
+  }
+}
+
 // The event handler for the the buttons
 void handleButtonEvent(AceButton* /* btn */, uint8_t eventType, uint8_t /* st */) {
   switch (eventType) {
+  case AceButton::kEventPressed:
+    break;
   case AceButton::kEventDoubleClicked:
-    if (armed) {
-      disarmSystem();
-    } else if (throttleSafe()) {
-      armSystem();
-    } else {
-      handleArmFail();
-    }
+    toggleArm();
     break;
   case AceButton::kEventLongPressed:
     if (armed) {
@@ -365,7 +371,7 @@ bool throttleSafe() {
 float getAltitudeM() {
   if (!bmpPresent) { return 0; }
   if (!bmp.performReading()) { return 0; }
-  
+
   ambientTempC = bmp.temperature;
   float altitudeM = bmp.readAltitude(deviceData.sea_pressure);
   return altitudeM;
