@@ -228,6 +228,20 @@ void toggleArm() {
   }
 }
 
+void toggleCruise() {
+  if (armed) {
+    if (cruising) {
+      removeCruise(true);
+    } else if (throttleSafe()) {
+      modeSwitch(true);
+    } else {
+      setCruise();
+    }
+  } else {
+    // show stats screen?
+  }
+}
+
 // The event handler for the the buttons
 void handleButtonEvent(AceButton* /* btn */, uint8_t eventType, uint8_t /* st */) {
   switch (eventType) {
@@ -237,17 +251,7 @@ void handleButtonEvent(AceButton* /* btn */, uint8_t eventType, uint8_t /* st */
     toggleArm();
     break;
   case AceButton::kEventLongPressed:
-    if (armed) {
-      if (cruising) {
-        removeCruise(true);
-      } else if (throttleSafe()) {
-        modeSwitch(true);
-      } else {
-        setCruise();
-      }
-    } else {
-      // show stats screen?
-    }
+    toggleCruise();
     break;
   case AceButton::kEventLongReleased:
     break;
