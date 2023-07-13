@@ -242,7 +242,11 @@ void toggleCruise() {
       setCruise();
     }
   } else {
-    // show stats screen?
+    // show stats screen
+    resetDisplay();
+    displayMeta();
+    delay(2000);
+    resetDisplay();
   }
 }
 
