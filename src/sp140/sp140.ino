@@ -4,6 +4,7 @@
 #include "../../lib/crc.c"       // packet error checking
 #ifdef M0_PIO
   #include "../../inc/sp140/m0-config.h"          // device config
+  // TODO find best SAMD21 freeRTOS port
 #else
   #include "../../inc/sp140/rp2040-config.h"         // device config
   #include <FreeRTOS.h>
@@ -20,8 +21,6 @@
 #include <ResponsiveAnalogRead.h>  // smoothing for throttle
 #include <Servo.h>               // to control ESCs
 #include <SPI.h>
-#include <StaticThreadController.h>
-#include <Thread.h>   // run tasks at different intervals
 #include <TimeLib.h>  // convert time to hours mins etc
 #include <Wire.h>
 #ifdef USE_TINYUSB
@@ -63,15 +62,6 @@ ButtonConfig* buttonConfig = button_top.getButtonConfig();
 CircularBuffer<float, 50> voltageBuffer;
 CircularBuffer<int, 8> potBuffer;
 
-//Thread ledBlinkThread = Thread();
-Thread displayThread = Thread();
-Thread throttleThread = Thread();
-Thread buttonThread = Thread();
-Thread telemetryThread = Thread();
-Thread counterThread = Thread();
-StaticThreadController<5> threads(&displayThread, &throttleThread,
-                                  &buttonThread, &telemetryThread, &counterThread);
-
 bool armed = false;
 bool use_hub_v2 = true;
 int page = 0;
@@ -89,6 +79,56 @@ void blinkLEDTask(void *pvParameters) {
   for (;;) {  // infinite loop
     blinkLED();  // call blinkLED function
     delay(500);  // wait for 500ms
+  }
+  vTaskDelete(NULL); // should never reach this
+}
+
+void throttleTask(void *pvParameters) {
+  (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
+
+  for (;;) {  // infinite loop
+    handleThrottle();  // call handleThrottle function
+    delay(22);  // wait for 22ms
+  }
+  vTaskDelete(NULL); // should never reach this
+}
+
+void telemetryTask(void *pvParameters) {
+  (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
+
+  for (;;) {  // infinite loop
+    handleTelemetry();  // call handleThrottle function
+    delay(50);  // wait for 50ms
+  }
+  vTaskDelete(NULL); // should never reach this
+}
+
+void trackPowerTask(void *pvParameters) {
+  (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
+
+  for (;;) {  // infinite loop
+    trackPower();  // call handleThrottle function
+    delay(250);  // wait for 250ms
+  }
+  vTaskDelete(NULL); // should never reach this
+}
+
+void checkButtonTask(void *pvParameters) {
+  (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
+
+  for (;;) {  // infinite loop
+    checkButtons();  // call handleThrottle function
+    delay(5);  // wait for 5ms
+  }
+  vTaskDelete(NULL); // should never reach this
+}
+
+void updateDisplayTask(void *pvParameters) { //TODO set core affinity to one core only
+  (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
+
+  for (;;) {  // infinite loop
+    updateDisplay();  // call handleThrottle function
+    delay(255);  // wait for 250ms
   }
   vTaskDelete(NULL); // should never reach this
 }
@@ -122,23 +162,48 @@ void setup() {
     "BlinkLed",  // a name you can use for debugging
     1000,  // stack size in words, not bytes. For the AVR Arduino, this is the number of bytes.
     NULL,  // parameters passed into the task
+    4,  // priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
+    NULL);  // used to pass back a handle by which the created task can be referenced.
+
+  xTaskCreate(
+    throttleTask,  // the function that implements the task
+    "throttle",  // a name you can use for debugging
+    1000,  // stack size in words, not bytes. For the AVR Arduino, this is the number of bytes.
+    NULL,  // parameters passed into the task
     1,  // priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
     NULL);  // used to pass back a handle by which the created task can be referenced.
 
-  displayThread.onRun(updateDisplay);
-  displayThread.setInterval(250);
+  xTaskCreate(
+    telemetryTask,  // the function that implements the task
+    "telemetry",  // a name you can use for debugging
+    1000,  // stack size in words, not bytes. For the AVR Arduino, this is the number of bytes.
+    NULL,  // parameters passed into the task
+    2,  // priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
+    NULL);  // used to pass back a handle by which the created task can be referenced.
 
-  buttonThread.onRun(checkButtons);
-  buttonThread.setInterval(5);
+  xTaskCreate(
+    trackPowerTask,  // the function that implements the task
+    "trackpower",  // a name you can use for debugging
+    1000,  // stack size in words, not bytes. For the AVR Arduino, this is the number of bytes.
+    NULL,  // parameters passed into the task
+    3,  // priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
+    NULL);  // used to pass back a handle by which the created task can be referenced.
 
-  throttleThread.onRun(handleThrottle);
-  throttleThread.setInterval(22);
+  xTaskCreate(
+    updateDisplayTask,  // the function that implements the task
+    "updateDisplayTask",  // a name you can use for debugging
+    2000,  // stack size in words, not bytes. For the AVR Arduino, this is the number of bytes.
+    NULL,  // parameters passed into the task
+    3,  // priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
+    NULL);  // used to pass back a handle by which the created task can be referenced.
 
-  telemetryThread.onRun(handleTelemetry);
-  telemetryThread.setInterval(50);
-
-  counterThread.onRun(trackPower);
-  counterThread.setInterval(250);
+  xTaskCreate(
+    checkButtonTask,  // the function that implements the task
+    "checkbutton",  // a name you can use for debugging
+    1000,  // stack size in words, not bytes. For the AVR Arduino, this is the number of bytes.
+    NULL,  // parameters passed into the task
+    1,  // priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
+    NULL);  // used to pass back a handle by which the created task can be referenced.
 
 #ifdef M0_PIO
   Watchdog.enable(5000);
@@ -181,8 +246,7 @@ void loop() {
   if (!armed && usb_web.available()) parse_usb_serial();
 #endif
 
-  threads.run();
-  delay(20);
+  delay(100);
 }
 
 #ifdef RP_PIO
