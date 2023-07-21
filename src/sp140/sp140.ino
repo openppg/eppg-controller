@@ -6,6 +6,8 @@
   #include "../../inc/sp140/m0-config.h"          // device config
 #else
   #include "../../inc/sp140/rp2040-config.h"         // device config
+  #include <FreeRTOS.h>
+  #include <task.h>
 #endif
 
 #include "../../inc/sp140/structs.h"         // data structs
@@ -61,13 +63,13 @@ ButtonConfig* buttonConfig = button_top.getButtonConfig();
 CircularBuffer<float, 50> voltageBuffer;
 CircularBuffer<int, 8> potBuffer;
 
-Thread ledBlinkThread = Thread();
+//Thread ledBlinkThread = Thread();
 Thread displayThread = Thread();
 Thread throttleThread = Thread();
 Thread buttonThread = Thread();
 Thread telemetryThread = Thread();
 Thread counterThread = Thread();
-StaticThreadController<6> threads(&ledBlinkThread, &displayThread, &throttleThread,
+StaticThreadController<5> threads(&displayThread, &throttleThread,
                                   &buttonThread, &telemetryThread, &counterThread);
 
 bool armed = false;
@@ -80,6 +82,16 @@ unsigned int armedSecs = 0;
 unsigned int last_throttle = 0;
 
 #pragma message "Warning: OpenPPG software is in beta"
+
+void blinkLEDTask(void *pvParameters) {
+  (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
+
+  for (;;) {  // infinite loop
+    blinkLED();  // call blinkLED function
+    delay(500);  // wait for 500ms
+  }
+  vTaskDelete(NULL); // should never reach this
+}
 
 // the setup function runs once when you press reset or power the board
 void setup() {
@@ -104,8 +116,14 @@ void setup() {
   unsigned int startup_vibes[] = { 27, 27, 0 };
   initButtons();
 
-  ledBlinkThread.onRun(blinkLED);
-  ledBlinkThread.setInterval(500);
+  // create a new task
+  xTaskCreate(
+    blinkLEDTask,  // the function that implements the task
+    "BlinkLed",  // a name you can use for debugging
+    1000,  // stack size in words, not bytes. For the AVR Arduino, this is the number of bytes.
+    NULL,  // parameters passed into the task
+    1,  // priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
+    NULL);  // used to pass back a handle by which the created task can be referenced.
 
   displayThread.onRun(updateDisplay);
   displayThread.setInterval(250);
@@ -164,6 +182,7 @@ void loop() {
 #endif
 
   threads.run();
+  delay(20);
 }
 
 #ifdef RP_PIO
@@ -172,14 +191,6 @@ void setup1() {}
 
 // automatically runs on the second core of the RP2040
 void loop1() {
-  if (rp2040.fifo.available() > 0) {
-    STR_NOTE noteData;
-    uint32_t note_msg = rp2040.fifo.pop();  // get note from fifo queue
-    memcpy((uint32_t*)&noteData, &note_msg, sizeof(noteData));
-    tone(BUZZER_PIN, noteData.freq);
-    delay(noteData.duration);
-    noTone(BUZZER_PIN);
-  }
 }
 #endif
 
@@ -203,7 +214,7 @@ void disarmSystem() {
   armed = false;
   removeCruise(false);
 
-  ledBlinkThread.enabled = true;
+  // ledBlinkThread.enabled = true;
   runVibe(disarm_vibes, 3);
   playMelody(disarm_melody, 3);
 
@@ -337,7 +348,7 @@ bool armSystem() {
   armed = true;
   esc.writeMicroseconds(ESC_DISARMED_PWM);  // initialize the signal to low
 
-  ledBlinkThread.enabled = false;
+  //ledBlinkThread.enabled = false;
   armedAtMilis = millis();
   armAltM = getAltitudeM();
 
@@ -365,7 +376,7 @@ bool throttleSafe() {
 float getAltitudeM() {
   if (!bmpPresent) { return 0; }
   if (!bmp.performReading()) { return 0; }
-  
+
   ambientTempC = bmp.temperature;
   float altitudeM = bmp.readAltitude(deviceData.sea_pressure);
   return altitudeM;
