@@ -132,6 +132,7 @@ void updateDisplayTask(void *pvParameters) { //TODO set core affinity to one cor
   }
   vTaskDelete(NULL); // should never reach this
 }
+TaskHandle_t updateDisplayTaskHandle = NULL;
 
 // the setup function runs once when you press reset or power the board
 void setup() {
@@ -192,10 +193,14 @@ void setup() {
   xTaskCreate(
     updateDisplayTask,  // the function that implements the task
     "updateDisplayTask",  // a name you can use for debugging
-    2000,  // stack size in words, not bytes. For the AVR Arduino, this is the number of bytes.
+    3000,  // stack size in words, not bytes. For the AVR Arduino, this is the number of bytes.
     NULL,  // parameters passed into the task
     3,  // priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
-    NULL);  // used to pass back a handle by which the created task can be referenced.
+    &updateDisplayTaskHandle);  // used to pass back a handle by which the created task can be referenced.
+
+    if (updateDisplayTaskHandle != NULL) {
+      vTaskSuspend(updateDisplayTaskHandle);  // Suspend the task immediately after creation
+    }
 
   xTaskCreate(
     checkButtonTask,  // the function that implements the task
@@ -346,6 +351,7 @@ void initDisplay() {
   displayMeta();
   digitalWrite(TFT_LITE, HIGH);  // Backlight on
   delay(2500);
+  vTaskResume(updateDisplayTaskHandle);
 }
 
 // wipes screen and resets properties
