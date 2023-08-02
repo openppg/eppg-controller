@@ -80,19 +80,6 @@ bool playMelody(uint16_t melody[], int siz) {
   return true;
 }
 
-#ifdef RP_PIO
-// non-blocking tone function that uses second core
-void playNote(uint16_t note, uint16_t duration) {
-    STR_NOTE noteData;
-    // fifo uses 32 bit messages so package up the note and duration
-    uint32_t note_msg;
-    noteData.duration = duration;
-    noteData.freq = note;
-
-    memcpy((uint32_t*)&note_msg, &noteData, sizeof(noteData));
-    rp2040.fifo.push_nb(note_msg);  // send note to second core via fifo queue
-}
-#else
 // blocking tone function that delays for notes
 void playNote(uint16_t note, uint16_t duration) {
   // quarter note = 1000 / 4, eigth note = 1000/8, etc.
@@ -100,7 +87,6 @@ void playNote(uint16_t note, uint16_t duration) {
   delay(duration);  // to distinguish the notes, delay between them
   noTone(BUZZER_PIN);
 }
-#endif
 
 void handleArmFail() {
   uint16_t arm_fail_melody[] = { 820, 640 };
