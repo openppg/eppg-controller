@@ -9,6 +9,7 @@
   #include "../../inc/sp140/rp2040-config.h"         // device config
   #include <FreeRTOS.h>
   #include <task.h>
+  #include <map>
 #endif
 
 #include "../../inc/sp140/structs.h"         // data structs
@@ -71,6 +72,13 @@ uint32_t cruisedAtMilisMilis = 0;
 unsigned int armedSecs = 0;
 unsigned int last_throttle = 0;
 
+TaskHandle_t checkButtonTaskHandle = NULL;
+TaskHandle_t blinkLEDTaskHandle = NULL;
+TaskHandle_t throttleTaskHandle = NULL;
+TaskHandle_t telemetryTaskHandle = NULL;
+TaskHandle_t trackPowerTaskHandle = NULL;
+TaskHandle_t updateDisplayTaskHandle = NULL;
+
 #pragma message "Warning: OpenPPG software is in beta"
 
 void blinkLEDTask(void *pvParameters) {
@@ -132,7 +140,6 @@ void updateDisplayTask(void *pvParameters) { //TODO set core affinity to one cor
   }
   vTaskDelete(NULL); // should never reach this
 }
-TaskHandle_t updateDisplayTaskHandle = NULL;
 
 // the setup function runs once when you press reset or power the board
 void setup() {
@@ -156,59 +163,7 @@ void setup() {
   pot.setAnalogResolution(4096);
   unsigned int startup_vibes[] = { 27, 27, 0 };
   initButtons();
-
-  // create a new task
-  xTaskCreate(
-    blinkLEDTask,  // the function that implements the task
-    "BlinkLed",  // a name you can use for debugging
-    1000,  // stack size in words, not bytes. For the AVR Arduino, this is the number of bytes.
-    NULL,  // parameters passed into the task
-    4,  // priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
-    NULL);  // used to pass back a handle by which the created task can be referenced.
-
-  xTaskCreate(
-    throttleTask,  // the function that implements the task
-    "throttle",  // a name you can use for debugging
-    1000,  // stack size in words, not bytes. For the AVR Arduino, this is the number of bytes.
-    NULL,  // parameters passed into the task
-    1,  // priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
-    NULL);  // used to pass back a handle by which the created task can be referenced.
-
-  xTaskCreate(
-    telemetryTask,  // the function that implements the task
-    "telemetry",  // a name you can use for debugging
-    1000,  // stack size in words, not bytes. For the AVR Arduino, this is the number of bytes.
-    NULL,  // parameters passed into the task
-    2,  // priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
-    NULL);  // used to pass back a handle by which the created task can be referenced.
-
-  xTaskCreate(
-    trackPowerTask,  // the function that implements the task
-    "trackpower",  // a name you can use for debugging
-    1000,  // stack size in words, not bytes. For the AVR Arduino, this is the number of bytes.
-    NULL,  // parameters passed into the task
-    3,  // priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
-    NULL);  // used to pass back a handle by which the created task can be referenced.
-
-  xTaskCreate(
-    updateDisplayTask,  // the function that implements the task
-    "updateDisplayTask",  // a name you can use for debugging
-    3000,  // stack size in words, not bytes. For the AVR Arduino, this is the number of bytes.
-    NULL,  // parameters passed into the task
-    3,  // priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
-    &updateDisplayTaskHandle);  // used to pass back a handle by which the created task can be referenced.
-
-    if (updateDisplayTaskHandle != NULL) {
-      vTaskSuspend(updateDisplayTaskHandle);  // Suspend the task immediately after creation
-    }
-
-  xTaskCreate(
-    checkButtonTask,  // the function that implements the task
-    "checkbutton",  // a name you can use for debugging
-    1000,  // stack size in words, not bytes. For the AVR Arduino, this is the number of bytes.
-    NULL,  // parameters passed into the task
-    1,  // priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
-    NULL);  // used to pass back a handle by which the created task can be referenced.
+  setupTasks();
 
 #ifdef M0_PIO
   Watchdog.enable(5000);
@@ -226,6 +181,66 @@ void setup() {
   if (button_top.isPressedRaw()) {
     modeSwitch(false);
   }
+}
+
+// set up all the threads/tasks 
+void setupTasks() {
+  xTaskCreate(
+    checkButtonTask,  // the function that implements the task
+    "checkbutton",  // a name you can use for debugging
+    1000,  // stack size in words, not bytes. For the AVR Arduino, this is the number of bytes.
+    NULL,  // parameters passed into the task
+    1,  // priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
+    &checkButtonTaskHandle);  // used to pass back a handle by which the created task can be referenced.
+
+  xTaskCreate(blinkLEDTask, "blinkLed", 200, NULL, 4, &blinkLEDTaskHandle);
+  xTaskCreate(throttleTask, "throttle", 1000, NULL, 1, &throttleTaskHandle);
+  xTaskCreate(telemetryTask, "telemetry", 1000, NULL, 2, &telemetryTaskHandle);
+  xTaskCreate(trackPowerTask, "trackPower", 1000, NULL, 3, &trackPowerTaskHandle);
+  xTaskCreate(updateDisplayTask, "updateDisplay", 2000, NULL, 3, &updateDisplayTaskHandle);
+
+  if (updateDisplayTaskHandle != NULL) {
+    vTaskSuspend(updateDisplayTaskHandle);  // Suspend the task immediately after creation
+  }
+}
+
+std::map<eTaskState, const char *> eTaskStateName { {eReady, "Ready"}, { eRunning, "Running" }, {eBlocked, "Blocked"}, {eSuspended, "Suspended"}, {eDeleted, "Deleted"} };
+void ps() {
+  int tasks = uxTaskGetNumberOfTasks();
+  TaskStatus_t *pxTaskStatusArray = new TaskStatus_t[tasks];
+  unsigned long runtime;
+  tasks = uxTaskGetSystemState( pxTaskStatusArray, tasks, &runtime );
+  Serial.printf("# Tasks: %d\n", tasks);
+  Serial.println("ID, NAME, STATE, PRIO, CYCLES");
+  for (int i=0; i < tasks; i++) {
+    Serial.printf("%d: %-16s %-10s %d %lu\n", i, pxTaskStatusArray[i].pcTaskName, eTaskStateName[pxTaskStatusArray[i].eCurrentState], (int)pxTaskStatusArray[i].uxCurrentPriority, pxTaskStatusArray[i].ulRunTimeCounter);
+  }
+  delete[] pxTaskStatusArray;
+}
+
+
+void printTaskMemoryUsage(TaskHandle_t taskHandle, const char* taskName) {
+    UBaseType_t stackHighWaterMark;
+    if (taskHandle == NULL) {
+        taskHandle = xTaskGetCurrentTaskHandle(); // Get current task handle if NULL is passed
+    }
+    stackHighWaterMark = uxTaskGetStackHighWaterMark(taskHandle);
+    printf("Task: %s\n", taskName);
+    printf("Stack High Watermark: %lu words\n", stackHighWaterMark);
+    printf("Estimated Memory Usage: %lu bytes\n", (configTOTAL_HEAP_SIZE - stackHighWaterMark * sizeof(StackType_t)));
+    printf("-------------------------\n");
+}
+
+void psTop() {
+  // Print memory usage for each task
+  Serial.printf("\nLoop() - Free Stack Space: %d", uxTaskGetStackHighWaterMark(NULL));
+  Serial.printf("\nblinkLEDTask - Free Stack Space: %d", uxTaskGetStackHighWaterMark(blinkLEDTaskHandle));
+  Serial.printf("\nthrottleTask - Free Stack Space: %d", uxTaskGetStackHighWaterMark(throttleTaskHandle));
+  Serial.printf("\ntelemetryTask - Free Stack Space: %d", uxTaskGetStackHighWaterMark(telemetryTaskHandle));
+  Serial.printf("\ntrackPowerTask - Free Stack Space: %d", uxTaskGetStackHighWaterMark(trackPowerTaskHandle));
+  Serial.printf("\ncheckButtonTask - Free Stack Space: %d", uxTaskGetStackHighWaterMark(checkButtonTaskHandle));
+  Serial.printf("\nupdateDisplayTask - Free Stack Space: %d", uxTaskGetStackHighWaterMark(updateDisplayTaskHandle));
+  Serial.println("");
 }
 
 void setup140() {
@@ -252,6 +267,8 @@ void loop() {
 #endif
 
   delay(100);
+  //ps();
+  //psTop();
 }
 
 #ifdef RP_PIO
@@ -435,6 +452,7 @@ bool armSystem() {
 
 // Returns true if the throttle/pot is below the safe threshold
 bool throttleSafe() {
+  return true; // TODO remove
   pot.update();
   if (pot.getValue() < POT_SAFE_LEVEL) {
     return true;
