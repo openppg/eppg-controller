@@ -4,11 +4,12 @@
 #include "../../lib/crc.c"       // packet error checking
 #ifdef M0_PIO
   #include "../../inc/sp140/m0-config.h"          // device config
-  // TODO find best SAMD21 freeRTOS port
+  // TODO find best SAMD21 FreeRTOS port
 #else
   #include "../../inc/sp140/rp2040-config.h"         // device config
   #include <FreeRTOS.h>
   #include <task.h>
+  #include <semphr.h>
   #include <map>
 #endif
 
@@ -78,6 +79,8 @@ TaskHandle_t throttleTaskHandle = NULL;
 TaskHandle_t telemetryTaskHandle = NULL;
 TaskHandle_t trackPowerTaskHandle = NULL;
 TaskHandle_t updateDisplayTaskHandle = NULL;
+
+SemaphoreHandle_t eepromSemaphore;
 
 #pragma message "Warning: OpenPPG software is in beta"
 
@@ -183,7 +186,7 @@ void setup() {
   }
 }
 
-// set up all the threads/tasks 
+// set up all the threads/tasks
 void setupTasks() {
   xTaskCreate(
     checkButtonTask,  // the function that implements the task
@@ -202,6 +205,9 @@ void setupTasks() {
   if (updateDisplayTaskHandle != NULL) {
     vTaskSuspend(updateDisplayTaskHandle);  // Suspend the task immediately after creation
   }
+
+  eepromSemaphore = xSemaphoreCreateBinary();
+  xSemaphoreGive(eepromSemaphore);
 }
 
 std::map<eTaskState, const char *> eTaskStateName { {eReady, "Ready"}, { eRunning, "Running" }, {eBlocked, "Blocked"}, {eSuspended, "Suspended"}, {eDeleted, "Deleted"} };
@@ -311,8 +317,10 @@ void disarmSystem() {
   // update armed_time
   refreshDeviceData();
   deviceData.armed_time += round(armedSecs / 60);  // convert to mins
-  writeDeviceData();
+  xTaskCreate(writeDeviceDataTask, "EEPROMWrite", 128, NULL, 1, NULL);
+
   delay(1000);  // TODO just disable button thread // dont allow immediate rearming
+    // probably not possible now that it takes longer to arm with button sequence?
 }
 
 // The event handler for the the buttons

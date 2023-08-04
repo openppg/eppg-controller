@@ -134,7 +134,7 @@ void initBuzz() {
 bool initVibe() {
   if (!ENABLE_VIB) { return false; }
   if (!vibe.begin()) { return false; }
- 
+
   vibe.selectLibrary(1);
   vibe.setMode(DRV2605_MODE_INTTRIG);
   vibrateNotify();  // initial boot vibration
@@ -150,7 +150,9 @@ void modeSwitch(bool update_display) {
   } else {
     deviceData.performance_mode = 0;
   }
-  writeDeviceData();
+
+  xTaskCreate(writeDeviceDataTask, "EEPROMWrite", 256, NULL, 1, NULL);
+
   if (update_display) { // clear out old text
     clearModeDisplay();
   }

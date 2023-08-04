@@ -25,6 +25,21 @@ void refreshDeviceData() {
   }
 }
 
+// One time freeRTOS task that wraps writeDeviceData()
+void writeDeviceDataTask(void *pvParameters) {
+  if (eepromSemaphore != NULL) {
+    if (xSemaphoreTake(eepromSemaphore, (TickType_t)10) == pdTRUE) {
+      // Your EEPROM write logic here
+      writeDeviceData();
+      // Once done, release the semaphore
+      xSemaphoreGive(eepromSemaphore);
+    }
+  }
+
+  // Delete the task after completion
+  vTaskDelete(NULL);
+}
+
 // write to EEPROM
 void writeDeviceData() {
   deviceData.crc = crc16((uint8_t*)&deviceData, sizeof(deviceData) - 2);
