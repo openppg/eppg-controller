@@ -134,7 +134,7 @@ void initBuzz() {
 bool initVibe() {
   if (!ENABLE_VIB) { return false; }
   if (!vibe.begin()) { return false; }
- 
+
   vibe.selectLibrary(1);
   vibe.setMode(DRV2605_MODE_INTTRIG);
   vibrateNotify();  // initial boot vibration
@@ -188,7 +188,7 @@ void handleSerialData(byte buffer[]) {
   // }
 
   if (buffer[20] != 255 || buffer[21] != 255) {
-    Serial.println("no stop byte");
+    //Serial.println("no stop byte");
 
     return; //Stop byte of 65535 not recieved
   }

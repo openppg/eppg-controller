@@ -111,7 +111,7 @@ void setup() {
   displayThread.setInterval(250);
 
   buttonThread.onRun(checkButtons);
-  buttonThread.setInterval(5);
+  buttonThread.setInterval(4);
 
   throttleThread.onRun(handleThrottle);
   throttleThread.setInterval(22);
@@ -183,8 +183,12 @@ void loop1() {
 }
 #endif
 
+long last_btn_check = 0;
+
 void checkButtons() {
   button_top.check();
+  //Serial.println(millis() - last_btn_check);
+  last_btn_check = millis();
 }
 
 // disarm, remove cruise, alert, save updated stats
@@ -218,32 +222,66 @@ void disarmSystem() {
   delay(1000);  // TODO just disable button thread // dont allow immediate rearming
 }
 
-// The event handler for the the buttons
-void handleButtonEvent(AceButton* /* btn */, uint8_t eventType, uint8_t /* st */) {
-  switch (eventType) {
-  case AceButton::kEventDoubleClicked:
-    if (armed) {
-      disarmSystem();
+void toggleArm() {
+  if (armed) {
+    disarmSystem();
+  } else if (throttleSafe()) {
+    armSystem();
+  } else {
+    handleArmFail();
+  }
+}
+
+void toggleCruise() {
+  if (armed) {
+    if (cruising) {
+      removeCruise(true);
     } else if (throttleSafe()) {
-      armSystem();
+      modeSwitch(true);
     } else {
-      handleArmFail();
+      setCruise();
     }
+  } else {
+    // show stats screen
+    resetDisplay();
+    displayMeta();
+    delay(2000);
+    resetDisplay();
+  }
+}
+
+// Variable to track if a button was clicked
+bool wasClicked = false;
+
+// Timestamp when the button was released
+unsigned long releaseTime = 0;
+
+// Time threshold for LongClick after release (in milliseconds)
+const unsigned long longClickThreshold = 3500; // adjust as necessary
+
+void handleButtonEvent(AceButton* btn, uint8_t eventType, uint8_t /* st */) {
+  switch (eventType) {
+  case AceButton::kEventClicked:
+    wasClicked = true;
+    break;
+  case AceButton::kEventReleased:
+    if (wasClicked) {
+      releaseTime = millis();
+      wasClicked = false;
+      Serial.println("Button Released after Click");
+    }
+    break;
+  case AceButton::kEventDoubleClicked:
     break;
   case AceButton::kEventLongPressed:
-    if (armed) {
-      if (cruising) {
-        removeCruise(true);
-      } else if (throttleSafe()) {
-        modeSwitch(true);
-      } else {
-        setCruise();
-      }
-    } else {
-      // show stats screen?
+    if (!wasClicked && (millis() - releaseTime <= longClickThreshold)) {
+      toggleArm(); //
+      Serial.println("Long Press after Click and Release");
     }
-    break;
-  case AceButton::kEventLongReleased:
+    else {
+      toggleCruise();
+      Serial.println("Long Press");
+    }
     break;
   }
 }
@@ -258,7 +296,9 @@ void initButtons() {
   buttonConfig->setFeature(ButtonConfig::kFeatureSuppressAfterDoubleClick);
   buttonConfig->setFeature(ButtonConfig::kFeatureSuppressAfterLongPress);
   buttonConfig->setLongPressDelay(2500);
-  buttonConfig->setDoubleClickDelay(600);
+  buttonConfig->setClickDelay(300);
+  //buttonConfig->setDoubleClickDelay(900);
+  //buttonConfig->setDebounceDelay(100);
 }
 
 // inital screen setup and config
@@ -365,7 +405,7 @@ bool throttleSafe() {
 float getAltitudeM() {
   if (!bmpPresent) { return 0; }
   if (!bmp.performReading()) { return 0; }
-  
+
   ambientTempC = bmp.temperature;
   float altitudeM = bmp.readAltitude(deviceData.sea_pressure);
   return altitudeM;
