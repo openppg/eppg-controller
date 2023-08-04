@@ -310,7 +310,7 @@ void initDisplay() {
   resetDisplay();
   displayMeta();
   digitalWrite(TFT_LITE, HIGH);  // Backlight on
-  delay(2500);
+  delay(2000);
 }
 
 // wipes screen and resets properties
