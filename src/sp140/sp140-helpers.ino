@@ -20,27 +20,6 @@ void handleFlightTime() {
   }
 }
 
-// TODO (bug) rolls over at 99mins
-void displayTime(int val, int x, int y, uint16_t bg_color) {
-  // displays number of minutes and seconds (since armed and throttled)
-  display.setCursor(x, y);
-  display.setTextSize(2);
-  display.setTextColor(BLACK);
-  minutes = val / 60;
-  seconds = numberOfSeconds(val);
-  if (minutes < 10) {
-    display.setCursor(x, y);
-    display.print("0");
-  }
-  dispValue(minutes, prevMinutes, 2, 0, x, y, 2, BLACK, bg_color);
-  display.setCursor(x+24, y);
-  display.print(":");
-  display.setCursor(x+36, y);
-  if (seconds < 10) {
-    display.print("0");
-  }
-  dispValue(seconds, prevSeconds, 2, 0, x+36, y, 2, BLACK, bg_color);
-}
 
 // maps battery percentage to a display color
 uint16_t batt2color(int percentage) {
@@ -50,67 +29,6 @@ uint16_t batt2color(int percentage) {
     return YELLOW;
   }
   return RED;
-}
-
-//**************************************************************************************//
-//  Helper function to print values without flashing numbers due to slow screen refresh.
-//  This function only re-draws the digit that needs to be updated.
-//    BUG:  If textColor is not constant across multiple uses of this function,
-//          weird things happen.
-//**************************************************************************************//
-void dispValue(float value, float &prevVal, int maxDigits, int precision, int x, int y, int textSize, int textColor, int background){
-  int numDigits = 0;
-  char prevDigit[DIGIT_ARRAY_SIZE] = {};
-  char digit[DIGIT_ARRAY_SIZE] = {};
-  String prevValTxt = String(prevVal, precision);
-  String valTxt = String(value, precision);
-  prevValTxt.toCharArray(prevDigit, maxDigits+1);
-  valTxt.toCharArray(digit, maxDigits+1);
-
-  // COUNT THE NUMBER OF DIGITS THAT NEED TO BE PRINTED:
-  for(int i=0; i<maxDigits; i++){
-    if (digit[i]) {
-      numDigits++;
-    }
-  }
-
-  display.setTextSize(textSize);
-  display.setCursor(x, y);
-
-  // PRINT LEADING SPACES TO RIGHT-ALIGN:
-  display.setTextColor(background);
-  for(int i=0; i<(maxDigits-numDigits); i++){
-    display.print(static_cast<char>(218));
-  }
-  display.setTextColor(textColor);
-
-  // ERASE ONLY THE NECESSARY DIGITS:
-  for (int i=0; i<numDigits; i++) {
-    if (digit[i]!=prevDigit[i]) {
-      display.setTextColor(background);
-      display.print(static_cast<char>(218));
-    } else {
-      display.setTextColor(textColor);
-      display.print(digit[i]);
-    }
-  }
-
-  // BACK TO THE BEGINNING:
-  display.setCursor(x, y);
-
-  // ADVANCE THE CURSOR TO THE PROPER LOCATION:
-  display.setTextColor(background);
-  for (int i=0; i<(maxDigits-numDigits); i++) {
-    display.print(static_cast<char>(218));
-  }
-  display.setTextColor(textColor);
-
-  // PRINT THE DIGITS THAT NEED UPDATING
-  for(int i=0; i<numDigits; i++){
-    display.print(digit[i]);
-  }
-
-  prevVal = value;
 }
 
 // Start the bmp388 sensor
@@ -153,19 +71,8 @@ void modeSwitch(bool update_display) {
 
   xTaskCreate(writeDeviceDataTask, "EEPROMWrite", 256, NULL, 1, NULL);
 
-  if (update_display) { // clear out old text
-    clearModeDisplay();
-  }
   uint16_t notify_melody[] = { 900, 1976 };
   playMelody(notify_melody, 2);
-}
-
-void clearModeDisplay() {
-  String prevMode = (deviceData.performance_mode == 0) ? "SPORT" : "CHILL";
-  display.setCursor(30, 60);
-  display.setTextSize(1);
-  display.setTextColor(DEFAULT_BG_COLOR);
-  display.print(prevMode);
 }
 
 void prepareSerialRead() {  // TODO needed?

@@ -11,11 +11,6 @@
 
 #endif
 
-// Map double values
-double mapd(double x, double in_min, double in_max, double out_min, double out_max) {
-  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
-}
-
 /**
  * For digital time display - prints leading 0
  *
@@ -27,25 +22,6 @@ String convertToDigits(byte digits) {
   if (digits < 10) digits_string.concat("0");
   digits_string.concat(digits);
   return digits_string;
-}
-
-/**
- * advance to next screen page
- *
- * @return the number of next page
- */
-int nextPage() {
-  display.fillRect(0, 37, 160, 54, DEFAULT_BG_COLOR);
-
-  if (page >= LAST_PAGE) {
-    return page = 0;
-  }
-  return ++page;
-}
-
-void addVSpace() {
-  display.setTextSize(1);
-  display.println(" ");
 }
 
 void setLEDs(byte state) {
@@ -151,19 +127,3 @@ void rebootBootloader() {
 #endif
 }
 #endif
-
-void displayMeta() {
-  display.setFont(&FreeSansBold12pt7b);
-  display.setTextColor(BLACK);
-  display.setCursor(25, 30);
-  display.println("OpenPPG");
-  display.setFont();
-  display.setTextSize(2);
-  display.setCursor(60, 60);
-  display.print("v" + String(VERSION_MAJOR) + "." + String(VERSION_MINOR));
-#ifdef RP_PIO
-  display.print("R");
-#endif
-  display.setCursor(54, 90);
-  displayTime(deviceData.armed_time);
-}

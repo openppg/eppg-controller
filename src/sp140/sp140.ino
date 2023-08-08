@@ -17,7 +17,6 @@
 #include <AceButton.h>           // button clicks
 #include <Adafruit_BMP3XX.h>     // barometer
 #include <Adafruit_DRV2605.h>    // haptic controller
-#include <Adafruit_ST7735.h>     // screen
 #include <ArduinoJson.h>
 #include <CircularBuffer.h>      // smooth out readings
 #include <ResponsiveAnalogRead.h>  // smoothing for throttle
@@ -39,13 +38,14 @@
   #include "pico/unique_id.h"
 #endif
 
-#include <Fonts/FreeSansBold12pt7b.h>
 
 #include "../../inc/sp140/globals.h"  // device config
 
+//#include "../../inc/sp140/utilities.h"
+#include "../../inc/sp140/display.h"
+
 using namespace ace_button;
 
-Adafruit_ST7735 display = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 Adafruit_DRV2605 vibe;
 
 // USB WebUSB object
@@ -81,6 +81,7 @@ TaskHandle_t trackPowerTaskHandle = NULL;
 TaskHandle_t updateDisplayTaskHandle = NULL;
 
 SemaphoreHandle_t eepromSemaphore;
+SemaphoreHandle_t tftSemaphore;
 
 #pragma message "Warning: OpenPPG software is in beta"
 
@@ -98,7 +99,7 @@ void throttleTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
   for (;;) {  // infinite loop
-    handleThrottle();  // call handleThrottle function
+    handleThrottle();  // 
     delay(22);  // wait for 22ms
   }
   vTaskDelete(NULL); // should never reach this
@@ -108,7 +109,7 @@ void telemetryTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
   for (;;) {  // infinite loop
-    handleTelemetry();  // call handleThrottle function
+    handleTelemetry();  
     delay(50);  // wait for 50ms
   }
   vTaskDelete(NULL); // should never reach this
@@ -118,7 +119,7 @@ void trackPowerTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
   for (;;) {  // infinite loop
-    trackPower();  // call handleThrottle function
+    trackPower();  
     delay(250);  // wait for 250ms
   }
   vTaskDelete(NULL); // should never reach this
@@ -128,7 +129,7 @@ void checkButtonTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
   for (;;) {  // infinite loop
-    checkButtons();  // call handleThrottle function
+    checkButtons();  
     delay(5);  // wait for 5ms
   }
   vTaskDelete(NULL); // should never reach this
@@ -138,8 +139,9 @@ void updateDisplayTask(void *pvParameters) { //TODO set core affinity to one cor
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
   for (;;) {  // infinite loop
-    updateDisplay();  // call handleThrottle function
-    delay(255);  // wait for 250ms
+    const float altitude = getAltitudeM();
+    updateDisplay( deviceData, telemetryData, altitude, armed, cruising, armedAtMilis);
+    delay(250);  // wait for 250ms
   }
   vTaskDelete(NULL); // should never reach this
 }
@@ -180,10 +182,12 @@ void setup() {
 #ifdef M0_PIO
   Watchdog.reset();
 #endif
-  initDisplay();
+  setupDisplay(deviceData);
   if (button_top.isPressedRaw()) {
     modeSwitch(false);
   }
+  delay(2000);
+  vTaskResume(updateDisplayTaskHandle);
 }
 
 // set up all the threads/tasks
@@ -305,10 +309,6 @@ void disarmSystem() {
   runVibe(disarm_vibes, 3);
   playMelody(disarm_melody, 3);
 
-  bottom_bg_color = DEFAULT_BG_COLOR;
-  display.fillRect(0, 93, 160, 40, bottom_bg_color);
-  updateDisplay();
-
   // update armed_time
   refreshDeviceData();
   deviceData.armed_time += round(armedSecs / 60);  // convert to mins
@@ -339,10 +339,9 @@ void toggleCruise() {
     }
   } else {
     // show stats screen
-    resetDisplay();
-    displayMeta();
-    delay(2000);
-    resetDisplay();
+    // displayMeta();
+    // delay(2000);
+    // resetDisplay();
   }
 }
 
@@ -397,30 +396,6 @@ void initButtons() {
   //buttonConfig->setDebounceDelay(100);
 }
 
-// initial screen setup and config
-void initDisplay() {
-  display.initR(INITR_BLACKTAB);  // Init ST7735S chip, black tab
-  // display.setSPISpeed(40000000);  // 40MHz SPI speed
-
-  pinMode(TFT_LITE, OUTPUT);
-  resetDisplay();
-  displayMeta();
-  digitalWrite(TFT_LITE, HIGH);  // Backlight on
-  delay(2000);
-  vTaskResume(updateDisplayTaskHandle);
-}
-
-// wipes screen and resets properties
-void resetDisplay() {
-  display.fillScreen(DEFAULT_BG_COLOR);
-  display.setTextColor(BLACK);
-  display.setCursor(0, 0);
-  display.setTextSize(1);
-  display.setTextWrap(true);
-
-  display.setRotation(deviceData.screen_rotation);  // 1=right hand, 3=left hand
-}
-
 // read throttle and send to hub
 // read throttle
 void handleThrottle() {
@@ -438,7 +413,7 @@ void handleThrottle() {
     if (cruisingSecs >= CRUISE_GRACE && potRaw > POT_SAFE_LEVEL) {
       removeCruise(true);  // deactivate cruise
     } else {
-      throttlePWM = mapd(cruisedPotVal, 0, 4095, ESC_MIN_PWM, maxPWM);
+      //TODO throttlePWM = mapd(cruisedPotVal, 0, 4095, ESC_MIN_PWM, maxPWM);
     }
   } else {
     // no need to save & smooth throttle etc when in cruise mode (& pot == 0)
@@ -460,7 +435,7 @@ void handleThrottle() {
       maxPWM = ESC_MAX_PWM;
     }
     // mapping val to min and max pwm
-    throttlePWM = mapd(potLvl, 0, 4095, ESC_MIN_PWM, maxPWM);
+    //TODOthrottlePWM = mapd(potLvl, 0, 4095, ESC_MIN_PWM, maxPWM);
   }
 
   esc.writeMicroseconds(throttlePWM);  // using val as the signal to esc
@@ -482,8 +457,7 @@ bool armSystem() {
   runVibe(arm_vibes, 3);
   playMelody(arm_melody, 3);
 
-  bottom_bg_color = ARMED_BG_COLOR;
-  display.fillRect(0, 93, 160, 40, bottom_bg_color);
+  //bottom_bg_color = ARMED_BG_COLOR;
 
   return true;
 }
@@ -491,7 +465,6 @@ bool armSystem() {
 
 // Returns true if the throttle/pot is below the safe threshold
 bool throttleSafe() {
-  return true; // TODO remove
   pot.update();
   if (pot.getValue() < POT_SAFE_LEVEL) {
     return true;
@@ -516,181 +489,6 @@ float getAltitudeM() {
  *******/
 bool screen_wiped = false;
 
-// show data on screen and handle different pages
-void updateDisplay() {
-  if (!screen_wiped) {
-    display.fillScreen(WHITE);
-    screen_wiped = true;
-  }
-  //Serial.print("v: ");
-  //Serial.println(volts);
-
-  displayPage0();
-  //dispValue(kWatts, prevKilowatts, 4, 1, 10, /*42*/55, 2, BLACK, DEFAULT_BG_COLOR);
-  //display.print("kW");
-
-  display.setTextColor(BLACK);
-  float avgVoltage = getBatteryVoltSmoothed();
-  batteryPercent = getBatteryPercent(avgVoltage);  // multi-point line
-  // change battery color based on charge
-  int batt_width = map((int)batteryPercent, 0, 100, 0, 108);
-  display.fillRect(0, 0, batt_width, 36, batt2color(batteryPercent));
-
-  if (avgVoltage < BATT_MIN_V) {
-    if (batteryFlag) {
-      batteryFlag = false;
-      display.fillRect(0, 0, 108, 36, DEFAULT_BG_COLOR);
-    }
-    display.setCursor(12, 3);
-    display.setTextSize(2);
-    display.setTextColor(RED);
-    display.println("BATTERY");
-
-    if ( avgVoltage < 10 ) {
-      display.print(" ERROR");
-    } else {
-      display.print(" DEAD");
-    }
-  } else {
-    batteryFlag = true;
-    display.fillRect(map(batteryPercent, 0,100, 0,108), 0, map(batteryPercent, 0,100, 108,0), 36, DEFAULT_BG_COLOR);
-  }
-  // cross out battery box if battery is dead
-  if (batteryPercent <= 5) {
-    display.drawLine(0, 1, 106, 36, RED);
-    display.drawLine(0, 0, 108, 36, RED);
-    display.drawLine(1, 0, 110, 36, RED);
-  }
-  dispValue(batteryPercent, prevBatteryPercent, 3, 0, 108, 10, 2, BLACK, DEFAULT_BG_COLOR);
-  display.print("%");
-
-  // battery shape end
-  //display.fillRect(102, 0, 6, 9, BLACK);
-  //display.fillRect(102, 27, 6, 10, BLACK);
-
-  display.fillRect(0, 36, 160, 1, BLACK);
-  display.fillRect(108, 0, 1, 36, BLACK);
-  display.fillRect(0, 92, 160, 1, BLACK);
-
-  displayAlt();
-
-  //dispValue(ambientTempF, prevAmbTempF, 3, 0, 10, 100, 2, BLACK, DEFAULT_BG_COLOR);
-  //display.print("F");
-
-  handleFlightTime();
-  displayTime(throttleSecs, 8, 102, bottom_bg_color);
-
-  //dispPowerCycles(104,100,2);
-}
-
-// display first page (voltage and current)
-void displayPage0() {
-  float avgVoltage = getBatteryVoltSmoothed();
-
-  dispValue(avgVoltage, prevVolts, 5, 1, 84, 42, 2, BLACK, DEFAULT_BG_COLOR);
-  display.print("V");
-
-  dispValue(telemetryData.amps, prevAmps, 3, 0, 108, 71, 2, BLACK, DEFAULT_BG_COLOR);
-  display.print("A");
-
-  float kWatts = watts / 1000.0;
-  kWatts = constrain(kWatts, 0, 50);
-
-  dispValue(kWatts, prevKilowatts, 4, 1, 10, 42, 2, BLACK, DEFAULT_BG_COLOR);
-  display.print("kW");
-
-  float kwh = wattsHoursUsed / 1000;
-  dispValue(kwh, prevKwh, 4, 1, 10, 71, 2, BLACK, DEFAULT_BG_COLOR);
-  display.print("kWh");
-  displyMode();
-}
-
-// display second page (mAh and armed time)
-void displayPage1() {
-  dispValue(telemetryData.volts, prevVolts, 5, 1, 84, 42, 2, BLACK, DEFAULT_BG_COLOR);
-  display.print("V");
-
-  dispValue(telemetryData.amps, prevAmps, 3, 0, 108, 71, 2, BLACK, DEFAULT_BG_COLOR);
-  display.print("A");
-
-  float kwh = wattsHoursUsed / 1000;
-  dispValue(kwh, prevKilowatts, 4, 1, 10, 71, 2, BLACK, DEFAULT_BG_COLOR);
-  display.print("kWh");
-
-  displyMode();
-}
-
-void displyMode() {
-  display.setCursor(30, 60);
-  display.setTextSize(1);
-  if (deviceData.performance_mode == 0) {
-    display.setTextColor(BLUE);
-    display.print("CHILL");
-  } else {
-    display.setTextColor(RED);
-    display.print("SPORT");
-  }
-}
-
-// displays number of minutes and seconds (since armed)
-void displayTime(int val) {
-  int minutes = val / 60;  // numberOfMinutes(val);
-  int seconds = numberOfSeconds(val);
-
-  display.print(convertToDigits(minutes));
-  display.print(":");
-  display.print(convertToDigits(seconds));
-}
-
-// display altitude data on screen
-void displayAlt() {
-  // if no bmp, just display "ERR"
-  if (!bmpPresent) {
-    display.setTextSize(2);
-    display.setCursor (85, 102);
-    display.setTextColor(RED);
-    display.print(F("AL ERR"));
-    return;
-  }
-
-  float altM = 0;
-  // TODO make MSL explicit?
-  if (armAltM > 0 && deviceData.sea_pressure != DEFAULT_SEA_PRESSURE) {  // MSL
-    altM = getAltitudeM();
-  } else {  // AGL
-    altM = getAltitudeM() - armAltM;
-  }
-
-  // convert to ft if not using metric
-  float alt = deviceData.metric_alt ? altM : (round(altM * 3.28084));
-
-  dispValue(alt, lastAltM, 5, 0, 70, 102, 2, BLACK, bottom_bg_color);
-
-  display.print(deviceData.metric_alt ? F("m") : F("ft"));
-  lastAltM = alt;
-}
-
-// display hidden page (firmware version and total armed time)
-void displayVersions() {
-  display.setTextSize(2);
-  display.print(F("v"));
-  display.print(VERSION_MAJOR);
-  display.print(F("."));
-  display.println(VERSION_MINOR);
-  addVSpace();
-  display.setTextSize(2);
-  displayTime(deviceData.armed_time);
-  display.print(F(" h:m"));
-  // addVSpace();
-  // display.print(chipId()); // TODO: trim down
-}
-
-// display hidden page (firmware version and total armed time)
-void displayMessage(char *message) {
-  display.setCursor(0, 0);
-  display.setTextSize(2);
-  display.println(message);
-}
 
 void setCruise() {
   // IDEA: fill a "cruise indicator" as long press activate happens
@@ -701,17 +499,11 @@ void setCruise() {
     vibrateNotify();
 
     // update display to show cruise
-    display.setCursor(70, 60);
-    display.setTextSize(1);
-    display.setTextColor(RED);
-    display.print(F("CRUISE"));
 
     uint16_t notify_melody[] = { 900, 900 };
     playMelody(notify_melody, 2);
 
-    bottom_bg_color = YELLOW;
-    display.fillRect(0, 93, 160, 40, bottom_bg_color);
-
+    //bottom_bg_color = YELLOW;
     cruisedAtMilis = millis();  // start timer
   }
 }
@@ -720,16 +512,8 @@ void removeCruise(bool alert) {
   cruising = false;
 
   // update bottom bar
-  bottom_bg_color = DEFAULT_BG_COLOR;
-  if (armed) { bottom_bg_color = ARMED_BG_COLOR; }
-  display.fillRect(0, 93, 160, 40, bottom_bg_color);
-
-  // update text status
-  display.setCursor(70, 60);
-  display.setTextSize(1);
-  display.setTextColor(DEFAULT_BG_COLOR);
-  display.print(F("CRUISE"));  // overwrite in bg color to remove
-  display.setTextColor(BLACK);
+  // bottom_bg_color = DEFAULT_BG_COLOR;
+  // if (armed) { bottom_bg_color = ARMED_BG_COLOR; }
 
   if (alert) {
     vibrateNotify();
@@ -749,6 +533,6 @@ void trackPower() {
   prevPwrMillis = currentPwrMillis;
 
   if (armed) {
-    wattsHoursUsed += round(watts/60/60*msec_diff)/1000.0;
+    wattHoursUsed += round(watts/60/60*msec_diff)/1000.0;
   }
 }
