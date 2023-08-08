@@ -73,7 +73,7 @@ bool runVibe(unsigned int sequence[], int siz) {
 bool playMelody(uint16_t melody[], int siz) {
   if (!ENABLE_BUZ) { return false; }
   for (int thisNote = 0; thisNote < siz; thisNote++) {
-    // quarter note = 1000 / 4, eigth note = 1000/8, etc.
+    // quarter note = 1000 / 4, eighth note = 1000/8, etc.
     int noteDuration = 125;
     playNote(melody[thisNote], noteDuration);
   }
@@ -82,7 +82,7 @@ bool playMelody(uint16_t melody[], int siz) {
 
 // blocking tone function that delays for notes
 void playNote(uint16_t note, uint16_t duration) {
-  // quarter note = 1000 / 4, eigth note = 1000/8, etc.
+  // quarter note = 1000 / 4, eighth note = 1000/8, etc.
   tone(BUZZER_PIN, note);
   delay(duration);  // to distinguish the notes, delay between them
   noTone(BUZZER_PIN);

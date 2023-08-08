@@ -344,7 +344,7 @@ void handleButtonEvent(AceButton* /* btn */, uint8_t eventType, uint8_t /* st */
   }
 }
 
-// inital button setup and config
+// initial button setup and config
 void initButtons() {
   pinMode(BUTTON_TOP, INPUT_PULLUP);
 
@@ -357,7 +357,7 @@ void initButtons() {
   buttonConfig->setDoubleClickDelay(600);
 }
 
-// inital screen setup and config
+// initial screen setup and config
 void initDisplay() {
   display.initR(INITR_BLACKTAB);  // Init ST7735S chip, black tab
   // display.setSPISpeed(40000000);  // 40MHz SPI speed

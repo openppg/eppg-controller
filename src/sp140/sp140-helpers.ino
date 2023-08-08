@@ -84,7 +84,7 @@ void dispValue(float value, float &prevVal, int maxDigits, int precision, int x,
   }
   display.setTextColor(textColor);
 
-  // ERASE ONLY THE NESSESARY DIGITS:
+  // ERASE ONLY THE NECESSARY DIGITS:
   for (int i=0; i<numDigits; i++) {
     if (digit[i]!=prevDigit[i]) {
       display.setTextColor(background);
@@ -192,7 +192,7 @@ void handleSerialData(byte buffer[]) {
   if (buffer[20] != 255 || buffer[21] != 255) {
     Serial.println("no stop byte");
 
-    return; //Stop byte of 65535 not recieved
+    return; //Stop byte of 65535 not received
   }
 
   //Check the fletcher checksum
@@ -244,7 +244,7 @@ void handleSerialData(byte buffer[]) {
 
   temperature += 1.0 / ((float) NOMINAL_TEMPERATURE + 273.15); // + (1/To)
   temperature = 1.0 / temperature; // Invert
-  temperature -= 273.15; // convert to Celcius
+  temperature -= 273.15; // convert to Celsius
 
   // filter bad values
   if (temperature < 0 || temperature > 200) {
@@ -308,9 +308,9 @@ void handleSerialData(byte buffer[]) {
   # Bit position in byte indicates flag set, 1 is set, 0 is default
   # Bit 0: Motor Started, set when motor is running as expected
   # Bit 1: Motor Saturation Event, set when saturation detected and power is reduced for desync protection
-  # Bit 2: ESC Over temperature event occuring, shut down method as per configuration
-  # Bit 3: ESC Overvoltage event occuring, shut down method as per configuration
-  # Bit 4: ESC Undervoltage event occuring, shut down method as per configuration
+  # Bit 2: ESC Over temperature event occurring, shut down method as per configuration
+  # Bit 3: ESC Overvoltage event occurring, shut down method as per configuration
+  # Bit 4: ESC Undervoltage event occurring, shut down method as per configuration
   # Bit 5: Startup error detected, motor stall detected upon trying to start*/
   raw_telemdata.statusFlag = buffer[16];
   telemetryData.statusFlag = raw_telemdata.statusFlag;
