@@ -9,8 +9,8 @@
 #define MAMP_OFFSET 200
 #define VOLT_OFFSET 1.5
 
-#define VERSION_MAJOR 5
-#define VERSION_MINOR 9
+#define VERSION_MAJOR 6
+#define VERSION_MINOR 0
 
 #define CRUISE_GRACE 1.5  // 1.5 sec period to get off throttle
 #define POT_SAFE_LEVEL 0.05 * 4096  // 5% or less
