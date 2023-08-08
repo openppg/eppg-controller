@@ -190,7 +190,7 @@ void handleSerialData(byte buffer[]) {
   // }
 
   if (buffer[20] != 255 || buffer[21] != 255) {
-    Serial.println("no stop byte");
+    //Serial.println("no stop byte");
 
     return; //Stop byte of 65535 not received
   }

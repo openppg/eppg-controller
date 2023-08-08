@@ -277,8 +277,12 @@ void loop() {
   //psTop();
 }
 
+long last_btn_check = 0;
+
 void checkButtons() {
   button_top.check();
+  //Serial.println(millis() - last_btn_check);
+  last_btn_check = millis();
 }
 
 // disarm, remove cruise, alert, save updated stats
@@ -314,32 +318,66 @@ void disarmSystem() {
     // probably not possible now that it takes longer to arm with button sequence?
 }
 
-// The event handler for the the buttons
-void handleButtonEvent(AceButton* /* btn */, uint8_t eventType, uint8_t /* st */) {
-  switch (eventType) {
-  case AceButton::kEventDoubleClicked:
-    if (armed) {
-      disarmSystem();
+void toggleArm() {
+  if (armed) {
+    disarmSystem();
+  } else if (throttleSafe()) {
+    armSystem();
+  } else {
+    handleArmFail();
+  }
+}
+
+void toggleCruise() {
+  if (armed) {
+    if (cruising) {
+      removeCruise(true);
     } else if (throttleSafe()) {
-      armSystem();
+      modeSwitch(true);
     } else {
-      handleArmFail();
+      setCruise();
     }
+  } else {
+    // show stats screen
+    resetDisplay();
+    displayMeta();
+    delay(2000);
+    resetDisplay();
+  }
+}
+
+// Variable to track if a button was clicked
+bool wasClicked = false;
+
+// Timestamp when the button was released
+unsigned long releaseTime = 0;
+
+// Time threshold for LongClick after release (in milliseconds)
+const unsigned long longClickThreshold = 3500; // adjust as necessary
+
+void handleButtonEvent(AceButton* btn, uint8_t eventType, uint8_t /* st */) {
+  switch (eventType) {
+  case AceButton::kEventClicked:
+    wasClicked = true;
+    break;
+  case AceButton::kEventReleased:
+    if (wasClicked) {
+      releaseTime = millis();
+      wasClicked = false;
+      Serial.println("Button Released after Click");
+    }
+    break;
+  case AceButton::kEventDoubleClicked:
     break;
   case AceButton::kEventLongPressed:
-    if (armed) {
-      if (cruising) {
-        removeCruise(true);
-      } else if (throttleSafe()) {
-        modeSwitch(true);
-      } else {
-        setCruise();
-      }
-    } else {
-      // show stats screen?
+    if (!wasClicked && (millis() - releaseTime <= longClickThreshold)) {
+      toggleArm(); //
+      Serial.println("Long Press after Click and Release");
     }
-    break;
-  case AceButton::kEventLongReleased:
+    else {
+      toggleCruise();
+      Serial.println("Long Press");
+    }
     break;
   }
 }
@@ -354,7 +392,9 @@ void initButtons() {
   buttonConfig->setFeature(ButtonConfig::kFeatureSuppressAfterDoubleClick);
   buttonConfig->setFeature(ButtonConfig::kFeatureSuppressAfterLongPress);
   buttonConfig->setLongPressDelay(2500);
-  buttonConfig->setDoubleClickDelay(600);
+  buttonConfig->setClickDelay(300);
+  //buttonConfig->setDoubleClickDelay(900);
+  //buttonConfig->setDebounceDelay(100);
 }
 
 // initial screen setup and config
@@ -366,7 +406,7 @@ void initDisplay() {
   resetDisplay();
   displayMeta();
   digitalWrite(TFT_LITE, HIGH);  // Backlight on
-  delay(2500);
+  delay(2000);
   vTaskResume(updateDisplayTaskHandle);
 }
 
