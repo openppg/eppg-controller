@@ -277,15 +277,6 @@ void loop() {
   //psTop();
 }
 
-#ifdef RP_PIO
-// set up the second core. Nothing to do for now
-void setup1() {}
-
-// automatically runs on the second core of the RP2040
-void loop1() {
-}
-#endif
-
 void checkButtons() {
   button_top.check();
 }
