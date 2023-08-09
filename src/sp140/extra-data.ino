@@ -98,6 +98,7 @@ void parse_usb_serial() {
   deviceData.batt_size = doc["batt_size"];  // 4000
   sanitizeDeviceData();
   writeDeviceData();
+  resetRotation(deviceData.screen_rotation);  // Screen orientation may have changed
   send_usb_serial();
 #endif
 }

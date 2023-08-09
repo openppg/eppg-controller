@@ -15,7 +15,6 @@
 
 #include "../../inc/sp140/structs.h"         // data structs
 #include <AceButton.h>           // button clicks
-#include <Adafruit_BMP3XX.h>     // barometer
 #include <Adafruit_DRV2605.h>    // haptic controller
 #include <ArduinoJson.h>
 #include <CircularBuffer.h>      // smooth out readings
@@ -43,6 +42,7 @@
 
 //#include "../../inc/sp140/utilities.h"
 #include "../../inc/sp140/display.h"
+#include "../../inc/sp140/altimeter.h"
 
 using namespace ace_button;
 
@@ -67,8 +67,7 @@ CircularBuffer<int, 8> potBuffer;
 bool armed = false;
 bool use_hub_v2 = true;
 int page = 0;
-float armAltM = 0;
-uint32_t armedAtMilis = 0;
+uint32_t armedAtMillis = 0;
 uint32_t cruisedAtMilisMilis = 0;
 unsigned int armedSecs = 0;
 unsigned int last_throttle = 0;
@@ -139,8 +138,10 @@ void updateDisplayTask(void *pvParameters) { //TODO set core affinity to one cor
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
   for (;;) {  // infinite loop
-    const float altitude = getAltitudeM();
-    updateDisplay( deviceData, telemetryData, altitude, armed, cruising, armedAtMilis);
+    // TODO separate alt reading out to its own task. Avoid blocking display updates when alt reading is slow etc 
+    // TODO use queues to pass data between tasks (xQueueOverwrite)
+    const float altitude = getAltitude(deviceData); 
+    updateDisplay( deviceData, telemetryData, altitude, armed, cruising, armedAtMillis);
     delay(250);  // wait for 250ms
   }
   vTaskDelete(NULL); // should never reach this
@@ -182,6 +183,8 @@ void setup() {
 #ifdef M0_PIO
   Watchdog.reset();
 #endif
+  setupAltimeter();
+
   setupDisplay(deviceData);
   if (button_top.isPressedRaw()) {
     modeSwitch(false);
@@ -258,8 +261,7 @@ void setup140() {
   esc.writeMicroseconds(ESC_DISARMED_PWM);
 
   initBuzz();
-  bmpPresent = initBmp();
-  getAltitudeM();  // throw away first value
+  setupAltimeter();
   vibePresent = initVibe();
 }
 
@@ -305,7 +307,7 @@ void disarmSystem() {
   armed = false;
   removeCruise(false);
 
-  // ledBlinkThread.enabled = true;
+  vTaskResume(blinkLEDTaskHandle);  // blink LED while disarmed
   runVibe(disarm_vibes, 3);
   playMelody(disarm_melody, 3);
 
@@ -401,7 +403,7 @@ void initButtons() {
 void handleThrottle() {
   if (!armed) return;  // safe
 
-  armedSecs = (millis() - armedAtMilis) / 1000;  // update time while armed
+  armedSecs = (millis() - armedAtMillis) / 1000;  // update time while armed
 
   static int maxPWM = ESC_MAX_PWM;
   pot.update();
@@ -450,10 +452,12 @@ bool armSystem() {
   esc.writeMicroseconds(ESC_DISARMED_PWM);  // initialize the signal to low
 
   //ledBlinkThread.enabled = false;
-  armedAtMilis = millis();
-  armAltM = getAltitudeM();
+  armedAtMillis = millis();
+  setGroundAltitude(deviceData);
 
   setLEDs(HIGH);
+  vTaskSuspend(blinkLEDTaskHandle);  // solid LED while armed
+
   runVibe(arm_vibes, 3);
   playMelody(arm_melody, 3);
 
@@ -472,23 +476,6 @@ bool throttleSafe() {
   return false;
 }
 
-// convert barometer data to altitude in meters
-float getAltitudeM() {
-  if (!bmpPresent) { return 0; }
-  if (!bmp.performReading()) { return 0; }
-
-  ambientTempC = bmp.temperature;
-  float altitudeM = bmp.readAltitude(deviceData.sea_pressure);
-  return altitudeM;
-}
-
-/********
- *
- * Display logic
- *
- *******/
-bool screen_wiped = false;
-
 
 void setCruise() {
   // IDEA: fill a "cruise indicator" as long press activate happens
@@ -498,22 +485,15 @@ void setCruise() {
     cruising = true;
     vibrateNotify();
 
-    // update display to show cruise
-
     uint16_t notify_melody[] = { 900, 900 };
     playMelody(notify_melody, 2);
 
-    //bottom_bg_color = YELLOW;
     cruisedAtMilis = millis();  // start timer
   }
 }
 
 void removeCruise(bool alert) {
   cruising = false;
-
-  // update bottom bar
-  // bottom_bg_color = DEFAULT_BG_COLOR;
-  // if (armed) { bottom_bg_color = ARMED_BG_COLOR; }
 
   if (alert) {
     vibrateNotify();

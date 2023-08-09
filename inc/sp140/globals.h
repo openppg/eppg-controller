@@ -23,7 +23,6 @@ float watts = 0;
 float wattHoursUsed = 0;
 
 // sensor states
-bool bmpPresent = false;
 bool vibePresent = false;
 
 uint16_t _volts = 0;
@@ -33,12 +32,6 @@ uint32_t _eRPM = 0;
 uint16_t _inPWM = 0;
 uint16_t _outPWM = 0;
 
-// ALTIMETER
-float ambientTempC = 0;
-float altitudeM = 0;
-float lastAltM = 0;
-
-Adafruit_BMP3XX bmp;
 Servo esc;  // Creating a servo class with name of esc
 
 static STR_DEVICE_DATA_140_V1 deviceData;

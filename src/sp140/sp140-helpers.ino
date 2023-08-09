@@ -31,18 +31,6 @@ uint16_t batt2color(int percentage) {
   return RED;
 }
 
-// Start the bmp388 sensor
-bool initBmp() {
-  if (!bmp.begin_I2C()) { return false; }
-
-  bmp.setOutputDataRate(BMP3_ODR_25_HZ);
-  bmp.setTemperatureOversampling(BMP3_OVERSAMPLING_2X);
-  bmp.setPressureOversampling(BMP3_OVERSAMPLING_4X);
-  bmp.setIIRFilterCoeff(BMP3_IIR_FILTER_COEFF_15);
-
-  return true;
-}
-
 // initialize the buzzer
 void initBuzz() {
   pinMode(BUZZER_PIN, OUTPUT);
