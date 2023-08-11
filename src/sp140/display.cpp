@@ -148,14 +148,14 @@ void updateDisplay(
     canvas.print("SPORT");
   }
 
-  canvas.setCursor(46, 83);
-  if (armed) {
-    canvas.setTextColor(BLACK, CYAN);
-    canvas.print("ARMED");
-  } else {
-    canvas.setTextColor(BLACK, GREEN);
-    canvas.print("SAFED");
-  }
+  // canvas.setCursor(46, 83);
+  // if (armed) {
+  //   canvas.setTextColor(BLACK, CYAN);
+  //   canvas.print("ARMED");
+  // } else {
+  //   canvas.setTextColor(BLACK, GREEN);
+  //   canvas.print("SAFED");
+  // }
 
   if (cruising) {
     canvas.setCursor(84, 83);
@@ -163,9 +163,9 @@ void updateDisplay(
     canvas.print("CRUISE");
   }
 
-  canvas.setCursor(124, 83);
-  canvas.setTextColor(BLACK);
-  canvas.printf("FLAG%2d", escTelemetry.statusFlag);
+  // canvas.setCursor(124, 83);
+  // canvas.setTextColor(BLACK);
+  // canvas.printf("FLAG%2d", escTelemetry.statusFlag);
 
   // Display statusbar
   unsigned int statusBarColor = WHITE;
@@ -199,7 +199,7 @@ void updateDisplay(
 
   // ESC temperature
   canvas.setTextSize(1);
-  canvas.setCursor(114, 28);
+  canvas.setCursor(124, 83);
   canvas.printf("%0.1f%cC", escTelemetry.temperatureC, 247);  // Note: 247 is the 'degree' character.
 
 //  // DEBUG TIMING
