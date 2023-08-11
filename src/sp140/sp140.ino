@@ -283,12 +283,9 @@ void loop() {
   //psTop();
 }
 
-long last_btn_check = 0;
 
 void checkButtons() {
   button_top.check();
-  //Serial.println(millis() - last_btn_check);
-  last_btn_check = millis();
 }
 
 // disarm, remove cruise, alert, save updated stats
