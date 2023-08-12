@@ -142,8 +142,8 @@ void updateDisplay(
   canvas.setCursor(8, 83);
   canvas.setTextSize(1);
   if (deviceData.performance_mode == 0) {
-      canvas.setTextColor(BLUE);
-      canvas.print("CHILL");
+    canvas.setTextColor(BLUE);
+    canvas.print("CHILL");
   } else {
     canvas.setTextColor(RED);
     canvas.print("SPORT");
@@ -201,17 +201,16 @@ void updateDisplay(
   // ESC temperature
   canvas.setTextSize(1);
   canvas.setCursor(124, 83);
-  Serial.println(escTelemetry.temperatureC);
+  canvas.setTextColor(BLACK);
+  if (escTelemetry.temperatureC >= 100) { canvas.setTextColor(RED); } // If temperature is over 100C, display in red.
   if (escTelemetry.temperatureC == __FLT_MIN__) { // If temperature is not available, display a question mark.
     canvas.printf("?%c", 247); 
-  } 
-  else if (deviceData.metric_alt) {
+  } else if (deviceData.metric_alt) { // If metric units are selected, display in Celsius.
     canvas.printf("%0.1f%cC", escTelemetry.temperatureC, 247);  // Note: 247 is the 'degree' character.
-  } 
-  else {
+  } else {
     float temperatureF = escTelemetry.temperatureC * 9.0 / 5.0 + 32;
     int roundedTemperatureF = static_cast<int>(round(temperatureF));
-    canvas.printf("%d%cF", roundedTemperatureF, 247);  // Note: 247 is the 'degree' character.
+    canvas.printf("%d%cF", roundedTemperatureF, 247);  // fahrenheit
   }
 
 //  // DEBUG TIMING

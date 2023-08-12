@@ -4,7 +4,7 @@
 
 byte escData[ESC_DATA_SIZE];
 byte escDataV2[ESC_DATA_V2_SIZE];
-unsigned long cruisedAtMilis = 0;
+unsigned long cruisedAtMillis = 0;
 unsigned long transmitted = 0;
 unsigned long failed = 0;
 bool cruising = false;

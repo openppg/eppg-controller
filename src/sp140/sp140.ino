@@ -68,7 +68,7 @@ bool armed = false;
 bool use_hub_v2 = true;
 int page = 0;
 uint32_t armedAtMillis = 0;
-uint32_t cruisedAtMilisMilis = 0;
+uint32_t cruisedAtMillisMilis = 0;
 unsigned int armedSecs = 0;
 unsigned int last_throttle = 0;
 
@@ -415,21 +415,18 @@ void handleThrottle() {
   int potRaw = pot.getValue();
 
   if (cruising) {
-    unsigned long cruisingSecs = (millis() - cruisedAtMilis) / 1000;
+    unsigned long cruisingSecs = (millis() - cruisedAtMillis) / 1000;
 
     if (cruisingSecs >= CRUISE_GRACE && potRaw > POT_SAFE_LEVEL) {
       removeCruise(true);  // deactivate cruise
     } else {
-      throttlePWM = mapd(cruisedPotVal, 0, 4095, ESC_MIN_PWM, maxPWM);
+      throttlePWM = mapd(cruisedPotVal, 0, POT_MAX_VALUE, ESC_MIN_PWM, maxPWM);
     }
   } else {
     // no need to save & smooth throttle etc when in cruise mode (& pot == 0)
     potBuffer.push(potRaw);
 
-    int potLvl = 0;
-    for (decltype(potBuffer)::index_t i = 0; i < potBuffer.size(); i++) {
-      potLvl += potBuffer[i] / potBuffer.size();  // avg
-    }
+    int potLvl = averagePotBuffer();
 
   // runs ~40x sec
   // 1000 diff in pwm from 0
@@ -448,6 +445,14 @@ void handleThrottle() {
   esc.writeMicroseconds(throttlePWM);  // using val as the signal to esc
 }
 
+int averagePotBuffer() {
+  int sum = 0;
+  for (decltype(potBuffer)::index_t i = 0; i < potBuffer.size(); i++) {
+    sum += potBuffer[i];
+  }
+  return sum / potBuffer.size();
+}
+
 // get the PPG ready to fly
 bool armSystem() {
   uint16_t arm_melody[] = { 1760, 1976, 2093 };
@@ -460,13 +465,10 @@ bool armSystem() {
   armedAtMillis = millis();
   setGroundAltitude(deviceData);
 
-  setLEDs(HIGH);
-  vTaskSuspend(blinkLEDTaskHandle);  // solid LED while armed
-
+  vTaskSuspend(blinkLEDTaskHandle);  
+  setLEDs(HIGH); // solid LED while armed
   runVibe(arm_vibes, 3);
   playMelody(arm_melody, 3);
-
-  //bottom_bg_color = ARMED_BG_COLOR;
 
   return true;
 }
@@ -493,7 +495,7 @@ void setCruise() {
     uint16_t notify_melody[] = { 900, 900 };
     playMelody(notify_melody, 2);
 
-    cruisedAtMilis = millis();  // start timer
+    cruisedAtMillis = millis();  // start timer
   }
 }
 
