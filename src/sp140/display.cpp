@@ -139,7 +139,11 @@ void updateDisplay(
   const float amps = escTelemetry.amps;
 
   canvas.setCursor(1, 42);
-  canvas.printf("%4.1fkW  %4.1fV", kWatts, volts);
+  if (volts > 99.9) { // remove decimal point for 3 digit voltages
+    canvas.printf("%4.1fkW   %3.0fV", kWatts, volts);
+  } else {
+    canvas.printf("%4.1fkW  %4.1fV", kWatts, volts);
+  }
   canvas.setCursor(1, 61);
   canvas.printf("%4.1fkWh %4.1fA", kWh, amps);
 
@@ -163,11 +167,11 @@ void updateDisplay(
   //   canvas.print("SAFED");
   // }
 
-  if (cruising) {
-    canvas.setCursor(84, 83);
-    canvas.setTextColor(BLACK, YELLOW);
-    canvas.print("CRUISE");
-  }
+  // if (cruising) {
+  //   canvas.setCursor(84, 83);
+  //   canvas.setTextColor(BLACK, YELLOW);
+  //   canvas.print("CRUISE");
+  // }
 
   // canvas.setCursor(124, 83);
   // canvas.setTextColor(BLACK);
@@ -205,17 +209,14 @@ void updateDisplay(
 
   // ESC temperature
   canvas.setTextSize(1);
-  canvas.setCursor(124, 83);
+  canvas.setCursor(100, 83);
   canvas.setTextColor(BLACK);
+  canvas.print("ESC ");
   if (escTelemetry.temperatureC >= 100) { canvas.setTextColor(RED); }  // If temperature is over 100C, display in red.
   if (escTelemetry.temperatureC == __FLT_MIN__) {  // If temperature is not available, display a question mark.
     canvas.printf("?%c", 247);
-  } else if (deviceData.metric_alt) {  // If metric units are selected, display in Celsius.
+  } else { // Otherwise, display the temperature. (in degrees C)
     canvas.printf("%0.1f%cC", escTelemetry.temperatureC, 247);  // Note: 247 is the 'degree' character.
-  } else {
-    float temperatureF = escTelemetry.temperatureC * 9.0 / 5.0 + 32;
-    int roundedTemperatureF = static_cast<int>(round(temperatureF));
-    canvas.printf("%d%cF", roundedTemperatureF, 247);  // fahrenheit
   }
 
 //  // DEBUG TIMING
