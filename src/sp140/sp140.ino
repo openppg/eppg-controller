@@ -189,7 +189,6 @@ void setup() {
   if (button_top.isPressedRaw()) {
     modeSwitch(false);
   }
-  delay(2000);
   vTaskResume(updateDisplayTaskHandle);
 }
 
@@ -328,6 +327,10 @@ void toggleArm() {
 }
 
 void toggleCruise() {
+  Serial.print(F("armed: "));
+  Serial.println(armed);
+  Serial.print(F("cruising: "));
+  Serial.println(cruising);
   if (armed) {
     if (cruising) {
       removeCruise(true);
@@ -338,9 +341,9 @@ void toggleCruise() {
     }
   } else {
     // show stats screen
-    // displayMeta();
-    // delay(2000);
-    // resetDisplay();
+    vTaskSuspend(updateDisplayTaskHandle);
+    displayMeta(deviceData);
+    vTaskResume(updateDisplayTaskHandle);
   }
 }
 
@@ -362,7 +365,7 @@ void handleButtonEvent(AceButton* btn, uint8_t eventType, uint8_t /* st */) {
     if (wasClicked) {
       releaseTime = millis();
       wasClicked = false;
-      Serial.println("Button Released after Click");
+      //Serial.println("Button Released after Click");
     }
     break;
   case AceButton::kEventDoubleClicked:
@@ -370,11 +373,11 @@ void handleButtonEvent(AceButton* btn, uint8_t eventType, uint8_t /* st */) {
   case AceButton::kEventLongPressed:
     if (!wasClicked && (millis() - releaseTime <= longClickThreshold)) {
       toggleArm(); //
-      Serial.println("Long Press after Click and Release");
+      //Serial.println("Long Press after Click and Release");
     }
     else {
       toggleCruise();
-      Serial.println("Long Press");
+      //Serial.println("Long Press");
     }
     break;
   }

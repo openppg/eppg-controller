@@ -47,8 +47,9 @@ void resetRotation(unsigned int rotation) {
   display.setRotation(rotation);  // 1=right hand, 3=left hand
 }
 
-void displayBoot(const STR_DEVICE_DATA_140_V1& deviceData) {
+void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
   display.fillScreen(WHITE);
+  display.setTextSize(1);
   display.setFont(&FreeSansBold12pt7b);
   display.setTextColor(BLACK);
   display.setCursor(25, 30);
@@ -63,9 +64,10 @@ void displayBoot(const STR_DEVICE_DATA_140_V1& deviceData) {
   // Total armed time
   display.setCursor(54, 90);
 
-  const int hours = deviceData.armed_time / 3600;
-  const int minutes = (deviceData.armed_time / 60) % 60;
+  const int hours = deviceData.armed_time / 60;
+  const int minutes = deviceData.armed_time % 60;
   display.printf("%02d:%02d", hours, minutes);
+  delay(duration);
 }
 
 // inital screen setup and config
@@ -78,7 +80,7 @@ void setupDisplay(const STR_DEVICE_DATA_140_V1& deviceData) {
   pinMode(TFT_LITE, OUTPUT);
   digitalWrite(TFT_LITE, HIGH);  // Backlight on
   resetRotation(deviceData.screen_rotation);
-  displayBoot(deviceData);
+  displayMeta(deviceData);
 }
 
 void updateDisplay(
@@ -124,7 +126,6 @@ void updateDisplay(
   canvas.setCursor(108, 10);
   canvas.setTextColor(BLACK);
   canvas.printf("%3d%%", static_cast<int>(batteryPercent));
-
 
 
   const float kWatts = constrain(watts / 1000.0, 0, 50);
