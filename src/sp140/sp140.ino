@@ -184,12 +184,17 @@ void setup() {
   Watchdog.reset();
 #endif
   setupAltimeter();
+  setupTelemetry();
 
   setupDisplay(deviceData);
   if (button_top.isPressedRaw()) {
     modeSwitch(false);
   }
   vTaskResume(updateDisplayTaskHandle);
+}
+
+void setupTelemetry() {
+  telemetryData.temperatureC = __FLT_MIN__;
 }
 
 // set up all the threads/tasks

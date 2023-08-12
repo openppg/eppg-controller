@@ -201,7 +201,18 @@ void updateDisplay(
   // ESC temperature
   canvas.setTextSize(1);
   canvas.setCursor(124, 83);
-  canvas.printf("%0.1f%cC", escTelemetry.temperatureC, 247);  // Note: 247 is the 'degree' character.
+  Serial.println(escTelemetry.temperatureC);
+  if (escTelemetry.temperatureC == __FLT_MIN__) { // If temperature is not available, display a question mark.
+    canvas.printf("?%c", 247); 
+  } 
+  else if (deviceData.metric_alt) {
+    canvas.printf("%0.1f%cC", escTelemetry.temperatureC, 247);  // Note: 247 is the 'degree' character.
+  } 
+  else {
+    float temperatureF = escTelemetry.temperatureC * 9.0 / 5.0 + 32;
+    int roundedTemperatureF = static_cast<int>(round(temperatureF));
+    canvas.printf("%d%cF", roundedTemperatureF, 247);  // Note: 247 is the 'degree' character.
+  }
 
 //  // DEBUG TIMING
 //  canvas.setTextSize(1);
