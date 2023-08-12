@@ -207,10 +207,10 @@ void updateDisplay(
   canvas.setTextSize(1);
   canvas.setCursor(124, 83);
   canvas.setTextColor(BLACK);
-  if (escTelemetry.temperatureC >= 100) { canvas.setTextColor(RED); } // If temperature is over 100C, display in red.
-  if (escTelemetry.temperatureC == __FLT_MIN__) { // If temperature is not available, display a question mark.
-    canvas.printf("?%c", 247); 
-  } else if (deviceData.metric_alt) { // If metric units are selected, display in Celsius.
+  if (escTelemetry.temperatureC >= 100) { canvas.setTextColor(RED); }  // If temperature is over 100C, display in red.
+  if (escTelemetry.temperatureC == __FLT_MIN__) {  // If temperature is not available, display a question mark.
+    canvas.printf("?%c", 247);
+  } else if (deviceData.metric_alt) {  // If metric units are selected, display in Celsius.
     canvas.printf("%0.1f%cC", escTelemetry.temperatureC, 247);  // Note: 247 is the 'degree' character.
   } else {
     float temperatureF = escTelemetry.temperatureC * 9.0 / 5.0 + 32;

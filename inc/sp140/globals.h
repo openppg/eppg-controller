@@ -25,12 +25,7 @@ float wattHoursUsed = 0;
 // sensor states
 bool vibePresent = false;
 
-uint16_t _volts = 0;
-uint16_t _temperatureC = 0;
 int16_t _amps = 0;
-uint32_t _eRPM = 0;
-uint16_t _inPWM = 0;
-uint16_t _outPWM = 0;
 
 Servo esc;  // Creating a servo class with name of esc
 
