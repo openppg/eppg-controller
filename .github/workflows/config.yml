@@ -9,7 +9,7 @@ jobs:
     name: CPP Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Setup Python
         uses: actions/setup-python@v2
         with:
@@ -20,7 +20,7 @@ jobs:
     name: PlatformIO Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Setup Python
         uses: actions/setup-python@v2
         with:
@@ -54,7 +54,7 @@ jobs:
   #     - name: Setup Python
   #       uses: actions/setup-python@v2
   #     - name: Checkout Microsoft uf2 repo
-  #       uses: actions/checkout@v2
+  #       uses: actions/checkout@v3
   #       with:
   #         repository: microsoft/uf2
   #     - name: Download built binary
