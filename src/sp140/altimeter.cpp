@@ -27,6 +27,6 @@ void setupAltimeter() {
   bmp.setTemperatureOversampling(BMP3_OVERSAMPLING_2X);
   bmp.setPressureOversampling(BMP3_OVERSAMPLING_4X);
   bmp.setIIRFilterCoeff(BMP3_IIR_FILTER_COEFF_15);
-  bmp.readPressure(); // throw away first reading
+  bmp.readPressure();  // throw away first reading
   bmpPresent = true;
 }

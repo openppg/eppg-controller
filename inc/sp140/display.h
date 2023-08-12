@@ -1,5 +1,5 @@
-#ifndef INCLUDE_SP140_DISPLAY_H_
-#define INCLUDE_SP140_DISPLAY_H_
+#ifndef INC_SP140_DISPLAY_H_
+#define INC_SP140_DISPLAY_H_
 
 #include <Arduino.h>
 
@@ -42,4 +42,4 @@ void updateDisplay(const STR_DEVICE_DATA_140_V1& deviceData,
                    float altitude, bool armed, bool cruising,
                    unsigned int armedStartMillis);
 
-#endif  // INCLUDE_SP140_DISPLAY_H_
+#endif  // INC_SP140_DISPLAY_H_
