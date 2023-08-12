@@ -332,10 +332,6 @@ void toggleArm() {
 }
 
 void toggleCruise() {
-  Serial.print(F("armed: "));
-  Serial.println(armed);
-  Serial.print(F("cruising: "));
-  Serial.println(cruising);
   if (armed) {
     if (cruising) {
       removeCruise(true);
@@ -489,13 +485,15 @@ void setCruise() {
   // or gradually change color from blue to yellow with time
   if (!throttleSafe()) {  // using pot/throttle
     cruisedPotVal = pot.getValue();  // save current throttle val
+    cruisedAtMillis = millis();  // start timer 
+    // throttle handle runs fast and a lot. need to set the timer before 
+    // setting cruise so its updated in time
+    // TODO since these values are accessed in another task make sure memory safe
     cruising = true;
     vibrateNotify();
 
     uint16_t notify_melody[] = { 900, 900 };
     playMelody(notify_melody, 2);
-
-    cruisedAtMillis = millis();  // start timer
   }
 }
 
