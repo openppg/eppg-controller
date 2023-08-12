@@ -121,6 +121,11 @@ void updateDisplay(
     canvas.print(" DEAD");
     }
   }
+  // Draw ends of battery outline
+  canvas.fillRect(97, 0, 3, 9, BLACK);
+  canvas.fillRect(97, 27, 3, 9, BLACK);
+  canvas.fillRect(0, 0, 1, 2, BLACK);
+  canvas.fillRect(0, 34, 1, 2, BLACK);
 
   //   Display battery percent
   canvas.setCursor(108, 10);
