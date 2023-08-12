@@ -191,6 +191,7 @@ void setup() {
     modeSwitch(false);
   }
   vTaskResume(updateDisplayTaskHandle);
+  vTaskResume(checkButtonTaskHandle);
 }
 
 void setupTelemetry() {
@@ -204,14 +205,18 @@ void setupTasks() {
     "checkbutton",  // a name you can use for debugging
     1000,  // stack size in words, not bytes. For the AVR Arduino, this is the number of bytes.
     NULL,  // parameters passed into the task
-    1,  // priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
+    3,  // priority, with 3 being the highest, and 0 being the lowest.
     &checkButtonTaskHandle);  // used to pass back a handle by which the created task can be referenced.
+  
+  if (checkButtonTaskHandle != NULL) {
+    vTaskSuspend(checkButtonTaskHandle);  // Suspend the task immediately after creation
+  }
 
-  xTaskCreate(blinkLEDTask, "blinkLed", 200, NULL, 4, &blinkLEDTaskHandle);
-  xTaskCreate(throttleTask, "throttle", 1000, NULL, 1, &throttleTaskHandle);
+  xTaskCreate(blinkLEDTask, "blinkLed", 200, NULL, 1, &blinkLEDTaskHandle);
+  xTaskCreate(throttleTask, "throttle", 1000, NULL, 3, &throttleTaskHandle);
   xTaskCreate(telemetryTask, "telemetry", 1000, NULL, 2, &telemetryTaskHandle);
-  xTaskCreate(trackPowerTask, "trackPower", 1000, NULL, 3, &trackPowerTaskHandle);
-  xTaskCreate(updateDisplayTask, "updateDisplay", 2000, NULL, 3, &updateDisplayTaskHandle);
+  xTaskCreate(trackPowerTask, "trackPower", 500, NULL, 2, &trackPowerTaskHandle);
+  xTaskCreate(updateDisplayTask, "updateDisplay", 2000, NULL, 1, &updateDisplayTaskHandle);
 
   if (updateDisplayTaskHandle != NULL) {
     vTaskSuspend(updateDisplayTaskHandle);  // Suspend the task immediately after creation
