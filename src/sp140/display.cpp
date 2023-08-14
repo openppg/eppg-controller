@@ -48,10 +48,10 @@ void resetRotation(unsigned int rotation) {
 }
 
 void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
-  display.fillScreen(WHITE);
+  display.fillScreen(DEFAULT_BG_COLOR);
   display.setTextSize(1);
   display.setFont(&FreeSansBold12pt7b);
-  display.setTextColor(BLACK);
+  display.setTextColor(DEFAULT_TEXT_COLOR);
   display.setCursor(25, 30);
   display.println("OpenPPG");
   display.setFont();
@@ -89,16 +89,16 @@ void updateDisplay(
   float altitude, bool armed, bool cruising,
   unsigned int armedStartMillis
   ) {
-  canvas.fillScreen(WHITE);
+  canvas.fillScreen(DEFAULT_BG_COLOR);
   canvas.setTextWrap(false);
 
   const unsigned int nowMillis = millis();
 
   // Display region lines
-  canvas.drawFastHLine(0, 36, 160, BLACK);
-  canvas.drawFastVLine(100, 0, 36, BLACK);
-  canvas.drawFastHLine(0, 80, 160, BLACK);
-  canvas.drawFastHLine(0, 92, 160, BLACK);
+  canvas.drawFastHLine(0, 36, 160, UI_ACCENT_COLOR);
+  canvas.drawFastVLine(100, 0, 36, UI_ACCENT_COLOR);
+  canvas.drawFastHLine(0, 80, 160, UI_ACCENT_COLOR);
+  canvas.drawFastHLine(0, 92, 160, UI_ACCENT_COLOR);
 
   // Display battery level and status
   canvas.setTextSize(2);
@@ -113,7 +113,7 @@ void updateDisplay(
     canvas.fillRect(0, 0, batteryPercentWidth, 36, batteryColor);
   } else {
     canvas.setCursor(12, 3);
-    canvas.setTextColor(RED);
+    canvas.setTextColor(ERROR_TEXT_COLOR);
     canvas.println("BATTERY");
     if (escTelemetry.volts < 10) {
     canvas.print(" ERROR");
@@ -122,14 +122,14 @@ void updateDisplay(
     }
   }
   // Draw ends of battery outline
-  canvas.fillRect(97, 0, 3, 9, BLACK);
-  canvas.fillRect(97, 27, 3, 9, BLACK);
-  canvas.fillRect(0, 0, 1, 2, BLACK);
-  canvas.fillRect(0, 34, 1, 2, BLACK);
+  canvas.fillRect(97, 0, 3, 9, UI_ACCENT_COLOR);
+  canvas.fillRect(97, 27, 3, 9, UI_ACCENT_COLOR);
+  canvas.fillRect(0, 0, 1, 2, UI_ACCENT_COLOR);
+  canvas.fillRect(0, 34, 1, 2, UI_ACCENT_COLOR);
 
   //   Display battery percent
   canvas.setCursor(108, 10);
-  canvas.setTextColor(BLACK);
+  canvas.setTextColor(DEFAULT_TEXT_COLOR);
   canvas.printf("%3d%%", static_cast<int>(batteryPercent));
 
 
@@ -151,7 +151,7 @@ void updateDisplay(
   canvas.setCursor(8, 83);
   canvas.setTextSize(1);
   if (deviceData.performance_mode == 0) {
-    canvas.setTextColor(BLUE);
+    canvas.setTextColor(CHILL_TEXT_COLOR);
     canvas.print("CHILL");
   } else {
     canvas.setTextColor(RED);
@@ -178,13 +178,13 @@ void updateDisplay(
   // canvas.printf("FLAG%2d", escTelemetry.statusFlag);
 
   // Display statusbar
-  unsigned int statusBarColor = WHITE;
-  if (cruising) statusBarColor = YELLOW;
-  else if (armed) statusBarColor = CYAN;
+  unsigned int statusBarColor = DEFAULT_BG_COLOR;
+  if (cruising) statusBarColor = CRUISE_BG_COLOR;
+  else if (armed) statusBarColor = ARMED_BG_COLOR;
   canvas.fillRect(0, 93, 160, 40, statusBarColor);
 
   // Display armed time for the current session
-  canvas.setTextColor(BLACK);
+  canvas.setTextColor(DEFAULT_TEXT_COLOR);
   canvas.setTextSize(2);
   canvas.setCursor(8, 102);
   static unsigned int _lastArmedMillis = 0;
@@ -196,10 +196,10 @@ void updateDisplay(
   canvas.setCursor(72, 102);
   canvas.setTextSize(2);
   if (altitude == __FLT_MIN__) {
-    canvas.setTextColor(RED);
+    canvas.setTextColor(ERROR_TEXT_COLOR);
     canvas.print(F("ALTERR"));
   } else {
-    canvas.setTextColor(BLACK);
+    canvas.setTextColor(DEFAULT_TEXT_COLOR);
     if (deviceData.metric_alt) {
       canvas.printf("%6.1fm", altitude);
     } else {
@@ -210,9 +210,9 @@ void updateDisplay(
   // ESC temperature
   canvas.setTextSize(1);
   canvas.setCursor(100, 83);
-  canvas.setTextColor(BLACK);
+  canvas.setTextColor(DEFAULT_TEXT_COLOR);
   canvas.print("ESC ");
-  if (escTelemetry.temperatureC >= 100) { canvas.setTextColor(RED); }  // If temperature is over 100C, display in red.
+  if (escTelemetry.temperatureC >= 100) { canvas.setTextColor(ERROR_TEXT_COLOR); }  // If temperature is over 100C, display in red.
   if (escTelemetry.temperatureC == __FLT_MIN__) {  // If temperature is not available, display a question mark.
     canvas.printf("?%c", 247);
   } else { // Otherwise, display the temperature. (in degrees C)

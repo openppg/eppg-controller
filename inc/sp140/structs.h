@@ -27,7 +27,7 @@ typedef struct {
   bool metric_alt;     // false
   uint8_t performance_mode;  // 0,1,2
   uint16_t batt_size;     // 4000 (4kw) or 2000 (2kw)
-  uint8_t btn_mode;     // for future use
+  uint8_t theme;     // 0,1 for light/dark
   uint8_t unused;     // for future use
   uint16_t crc;        // error check
 }STR_DEVICE_DATA_140_V1;

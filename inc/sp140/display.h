@@ -18,9 +18,26 @@
 #define PURPLE                0x780F
 #define GRAY                  0xDEFB
 
-#define DEFAULT_BG_COLOR      WHITE
-#define ARMED_BG_COLOR        ST77XX_CYAN
-#define CRUISE_BG_COLOR       YELLOW
+
+//#define DEFAULT_TEXT_COLOR    BLACK
+
+//#define DEFAULT_BG_COLOR      WHITE
+//#define ARMED_BG_COLOR        ST77XX_CYAN
+//#define CRUISE_BG_COLOR       YELLOW
+//#define UI_ACCENT_COLOR       BLACK
+
+
+// Dark mode
+#define DEFAULT_TEXT_COLOR    WHITE
+#define ERROR_TEXT_COLOR      RED
+#define CHILL_TEXT_COLOR       CYAN
+
+#define DEFAULT_BG_COLOR      BLACK
+#define ARMED_BG_COLOR        BLUE
+#define CRUISE_BG_COLOR       ORANGE
+#define UI_ACCENT_COLOR       GRAY
+
+
 
 // Library config
 #define NO_ADAFRUIT_SSD1306_COLOR_COMPATIBILITY
