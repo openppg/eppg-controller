@@ -380,8 +380,7 @@ void handleButtonEvent(AceButton* btn, uint8_t eventType, uint8_t /* st */) {
     if (!wasClicked && (millis() - releaseTime <= longClickThreshold)) {
       toggleArm(); //
       //Serial.println("Long Press after Click and Release");
-    }
-    else {
+    } else {
       toggleCruise();
       //Serial.println("Long Press");
     }
@@ -398,7 +397,7 @@ void initButtons() {
   buttonConfig->setFeature(ButtonConfig::kFeatureLongPress);
   buttonConfig->setFeature(ButtonConfig::kFeatureSuppressAfterDoubleClick);
   buttonConfig->setFeature(ButtonConfig::kFeatureSuppressAfterLongPress);
-  buttonConfig->setLongPressDelay(2500);
+  buttonConfig->setLongPressDelay(2000);
   buttonConfig->setClickDelay(300);
   //buttonConfig->setDoubleClickDelay(900);
   //buttonConfig->setDebounceDelay(100);
