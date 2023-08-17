@@ -63,6 +63,7 @@ void resetDeviceData() {
   deviceData.metric_temp = true;
   deviceData.metric_alt = true;
   deviceData.performance_mode = 0;
+  deviceData.theme = 0;
   deviceData.batt_size = 4000;  // 4kw
   writeDeviceData();
 }
@@ -83,7 +84,7 @@ void parse_usb_serial() {
 
   if (doc["command"] && doc["command"] == "rbl") {
     // display.fillScreen(DEFAULT_BG_COLOR);
-    //displayMessage("BL - UF2");
+    //TODO display ("BL - UF2");
     rebootBootloader();
     return;  // run only the command
   }

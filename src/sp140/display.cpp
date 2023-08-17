@@ -14,6 +14,31 @@
 Adafruit_ST7735 display = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 GFXcanvas16 canvas(160, 128);
 
+// Light Mode Colors
+UIColors lightModeColors = {
+  BLACK,  // Default Text Color
+  RED,    // Error Text Color
+  BLUE,   // Chill Text Color
+  WHITE,  // Default BG Color
+  CYAN,   // Armed BG Color
+  YELLOW, // Cruise BG Color
+  BLACK   // UI Accent Color
+};
+
+// Dark Mode Colors
+UIColors darkModeColors = {
+  WHITE,  // Default Text Color
+  RED,    // Error Text Color
+  CYAN,   // Chill Text Color
+  BLACK,  // Default BG Color
+  BLUE,   // Armed BG Color
+  ORANGE, // Cruise BG Color
+  GRAY    // UI Accent Color
+};
+
+// Pointer to the current color set
+UIColors *currentTheme;
+
 // Map voltage to battery percentage, based on a
 // simple set of data points from load testing.
 float getBatteryPercent(float voltage) {
@@ -47,11 +72,12 @@ void resetRotation(unsigned int rotation) {
   display.setRotation(rotation);  // 1=right hand, 3=left hand
 }
 
+// Show splash screen
 void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
-  display.fillScreen(DEFAULT_BG_COLOR);
+  display.fillScreen(currentTheme->default_bg);
   display.setTextSize(1);
   display.setFont(&FreeSansBold12pt7b);
-  display.setTextColor(DEFAULT_TEXT_COLOR);
+  display.setTextColor(currentTheme->default_text);
   display.setCursor(25, 30);
   display.println("OpenPPG");
   display.setFont();
@@ -80,6 +106,7 @@ void setupDisplay(const STR_DEVICE_DATA_140_V1& deviceData) {
   pinMode(TFT_LITE, OUTPUT);
   digitalWrite(TFT_LITE, HIGH);  // Backlight on
   resetRotation(deviceData.screen_rotation);
+  setTheme(deviceData.theme); // 0=light, 1=dark //TODO: read from deviceData
   displayMeta(deviceData);
 }
 
@@ -89,16 +116,16 @@ void updateDisplay(
   float altitude, bool armed, bool cruising,
   unsigned int armedStartMillis
   ) {
-  canvas.fillScreen(DEFAULT_BG_COLOR);
+  canvas.fillScreen(currentTheme->default_bg);
   canvas.setTextWrap(false);
 
   const unsigned int nowMillis = millis();
 
   // Display region lines
-  canvas.drawFastHLine(0, 36, 160, UI_ACCENT_COLOR);
-  canvas.drawFastVLine(100, 0, 36, UI_ACCENT_COLOR);
-  canvas.drawFastHLine(0, 80, 160, UI_ACCENT_COLOR);
-  canvas.drawFastHLine(0, 92, 160, UI_ACCENT_COLOR);
+  canvas.drawFastHLine(0, 36, 160, currentTheme->ui_accent);
+  canvas.drawFastVLine(100, 0, 36, currentTheme->ui_accent);
+  canvas.drawFastHLine(0, 80, 160, currentTheme->ui_accent);
+  canvas.drawFastHLine(0, 92, 160, currentTheme->ui_accent);
 
   // Display battery level and status
   canvas.setTextSize(2);
@@ -113,7 +140,7 @@ void updateDisplay(
     canvas.fillRect(0, 0, batteryPercentWidth, 36, batteryColor);
   } else {
     canvas.setCursor(12, 3);
-    canvas.setTextColor(ERROR_TEXT_COLOR);
+    canvas.setTextColor(currentTheme->error_text);
     canvas.println("BATTERY");
     if (escTelemetry.volts < 10) {
     canvas.print(" ERROR");
@@ -122,14 +149,14 @@ void updateDisplay(
     }
   }
   // Draw ends of battery outline
-  canvas.fillRect(97, 0, 3, 9, UI_ACCENT_COLOR);
-  canvas.fillRect(97, 27, 3, 9, UI_ACCENT_COLOR);
-  canvas.fillRect(0, 0, 1, 2, UI_ACCENT_COLOR);
-  canvas.fillRect(0, 34, 1, 2, UI_ACCENT_COLOR);
+  canvas.fillRect(97, 0, 3, 9, currentTheme->ui_accent);
+  canvas.fillRect(97, 27, 3, 9, currentTheme->ui_accent);
+  canvas.fillRect(0, 0, 1, 2, currentTheme->ui_accent);
+  canvas.fillRect(0, 34, 1, 2, currentTheme->ui_accent);
 
   //   Display battery percent
   canvas.setCursor(108, 10);
-  canvas.setTextColor(DEFAULT_TEXT_COLOR);
+  canvas.setTextColor(currentTheme->default_text);
   canvas.printf("%3d%%", static_cast<int>(batteryPercent));
 
 
@@ -151,7 +178,7 @@ void updateDisplay(
   canvas.setCursor(8, 83);
   canvas.setTextSize(1);
   if (deviceData.performance_mode == 0) {
-    canvas.setTextColor(CHILL_TEXT_COLOR);
+    canvas.setTextColor(currentTheme->chill_text);
     canvas.print("CHILL");
   } else {
     canvas.setTextColor(RED);
@@ -178,13 +205,13 @@ void updateDisplay(
   // canvas.printf("FLAG%2d", escTelemetry.statusFlag);
 
   // Display statusbar
-  unsigned int statusBarColor = DEFAULT_BG_COLOR;
-  if (cruising) statusBarColor = CRUISE_BG_COLOR;
-  else if (armed) statusBarColor = ARMED_BG_COLOR;
+  unsigned int statusBarColor = currentTheme->default_bg;
+  if (cruising) statusBarColor = currentTheme->cruise_bg;
+  else if (armed) statusBarColor = currentTheme->armed_bg;
   canvas.fillRect(0, 93, 160, 40, statusBarColor);
 
   // Display armed time for the current session
-  canvas.setTextColor(DEFAULT_TEXT_COLOR);
+  canvas.setTextColor(currentTheme->default_text);
   canvas.setTextSize(2);
   canvas.setCursor(8, 102);
   static unsigned int _lastArmedMillis = 0;
@@ -196,10 +223,10 @@ void updateDisplay(
   canvas.setCursor(72, 102);
   canvas.setTextSize(2);
   if (altitude == __FLT_MIN__) {
-    canvas.setTextColor(ERROR_TEXT_COLOR);
+    canvas.setTextColor(currentTheme->error_text);
     canvas.print(F("ALTERR"));
   } else {
-    canvas.setTextColor(DEFAULT_TEXT_COLOR);
+    canvas.setTextColor(currentTheme->default_text);
     if (deviceData.metric_alt) {
       canvas.printf("%6.1fm", altitude);
     } else {
@@ -210,9 +237,9 @@ void updateDisplay(
   // ESC temperature
   canvas.setTextSize(1);
   canvas.setCursor(100, 83);
-  canvas.setTextColor(DEFAULT_TEXT_COLOR);
+  canvas.setTextColor(currentTheme->default_text);
   canvas.print("ESC ");
-  if (escTelemetry.temperatureC >= 100) { canvas.setTextColor(ERROR_TEXT_COLOR); }  // If temperature is over 100C, display in red.
+  if (escTelemetry.temperatureC >= 100) { canvas.setTextColor(currentTheme->error_text); }  // If temperature is over 100C, display in red.
   if (escTelemetry.temperatureC == __FLT_MIN__) {  // If temperature is not available, display a question mark.
     canvas.printf("?%c", 247);
   } else { // Otherwise, display the temperature. (in degrees C)
@@ -243,4 +270,15 @@ void updateDisplay(
 
   // Draw the canvas to the display.
   display.drawRGBBitmap(0, 0, canvas.getBuffer(), canvas.width(), canvas.height());
+}
+
+// Set the theme
+void setTheme(int theme) {
+  if (theme == 1) {
+    currentTheme = &darkModeColors;
+    Serial.println("Switched to Dark Mode");
+  } else {
+    currentTheme = &lightModeColors;
+    Serial.println("Switched to Light Mode");
+  }
 }

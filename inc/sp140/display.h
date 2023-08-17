@@ -7,6 +7,9 @@
 #include <Adafruit_ST7735.h>
 #include "utilities.h"
 
+// Library config
+#define NO_ADAFRUIT_SSD1306_COLOR_COMPATIBILITY
+
 #define BLACK                 ST77XX_BLACK
 #define WHITE                 ST77XX_WHITE
 #define GREEN                 ST77XX_GREEN
@@ -38,9 +41,15 @@
 // #define CRUISE_BG_COLOR       ORANGE
 // #define UI_ACCENT_COLOR       GRAY
 
-
-// Library config
-#define NO_ADAFRUIT_SSD1306_COLOR_COMPATIBILITY
+struct UIColors {
+  uint16_t default_text;
+  uint16_t error_text;
+  uint16_t chill_text;
+  uint16_t default_bg;
+  uint16_t armed_bg;
+  uint16_t cruise_bg;
+  uint16_t ui_accent;
+};
 
 extern float watts;
 extern float wattHoursUsed;
@@ -58,5 +67,7 @@ void updateDisplay(const STR_DEVICE_DATA_140_V1& deviceData,
                    const STR_ESC_TELEMETRY_140& escTelemetry,
                    float altitude, bool armed, bool cruising,
                    unsigned int armedStartMillis);
+
+void setTheme(int theme); // 0,1
 
 #endif  // INC_SP140_DISPLAY_H_
