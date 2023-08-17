@@ -106,7 +106,7 @@ void setupDisplay(const STR_DEVICE_DATA_140_V1& deviceData) {
   pinMode(TFT_LITE, OUTPUT);
   digitalWrite(TFT_LITE, HIGH);  // Backlight on
   resetRotation(deviceData.screen_rotation);
-  setTheme(deviceData.theme); // 0=light, 1=dark //TODO: read from deviceData
+  setTheme(deviceData.theme); // 0=light, 1=dark
   displayMeta(deviceData);
 }
 
