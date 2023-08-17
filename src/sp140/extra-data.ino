@@ -96,6 +96,7 @@ void parse_usb_serial() {
   deviceData.metric_alt = doc["metric_alt"];  // true/false
   deviceData.performance_mode = doc["performance_mode"];  // 0,1
   deviceData.batt_size = doc["batt_size"];  // 4000
+  deviceData.theme = doc["thm"];  // 0,1
   sanitizeDeviceData();
   writeDeviceData();
   resetRotation(deviceData.screen_rotation);  // Screen orientation may have changed
@@ -129,6 +130,10 @@ bool sanitizeDeviceData() {
   }
   if (deviceData.batt_size < 0 || deviceData.batt_size > 10000) {
     deviceData.batt_size = 4000;
+    changed = true;
+  }
+  if (deviceData.theme < 0 || deviceData.theme > 1) {
+    deviceData.theme = 0;
     changed = true;
   }
   return changed;
@@ -166,6 +171,7 @@ void send_usb_serial() {
   doc["m_alt"].set(deviceData.metric_alt);
   doc["prf"].set(deviceData.performance_mode);
   doc["sea_p"].set(deviceData.sea_pressure);
+  doc["thm"].set(deviceData.theme);
   //doc["id"].set(chipId()); // webusb bug prevents this extra field from being sent
 
   char output[256];
