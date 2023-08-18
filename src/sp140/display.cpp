@@ -1,8 +1,9 @@
 #include "sp140/display.h"
 
+#include <Fonts/FreeSansBold12pt7b.h>
+
 #include "../../inc/sp140/rp2040-config.h"         // device config
 #include "sp140/structs.h"
-#include <Fonts/FreeSansBold12pt7b.h>
 
 // DEBUG WATCHDOG
 #ifdef RP_PIO
@@ -242,7 +243,7 @@ void updateDisplay(
   if (escTelemetry.temperatureC >= 100) { canvas.setTextColor(currentTheme->error_text); }  // If temperature is over 100C, display in red.
   if (escTelemetry.temperatureC == __FLT_MIN__) {  // If temperature is not available, display a question mark.
     canvas.printf("?%c", 247);
-  } else { // Otherwise, display the temperature. (in degrees C)
+  } else {  // Otherwise, display the temperature. (in degrees C)
     canvas.printf("%0.1f%cC", escTelemetry.temperatureC, 247);  // Note: 247 is the 'degree' character.
   }
 
