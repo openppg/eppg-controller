@@ -78,7 +78,7 @@ void line_state_callback(bool connected) {
 // customized for sp140
 void parse_usb_serial() {
 #ifdef USE_TINYUSB
-  const size_t capacity = JSON_OBJECT_SIZE(12) + 90;
+  const size_t capacity = JSON_OBJECT_SIZE(13) + 90;
   DynamicJsonDocument doc(capacity);
   deserializeJson(doc, usb_web);
 
@@ -113,16 +113,22 @@ void parse_usb_serial() {
 
 bool sanitizeDeviceData() {
   bool changed = false;
-
+  // Ensure screen rotation is either 1 or 3, default to 3
   if (deviceData.screen_rotation == 1 || deviceData.screen_rotation == 3) {
   } else {
     deviceData.screen_rotation = 3;
     changed = true;
   }
-  if (deviceData.sea_pressure < 0 || deviceData.sea_pressure > 10000) {
+  
+  // Ensure sea pressure is within acceptable limits, default to 1013.25
+  // 337 is the air pressure at the top of Mt. Everest
+  // 1065 is the air pressure at the dead sea. Pad both a bit
+  if (deviceData.sea_pressure < 300 || deviceData.sea_pressure > 1200) {
     deviceData.sea_pressure = 1013.25;
     changed = true;
   }
+  
+  // Simply force metric_temp and metric_alt to be valid bool values
   if (deviceData.metric_temp != true && deviceData.metric_temp != false) {
     deviceData.metric_temp = true;
     changed = true;
@@ -131,16 +137,19 @@ bool sanitizeDeviceData() {
     deviceData.metric_alt = true;
     changed = true;
   }
+  // Ensure performance_mode is either 0 or 1, default to 0
   if (deviceData.performance_mode < 0 || deviceData.performance_mode > 1) {
     deviceData.performance_mode = 0;
     changed = true;
   }
+  // Ensure battery size is within acceptable limits, default to 4000
   if (deviceData.batt_size < 0 || deviceData.batt_size > 10000) {
     deviceData.batt_size = 4000;
     changed = true;
   }
+  // Ensure theme is either 0 or 1, default to 0
   if (deviceData.theme < 0 || deviceData.theme > 1) {
-    deviceData.theme = 0;
+    deviceData.theme = 0; // 0=light, 1=dark
     changed = true;
   }
   return changed;
