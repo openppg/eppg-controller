@@ -1,36 +1,5 @@
 // Copyright 2020 <Zach Whitehead>
 
-// track flight timer
-void handleFlightTime() {
-  if (!armed) {
-    throttledFlag = true;
-    throttled = false;
-  } else { // armed
-    // start the timer when armed and throttle is above the threshold
-    if (throttlePWM > 1250 && throttledFlag) {
-      throttledAtMillis = millis();
-      throttledFlag = false;
-      throttled = true;
-    }
-    if (throttled) {
-      throttleSecs = (millis()-throttledAtMillis) / 1000.0;
-    } else {
-      throttleSecs = 0;
-    }
-  }
-}
-
-
-// maps battery percentage to a display color
-uint16_t batt2color(int percentage) {
-  if (percentage >= 30) {
-    return GREEN;
-  } else if (percentage >= 15) {
-    return YELLOW;
-  }
-  return RED;
-}
-
 // initialize the buzzer
 void initBuzz() {
   pinMode(BUZZER_PIN, OUTPUT);

@@ -22,14 +22,14 @@
 #define GRAY                  0xDEFB
 
 // Light mode (default)
-#define DEFAULT_TEXT_COLOR    BLACK
-#define ERROR_TEXT_COLOR      RED
-#define CHILL_TEXT_COLOR      CYAN
+// #define DEFAULT_TEXT_COLOR    BLACK
+// #define ERROR_TEXT_COLOR      RED
+// #define CHILL_TEXT_COLOR      CYAN
 
-#define DEFAULT_BG_COLOR      WHITE
-#define ARMED_BG_COLOR        CYAN
-#define CRUISE_BG_COLOR       YELLOW
-#define UI_ACCENT_COLOR       BLACK
+// #define DEFAULT_BG_COLOR      WHITE
+// #define ARMED_BG_COLOR        CYAN
+// #define CRUISE_BG_COLOR       YELLOW
+// #define UI_ACCENT_COLOR       BLACK
 
 // Dark mode
 // #define DEFAULT_TEXT_COLOR    WHITE
@@ -68,6 +68,6 @@ void updateDisplay(const STR_DEVICE_DATA_140_V1& deviceData,
                    float altitude, bool armed, bool cruising,
                    unsigned int armedStartMillis);
 
-void setTheme(int theme); // 0,1
+void setTheme(int theme);  // 0,1
 
 #endif  // INC_SP140_DISPLAY_H_

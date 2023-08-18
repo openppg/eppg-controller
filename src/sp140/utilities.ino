@@ -1,8 +1,6 @@
 // Copyright 2019 <Zach Whitehead>
 // OpenPPG
 
-#define LAST_PAGE 1  // starts at 0
-
 #ifdef M0_PIO
 
 #define DBL_TAP_PTR ((volatile uint32_t *)(HMCRAMC0_ADDR + HMCRAMC0_SIZE - 4))

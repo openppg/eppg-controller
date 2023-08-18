@@ -17,7 +17,6 @@ bool batteryFlag = true;
 bool throttledFlag = true;
 bool throttled = false;
 unsigned long throttledAtMillis = 0;
-unsigned int throttleSecs = 0;
 
 float watts = 0;
 float wattHoursUsed = 0;

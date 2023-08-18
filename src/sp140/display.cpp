@@ -16,24 +16,24 @@ GFXcanvas16 canvas(160, 128);
 
 // Light Mode Colors
 UIColors lightModeColors = {
-  BLACK,  // Default Text Color
-  RED,    // Error Text Color
-  BLUE,   // Chill Text Color
-  WHITE,  // Default BG Color
-  CYAN,   // Armed BG Color
-  YELLOW, // Cruise BG Color
-  BLACK   // UI Accent Color
+  BLACK,   // Default Text Color
+  RED,     // Error Text Color
+  BLUE,    // Chill Text Color
+  WHITE,   // Default BG Color
+  CYAN,    // Armed BG Color
+  YELLOW,  // Cruise BG Color
+  BLACK    // UI Accent Color
 };
 
 // Dark Mode Colors
 UIColors darkModeColors = {
-  WHITE,  // Default Text Color
-  RED,    // Error Text Color
-  CYAN,   // Chill Text Color
-  BLACK,  // Default BG Color
-  BLUE,   // Armed BG Color
-  ORANGE, // Cruise BG Color
-  GRAY    // UI Accent Color
+  WHITE,   // Default Text Color
+  RED,     // Error Text Color
+  CYAN,    // Chill Text Color
+  BLACK,   // Default BG Color
+  BLUE,    // Armed BG Color
+  ORANGE,  // Cruise BG Color
+  GRAY     // UI Accent Color
 };
 
 // Pointer to the current color set
@@ -106,7 +106,7 @@ void setupDisplay(const STR_DEVICE_DATA_140_V1& deviceData) {
   pinMode(TFT_LITE, OUTPUT);
   digitalWrite(TFT_LITE, HIGH);  // Backlight on
   resetRotation(deviceData.screen_rotation);
-  setTheme(deviceData.theme); // 0=light, 1=dark
+  setTheme(deviceData.theme);  // 0=light, 1=dark
   displayMeta(deviceData);
 }
 
@@ -166,7 +166,7 @@ void updateDisplay(
   const float amps = escTelemetry.amps;
 
   canvas.setCursor(1, 42);
-  if (volts > 99.9) { // remove decimal point for 3 digit voltages
+  if (volts > 99.9) {  // remove decimal point for 3 digit voltages
     canvas.printf("%4.1fkW   %3.0fV", kWatts, volts);
   } else {
     canvas.printf("%4.1fkW  %4.1fV", kWatts, volts);

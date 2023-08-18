@@ -65,8 +65,6 @@ CircularBuffer<float, 50> voltageBuffer;
 CircularBuffer<int, 8> potBuffer;
 
 bool armed = false;
-bool use_hub_v2 = true;
-int page = 0;
 uint32_t armedAtMillis = 0;
 uint32_t cruisedAtMillisMilis = 0;
 unsigned int armedSecs = 0;
