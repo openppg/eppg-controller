@@ -25,6 +25,21 @@ void refreshDeviceData() {
   }
 }
 
+// One time freeRTOS task that wraps writeDeviceData()
+void writeDeviceDataTask(void *pvParameters) {
+  if (eepromSemaphore != NULL) {
+    if (xSemaphoreTake(eepromSemaphore, (TickType_t)10) == pdTRUE) {
+      // Your EEPROM write logic here
+      writeDeviceData();
+      // Once done, release the semaphore
+      xSemaphoreGive(eepromSemaphore);
+    }
+  }
+
+  // Delete the task after completion
+  vTaskDelete(NULL);
+}
+
 // write to EEPROM
 void writeDeviceData() {
   deviceData.crc = crc16((uint8_t*)&deviceData, sizeof(deviceData) - 2);
@@ -48,6 +63,7 @@ void resetDeviceData() {
   deviceData.metric_temp = true;
   deviceData.metric_alt = true;
   deviceData.performance_mode = 0;
+  deviceData.theme = 0;
   deviceData.batt_size = 4000;  // 4kw
   writeDeviceData();
 }
@@ -62,18 +78,20 @@ void line_state_callback(bool connected) {
 // customized for sp140
 void parse_usb_serial() {
 #ifdef USE_TINYUSB
-  const size_t capacity = JSON_OBJECT_SIZE(12) + 90;
+  const size_t capacity = JSON_OBJECT_SIZE(13) + 90;
   DynamicJsonDocument doc(capacity);
   deserializeJson(doc, usb_web);
 
   if (doc["command"] && doc["command"] == "rbl") {
-    display.fillScreen(DEFAULT_BG_COLOR);
-    displayMessage("BL - UF2");
+    // display.fillScreen(DEFAULT_BG_COLOR);
+    //TODO display ("BL - UF2");
     rebootBootloader();
     return;  // run only the command
   }
 
   if (doc["major_v"] < 5) return;
+
+  vTaskSuspend(updateDisplayTaskHandle); // Prevent display from updating while we're changing settings
 
   deviceData.screen_rotation = doc["screen_rot"].as<unsigned int>();  // "3/1"
   deviceData.sea_pressure = doc["sea_pressure"];  // 1013.25 mbar
@@ -81,25 +99,36 @@ void parse_usb_serial() {
   deviceData.metric_alt = doc["metric_alt"];  // true/false
   deviceData.performance_mode = doc["performance_mode"];  // 0,1
   deviceData.batt_size = doc["batt_size"];  // 4000
+  deviceData.theme = doc["theme"];  // 0,1
   sanitizeDeviceData();
   writeDeviceData();
-  resetDisplay();
+  resetRotation(deviceData.screen_rotation);  // Screen orientation may have changed
+  setTheme(deviceData.theme); // may have changed
+  
+  vTaskResume(updateDisplayTaskHandle);
+
   send_usb_serial();
 #endif
 }
 
 bool sanitizeDeviceData() {
   bool changed = false;
-
+  // Ensure screen rotation is either 1 or 3, default to 3
   if (deviceData.screen_rotation == 1 || deviceData.screen_rotation == 3) {
   } else {
     deviceData.screen_rotation = 3;
     changed = true;
   }
-  if (deviceData.sea_pressure < 0 || deviceData.sea_pressure > 10000) {
+  
+  // Ensure sea pressure is within acceptable limits, default to 1013.25
+  // 337 is the air pressure at the top of Mt. Everest
+  // 1065 is the air pressure at the dead sea. Pad both a bit
+  if (deviceData.sea_pressure < 300 || deviceData.sea_pressure > 1200) {
     deviceData.sea_pressure = 1013.25;
     changed = true;
   }
+  
+  // Simply force metric_temp and metric_alt to be valid bool values
   if (deviceData.metric_temp != true && deviceData.metric_temp != false) {
     deviceData.metric_temp = true;
     changed = true;
@@ -108,12 +137,19 @@ bool sanitizeDeviceData() {
     deviceData.metric_alt = true;
     changed = true;
   }
+  // Ensure performance_mode is either 0 or 1, default to 0
   if (deviceData.performance_mode < 0 || deviceData.performance_mode > 1) {
     deviceData.performance_mode = 0;
     changed = true;
   }
+  // Ensure battery size is within acceptable limits, default to 4000
   if (deviceData.batt_size < 0 || deviceData.batt_size > 10000) {
     deviceData.batt_size = 4000;
+    changed = true;
+  }
+  // Ensure theme is either 0 or 1, default to 0
+  if (deviceData.theme < 0 || deviceData.theme > 1) {
+    deviceData.theme = 0; // 0=light, 1=dark
     changed = true;
   }
   return changed;
@@ -151,7 +187,8 @@ void send_usb_serial() {
   doc["m_alt"].set(deviceData.metric_alt);
   doc["prf"].set(deviceData.performance_mode);
   doc["sea_p"].set(deviceData.sea_pressure);
-  //doc["id"].set(chipId()); // webusb bug prevents this extra field from being sent
+  doc["thm"].set(deviceData.theme);
+  //doc["id"].set(chipId()); // webusb bug prevents anything over a certain size / this extra field from being sent
 
   char output[256];
   serializeJson(doc, output, sizeof(output));

@@ -1,8 +1,6 @@
 // Copyright 2019 <Zach Whitehead>
 // OpenPPG
 
-#define LAST_PAGE 1  // starts at 0
-
 #ifdef M0_PIO
 
 #define DBL_TAP_PTR ((volatile uint32_t *)(HMCRAMC0_ADDR + HMCRAMC0_SIZE - 4))
@@ -10,11 +8,6 @@
 #define DBL_TAP_MAGIC_QUICK_BOOT 0xf02669ef
 
 #endif
-
-// Map double values
-double mapd(double x, double in_min, double in_max, double out_min, double out_max) {
-  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
-}
 
 /**
  * For digital time display - prints leading 0
@@ -27,25 +20,6 @@ String convertToDigits(byte digits) {
   if (digits < 10) digits_string.concat("0");
   digits_string.concat(digits);
   return digits_string;
-}
-
-/**
- * advance to next screen page
- *
- * @return the number of next page
- */
-int nextPage() {
-  display.fillRect(0, 37, 160, 54, DEFAULT_BG_COLOR);
-
-  if (page >= LAST_PAGE) {
-    return page = 0;
-  }
-  return ++page;
-}
-
-void addVSpace() {
-  display.setTextSize(1);
-  display.println(" ");
 }
 
 void setLEDs(byte state) {
@@ -73,34 +47,20 @@ bool runVibe(unsigned int sequence[], int siz) {
 bool playMelody(uint16_t melody[], int siz) {
   if (!ENABLE_BUZ) { return false; }
   for (int thisNote = 0; thisNote < siz; thisNote++) {
-    // quarter note = 1000 / 4, eigth note = 1000/8, etc.
+    // quarter note = 1000 / 4, eighth note = 1000/8, etc.
     int noteDuration = 125;
     playNote(melody[thisNote], noteDuration);
   }
   return true;
 }
 
-#ifdef RP_PIO
-// non-blocking tone function that uses second core
-void playNote(uint16_t note, uint16_t duration) {
-    STR_NOTE noteData;
-    // fifo uses 32 bit messages so package up the note and duration
-    uint32_t note_msg;
-    noteData.duration = duration;
-    noteData.freq = note;
-
-    memcpy((uint32_t*)&note_msg, &noteData, sizeof(noteData));
-    rp2040.fifo.push_nb(note_msg);  // send note to second core via fifo queue
-}
-#else
 // blocking tone function that delays for notes
 void playNote(uint16_t note, uint16_t duration) {
-  // quarter note = 1000 / 4, eigth note = 1000/8, etc.
+  // quarter note = 1000 / 4, eighth note = 1000/8, etc.
   tone(BUZZER_PIN, note);
   delay(duration);  // to distinguish the notes, delay between them
   noTone(BUZZER_PIN);
 }
-#endif
 
 void handleArmFail() {
   uint16_t arm_fail_melody[] = { 820, 640 };
@@ -165,19 +125,3 @@ void rebootBootloader() {
 #endif
 }
 #endif
-
-void displayMeta() {
-  display.setFont(&FreeSansBold12pt7b);
-  display.setTextColor(BLACK);
-  display.setCursor(25, 30);
-  display.println("OpenPPG");
-  display.setFont();
-  display.setTextSize(2);
-  display.setCursor(60, 60);
-  display.print("v" + String(VERSION_MAJOR) + "." + String(VERSION_MINOR));
-#ifdef RP_PIO
-  display.print("R");
-#endif
-  display.setCursor(54, 90);
-  displayTime(deviceData.armed_time);
-}

@@ -11,6 +11,8 @@ X4 code has been migrated to a separate repo - https://github.com/openppg/x4-con
 It may not be stable and is not recommended for flying.
 See stable releases [here](https://github.com/openppg/eppg-controller/releases)
 
+> Version 6.0 introduced [FreeRTOS](https://www.freertos.org/index.html) and is currently only working with RP2040 processors. For M0/SAMD21 processors please use [version/5 branch](https://github.com/openppg/eppg-controller/tree/version/5).
+
 > For batch 3 (non-telemetry) controllers please see the [batch-3 branch](https://github.com/openppg/eppg-controller/tree/batch-3).
 
 > For batch 2 (Arduino nano based) controllers please see the [batch-2 branch](https://github.com/openppg/eppg-controller/tree/batch-2).

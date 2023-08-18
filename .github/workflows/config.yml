@@ -9,20 +9,20 @@ jobs:
     name: CPP Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Setup Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v3
         with:
           python-version: 3.x
       - run: pip install cpplint
-      - run: cpplint --linelength 140 --filter=-runtime/int,-build/include_subdir --recursive ./inc/ ./lib/ ./src/
+      - run: cpplint --linelength 140 --filter=-legal/copyright,-runtime/int,-build/include_subdir --recursive ./inc/ ./lib/ ./src/
   pio-build:
     name: PlatformIO Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Setup Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v3
         with:
           python-version: 3.x
       - name: Install Platform IO
@@ -41,28 +41,29 @@ jobs:
         with:
           name: OpenPPG-CRP2040-SP140.uf2
           path: .pio/build/OpenPPG-CRP2040-SP140/firmware.uf2
-  generate-uf2:
-    name: Save uf2 for ${{ matrix.device }}
-    needs: pio-build
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        device: [OpenPPG-CM0-SP140]
-      fail-fast: false
-    steps:
-      - name: Setup Python
-        uses: actions/setup-python@v2
-      - name: Checkout Microsoft uf2 repo
-        uses: actions/checkout@v2
-        with:
-          repository: microsoft/uf2
-      - name: Download built binary
-        uses: actions/download-artifact@v2
-        with:
-          name: bins
-      - name: Run uf2 conversion
-        run: python3 utils/uf2conv.py ${{ matrix.device }}/firmware.bin -c -o ${{ matrix.device }}.uf2
-      - uses: actions/upload-artifact@v3
-        with:
-          name: ${{ matrix.device }}.uf2
-          path: ${{ matrix.device }}.uf2
+  # Skip until M0 builds running by default
+  # generate-uf2: 
+  #   name: Save uf2 for ${{ matrix.device }}
+  #   needs: pio-build
+  #   runs-on: ubuntu-latest
+  #   strategy:
+  #     matrix:
+  #       device: [OpenPPG-CM0-SP140]
+  #     fail-fast: false
+  #   steps:
+  #     - name: Setup Python
+  #       uses: actions/setup-python@v2
+  #     - name: Checkout Microsoft uf2 repo
+  #       uses: actions/checkout@v3
+  #       with:
+  #         repository: microsoft/uf2
+  #     - name: Download built binary
+  #       uses: actions/download-artifact@v2
+  #       with:
+  #         name: bins
+  #     - name: Run uf2 conversion
+  #       run: python3 utils/uf2conv.py ${{ matrix.device }}/firmware.bin -c -o ${{ matrix.device }}.uf2
+  #     - uses: actions/upload-artifact@v3
+  #       with:
+  #         name: ${{ matrix.device }}.uf2
+  #         path: ${{ matrix.device }}.uf2

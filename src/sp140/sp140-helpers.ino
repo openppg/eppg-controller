@@ -1,130 +1,5 @@
 // Copyright 2020 <Zach Whitehead>
 
-// track flight timer
-void handleFlightTime() {
-  if (!armed) {
-    throttledFlag = true;
-    throttled = false;
-  } else { // armed
-    // start the timer when armed and throttle is above the threshold
-    if (throttlePWM > 1250 && throttledFlag) {
-      throttledAtMillis = millis();
-      throttledFlag = false;
-      throttled = true;
-    }
-    if (throttled) {
-      throttleSecs = (millis()-throttledAtMillis) / 1000.0;
-    } else {
-      throttleSecs = 0;
-    }
-  }
-}
-
-// TODO (bug) rolls over at 99mins
-void displayTime(int val, int x, int y, uint16_t bg_color) {
-  // displays number of minutes and seconds (since armed and throttled)
-  display.setCursor(x, y);
-  display.setTextSize(2);
-  display.setTextColor(BLACK);
-  minutes = val / 60;
-  seconds = numberOfSeconds(val);
-  if (minutes < 10) {
-    display.setCursor(x, y);
-    display.print("0");
-  }
-  dispValue(minutes, prevMinutes, 2, 0, x, y, 2, BLACK, bg_color);
-  display.setCursor(x+24, y);
-  display.print(":");
-  display.setCursor(x+36, y);
-  if (seconds < 10) {
-    display.print("0");
-  }
-  dispValue(seconds, prevSeconds, 2, 0, x+36, y, 2, BLACK, bg_color);
-}
-
-// maps battery percentage to a display color
-uint16_t batt2color(int percentage) {
-  if (percentage >= 30) {
-    return GREEN;
-  } else if (percentage >= 15) {
-    return YELLOW;
-  }
-  return RED;
-}
-
-//**************************************************************************************//
-//  Helper function to print values without flashing numbers due to slow screen refresh.
-//  This function only re-draws the digit that needs to be updated.
-//    BUG:  If textColor is not constant across multiple uses of this function,
-//          weird things happen.
-//**************************************************************************************//
-void dispValue(float value, float &prevVal, int maxDigits, int precision, int x, int y, int textSize, int textColor, int background){
-  int numDigits = 0;
-  char prevDigit[DIGIT_ARRAY_SIZE] = {};
-  char digit[DIGIT_ARRAY_SIZE] = {};
-  String prevValTxt = String(prevVal, precision);
-  String valTxt = String(value, precision);
-  prevValTxt.toCharArray(prevDigit, maxDigits+1);
-  valTxt.toCharArray(digit, maxDigits+1);
-
-  // COUNT THE NUMBER OF DIGITS THAT NEED TO BE PRINTED:
-  for(int i=0; i<maxDigits; i++){
-    if (digit[i]) {
-      numDigits++;
-    }
-  }
-
-  display.setTextSize(textSize);
-  display.setCursor(x, y);
-
-  // PRINT LEADING SPACES TO RIGHT-ALIGN:
-  display.setTextColor(background);
-  for(int i=0; i<(maxDigits-numDigits); i++){
-    display.print(static_cast<char>(218));
-  }
-  display.setTextColor(textColor);
-
-  // ERASE ONLY THE NESSESARY DIGITS:
-  for (int i=0; i<numDigits; i++) {
-    if (digit[i]!=prevDigit[i]) {
-      display.setTextColor(background);
-      display.print(static_cast<char>(218));
-    } else {
-      display.setTextColor(textColor);
-      display.print(digit[i]);
-    }
-  }
-
-  // BACK TO THE BEGINNING:
-  display.setCursor(x, y);
-
-  // ADVANCE THE CURSOR TO THE PROPER LOCATION:
-  display.setTextColor(background);
-  for (int i=0; i<(maxDigits-numDigits); i++) {
-    display.print(static_cast<char>(218));
-  }
-  display.setTextColor(textColor);
-
-  // PRINT THE DIGITS THAT NEED UPDATING
-  for(int i=0; i<numDigits; i++){
-    display.print(digit[i]);
-  }
-
-  prevVal = value;
-}
-
-// Start the bmp388 sensor
-bool initBmp() {
-  if (!bmp.begin_I2C()) { return false; }
-
-  bmp.setOutputDataRate(BMP3_ODR_25_HZ);
-  bmp.setTemperatureOversampling(BMP3_OVERSAMPLING_2X);
-  bmp.setPressureOversampling(BMP3_OVERSAMPLING_4X);
-  bmp.setIIRFilterCoeff(BMP3_IIR_FILTER_COEFF_15);
-
-  return true;
-}
-
 // initialize the buzzer
 void initBuzz() {
   pinMode(BUZZER_PIN, OUTPUT);
@@ -150,20 +25,11 @@ void modeSwitch(bool update_display) {
   } else {
     deviceData.performance_mode = 0;
   }
-  writeDeviceData();
-  if (update_display) { // clear out old text
-    clearModeDisplay();
-  }
+
+  xTaskCreate(writeDeviceDataTask, "EEPROMWrite", 256, NULL, 1, NULL);
+
   uint16_t notify_melody[] = { 900, 1976 };
   playMelody(notify_melody, 2);
-}
-
-void clearModeDisplay() {
-  String prevMode = (deviceData.performance_mode == 0) ? "SPORT" : "CHILL";
-  display.setCursor(30, 60);
-  display.setTextSize(1);
-  display.setTextColor(DEFAULT_BG_COLOR);
-  display.print(prevMode);
 }
 
 void prepareSerialRead() {  // TODO needed?
@@ -190,7 +56,7 @@ void handleSerialData(byte buffer[]) {
   if (buffer[20] != 255 || buffer[21] != 255) {
     //Serial.println("no stop byte");
 
-    return; //Stop byte of 65535 not recieved
+    return; //Stop byte of 65535 not received
   }
 
   //Check the fletcher checksum
@@ -242,15 +108,15 @@ void handleSerialData(byte buffer[]) {
 
   temperature += 1.0 / ((float) NOMINAL_TEMPERATURE + 273.15); // + (1/To)
   temperature = 1.0 / temperature; // Invert
-  temperature -= 273.15; // convert to Celcius
+  temperature -= 273.15; // convert to Celsius
 
   // filter bad values
   if (temperature < 0 || temperature > 200) {
-    temperature = 0;
+    telemetryData.temperatureC = __FLT_MIN__;
+  } else {
+    temperature = (float) trunc(temperature * 100) / 100; // 2 decimal places
+    telemetryData.temperatureC = temperature;
   }
-
-  temperature = (float) trunc(temperature * 100) / 100; // 2 decimal places
-  telemetryData.temperatureC = temperature;
 
   // Current
   _amps = word(buffer[5], buffer[4]);
@@ -306,9 +172,9 @@ void handleSerialData(byte buffer[]) {
   # Bit position in byte indicates flag set, 1 is set, 0 is default
   # Bit 0: Motor Started, set when motor is running as expected
   # Bit 1: Motor Saturation Event, set when saturation detected and power is reduced for desync protection
-  # Bit 2: ESC Over temperature event occuring, shut down method as per configuration
-  # Bit 3: ESC Overvoltage event occuring, shut down method as per configuration
-  # Bit 4: ESC Undervoltage event occuring, shut down method as per configuration
+  # Bit 2: ESC Over temperature event occurring, shut down method as per configuration
+  # Bit 3: ESC Overvoltage event occurring, shut down method as per configuration
+  # Bit 4: ESC Undervoltage event occurring, shut down method as per configuration
   # Bit 5: Startup error detected, motor stall detected upon trying to start*/
   raw_telemdata.statusFlag = buffer[16];
   telemetryData.statusFlag = raw_telemdata.statusFlag;
@@ -344,80 +210,6 @@ void printRawSentence() {
     Serial.print(F(" "));
   }
   Serial.println();
-}
-
-// OLD
-void parseData() {
-  // LSB First
-  // TODO is this being called even with no ESC?
-
-  _volts = word(escData[1], escData[0]);
-  //_volts = ((unsigned int)escData[1] << 8) + escData[0];
-  telemetryData.volts = _volts / 100.0;
-
-  if (telemetryData.volts > BATT_MIN_V) {
-    telemetryData.volts += 1.5;  // calibration
-  }
-
-  if (telemetryData.volts > 1) {  // ignore empty data
-    voltageBuffer.push(telemetryData.volts);
-  }
-
-  // Serial.print(F("Volts: "));
-  // Serial.println(telemetryData.volts);
-
-  // batteryPercent = mapd(telemetryData.volts, BATT_MIN_V, BATT_MAX_V, 0.0, 100.0); // flat line
-
-  _temperatureC = word(escData[3], escData[2]);
-  telemetryData.temperatureC = _temperatureC/100.0;
-  // reading 17.4C = 63.32F in 84F ambient?
-  // Serial.print(F("TemperatureC: "));
-  // Serial.println(temperatureC);
-
-  _amps = word(escData[5], escData[4]);
-  telemetryData.amps = _amps;
-
-  // Serial.print(F("Amps: "));
-  // Serial.println(amps);
-
-  watts = telemetryData.amps * telemetryData.volts;
-
-  // 7 and 6 are reserved bytes
-
-  _eRPM = escData[11];     // 0
-  _eRPM << 8;
-  _eRPM += escData[10];    // 0
-  _eRPM << 8;
-  _eRPM += escData[9];     // 30
-  _eRPM << 8;
-  _eRPM += escData[8];     // b4
-  telemetryData.eRPM = _eRPM/6.0/2.0;
-
-  // Serial.print(F("eRPM: "));
-  // Serial.println(eRPM);
-
-  _inPWM = word(escData[13], escData[12]);
-  telemetryData.inPWM = _inPWM/100.0;
-
-  // Serial.print(F("inPWM: "));
-  // Serial.println(inPWM);
-
-  _outPWM = word(escData[15], escData[14]);
-  telemetryData.outPWM = _outPWM/100.0;
-
-  // Serial.print(F("outPWM: "));
-  // Serial.println(outPWM);
-
-  // 17 and 16 are reserved bytes
-  // 19 and 18 is checksum
-  telemetryData.checksum = word(escData[19], escData[18]);
-
-  // Serial.print(F("CHECKSUM: "));
-  // Serial.print(escData[19]);
-  // Serial.print(F(" + "));
-  // Serial.print(escData[18]);
-  // Serial.print(F(" = "));
-  // Serial.println(checksum);
 }
 
 void vibrateNotify() {
