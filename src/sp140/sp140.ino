@@ -4,14 +4,14 @@
 #include "../../lib/crc.c"       // packet error checking
 #ifdef M0_PIO
   #include "../../inc/sp140/m0-config.h"          // device config
-  // TODO find best SAMD21 FreeRTOS port
 #else
   #include "../../inc/sp140/rp2040-config.h"         // device config
-  #include <FreeRTOS.h>
-  #include <task.h>
-  #include <semphr.h>
-  #include <map>
 #endif
+
+#include <FreeRTOS.h>
+#include <task.h>
+#include <semphr.h>
+#include <map>
 
 #include "../../inc/sp140/structs.h"         // data structs
 #include <AceButton.h>           // button clicks
