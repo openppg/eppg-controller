@@ -21,16 +21,27 @@ String convertToDigits(byte digits) {
   digits_string.concat(digits);
   return digits_string;
 }
+#define ENABLE_NEOPIXEL true
+
 
 void setLEDs(byte state) {
-  // digitalWrite(LED_2, state);
-  // digitalWrite(LED_3, state);
-  digitalWrite(LED_SW, state);
+  if (ENABLE_NEOPIXEL) {
+    if (state == HIGH) {
+      pixels.setPixelColor(0, LED_YELLOW);
+    } else {
+      pixels.clear();
+    }
+    pixels.show();
+  } else {
+    digitalWrite(LED_SW, state);
+  }
 }
 
 // toggle LEDs
+byte ledState = LOW;
+
 void blinkLED() {
-  byte ledState = !digitalRead(LED_SW);
+  ledState = !ledState;
   setLEDs(ledState);
 }
 

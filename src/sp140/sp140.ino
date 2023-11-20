@@ -32,6 +32,7 @@
   #include <extEEPROM.h>  // https://github.com/PaoloP74/extEEPROM
 #elif RP_PIO
   // rp2040 specific libraries here
+  #include <Adafruit_NeoPixel.h>
   #include <EEPROM.h>
   #include "hardware/watchdog.h"
   #include "pico/unique_id.h"
@@ -63,6 +64,8 @@ ButtonConfig* buttonConfig = button_top.getButtonConfig();
 
 CircularBuffer<float, 50> voltageBuffer;
 CircularBuffer<int, 8> potBuffer;
+
+Adafruit_NeoPixel pixels(1, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
 
 bool armed = false;
 uint32_t armedAtMillis = 0;
@@ -96,7 +99,7 @@ void throttleTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
   for (;;) {  // infinite loop
-    handleThrottle();  // 
+    handleThrottle();  //
     delay(22);  // wait for 22ms
   }
   vTaskDelete(NULL); // should never reach this
@@ -106,7 +109,7 @@ void telemetryTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
   for (;;) {  // infinite loop
-    handleTelemetry();  
+    handleTelemetry();
     delay(50);  // wait for 50ms
   }
   vTaskDelete(NULL); // should never reach this
@@ -116,7 +119,7 @@ void trackPowerTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
   for (;;) {  // infinite loop
-    trackPower();  
+    trackPower();
     delay(250);  // wait for 250ms
   }
   vTaskDelete(NULL); // should never reach this
@@ -126,7 +129,7 @@ void checkButtonTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
   for (;;) {  // infinite loop
-    checkButtons();  
+    checkButtons();
     delay(5);  // wait for 5ms
   }
   vTaskDelete(NULL); // should never reach this
@@ -136,9 +139,9 @@ void updateDisplayTask(void *pvParameters) { //TODO set core affinity to one cor
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
   for (;;) {  // infinite loop
-    // TODO separate alt reading out to its own task. Avoid blocking display updates when alt reading is slow etc 
+    // TODO separate alt reading out to its own task. Avoid blocking display updates when alt reading is slow etc
     // TODO use queues to pass data between tasks (xQueueOverwrite)
-    const float altitude = getAltitude(deviceData); 
+    const float altitude = getAltitude(deviceData);
     updateDisplay( deviceData, telemetryData, altitude, armed, cruising, armedAtMillis);
     delay(250);  // wait for 250ms
   }
@@ -162,6 +165,9 @@ void setup() {
   //Serial.print(VERSION_MAJOR + "." + VERSION_MINOR);
 
   pinMode(LED_SW, OUTPUT);   // set up the internal LED2 pin
+  pixels.begin();
+  pixels.setPixelColor(0, LED_YELLOW);
+  pixels.show();
 
   analogReadResolution(12);     // M0 family chip provides 12bit resolution
   pot.setAnalogResolution(4096);
@@ -205,7 +211,7 @@ void setupTasks() {
     NULL,  // parameters passed into the task
     3,  // priority, with 3 being the highest, and 0 being the lowest.
     &checkButtonTaskHandle);  // used to pass back a handle by which the created task can be referenced.
-  
+
   if (checkButtonTaskHandle != NULL) {
     vTaskSuspend(checkButtonTaskHandle);  // Suspend the task immediately after creation
   }
@@ -463,7 +469,7 @@ bool armSystem() {
   armedAtMillis = millis();
   setGroundAltitude(deviceData);
 
-  vTaskSuspend(blinkLEDTaskHandle);  
+  vTaskSuspend(blinkLEDTaskHandle);
   setLEDs(HIGH); // solid LED while armed
   runVibe(arm_vibes, 3);
   playMelody(arm_melody, 3);
@@ -487,8 +493,8 @@ void setCruise() {
   // or gradually change color from blue to yellow with time
   if (!throttleSafe()) {  // using pot/throttle
     cruisedPotVal = pot.getValue();  // save current throttle val
-    cruisedAtMillis = millis();  // start timer 
-    // throttle handle runs fast and a lot. need to set the timer before 
+    cruisedAtMillis = millis();  // start timer
+    // throttle handle runs fast and a lot. need to set the timer before
     // setting cruise so its updated in time
     // TODO since these values are accessed in another task make sure memory safe
     cruising = true;
