@@ -6,7 +6,7 @@
 #include "sp140/structs.h"
 
 // Set up the barometer
-void setupAltimeter();
+bool setupAltimeter();
 
 // Get the altitude (in meters)
 float getAltitude(const STR_DEVICE_DATA_140_V1& deviceData);

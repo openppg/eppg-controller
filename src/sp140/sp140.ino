@@ -172,6 +172,7 @@ void setup() {
   analogReadResolution(12);     // M0 family chip provides 12bit resolution
   pot.setAnalogResolution(4096);
   unsigned int startup_vibes[] = { 27, 27, 0 };
+
   initButtons();
   setupTasks();
 
@@ -274,6 +275,8 @@ void setup140() {
   esc.writeMicroseconds(ESC_DISARMED_PWM);
 
   initBuzz();
+  Wire1.setSDA(A0);
+  Wire1.setSCL(A1);
   setupAltimeter();
   vibePresent = initVibe();
 }

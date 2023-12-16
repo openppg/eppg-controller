@@ -8,7 +8,7 @@ void initBuzz() {
 // initialize the vibration motor
 bool initVibe() {
   if (!ENABLE_VIB) { return false; }
-  if (!vibe.begin()) { return false; }
+  if (!vibe.begin(&Wire1)) { return false; }
 
   vibe.selectLibrary(1);
   vibe.setMode(DRV2605_MODE_INTTRIG);
