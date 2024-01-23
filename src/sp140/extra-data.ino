@@ -9,20 +9,32 @@ void refreshDeviceData() {
   uint8_t tempBuf[sizeof(deviceData)];
   uint16_t crc;
 
-  #ifdef M0_PIO
-    if (0 != eep.read(EEPROM_OFFSET, tempBuf, sizeof(deviceData))) {
-      // Serial.println(F("error reading EEPROM"));
-    }
-  #elif RP_PIO
-    EEPROM.get(EEPROM_OFFSET, tempBuf);
-  #endif
-
+  readDeviceDataFromEEPROM(tempBuf);
   memcpy((uint8_t*)&deviceData, tempBuf, sizeof(deviceData));
   crc = crc16((uint8_t*)&deviceData, sizeof(deviceData) - 2);
 
-  if (crc != deviceData.crc) {
-    resetDeviceData();
-  }
+  if (crc != deviceData.crc) { resetDeviceData(); }
+
+  updateRevisionIfRequired();
+}
+
+void readDeviceDataFromEEPROM(uint8_t* buffer) {
+  #ifdef M0_PIO
+    if (0 != eep.read(EEPROM_OFFSET, buffer, sizeof(deviceData))) {
+      // Serial.println(F("error reading EEPROM"));
+    }
+  #elif RP_PIO
+    EEPROM.get(EEPROM_OFFSET, buffer);
+  #endif
+}
+
+void updateRevisionIfRequired() {
+  #ifdef RP_PIO
+    if (deviceData.revision == 0) {
+      deviceData.revision = 1;
+      writeDeviceData(); // Save the updated revision to EEPROM
+    }
+  #endif
 }
 
 // One time freeRTOS task that wraps writeDeviceData()
@@ -56,6 +68,14 @@ void writeDeviceData() {
 // reset eeprom and deviceData to factory defaults
 void resetDeviceData() {
   deviceData = STR_DEVICE_DATA_140_V1();
+
+  // set the revision based on the arch and board revision
+  #ifdef M0_PIO
+    deviceData.revision = 0;
+  #elif RP_PIO
+    deviceData.revision = 2; // default to new 2040 board revision
+  #endif
+
   deviceData.version_major = VERSION_MAJOR;
   deviceData.version_minor = VERSION_MINOR;
   deviceData.screen_rotation = 3;
@@ -104,7 +124,7 @@ void parse_usb_serial() {
   writeDeviceData();
   resetRotation(deviceData.screen_rotation);  // Screen orientation may have changed
   setTheme(deviceData.theme); // may have changed
-  
+
   vTaskResume(updateDisplayTaskHandle);
 
   send_usb_serial();
@@ -119,7 +139,7 @@ bool sanitizeDeviceData() {
     deviceData.screen_rotation = 3;
     changed = true;
   }
-  
+
   // Ensure sea pressure is within acceptable limits, default to 1013.25
   // 337 is the air pressure at the top of Mt. Everest
   // 1065 is the air pressure at the dead sea. Pad both a bit
@@ -127,7 +147,7 @@ bool sanitizeDeviceData() {
     deviceData.sea_pressure = 1013.25;
     changed = true;
   }
-  
+
   // Simply force metric_temp and metric_alt to be valid bool values
   if (deviceData.metric_temp != true && deviceData.metric_temp != false) {
     deviceData.metric_temp = true;
