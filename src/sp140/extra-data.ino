@@ -4,6 +4,14 @@
 // ** Logic for EEPROM **
 # define EEPROM_OFFSET 0  // Address of first byte of EEPROM
 
+// Constants for device data
+const unsigned int DEFAULT_SCREEN_ROTATION = 3;
+const bool DEFAULT_METRIC_TEMP = true;
+const bool DEFAULT_METRIC_ALT = true;
+const int DEFAULT_PERFORMANCE_MODE = 0;
+const int DEFAULT_THEME = 0;  // 0=light, 1=dark
+const int DEFAULT_BATT_SIZE = 4000;  // 4kw
+
 // read saved data from EEPROM
 void refreshDeviceData() {
   uint8_t tempBuf[sizeof(deviceData)];
@@ -13,11 +21,14 @@ void refreshDeviceData() {
   memcpy((uint8_t*)&deviceData, tempBuf, sizeof(deviceData));
   crc = crc16((uint8_t*)&deviceData, sizeof(deviceData) - 2);
 
+  // If the CRC does not match, reset the device data
   if (crc != deviceData.crc) { resetDeviceData(); }
 
+  // Update the revision if required
   updateRevisionIfRequired();
 }
 
+// Read device data from EEPROM
 void readDeviceDataFromEEPROM(uint8_t* buffer) {
   #ifdef M0_PIO
     if (0 != eep.read(EEPROM_OFFSET, buffer, sizeof(deviceData))) {
@@ -28,6 +39,7 @@ void readDeviceDataFromEEPROM(uint8_t* buffer) {
   #endif
 }
 
+// Update the revision if required
 void updateRevisionIfRequired() {
   #ifdef RP_PIO
     if (deviceData.revision == 0) {
@@ -52,7 +64,7 @@ void writeDeviceDataTask(void *pvParameters) {
   vTaskDelete(NULL);
 }
 
-// write to EEPROM
+// Write to EEPROM
 void writeDeviceData() {
   deviceData.crc = crc16((uint8_t*)&deviceData, sizeof(deviceData) - 2);
   #ifdef M0_PIO
@@ -65,26 +77,26 @@ void writeDeviceData() {
   #endif
 }
 
-// reset eeprom and deviceData to factory defaults
+// Reset EEPROM and deviceData to factory defaults
 void resetDeviceData() {
   deviceData = STR_DEVICE_DATA_140_V1();
 
-  // set the revision based on the arch and board revision
+  // Set the revision based on the arch and board revision
   #ifdef M0_PIO
     deviceData.revision = 0;
   #elif RP_PIO
-    deviceData.revision = 2; // default to new 2040 board revision
+    deviceData.revision = 2; // Default to new 2040 board revision
   #endif
 
   deviceData.version_major = VERSION_MAJOR;
   deviceData.version_minor = VERSION_MINOR;
-  deviceData.screen_rotation = 3;
-  deviceData.sea_pressure = DEFAULT_SEA_PRESSURE;  // 1013.25 mbar
-  deviceData.metric_temp = true;
-  deviceData.metric_alt = true;
-  deviceData.performance_mode = 0;
-  deviceData.theme = 0;
-  deviceData.batt_size = 4000;  // 4kw
+  deviceData.screen_rotation = DEFAULT_SCREEN_ROTATION;
+  deviceData.sea_pressure = DEFAULT_SEA_PRESSURE;
+  deviceData.metric_temp = DEFAULT_METRIC_TEMP;
+  deviceData.metric_alt = DEFAULT_METRIC_ALT;
+  deviceData.performance_mode = DEFAULT_PERFORMANCE_MODE;
+  deviceData.theme = DEFAULT_THEME;
+  deviceData.batt_size = DEFAULT_BATT_SIZE;
   writeDeviceData();
 }
 
