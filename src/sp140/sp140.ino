@@ -164,6 +164,9 @@ void setup() {
   //Serial.print(F("Booting up (USB) V"));
   //Serial.print(VERSION_MAJOR + "." + VERSION_MINOR);
 
+  pinMode(9, OUTPUT);
+  digitalWrite(9, HIGH);
+
   pinMode(LED_SW, OUTPUT);   // set up the internal LED2 pin
   pixels.begin();
   pixels.setPixelColor(0, LED_YELLOW);
