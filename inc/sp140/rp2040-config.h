@@ -6,7 +6,6 @@
 
 // Arduino Pins
 #define BUTTON_TOP    7  // arm/disarm button_top
-#define BUTTON_SIDE   7   // secondary button_top
 #define BUZZER_PIN    2  // output for buzzer speaker
 #define LED_SW        LED_BUILTIN  // output for LED
 #define THROTTLE_PIN  A2  // throttle pot input
