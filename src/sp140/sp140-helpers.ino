@@ -2,12 +2,12 @@
 
 // initialize the buzzer
 void initBuzz() {
-  pinMode(BUZZER_PIN, OUTPUT);
+  pinMode(board_config.buzzer_pin, OUTPUT);
 }
 
 // initialize the vibration motor
 bool initVibe() {
-  if (!ENABLE_VIB) { return false; }
+  if (!board_config.enable_vib) { return false; }
   if (!vibe.begin(&Wire1)) { return false; }
 
   vibe.selectLibrary(1);
@@ -213,7 +213,7 @@ void printRawSentence() {
 }
 
 void vibrateNotify() {
-  if (!ENABLE_VIB) { return; }
+  if (!board_config.enable_vib) { return; }
 
   vibe.setWaveform(0, 15);  // 1 through 117 (see example sketch)
   vibe.setWaveform(1, 0);

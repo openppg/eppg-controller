@@ -4,23 +4,51 @@
 
 #include "shared-config.h"
 
-// Arduino Pins
-#define BUTTON_TOP    7  // arm/disarm button_top
-#define BUZZER_PIN    2  // output for buzzer speaker
-#define LED_SW        LED_BUILTIN  // output for LED
-#define THROTTLE_PIN  A2  // throttle pot input
-
 #define SerialESC  Serial1  // ESC UART connection
 
-// UART pins
-// RX is GPIO 1
+struct HardwareConfig {
+  int button_top;
+  int buzzer_pin;
+  int led_sw;
+  int throttle_pin;
+  int bmp_pin;
+  HardwareSerial* serial_esc;
+  int tft_rst;
+  int tft_cs;
+  int tft_dc;
+  int tft_lite;
+  int esc_pin;
+  bool enable_vib;
+};
 
-// SP140
-#define TFT_RST 6
-#define TFT_CS 4
-#define TFT_DC 5
-#define TFT_LITE A3
-#define ESC_PIN 3
-#define ENABLE_VIB            true    // enable vibration
+// V1 configuration
+HardwareConfig v1_config = {
+  .button_top = 7,
+  .buzzer_pin = 2,
+  .led_sw = LED_BUILTIN,
+  .throttle_pin = A2,
+  .serial_esc = &Serial1,
+  .tft_rst = 6,
+  .tft_cs = 4,
+  .tft_dc = 5,
+  .tft_lite = A3,
+  .esc_pin = 3,
+  .enable_vib = true
+};
 
+// V2 configuration
+HardwareConfig v2_config = {
+  .button_top = 15,
+  .buzzer_pin = 10,
+  .led_sw = 12,
+  .throttle_pin = A0,
+  .bmp_pin = 9,
+  .serial_esc = &Serial1,
+  .tft_rst = 5,
+  .tft_cs = 13,
+  .tft_dc = 11,
+  .tft_lite = 25,
+  .esc_pin = 14,
+  .enable_vib = false
+};
 #endif  // INC_SP140_RP2040_CONFIG_H_

@@ -47,6 +47,8 @@
 
 using namespace ace_button;
 
+HardwareConfig board_config;
+
 Adafruit_DRV2605 vibe;
 
 // USB WebUSB object
@@ -55,9 +57,10 @@ Adafruit_USBD_WebUSB usb_web;
 WEBUSB_URL_DEF(landingPage, 1 /*https*/, "config.openppg.com");
 #endif
 
-ResponsiveAnalogRead pot(THROTTLE_PIN, false);
-AceButton button_top(BUTTON_TOP);
-ButtonConfig* buttonConfig = button_top.getButtonConfig();
+ResponsiveAnalogRead* pot;
+AceButton* button_top;
+ButtonConfig* buttonConfig;
+
 #ifdef M0_PIO
   extEEPROM eep(kbits_64, 1, 64);
 #endif
@@ -148,6 +151,20 @@ void updateDisplayTask(void *pvParameters) { //TODO set core affinity to one cor
   vTaskDelete(NULL); // should never reach this
 }
 
+
+void loadHardwareConfig() {
+  if (deviceData.revision == 1) {
+    board_config = v1_config;
+  } else if (deviceData.revision == 2) {
+    board_config = v2_config;
+  } else {
+    // Handle other cases or throw an error
+  }
+  pot = new ResponsiveAnalogRead(board_config.throttle_pin, false);
+  button_top = new AceButton(board_config.button_top);
+  buttonConfig = button_top->getButtonConfig();
+}
+
 // the setup function runs once when you press reset or power the board
 void setup() {
 
@@ -164,16 +181,24 @@ void setup() {
   //Serial.print(F("Booting up (USB) V"));
   //Serial.print(VERSION_MAJOR + "." + VERSION_MINOR);
 
-  pinMode(9, OUTPUT);
-  digitalWrite(9, HIGH);
+  loadHardwareConfig();
 
-  pinMode(LED_SW, OUTPUT);   // set up the internal LED2 pin
-  pixels.begin();
-  pixels.setPixelColor(0, LED_YELLOW);
-  pixels.show();
+  if (deviceData.revision == M0) {
+    pinMode(board_config.bmp_pin, OUTPUT);
+    digitalWrite(board_config.bmp_pin, HIGH);
+  } else if (deviceData.revision == V1) {
+    // no custom setup for v1
+  } else if (deviceData.revision == MODULE) {
+    pinMode(board_config.bmp_pin, OUTPUT);
+    digitalWrite(board_config.bmp_pin, HIGH);
 
-  analogReadResolution(12);     // M0 family chip provides 12bit resolution
-  pot.setAnalogResolution(4096);
+    pixels.begin();
+    pixels.setPixelColor(0, LED_YELLOW);
+    pixels.show();
+  }
+
+  analogReadResolution(12);   // M0 family of chips provide 12bit resolution
+  pot->setAnalogResolution(4096);
   unsigned int startup_vibes[] = { 27, 27, 0 };
 
   initButtons();
@@ -194,8 +219,8 @@ void setup() {
   setupAltimeter();
   setupTelemetry();
 
-  setupDisplay(deviceData);
-  if (button_top.isPressedRaw()) {
+  setupDisplay(deviceData, board_config);
+  if (button_top->isPressedRaw()) {
     modeSwitch(false);
   }
   vTaskResume(updateDisplayTaskHandle);
@@ -274,7 +299,7 @@ void psTop() {
 }
 
 void setup140() {
-  esc.attach(ESC_PIN);
+  esc.attach(board_config.esc_pin);
   esc.writeMicroseconds(ESC_DISARMED_PWM);
 
   initBuzz();
@@ -304,7 +329,7 @@ void loop() {
 
 
 void checkButtons() {
-  button_top.check();
+  button_top->check();
 }
 
 // disarm, remove cruise, alert, save updated stats
@@ -400,7 +425,7 @@ void handleButtonEvent(AceButton* btn, uint8_t eventType, uint8_t /* st */) {
 
 // initial button setup and config
 void initButtons() {
-  pinMode(BUTTON_TOP, INPUT_PULLUP);
+  pinMode(board_config.button_top, INPUT_PULLUP);
 
   buttonConfig->setEventHandler(handleButtonEvent);
   buttonConfig->setFeature(ButtonConfig::kFeatureDoubleClick);
@@ -421,8 +446,8 @@ void handleThrottle() {
   armedSecs = (millis() - armedAtMillis) / 1000;  // update time while armed
 
   static int maxPWM = ESC_MAX_PWM;
-  pot.update();
-  int potRaw = pot.getValue();
+  pot->update();
+  int potRaw = pot->getValue();
 
   if (cruising) {
     unsigned long cruisingSecs = (millis() - cruisedAtMillis) / 1000;
@@ -486,8 +511,8 @@ bool armSystem() {
 
 // Returns true if the throttle/pot is below the safe threshold
 bool throttleSafe() {
-  pot.update();
-  if (pot.getValue() < POT_SAFE_LEVEL) {
+  pot->update();
+  if (pot->getValue() < POT_SAFE_LEVEL) {
     return true;
   }
   return false;
@@ -498,7 +523,7 @@ void setCruise() {
   // IDEA: fill a "cruise indicator" as long press activate happens
   // or gradually change color from blue to yellow with time
   if (!throttleSafe()) {  // using pot/throttle
-    cruisedPotVal = pot.getValue();  // save current throttle val
+    cruisedPotVal = pot->getValue();  // save current throttle val
     cruisedAtMillis = millis();  // start timer
     // throttle handle runs fast and a lot. need to set the timer before
     // setting cruise so its updated in time

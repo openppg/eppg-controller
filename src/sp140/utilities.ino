@@ -33,7 +33,7 @@ void setLEDs(byte state) {
     }
     pixels.show();
   } else {
-    digitalWrite(LED_SW, state);
+    digitalWrite(board_config.led_sw, state);
   }
 }
 
@@ -68,9 +68,9 @@ bool playMelody(uint16_t melody[], int siz) {
 // blocking tone function that delays for notes
 void playNote(uint16_t note, uint16_t duration) {
   // quarter note = 1000 / 4, eighth note = 1000/8, etc.
-  tone(BUZZER_PIN, note);
+  tone(board_config.buzzer_pin, note);
   delay(duration);  // to distinguish the notes, delay between them
-  noTone(BUZZER_PIN);
+  noTone(board_config.buzzer_pin);
 }
 
 void handleArmFail() {

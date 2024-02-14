@@ -34,4 +34,10 @@
 #define ENABLE_VIB_LOW_BAT    false   // vibrate if armed and battery voltage sags below min volts. Gets pilot's attention.
 #define POT_MAX_VALUE         4095    // 12 bit ADC //TODO use calibration and store in EEPROM
 
+enum DeviceRevision {
+  M0 = 0,
+  V1 = 1,
+  MODULE = 2
+};
+
 #endif  // INC_SP140_SHARED_CONFIG_H_
