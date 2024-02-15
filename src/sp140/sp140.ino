@@ -86,6 +86,37 @@ TaskHandle_t updateDisplayTaskHandle = NULL;
 SemaphoreHandle_t eepromSemaphore;
 SemaphoreHandle_t tftSemaphore;
 
+// V1 configuration
+HardwareConfig v1_config = {
+  .button_top = 7,
+  .buzzer_pin = 2,
+  .led_sw = LED_BUILTIN,
+  .throttle_pin = A2,
+  .serial_esc = &Serial1,
+  .tft_rst = 6,
+  .tft_cs = 4,
+  .tft_dc = 5,
+  .tft_lite = A3,
+  .esc_pin = 3,
+  .enable_vib = true
+};
+
+// V2 configuration
+HardwareConfig v2_config = {
+  .button_top = 15,
+  .buzzer_pin = 10,
+  .led_sw = 12,
+  .throttle_pin = A0,
+  .bmp_pin = 9,
+  .serial_esc = &Serial1,
+  .tft_rst = 5,
+  .tft_cs = 13,
+  .tft_dc = 11,
+  .tft_lite = 25,
+  .esc_pin = 14,
+  .enable_vib = false
+};
+
 #pragma message "Warning: OpenPPG software is in beta"
 
 void blinkLEDTask(void *pvParameters) {
@@ -164,10 +195,7 @@ void loadHardwareConfig() {
   button_top = new AceButton(board_config.button_top);
   buttonConfig = button_top->getButtonConfig();
 }
-
-// the setup function runs once when you press reset or power the board
-void setup() {
-
+void commonSetup() {
   Serial.begin(115200);
   SerialESC.begin(ESC_BAUD_RATE);
   SerialESC.setTimeout(ESC_TIMEOUT);
@@ -178,53 +206,71 @@ void setup() {
   usb_web.setLineStateCallback(line_state_callback);
 #endif
 
-  //Serial.print(F("Booting up (USB) V"));
-  //Serial.print(VERSION_MAJOR + "." + VERSION_MINOR);
-
-  loadHardwareConfig();
-
-  if (deviceData.revision == M0) {
-    pinMode(board_config.bmp_pin, OUTPUT);
-    digitalWrite(board_config.bmp_pin, HIGH);
-  } else if (deviceData.revision == V1) {
-    // no custom setup for v1
-  } else if (deviceData.revision == MODULE) {
-    pinMode(board_config.bmp_pin, OUTPUT);
-    digitalWrite(board_config.bmp_pin, HIGH);
-
-    pixels.begin();
-    pixels.setPixelColor(0, LED_YELLOW);
-    pixels.show();
-  }
-
   analogReadResolution(12);   // M0 family of chips provide 12bit resolution
   pot->setAnalogResolution(4096);
   unsigned int startup_vibes[] = { 27, 27, 0 };
 
   initButtons();
   setupTasks();
-
-#ifdef M0_PIO
-  Watchdog.enable(5000);
-  uint8_t eepStatus = eep.begin(eep.twiClock100kHz);
-#elif RP_PIO
-  watchdog_enable(5000, 1);
-  EEPROM.begin(512);
-#endif
   refreshDeviceData();
+
+  Serial.print(F("revision  "));
+  Serial.println(deviceData.revision);
+
+  loadHardwareConfig();
   setup140();
-#ifdef M0_PIO
-  Watchdog.reset();
-#endif
   setupAltimeter();
   setupTelemetry();
 
-  setupDisplay(deviceData, board_config);
   if (button_top->isPressedRaw()) {
     modeSwitch(false);
   }
   vTaskResume(updateDisplayTaskHandle);
   vTaskResume(checkButtonTaskHandle);
+}
+
+void setupM0() {
+#ifdef M0_PIO
+  Watchdog.enable(5000);
+  uint8_t eepStatus = eep.begin(eep.twiClock100kHz);
+
+  Serial.println(F("M0"));
+  pinMode(board_config.bmp_pin, OUTPUT);
+  digitalWrite(board_config.bmp_pin, HIGH);
+
+  Watchdog.reset(); //reset since setup can take a few secs
+#endif
+}
+
+void setupRP() {
+#ifdef RP_PIO
+  watchdog_enable(5000, 1);
+  EEPROM.begin(512);
+
+  if (deviceData.revision == M0) {
+    deviceData.revision = V1;
+    writeDeviceData();
+  }
+
+  if (deviceData.revision == MODULE) {
+    pinMode(board_config.bmp_pin, OUTPUT);
+    digitalWrite(board_config.bmp_pin, HIGH);
+
+    pixels.begin();
+    pixels.setPixelColor(0, LED_ORANGE);
+    pixels.show();
+  }
+#endif
+}
+
+void setup() {
+  commonSetup();
+
+  if (deviceData.revision == M0) {
+    setupM0();
+  } else if (deviceData.revision == V1 || deviceData.revision == MODULE) {
+    setupRP();
+  }
 }
 
 void setupTelemetry() {
@@ -323,6 +369,7 @@ void loop() {
 #endif
 
   delay(100);
+  Serial.println("loop");
   //ps();
   //psTop();
 }

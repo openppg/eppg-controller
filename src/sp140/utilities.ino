@@ -21,8 +21,8 @@ String convertToDigits(byte digits) {
   digits_string.concat(digits);
   return digits_string;
 }
-#define ENABLE_NEOPIXEL true
 
+#define ENABLE_NEOPIXEL false // TODO make this a config option
 
 void setLEDs(byte state) {
   if (ENABLE_NEOPIXEL) {

@@ -4,7 +4,6 @@
 #include <Arduino.h>
 
 #include "sp140/structs.h"
-#include "rp2040-config.h"
 #include <Adafruit_ST7735.h>
 #include "utilities.h"
 
@@ -56,7 +55,7 @@ extern float watts;
 extern float wattHoursUsed;
 
 // Set up the display and show splash screen
-void setupDisplay(const STR_DEVICE_DATA_140_V1& deviceData, const HardwareConfig& hwConfig);
+void setupDisplay(const STR_DEVICE_DATA_140_V1& deviceData);
 
 void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration = 2000);
 
