@@ -101,8 +101,10 @@ void resetDeviceData() {
 }
 
 // ** Logic for WebUSB **
+// Callback for when the USB connection state changes
 void line_state_callback(bool connected) {
-  digitalWrite(LED_SW, connected);
+  setLEDColor(connected ? LED_BLUE : LED_GREEN);
+  setLEDs(connected);
 
   if ( connected ) send_usb_serial();
 }
