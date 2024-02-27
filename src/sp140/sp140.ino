@@ -170,8 +170,7 @@ void setup() {
 
   pinMode(LED_SW, OUTPUT);   // set up the internal LED2 pin
   pixels.begin();
-  pixels.setPixelColor(0, led_color);
-  pixels.show();
+  setLEDColor(led_color);
 
   analogReadResolution(12);     // M0 family chip provides 12bit resolution
   pot.setAnalogResolution(4096);
@@ -192,9 +191,7 @@ void setup() {
 #ifdef M0_PIO
   Watchdog.reset();
 #endif
-  led_color = LED_YELLOW;
-  pixels.setPixelColor(0, led_color);
-  pixels.show();
+  setLEDColor(LED_YELLOW);
   setupAltimeter();
   setupTelemetry();
 
@@ -205,9 +202,7 @@ void setup() {
   vTaskResume(updateDisplayTaskHandle);
   vTaskResume(checkButtonTaskHandle);
 
-  led_color = LED_GREEN;
-  pixels.setPixelColor(0, led_color);
-  pixels.show();
+  setLEDColor(LED_GREEN);
 }
 
 void setupTelemetry() {

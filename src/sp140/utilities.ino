@@ -21,8 +21,14 @@ String convertToDigits(byte digits) {
   digits_string.concat(digits);
   return digits_string;
 }
+
 #define ENABLE_NEOPIXEL true
 
+// set LED color
+void setLEDColor(uint32_t color) {
+  pixels.setPixelColor(0, color);
+  pixels.show();
+}
 
 void setLEDs(byte state) {
   if (ENABLE_NEOPIXEL) {
