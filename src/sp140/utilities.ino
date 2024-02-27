@@ -26,8 +26,11 @@ String convertToDigits(byte digits) {
 
 // set LED color
 void setLEDColor(uint32_t color) {
-  pixels.setPixelColor(0, color);
-  pixels.show();
+  if (ENABLE_NEOPIXEL) {
+    led_color = color;
+    pixels.setPixelColor(0, color);
+    pixels.show();
+  }
 }
 
 void setLEDs(byte state) {
