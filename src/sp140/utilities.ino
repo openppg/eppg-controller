@@ -27,7 +27,7 @@ String convertToDigits(byte digits) {
 void setLEDs(byte state) {
   if (ENABLE_NEOPIXEL) {
     if (state == HIGH) {
-      pixels.setPixelColor(0, LED_YELLOW);
+      pixels.setPixelColor(0, led_color);
     } else {
       pixels.clear();
     }

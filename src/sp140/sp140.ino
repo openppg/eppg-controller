@@ -66,6 +66,7 @@ CircularBuffer<float, 50> voltageBuffer;
 CircularBuffer<int, 8> potBuffer;
 
 Adafruit_NeoPixel pixels(1, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
+uint32_t led_color = LED_RED; // current LED color
 
 bool armed = false;
 uint32_t armedAtMillis = 0;
@@ -169,7 +170,7 @@ void setup() {
 
   pinMode(LED_SW, OUTPUT);   // set up the internal LED2 pin
   pixels.begin();
-  pixels.setPixelColor(0, LED_YELLOW);
+  pixels.setPixelColor(0, led_color);
   pixels.show();
 
   analogReadResolution(12);     // M0 family chip provides 12bit resolution
@@ -191,6 +192,9 @@ void setup() {
 #ifdef M0_PIO
   Watchdog.reset();
 #endif
+  led_color = LED_YELLOW;
+  pixels.setPixelColor(0, led_color);
+  pixels.show();
   setupAltimeter();
   setupTelemetry();
 
@@ -200,6 +204,10 @@ void setup() {
   }
   vTaskResume(updateDisplayTaskHandle);
   vTaskResume(checkButtonTaskHandle);
+
+  led_color = LED_GREEN;
+  pixels.setPixelColor(0, led_color);
+  pixels.show();
 }
 
 void setupTelemetry() {
