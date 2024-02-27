@@ -44,7 +44,7 @@ void updateRevisionIfRequired() {
   #ifdef RP_PIO
     if (deviceData.revision == 0) {
       deviceData.revision = 1;
-      writeDeviceData(); // Save the updated revision to EEPROM
+      writeDeviceData();  // Save the updated revision to EEPROM
     }
   #endif
 }
@@ -135,7 +135,7 @@ void parse_usb_serial() {
   sanitizeDeviceData();
   writeDeviceData();
   resetRotation(deviceData.screen_rotation);  // Screen orientation may have changed
-  setTheme(deviceData.theme); // may have changed
+  setTheme(deviceData.theme);  // may have changed
 
   vTaskResume(updateDisplayTaskHandle);
 

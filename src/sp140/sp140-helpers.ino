@@ -78,10 +78,10 @@ void handleSerialData(byte buffer[]) {
   raw_telemdata.V_LO = buffer[0];
 
   float voltage = (raw_telemdata.V_HI << 8 | raw_telemdata.V_LO) / 100.0;
-  telemetryData.volts = voltage; //Voltage
+  telemetryData.volts = voltage;  // Voltage
 
   if (telemetryData.volts > BATT_MIN_V) {
-    telemetryData.volts += 1.0; // calibration
+    telemetryData.volts += 1.0;  // calibration
   }
 
   voltageBuffer.push(telemetryData.volts);
@@ -102,11 +102,11 @@ void handleSerialData(byte buffer[]) {
   Rntc = SERIESRESISTOR / Rntc;
 
   // Get the temperature
-  float temperature = Rntc / (float) NOMINAL_RESISTANCE; // (R/Ro)
+  float temperature = Rntc / (float) NOMINAL_RESISTANCE;  // (R/Ro)
   temperature = (float) log(temperature); // ln(R/Ro)
   temperature /= BCOEFFICIENT; // 1/B * ln(R/Ro)
 
-  temperature += 1.0 / ((float) NOMINAL_TEMPERATURE + 273.15); // + (1/To)
+  temperature += 1.0 / ((float) NOMINAL_TEMPERATURE + 273.15);  // + (1/To)
   temperature = 1.0 / temperature; // Invert
   temperature -= 273.15; // convert to Celsius
 
@@ -114,7 +114,7 @@ void handleSerialData(byte buffer[]) {
   if (temperature < 0 || temperature > 200) {
     telemetryData.temperatureC = __FLT_MIN__;
   } else {
-    temperature = (float) trunc(temperature * 100) / 100; // 2 decimal places
+    temperature = (float) trunc(temperature * 100) / 100;  // 2 decimal places
     telemetryData.temperatureC = temperature;
   }
 
@@ -152,7 +152,7 @@ void handleSerialData(byte buffer[]) {
   raw_telemdata.DUTYIN_LO = buffer[12];
 
   int throttleDuty = (int)(((raw_telemdata.DUTYIN_HI << 8) + raw_telemdata.DUTYIN_LO) / 10);
-  telemetryData.inPWM = (throttleDuty / 10); //Input throttle
+  telemetryData.inPWM = (throttleDuty / 10);  // Input throttle
 
   // Serial.print("throttle ");
   // Serial.print(telemetryData.inPWM);
@@ -163,7 +163,7 @@ void handleSerialData(byte buffer[]) {
   raw_telemdata.MOTORDUTY_LO = buffer[14];
 
   int motorDuty = (int)(((raw_telemdata.MOTORDUTY_HI << 8) + raw_telemdata.MOTORDUTY_LO) / 10);
-  int currentMotorDuty = (motorDuty / 10); //Motor duty cycle
+  int currentMotorDuty = (motorDuty / 10);  // Motor duty cycle
 
   // Reserved
   // raw_telemdata.R1 = buffer[17];
@@ -184,22 +184,21 @@ void handleSerialData(byte buffer[]) {
   // Serial.println(" ");
 }
 
-// new v2
+// new V2
 int CheckFlectcher16(byte byteBuffer[]) {
-    int fCCRC16;
-    int i;
-    int c0 = 0;
-    int c1 = 0;
+  int fCCRC16;
+  int i;
+  int c0 = 0;
+  int c1 = 0;
 
-    // Calculate checksum intermediate bytesUInt16
-    for (i = 0; i < 18; i++) //Check only first 18 bytes, skip crc bytes
-    {
-        c0 = (int)(c0 + ((int)byteBuffer[i])) % 255;
-        c1 = (int)(c1 + c0) % 255;
-    }
-    // Assemble the 16-bit checksum value
-    fCCRC16 = ( c1 << 8 ) | c0;
-    return (int)fCCRC16;
+  // Calculate checksum intermediate bytesUInt16
+  for (i = 0; i < 18; i++) { //Check only first 18 bytes, skip crc bytes
+    c0 = (int)(c0 + ((int)byteBuffer[i])) % 255;
+    c1 = (int)(c1 + c0) % 255;
+  }
+  // Assemble the 16-bit checksum value
+  fCCRC16 = ( c1 << 8 ) | c0;
+  return (int)fCCRC16;
 }
 
 // for debugging

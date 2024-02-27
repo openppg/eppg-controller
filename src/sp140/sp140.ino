@@ -113,7 +113,7 @@ void telemetryTask(void *pvParameters) {
     handleTelemetry();
     delay(50);  // wait for 50ms
   }
-  vTaskDelete(NULL); // should never reach this
+  vTaskDelete(NULL);  // should never reach this
 }
 
 void trackPowerTask(void *pvParameters) {
@@ -123,7 +123,7 @@ void trackPowerTask(void *pvParameters) {
     trackPower();
     delay(250);  // wait for 250ms
   }
-  vTaskDelete(NULL); // should never reach this
+  vTaskDelete(NULL);  // should never reach this
 }
 
 void checkButtonTask(void *pvParameters) {
@@ -133,7 +133,7 @@ void checkButtonTask(void *pvParameters) {
     checkButtons();
     delay(5);  // wait for 5ms
   }
-  vTaskDelete(NULL); // should never reach this
+  vTaskDelete(NULL);  // should never reach this
 }
 
 void updateDisplayTask(void *pvParameters) { //TODO set core affinity to one core only
@@ -143,15 +143,14 @@ void updateDisplayTask(void *pvParameters) { //TODO set core affinity to one cor
     // TODO separate alt reading out to its own task. Avoid blocking display updates when alt reading is slow etc
     // TODO use queues to pass data between tasks (xQueueOverwrite)
     const float altitude = getAltitude(deviceData);
-    updateDisplay( deviceData, telemetryData, altitude, armed, cruising, armedAtMillis);
+    updateDisplay(deviceData, telemetryData, altitude, armed, cruising, armedAtMillis);
     delay(250);  // wait for 250ms
   }
-  vTaskDelete(NULL); // should never reach this
+  vTaskDelete(NULL);  // should never reach this
 }
 
 // the setup function runs once when you press reset or power the board
 void setup() {
-
   Serial.begin(115200);
   SerialESC.begin(ESC_BAUD_RATE);
   SerialESC.setTimeout(ESC_TIMEOUT);
@@ -242,7 +241,7 @@ void ps() {
   int tasks = uxTaskGetNumberOfTasks();
   TaskStatus_t *pxTaskStatusArray = new TaskStatus_t[tasks];
   unsigned long runtime;
-  tasks = uxTaskGetSystemState( pxTaskStatusArray, tasks, &runtime );
+  tasks = uxTaskGetSystemState(pxTaskStatusArray, tasks, &runtime);
   Serial.printf("# Tasks: %d\n", tasks);
   Serial.println("ID, NAME, STATE, PRIO, CYCLES");
   for (int i=0; i < tasks; i++) {
