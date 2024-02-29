@@ -89,13 +89,29 @@ void handleArmFail() {
 
 // for debugging
 void printDeviceData() {
-  Serial.print("version major ");
+  Serial.print(F("version major "));
   Serial.println(deviceData.version_major);
-  Serial.print("version minor ");
+  Serial.print(F("version minor "));
   Serial.println(deviceData.version_minor);
-  Serial.print("armed_time ");
+  Serial.print(F("screen rotation "));
+  Serial.println(deviceData.screen_rotation);
+  Serial.print(F("sea pressure "));
+  Serial.println(deviceData.sea_pressure);
+  Serial.print(F("metric temp "));
+  Serial.println(deviceData.metric_temp);
+  Serial.print(F("metric alt "));
+  Serial.println(deviceData.metric_alt);
+  Serial.print(F("performance mode "));
+  Serial.println(deviceData.performance_mode);
+  Serial.print(F("theme "));
+  Serial.println(deviceData.theme);
+  Serial.print(F("batt size "));
+  Serial.println(deviceData.batt_size);
+  Serial.print(F("armed time "));
   Serial.println(deviceData.armed_time);
-  Serial.print("crc ");
+  Serial.print(F("revision "));
+  Serial.println(deviceData.revision);
+  Serial.print(F("crc "));
   Serial.println(deviceData.crc);
 }
 
