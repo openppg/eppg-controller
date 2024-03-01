@@ -38,10 +38,8 @@
   #include "pico/unique_id.h"
 #endif
 
-
 #include "../../inc/sp140/globals.h"  // device config
 
-//#include "../../inc/sp140/utilities.h"
 #include "../../inc/sp140/display.h"
 #include "../../inc/sp140/altimeter.h"
 
@@ -74,7 +72,6 @@ uint32_t cruisedAtMillisMilis = 0;
 unsigned int armedSecs = 0;
 unsigned int last_throttle = 0;
 
-TaskHandle_t checkButtonTaskHandle = NULL;
 TaskHandle_t blinkLEDTaskHandle = NULL;
 TaskHandle_t throttleTaskHandle = NULL;
 TaskHandle_t telemetryTaskHandle = NULL;
@@ -207,7 +204,6 @@ void setup() {
     modeSwitch(false);
   }
   vTaskResume(updateDisplayTaskHandle);
-  //vTaskResume(checkButtonTaskHandle);
 
   setLEDColor(LED_GREEN);
 }
@@ -268,7 +264,6 @@ void psTop() {
   Serial.printf("\nthrottleTask - Free Stack Space: %d", uxTaskGetStackHighWaterMark(throttleTaskHandle));
   Serial.printf("\ntelemetryTask - Free Stack Space: %d", uxTaskGetStackHighWaterMark(telemetryTaskHandle));
   Serial.printf("\ntrackPowerTask - Free Stack Space: %d", uxTaskGetStackHighWaterMark(trackPowerTaskHandle));
-  Serial.printf("\ncheckButtonTask - Free Stack Space: %d", uxTaskGetStackHighWaterMark(checkButtonTaskHandle));
   Serial.printf("\nupdateDisplayTask - Free Stack Space: %d", uxTaskGetStackHighWaterMark(updateDisplayTaskHandle));
   Serial.println("");
 }
@@ -295,6 +290,7 @@ void loop() {
   if (!armed && usb_web.available()) parse_usb_serial();
 #endif
 
+  // more stable in main loop
   checkButtons();
   delay(5);
   //ps();

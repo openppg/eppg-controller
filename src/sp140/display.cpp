@@ -257,11 +257,11 @@ void updateDisplay(
 //  canvas.printf("  %3d %2d %2d", escTelemetry.lastReadBytes, escTelemetry.errorStopBytes, escTelemetry.errorChecksum);
 
 //  // DEBUG WATCHDOG
- #ifdef RP_PIO
-   canvas.setTextSize(1);
-   canvas.setCursor(4, 118);
-   canvas.printf("watchdog %d %d", watchdogCausedReboot, watchdogEnableCausedReboot);
- #endif
+//  #ifdef RP_PIO
+//    canvas.setTextSize(1);
+//    canvas.setCursor(4, 118);
+//    canvas.printf("watchdog %d %d", watchdogCausedReboot, watchdogEnableCausedReboot);
+//  #endif
 //
 //  // DEBUG FREE MEMORY
 //  #ifdef RP_PIO
@@ -277,9 +277,9 @@ void updateDisplay(
 void setTheme(int theme) {
   if (theme == 1) {
     currentTheme = &darkModeColors;
-    Serial.println("Switched to Dark Mode");
+    // Serial.println("Switched to Dark Mode");
   } else {
     currentTheme = &lightModeColors;
-    Serial.println("Switched to Light Mode");
+    // Serial.println("Switched to Light Mode");
   }
 }

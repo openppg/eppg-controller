@@ -15,7 +15,13 @@ const int DEFAULT_BATT_SIZE = 4000;  // 4kw
 // read saved data from EEPROM
 void refreshDeviceData() {
   uint16_t crc;
-  EEPROM.get(EEPROM_OFFSET, deviceData);
+  #ifdef M0_PIO
+    if (0 != eep.read(EEPROM_OFFSET, deviceData, sizeof(deviceData))) {
+      // Serial.println(F("error reading EEPROM"));
+    }
+  #elif RP_PIO
+    EEPROM.get(EEPROM_OFFSET, deviceData);
+  #endif
   crc = crc16((uint8_t*)&deviceData, sizeof(deviceData) - 2);
 
   // If the CRC does not match, reset the device data
@@ -28,17 +34,6 @@ void refreshDeviceData() {
   //updateRevisionIfRequired();
 }
 
-// Read device data from EEPROM
-void readDeviceDataFromEEPROM(uint8_t* buffer) {
-  #ifdef M0_PIO
-    if (0 != eep.read(EEPROM_OFFSET, buffer, sizeof(deviceData))) {
-      // Serial.println(F("error reading EEPROM"));
-    }
-  #elif RP_PIO
-    EEPROM.get(EEPROM_OFFSET, buffer);
-  #endif
-}
-
 // Update the revision if required
 void updateRevisionIfRequired() {
   #ifdef RP_PIO
@@ -49,30 +44,15 @@ void updateRevisionIfRequired() {
   #endif
 }
 
-// One time freeRTOS task that wraps writeDeviceData()
-void writeDeviceDataTask(void *pvParameters) {
-  if (eepromSemaphore != NULL) {
-    if (xSemaphoreTake(eepromSemaphore, (TickType_t)10) == pdTRUE) {
-      // Your EEPROM write logic here
-      writeDeviceData();
-      // Once done, release the semaphore
-      xSemaphoreGive(eepromSemaphore);
-    }
-  }
-
-  // Delete the task after completion
-  vTaskDelete(NULL);
-}
-
 // Write to EEPROM
 void writeDeviceData() {
   deviceData.crc = crc16((uint8_t*)&deviceData, sizeof(deviceData) - 2);
   printDeviceData();
   EEPROM.put(EEPROM_OFFSET, deviceData);
   if (EEPROM.commit()) {
-    Serial.println("EEPROM commit successful");
+    // Serial.println("EEPROM commit successful");
   } else {
-    Serial.println("EEPROM commit failed");
+    // Serial.println("EEPROM commit failed");
   }
 }
 
@@ -84,7 +64,7 @@ void resetDeviceData() {
   #ifdef M0_PIO
     deviceData.revision = 0;
   #elif RP_PIO
-    deviceData.revision = 2; // Default to new 2040 board revision
+    deviceData.revision = 2; // Default to new 2040 board revision // TODO
   #endif
 
   deviceData.version_major = VERSION_MAJOR;
