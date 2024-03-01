@@ -14,18 +14,18 @@ const int DEFAULT_BATT_SIZE = 4000;  // 4kw
 
 // read saved data from EEPROM
 void refreshDeviceData() {
-  uint8_t tempBuf[sizeof(deviceData)];
   uint16_t crc;
-
-  readDeviceDataFromEEPROM(tempBuf);
-  memcpy((uint8_t*)&deviceData, tempBuf, sizeof(deviceData));
+  EEPROM.get(EEPROM_OFFSET, deviceData);
   crc = crc16((uint8_t*)&deviceData, sizeof(deviceData) - 2);
 
   // If the CRC does not match, reset the device data
-  if (crc != deviceData.crc) { resetDeviceData(); }
+  if (crc != deviceData.crc) {
+    Serial.println(F("EEPROM CRC mismatch - resetting device data"));
+    resetDeviceData();
+    }
 
   // Update the revision if required
-  updateRevisionIfRequired();
+  //updateRevisionIfRequired();
 }
 
 // Read device data from EEPROM
@@ -67,14 +67,13 @@ void writeDeviceDataTask(void *pvParameters) {
 // Write to EEPROM
 void writeDeviceData() {
   deviceData.crc = crc16((uint8_t*)&deviceData, sizeof(deviceData) - 2);
-  #ifdef M0_PIO
-    if (0 != eep.write(EEPROM_OFFSET, (uint8_t*)&deviceData, sizeof(deviceData))) {
-      //Serial.println(F("error writing EEPROM"));
-    }
-  #elif RP_PIO
-    EEPROM.put(EEPROM_OFFSET, deviceData);
-    EEPROM.commit();
-  #endif
+  printDeviceData();
+  EEPROM.put(EEPROM_OFFSET, deviceData);
+  if (EEPROM.commit()) {
+    Serial.println("EEPROM commit successful");
+  } else {
+    Serial.println("EEPROM commit failed");
+  }
 }
 
 // Reset EEPROM and deviceData to factory defaults
@@ -97,6 +96,7 @@ void resetDeviceData() {
   deviceData.performance_mode = DEFAULT_PERFORMANCE_MODE;
   deviceData.theme = DEFAULT_THEME;
   deviceData.batt_size = DEFAULT_BATT_SIZE;
+  deviceData.armed_time = 0;
   writeDeviceData();
 }
 

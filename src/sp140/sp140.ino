@@ -80,11 +80,19 @@ TaskHandle_t throttleTaskHandle = NULL;
 TaskHandle_t telemetryTaskHandle = NULL;
 TaskHandle_t trackPowerTaskHandle = NULL;
 TaskHandle_t updateDisplayTaskHandle = NULL;
+TaskHandle_t watchdogTaskHandle = NULL;
 
 SemaphoreHandle_t eepromSemaphore;
 SemaphoreHandle_t tftSemaphore;
 
 #pragma message "Warning: OpenPPG software is in beta"
+
+void watchdogTask(void* parameter) {
+  for (;;) {
+    watchdog_update();
+    vTaskDelay(pdMS_TO_TICKS(100));  // Delay for 100ms
+  }
+}
 
 void blinkLEDTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
@@ -182,8 +190,8 @@ void setup() {
   Watchdog.enable(5000);
   uint8_t eepStatus = eep.begin(eep.twiClock100kHz);
 #elif RP_PIO
-  watchdog_enable(5000, 1);
-  EEPROM.begin(512);
+  watchdog_enable(4000, 1);
+  EEPROM.begin(255);
 #endif
   refreshDeviceData();
   setup140();
@@ -199,7 +207,7 @@ void setup() {
     modeSwitch(false);
   }
   vTaskResume(updateDisplayTaskHandle);
-  vTaskResume(checkButtonTaskHandle);
+  //vTaskResume(checkButtonTaskHandle);
 
   setLEDColor(LED_GREEN);
 }
@@ -210,23 +218,13 @@ void setupTelemetry() {
 
 // set up all the threads/tasks
 void setupTasks() {
-  xTaskCreate(
-    checkButtonTask,  // the function that implements the task
-    "checkbutton",  // a name you can use for debugging
-    1000,  // stack size in words, not bytes. For the AVR Arduino, this is the number of bytes.
-    NULL,  // parameters passed into the task
-    3,  // priority, with 3 being the highest, and 0 being the lowest.
-    &checkButtonTaskHandle);  // used to pass back a handle by which the created task can be referenced.
-
-  if (checkButtonTaskHandle != NULL) {
-    vTaskSuspend(checkButtonTaskHandle);  // Suspend the task immediately after creation
-  }
 
   xTaskCreate(blinkLEDTask, "blinkLed", 200, NULL, 1, &blinkLEDTaskHandle);
   xTaskCreate(throttleTask, "throttle", 1000, NULL, 3, &throttleTaskHandle);
   xTaskCreate(telemetryTask, "telemetry", 1000, NULL, 2, &telemetryTaskHandle);
   xTaskCreate(trackPowerTask, "trackPower", 500, NULL, 2, &trackPowerTaskHandle);
   xTaskCreate(updateDisplayTask, "updateDisplay", 2000, NULL, 1, &updateDisplayTaskHandle);
+  xTaskCreate(watchdogTask, "watchdog", 1000, NULL, 4, &watchdogTaskHandle);
 
   if (updateDisplayTaskHandle != NULL) {
     vTaskSuspend(updateDisplayTaskHandle);  // Suspend the task immediately after creation
@@ -290,8 +288,6 @@ void setup140() {
 void loop() {
 #ifdef M0_PIO
   Watchdog.reset();
-#elif RP_PIO
-  watchdog_update();
 #endif
 
   // from WebUSB to both Serial & webUSB
@@ -299,43 +295,80 @@ void loop() {
   if (!armed && usb_web.available()) parse_usb_serial();
 #endif
 
-  delay(100);
+  checkButtons();
+  delay(5);
   //ps();
   //psTop();
 }
-
 
 void checkButtons() {
   button_top.check();
 }
 
-// disarm, remove cruise, alert, save updated stats
-void disarmSystem() {
+void printTime(const char* label) {
+  Serial.print(label);
+  Serial.println(millis());
+}
+
+void disarmESC() {
   throttlePWM = ESC_DISARMED_PWM;
   esc.writeMicroseconds(ESC_DISARMED_PWM);
-  //Serial.println(F("disarmed"));
+}
 
-  // reset smoothing
+// reset smoothing
+void resetSmoothing() {
   potBuffer.clear();
   prevPotLvl = 0;
+}
 
+void resumeLEDTask() {
+  vTaskResume(blinkLEDTaskHandle);  // blink LED while disarmed
+}
+
+void runDisarmAlert() {
   u_int16_t disarm_melody[] = { 2093, 1976, 880 };
   unsigned int disarm_vibes[] = { 100, 0 };
+  runVibe(disarm_vibes, 3);
+  playMelody(disarm_melody, 3);
+}
+
+void updateArmedTime() {
+  uint16_t newArmedTime = round(armedSecs / 60);
+  if (newArmedTime <= UINT16_MAX - deviceData.armed_time) {
+    deviceData.armed_time += newArmedTime;
+  } else {
+    // If adding the new time would cause an overflow, set the value to the maximum
+    deviceData.armed_time = UINT16_MAX;
+  }
+}
+
+void disarmSystem() {
+  printTime("Start time: ");
+
+  disarmESC();
+  printTime("After ESC_DISARMED_PWM: ");
+
+  resetSmoothing();
+  printTime("After reset smoothing: ");
 
   armed = false;
   removeCruise(false);
+  printTime("After removeCruise: ");
 
-  vTaskResume(blinkLEDTaskHandle);  // blink LED while disarmed
-  runVibe(disarm_vibes, 3);
-  playMelody(disarm_melody, 3);
+  resumeLEDTask();
 
-  // update armed_time
-  refreshDeviceData();
-  deviceData.armed_time += round(armedSecs / 60);  // convert to mins
-  xTaskCreate(writeDeviceDataTask, "EEPROMWrite", 128, NULL, 1, NULL);
+  runDisarmAlert();
+  printTime("After playMelody: ");
 
-  delay(1000);  // TODO just disable button thread // dont allow immediate rearming
-    // probably not possible now that it takes longer to arm with button sequence?
+  updateArmedTime();
+  printTime("After updating armed_time: ");
+
+  writeDeviceData();
+  printTime("After writeDeviceData: ");
+
+  delay(500);  // TODO just disable button thread // dont allow immediate rearming
+
+  printTime("End time: ");
 }
 
 void toggleArm() {

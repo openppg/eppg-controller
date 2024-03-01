@@ -26,7 +26,9 @@ void modeSwitch(bool update_display) {
     deviceData.performance_mode = 0;
   }
 
-  xTaskCreate(writeDeviceDataTask, "EEPROMWrite", 256, NULL, 1, NULL);
+  if (!armed) {
+    writeDeviceData();
+  }
 
   uint16_t notify_melody[] = { 900, 1976 };
   playMelody(notify_melody, 2);
