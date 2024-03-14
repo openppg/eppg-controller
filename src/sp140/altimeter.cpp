@@ -17,7 +17,9 @@ float getAltitude(const STR_DEVICE_DATA_140_V1& deviceData) {
 
 // set the ground altitude to the current altitude
 void setGroundAltitude(const STR_DEVICE_DATA_140_V1& deviceData) {
-  groundAltitude = bmp.readAltitude(deviceData.sea_pressure);
+  if (bmpPresent) {
+    groundAltitude = bmp.readAltitude(deviceData.sea_pressure);
+  }
 }
 
 // Start the bmp3XX sensor

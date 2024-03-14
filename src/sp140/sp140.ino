@@ -1,5 +1,6 @@
 // Copyright 2020 <Zach Whitehead>
 // OpenPPG
+#include "Arduino.h"
 
 #include "../../lib/crc.c"       // packet error checking
 #ifdef M0_PIO
@@ -69,8 +70,7 @@ uint32_t led_color = LED_RED; // current LED color
 bool armed = false;
 uint32_t armedAtMillis = 0;
 uint32_t cruisedAtMillisMilis = 0;
-unsigned int armedSecs = 0;
-unsigned int last_throttle = 0;
+unsigned long armedSecs = 0;
 
 TaskHandle_t blinkLEDTaskHandle = NULL;
 TaskHandle_t throttleTaskHandle = NULL;
