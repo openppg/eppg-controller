@@ -33,6 +33,15 @@ void setLEDColor(uint32_t color) {
   }
 }
 
+/**
+ * Sets the state of the LEDs.
+ *
+ * If ENABLE_NEOPIXEL is true, sets the color of the NeoPixel LED to led_color
+ * when the state is HIGH, and clears the NeoPixel LED when the state is LOW.
+ * Otherwise, sets the state of the LED_SW pin to the given state.
+ *
+ * @param state The state to set the LEDs to (HIGH or LOW).
+ */
 void setLEDs(byte state) {
   if (ENABLE_NEOPIXEL) {
     if (state == HIGH) {
@@ -64,6 +73,13 @@ bool runVibe(unsigned int sequence[], int siz) {
   return true;
 }
 
+/**
+ * Plays a melody using a piezo buzzer.
+ *
+ * @param melody An array of uint16_t values representing the notes of the melody.
+ * @param siz The size of the melody array.
+ * @return Returns true if the melody was played successfully, false otherwise.
+ */
 bool playMelody(uint16_t melody[], int siz) {
   if (!ENABLE_BUZ) { return false; }
   for (int thisNote = 0; thisNote < siz; thisNote++) {
@@ -82,6 +98,9 @@ void playNote(uint16_t note, uint16_t duration) {
   noTone(BUZZER_PIN);
 }
 
+/**
+ * Plays a melody to indicate arm failure.
+ */
 void handleArmFail() {
   uint16_t arm_fail_melody[] = { 820, 640 };
   playMelody(arm_fail_melody, 2);

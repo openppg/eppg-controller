@@ -10,6 +10,7 @@ X4 code has been migrated to a separate repo - https://github.com/openppg/x4-con
 
 It may not be stable and is not recommended for flying.
 See stable releases [here](https://github.com/openppg/eppg-controller/releases)
+> Version 6.1 was intially released only for the reworked RP2040 module based controller and being ported to the original RP2040 PCB which is currently in testing. The version shipped with that hardware can be found on the [rp2040-module-release branch](https://github.com/openppg/eppg-controller/tree/rp2040-module-release)
 
 > Version 6.0 introduced [FreeRTOS](https://www.freertos.org/index.html) and is currently only working with RP2040 processors. For M0/SAMD21 processors please use [version/5 branch](https://github.com/openppg/eppg-controller/tree/version/5).
 
@@ -38,7 +39,7 @@ Suitable for Mac, Windows, and Linux
 #### Install the driver
 
 Batch 3+ OpenPPG controllers and early SP140 controllers are powered by Atmel’s SAMD21G18A MCU, featuring a 32-bit ARM Cortex® M0+ core. On some operating systems you may need extra drivers to communicate with it.
-Newer SP140 controllers feature the RP2040 MCU which is a dual-core variant of the ARM Cortex® M0+. 
+Newer SP140 controllers feature the RP2040 MCU which is a dual-core variant of the ARM Cortex® M0+.
 
 #### Download and Prepare OpenPPG Code
 
