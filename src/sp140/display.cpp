@@ -285,9 +285,9 @@ void updateDisplay(
 void setTheme(int theme) {
   if (theme == 1) {
     currentTheme = &darkModeColors;
-    Serial.println("Switched to Dark Mode");
+    // Serial.println("Switched to Dark Mode");
   } else {
     currentTheme = &lightModeColors;
-    Serial.println("Switched to Light Mode");
+    // Serial.println("Switched to Light Mode");
   }
 }

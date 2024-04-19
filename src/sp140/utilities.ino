@@ -24,10 +24,28 @@ String convertToDigits(byte digits) {
 
 #define ENABLE_NEOPIXEL false // TODO make this a config option
 
+// set LED color
+void setLEDColor(uint32_t color) {
+  if (ENABLE_NEOPIXEL) {
+    led_color = color;
+    pixels.setPixelColor(0, color);
+    pixels.show();
+  }
+}
+
+/**
+ * Sets the state of the LEDs.
+ *
+ * If ENABLE_NEOPIXEL is true, sets the color of the NeoPixel LED to led_color
+ * when the state is HIGH, and clears the NeoPixel LED when the state is LOW.
+ * Otherwise, sets the state of the LED_SW pin to the given state.
+ *
+ * @param state The state to set the LEDs to (HIGH or LOW).
+ */
 void setLEDs(byte state) {
   if (ENABLE_NEOPIXEL) {
     if (state == HIGH) {
-      pixels.setPixelColor(0, LED_YELLOW);
+      pixels.setPixelColor(0, led_color);
     } else {
       pixels.clear();
     }
@@ -55,6 +73,13 @@ bool runVibe(unsigned int sequence[], int siz) {
   return true;
 }
 
+/**
+ * Plays a melody using a piezo buzzer.
+ *
+ * @param melody An array of uint16_t values representing the notes of the melody.
+ * @param siz The size of the melody array.
+ * @return Returns true if the melody was played successfully, false otherwise.
+ */
 bool playMelody(uint16_t melody[], int siz) {
   if (!ENABLE_BUZ) { return false; }
   for (int thisNote = 0; thisNote < siz; thisNote++) {
@@ -73,6 +98,9 @@ void playNote(uint16_t note, uint16_t duration) {
   noTone(board_config.buzzer_pin);
 }
 
+/**
+ * Plays a melody to indicate arm failure.
+ */
 void handleArmFail() {
   uint16_t arm_fail_melody[] = { 820, 640 };
   playMelody(arm_fail_melody, 2);
@@ -80,13 +108,29 @@ void handleArmFail() {
 
 // for debugging
 void printDeviceData() {
-  Serial.print("version major ");
+  Serial.print(F("version major "));
   Serial.println(deviceData.version_major);
-  Serial.print("version minor ");
+  Serial.print(F("version minor "));
   Serial.println(deviceData.version_minor);
-  Serial.print("armed_time ");
+  Serial.print(F("screen rotation "));
+  Serial.println(deviceData.screen_rotation);
+  Serial.print(F("sea pressure "));
+  Serial.println(deviceData.sea_pressure);
+  Serial.print(F("metric temp "));
+  Serial.println(deviceData.metric_temp);
+  Serial.print(F("metric alt "));
+  Serial.println(deviceData.metric_alt);
+  Serial.print(F("performance mode "));
+  Serial.println(deviceData.performance_mode);
+  Serial.print(F("theme "));
+  Serial.println(deviceData.theme);
+  Serial.print(F("batt size "));
+  Serial.println(deviceData.batt_size);
+  Serial.print(F("armed time "));
   Serial.println(deviceData.armed_time);
-  Serial.print("crc ");
+  Serial.print(F("revision "));
+  Serial.println(deviceData.revision);
+  Serial.print(F("crc "));
   Serial.println(deviceData.crc);
 }
 

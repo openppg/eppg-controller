@@ -14,29 +14,24 @@ const int DEFAULT_BATT_SIZE = 4000;  // 4kw
 
 // read saved data from EEPROM
 void refreshDeviceData() {
-  uint8_t tempBuf[sizeof(deviceData)];
   uint16_t crc;
-
-  readDeviceDataFromEEPROM(tempBuf);
-  memcpy((uint8_t*)&deviceData, tempBuf, sizeof(deviceData));
-  crc = crc16((uint8_t*)&deviceData, sizeof(deviceData) - 2);
-
-  // If the CRC does not match, reset the device data
-  if (crc != deviceData.crc) { resetDeviceData(); }
-
-  // Update the revision if required
-  updateRevisionIfRequired();
-}
-
-// Read device data from EEPROM
-void readDeviceDataFromEEPROM(uint8_t* buffer) {
   #ifdef M0_PIO
-    if (0 != eep.read(EEPROM_OFFSET, buffer, sizeof(deviceData))) {
+    if (0 != eep.read(EEPROM_OFFSET, deviceData, sizeof(deviceData))) {
       // Serial.println(F("error reading EEPROM"));
     }
   #elif RP_PIO
-    EEPROM.get(EEPROM_OFFSET, buffer);
+    EEPROM.get(EEPROM_OFFSET, deviceData);
   #endif
+  crc = crc16((uint8_t*)&deviceData, sizeof(deviceData) - 2);
+
+  // If the CRC does not match, reset the device data
+  if (crc != deviceData.crc) {
+    Serial.println(F("EEPROM CRC mismatch - resetting device data"));
+    resetDeviceData();
+    }
+
+  // Update the revision if required
+  //updateRevisionIfRequired();
 }
 
 // Update the revision if required
@@ -44,37 +39,21 @@ void updateRevisionIfRequired() {
   #ifdef RP_PIO
     if (deviceData.revision == 0) {
       deviceData.revision = 1;
-      writeDeviceData(); // Save the updated revision to EEPROM
+      writeDeviceData();  // Save the updated revision to EEPROM
     }
   #endif
-}
-
-// One time freeRTOS task that wraps writeDeviceData()
-void writeDeviceDataTask(void *pvParameters) {
-  if (eepromSemaphore != NULL) {
-    if (xSemaphoreTake(eepromSemaphore, (TickType_t)10) == pdTRUE) {
-      // Your EEPROM write logic here
-      writeDeviceData();
-      // Once done, release the semaphore
-      xSemaphoreGive(eepromSemaphore);
-    }
-  }
-
-  // Delete the task after completion
-  vTaskDelete(NULL);
 }
 
 // Write to EEPROM
 void writeDeviceData() {
   deviceData.crc = crc16((uint8_t*)&deviceData, sizeof(deviceData) - 2);
-  #ifdef M0_PIO
-    if (0 != eep.write(EEPROM_OFFSET, (uint8_t*)&deviceData, sizeof(deviceData))) {
-      //Serial.println(F("error writing EEPROM"));
-    }
-  #elif RP_PIO
-    EEPROM.put(EEPROM_OFFSET, deviceData);
-    EEPROM.commit();
-  #endif
+  printDeviceData();
+  EEPROM.put(EEPROM_OFFSET, deviceData);
+  if (EEPROM.commit()) {
+    // Serial.println("EEPROM commit successful");
+  } else {
+    // Serial.println("EEPROM commit failed");
+  }
 }
 
 // Reset EEPROM and deviceData to factory defaults
@@ -85,7 +64,7 @@ void resetDeviceData() {
   #ifdef M0_PIO
     deviceData.revision = 0;
   #elif RP_PIO
-    deviceData.revision = 2; // Default to new 2040 board revision
+    deviceData.revision = 2; // Default to new 2040 board revision // TODO
   #endif
 
   deviceData.version_major = VERSION_MAJOR;
@@ -97,12 +76,15 @@ void resetDeviceData() {
   deviceData.performance_mode = DEFAULT_PERFORMANCE_MODE;
   deviceData.theme = DEFAULT_THEME;
   deviceData.batt_size = DEFAULT_BATT_SIZE;
+  deviceData.armed_time = 0;
   writeDeviceData();
 }
 
 // ** Logic for WebUSB **
+// Callback for when the USB connection state changes
 void line_state_callback(bool connected) {
-  digitalWrite(board_config.led_sw, connected);
+  setLEDColor(connected ? LED_BLUE : LED_GREEN);
+  setLEDs(connected);
 
   if ( connected ) send_usb_serial();
 }
@@ -135,7 +117,7 @@ void parse_usb_serial() {
   sanitizeDeviceData();
   writeDeviceData();
   resetRotation(deviceData.screen_rotation);  // Screen orientation may have changed
-  setTheme(deviceData.theme); // may have changed
+  setTheme(deviceData.theme);  // may have changed
 
   vTaskResume(updateDisplayTaskHandle);
 
@@ -220,6 +202,7 @@ void send_usb_serial() {
   doc["prf"].set(deviceData.performance_mode);
   doc["sea_p"].set(deviceData.sea_pressure);
   doc["thm"].set(deviceData.theme);
+  doc["rev"].set(deviceData.revision);
   //doc["id"].set(chipId()); // webusb bug prevents anything over a certain size / this extra field from being sent
 
   char output[256];

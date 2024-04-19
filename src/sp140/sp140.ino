@@ -1,5 +1,6 @@
 // Copyright 2020 <Zach Whitehead>
 // OpenPPG
+#include "Arduino.h"
 
 #include "../../lib/crc.c"       // packet error checking
 #ifdef M0_PIO
@@ -38,10 +39,8 @@
   #include "pico/unique_id.h"
 #endif
 
-
 #include "../../inc/sp140/globals.h"  // device config
 
-//#include "../../inc/sp140/utilities.h"
 #include "../../inc/sp140/display.h"
 #include "../../inc/sp140/altimeter.h"
 
@@ -69,19 +68,19 @@ CircularBuffer<float, 50> voltageBuffer;
 CircularBuffer<int, 8> potBuffer;
 
 Adafruit_NeoPixel pixels(1, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
+uint32_t led_color = LED_RED; // current LED color
 
 bool armed = false;
 uint32_t armedAtMillis = 0;
 uint32_t cruisedAtMillisMilis = 0;
-unsigned int armedSecs = 0;
-unsigned int last_throttle = 0;
+unsigned long armedSecs = 0;
 
-TaskHandle_t checkButtonTaskHandle = NULL;
 TaskHandle_t blinkLEDTaskHandle = NULL;
 TaskHandle_t throttleTaskHandle = NULL;
 TaskHandle_t telemetryTaskHandle = NULL;
 TaskHandle_t trackPowerTaskHandle = NULL;
 TaskHandle_t updateDisplayTaskHandle = NULL;
+TaskHandle_t watchdogTaskHandle = NULL;
 
 SemaphoreHandle_t eepromSemaphore;
 SemaphoreHandle_t tftSemaphore;
@@ -119,6 +118,13 @@ HardwareConfig v2_config = {
 
 #pragma message "Warning: OpenPPG software is in beta"
 
+void watchdogTask(void* parameter) {
+  for (;;) {
+    watchdog_update();
+    vTaskDelay(pdMS_TO_TICKS(100));  // Delay for 100ms
+  }
+}
+
 void blinkLEDTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
@@ -146,7 +152,7 @@ void telemetryTask(void *pvParameters) {
     handleTelemetry();
     delay(50);  // wait for 50ms
   }
-  vTaskDelete(NULL); // should never reach this
+  vTaskDelete(NULL);  // should never reach this
 }
 
 void trackPowerTask(void *pvParameters) {
@@ -156,7 +162,7 @@ void trackPowerTask(void *pvParameters) {
     trackPower();
     delay(250);  // wait for 250ms
   }
-  vTaskDelete(NULL); // should never reach this
+  vTaskDelete(NULL);  // should never reach this
 }
 
 void checkButtonTask(void *pvParameters) {
@@ -166,7 +172,7 @@ void checkButtonTask(void *pvParameters) {
     checkButtons();
     delay(5);  // wait for 5ms
   }
-  vTaskDelete(NULL); // should never reach this
+  vTaskDelete(NULL);  // should never reach this
 }
 
 void updateDisplayTask(void *pvParameters) { //TODO set core affinity to one core only
@@ -176,10 +182,10 @@ void updateDisplayTask(void *pvParameters) { //TODO set core affinity to one cor
     // TODO separate alt reading out to its own task. Avoid blocking display updates when alt reading is slow etc
     // TODO use queues to pass data between tasks (xQueueOverwrite)
     const float altitude = getAltitude(deviceData);
-    updateDisplay( deviceData, telemetryData, altitude, armed, cruising, armedAtMillis);
+    updateDisplay(deviceData, telemetryData, altitude, armed, cruising, armedAtMillis);
     delay(250);  // wait for 250ms
   }
-  vTaskDelete(NULL); // should never reach this
+  vTaskDelete(NULL);  // should never reach this
 }
 
 
@@ -206,12 +212,30 @@ void commonSetup() {
   usb_web.setLineStateCallback(line_state_callback);
 #endif
 
-  analogReadResolution(12);   // M0 family of chips provide 12bit resolution
+  //Serial.print(F("Booting up (USB) V"));
+  //Serial.print(VERSION_MAJOR + "." + VERSION_MINOR);
+
+  pinMode(9, OUTPUT);
+  digitalWrite(9, HIGH);
+
+  pinMode(board_config.led_sw, OUTPUT);   // set up the internal LED2 pin
+  pixels.begin();
+  setLEDColor(led_color);
+
+  analogReadResolution(12);     // M0 family chip provides 12bit resolution
   pot->setAnalogResolution(4096);
   unsigned int startup_vibes[] = { 27, 27, 0 };
 
   initButtons();
   setupTasks();
+
+#ifdef M0_PIO
+  Watchdog.enable(5000);
+  uint8_t eepStatus = eep.begin(eep.twiClock100kHz);
+#elif RP_PIO
+  watchdog_enable(4000, 1);
+  EEPROM.begin(255);
+#endif
   refreshDeviceData();
 
   Serial.print(F("revision  "));
@@ -219,6 +243,10 @@ void commonSetup() {
 
   loadHardwareConfig();
   setup140();
+#ifdef M0_PIO
+  Watchdog.reset();
+#endif
+  setLEDColor(LED_YELLOW);
   setupAltimeter();
   setupTelemetry();
 
@@ -226,7 +254,8 @@ void commonSetup() {
     modeSwitch(false);
   }
   vTaskResume(updateDisplayTaskHandle);
-  vTaskResume(checkButtonTaskHandle);
+
+  setLEDColor(LED_GREEN);
 }
 
 void setupM0() {
@@ -279,23 +308,13 @@ void setupTelemetry() {
 
 // set up all the threads/tasks
 void setupTasks() {
-  xTaskCreate(
-    checkButtonTask,  // the function that implements the task
-    "checkbutton",  // a name you can use for debugging
-    1000,  // stack size in words, not bytes. For the AVR Arduino, this is the number of bytes.
-    NULL,  // parameters passed into the task
-    3,  // priority, with 3 being the highest, and 0 being the lowest.
-    &checkButtonTaskHandle);  // used to pass back a handle by which the created task can be referenced.
-
-  if (checkButtonTaskHandle != NULL) {
-    vTaskSuspend(checkButtonTaskHandle);  // Suspend the task immediately after creation
-  }
 
   xTaskCreate(blinkLEDTask, "blinkLed", 200, NULL, 1, &blinkLEDTaskHandle);
   xTaskCreate(throttleTask, "throttle", 1000, NULL, 3, &throttleTaskHandle);
   xTaskCreate(telemetryTask, "telemetry", 1000, NULL, 2, &telemetryTaskHandle);
   xTaskCreate(trackPowerTask, "trackPower", 500, NULL, 2, &trackPowerTaskHandle);
   xTaskCreate(updateDisplayTask, "updateDisplay", 2000, NULL, 1, &updateDisplayTaskHandle);
+  xTaskCreate(watchdogTask, "watchdog", 1000, NULL, 4, &watchdogTaskHandle);
 
   if (updateDisplayTaskHandle != NULL) {
     vTaskSuspend(updateDisplayTaskHandle);  // Suspend the task immediately after creation
@@ -310,7 +329,7 @@ void ps() {
   int tasks = uxTaskGetNumberOfTasks();
   TaskStatus_t *pxTaskStatusArray = new TaskStatus_t[tasks];
   unsigned long runtime;
-  tasks = uxTaskGetSystemState( pxTaskStatusArray, tasks, &runtime );
+  tasks = uxTaskGetSystemState(pxTaskStatusArray, tasks, &runtime);
   Serial.printf("# Tasks: %d\n", tasks);
   Serial.println("ID, NAME, STATE, PRIO, CYCLES");
   for (int i=0; i < tasks; i++) {
@@ -339,7 +358,6 @@ void psTop() {
   Serial.printf("\nthrottleTask - Free Stack Space: %d", uxTaskGetStackHighWaterMark(throttleTaskHandle));
   Serial.printf("\ntelemetryTask - Free Stack Space: %d", uxTaskGetStackHighWaterMark(telemetryTaskHandle));
   Serial.printf("\ntrackPowerTask - Free Stack Space: %d", uxTaskGetStackHighWaterMark(trackPowerTaskHandle));
-  Serial.printf("\ncheckButtonTask - Free Stack Space: %d", uxTaskGetStackHighWaterMark(checkButtonTaskHandle));
   Serial.printf("\nupdateDisplayTask - Free Stack Space: %d", uxTaskGetStackHighWaterMark(updateDisplayTaskHandle));
   Serial.println("");
 }
@@ -359,8 +377,6 @@ void setup140() {
 void loop() {
 #ifdef M0_PIO
   Watchdog.reset();
-#elif RP_PIO
-  watchdog_update();
 #endif
 
   // from WebUSB to both Serial & webUSB
@@ -368,44 +384,81 @@ void loop() {
   if (!armed && usb_web.available()) parse_usb_serial();
 #endif
 
-  delay(100);
-  Serial.println("loop");
+  // more stable in main loop
+  checkButtons();
+  delay(5);
   //ps();
   //psTop();
 }
-
 
 void checkButtons() {
   button_top->check();
 }
 
-// disarm, remove cruise, alert, save updated stats
-void disarmSystem() {
+void printTime(const char* label) {
+  Serial.print(label);
+  Serial.println(millis());
+}
+
+void disarmESC() {
   throttlePWM = ESC_DISARMED_PWM;
   esc.writeMicroseconds(ESC_DISARMED_PWM);
-  //Serial.println(F("disarmed"));
+}
 
-  // reset smoothing
+// reset smoothing
+void resetSmoothing() {
   potBuffer.clear();
   prevPotLvl = 0;
+}
 
+void resumeLEDTask() {
+  vTaskResume(blinkLEDTaskHandle);  // blink LED while disarmed
+}
+
+void runDisarmAlert() {
   u_int16_t disarm_melody[] = { 2093, 1976, 880 };
   unsigned int disarm_vibes[] = { 100, 0 };
+  runVibe(disarm_vibes, 3);
+  playMelody(disarm_melody, 3);
+}
+
+void updateArmedTime() {
+  uint16_t newArmedTime = round(armedSecs / 60);
+  if (newArmedTime <= UINT16_MAX - deviceData.armed_time) {
+    deviceData.armed_time += newArmedTime;
+  } else {
+    // If adding the new time would cause an overflow, set the value to the maximum
+    deviceData.armed_time = UINT16_MAX;
+  }
+}
+
+void disarmSystem() {
+  printTime("Start time: ");
+
+  disarmESC();
+  printTime("After ESC_DISARMED_PWM: ");
+
+  resetSmoothing();
+  printTime("After reset smoothing: ");
 
   armed = false;
   removeCruise(false);
+  printTime("After removeCruise: ");
 
-  vTaskResume(blinkLEDTaskHandle);  // blink LED while disarmed
-  runVibe(disarm_vibes, 3);
-  playMelody(disarm_melody, 3);
+  resumeLEDTask();
 
-  // update armed_time
-  refreshDeviceData();
-  deviceData.armed_time += round(armedSecs / 60);  // convert to mins
-  xTaskCreate(writeDeviceDataTask, "EEPROMWrite", 128, NULL, 1, NULL);
+  runDisarmAlert();
+  printTime("After playMelody: ");
 
-  delay(1000);  // TODO just disable button thread // dont allow immediate rearming
-    // probably not possible now that it takes longer to arm with button sequence?
+  updateArmedTime();
+  printTime("After updating armed_time: ");
+
+  writeDeviceData();
+  printTime("After writeDeviceData: ");
+
+  delay(500);  // TODO just disable button thread // dont allow immediate rearming
+
+  printTime("End time: ");
 }
 
 void toggleArm() {
