@@ -25,7 +25,7 @@ void refreshDeviceData() {
   crc = crc16((uint8_t*)&deviceData, sizeof(deviceData) - 2);
 
   // If the CRC does not match, reset the device data
-  if (crc != deviceData.crc) {
+  if (crc != deviceData.crc || deviceData.sea_pressure < 0) {
     Serial.println(F("EEPROM CRC mismatch - resetting device data"));
     resetDeviceData();
     }
@@ -50,9 +50,9 @@ void writeDeviceData() {
   printDeviceData();
   EEPROM.put(EEPROM_OFFSET, deviceData);
   if (EEPROM.commit()) {
-    // Serial.println("EEPROM commit successful");
+    Serial.println("EEPROM commit successful");
   } else {
-    // Serial.println("EEPROM commit failed");
+    Serial.println("EEPROM commit failed");
   }
 }
 

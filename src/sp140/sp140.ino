@@ -125,6 +125,8 @@ void watchdogTask(void* parameter) {
   }
 }
 
+#define ENABLE_NEOPIXEL true // TODO make this a config option
+
 void blinkLEDTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
@@ -201,6 +203,7 @@ void loadHardwareConfig() {
   button_top = new AceButton(board_config.button_top);
   buttonConfig = button_top->getButtonConfig();
 }
+
 void commonSetup() {
   Serial.begin(115200);
   SerialESC.begin(ESC_BAUD_RATE);
@@ -212,28 +215,20 @@ void commonSetup() {
   usb_web.setLineStateCallback(line_state_callback);
 #endif
 
-  //Serial.print(F("Booting up (USB) V"));
-  //Serial.print(VERSION_MAJOR + "." + VERSION_MINOR);
+//wait for serial connection
+  while (!Serial) {
+    delay(10);
+  }
+
+  Serial.print(F("Booting up (USB) V"));
+  Serial.print(VERSION_MAJOR + "." + VERSION_MINOR);
 
   pinMode(9, OUTPUT);
-  digitalWrite(9, HIGH);
+  digitalWrite(9, HIGH); //barometer fix for V2
 
-  pinMode(board_config.led_sw, OUTPUT);   // set up the internal LED2 pin
-  pixels.begin();
-  setLEDColor(led_color);
-
-  analogReadResolution(12);     // M0 family chip provides 12bit resolution
-  pot->setAnalogResolution(4096);
-  unsigned int startup_vibes[] = { 27, 27, 0 };
-
-  initButtons();
-  setupTasks();
-
-#ifdef M0_PIO
-  Watchdog.enable(5000);
+ #ifdef M0_PIO
   uint8_t eepStatus = eep.begin(eep.twiClock100kHz);
 #elif RP_PIO
-  watchdog_enable(4000, 1);
   EEPROM.begin(255);
 #endif
   refreshDeviceData();
@@ -242,6 +237,28 @@ void commonSetup() {
   Serial.println(deviceData.revision);
 
   loadHardwareConfig();
+  printDeviceData();
+
+  pinMode(board_config.led_sw, OUTPUT);   // set up the internal LED2 pin
+  if(ENABLE_NEOPIXEL){
+    pixels.begin();
+    setLEDColor(led_color);
+  }
+
+  analogReadResolution(12);     // M0 family chip provides 12bit resolution
+
+  pot->setAnalogResolution(4096);
+  unsigned int startup_vibes[] = { 27, 27, 0 };
+
+  initButtons();
+  setupTasks();
+
+#ifdef M0_PIO
+  Watchdog.enable(5000);
+#elif RP_PIO
+  watchdog_enable(4000, 1);
+#endif
+
   setup140();
 #ifdef M0_PIO
   Watchdog.reset();
@@ -249,7 +266,7 @@ void commonSetup() {
   setLEDColor(LED_YELLOW);
   setupAltimeter();
   setupTelemetry();
-
+  setupDisplay(deviceData);
   if (button_top->isPressedRaw()) {
     modeSwitch(false);
   }
@@ -274,11 +291,12 @@ void setupM0() {
 void setupRP() {
 #ifdef RP_PIO
   watchdog_enable(5000, 1);
-  EEPROM.begin(512);
+
+  return;
 
   if (deviceData.revision == M0) {
     deviceData.revision = V1;
-    writeDeviceData();
+    //writeDeviceData();
   }
 
   if (deviceData.revision == MODULE) {
@@ -293,13 +311,10 @@ void setupRP() {
 }
 
 void setup() {
+  delay(1000);  // delay for 1 sec
   commonSetup();
 
-  if (deviceData.revision == M0) {
-    setupM0();
-  } else if (deviceData.revision == V1 || deviceData.revision == MODULE) {
-    setupRP();
-  }
+  setupRP();
 }
 
 void setupTelemetry() {
@@ -375,6 +390,8 @@ void setup140() {
 
 // main loop - everything runs in threads
 void loop() {
+
+
 #ifdef M0_PIO
   Watchdog.reset();
 #endif

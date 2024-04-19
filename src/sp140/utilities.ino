@@ -22,7 +22,6 @@ String convertToDigits(byte digits) {
   return digits_string;
 }
 
-#define ENABLE_NEOPIXEL false // TODO make this a config option
 
 // set LED color
 void setLEDColor(uint32_t color) {
