@@ -2,7 +2,7 @@
 
 #include <Fonts/FreeSansBold12pt7b.h>
 
-#include "../../inc/sp140/rp2040-config.h"         // device config
+#include "../../inc/version.h"
 #include "sp140/structs.h"
 
 // DEBUG WATCHDOG
