@@ -85,8 +85,8 @@ TaskHandle_t watchdogTaskHandle = NULL;
 SemaphoreHandle_t eepromSemaphore;
 SemaphoreHandle_t tftSemaphore;
 
-// V1 configuration
-HardwareConfig v1_config = {
+// V2 configuration
+HardwareConfig v2_config = {
   .button_top = 7,
   .buzzer_pin = 2,
   .led_sw = LED_BUILTIN,
@@ -100,8 +100,8 @@ HardwareConfig v1_config = {
   .enable_vib = true
 };
 
-// V2 configuration
-HardwareConfig v2_config = {
+// V1 configuration
+HardwareConfig v1_config = {
   .button_top = 15,
   .buzzer_pin = 10,
   .led_sw = 12,
@@ -393,7 +393,7 @@ void loop() {
 
 
 #ifdef M0_PIO
-  Watchdog.reset();
+  Watchdog.reset(); // reset the watchdog timer (done in task for RP2040)
 #endif
 
   // from WebUSB to both Serial & webUSB
