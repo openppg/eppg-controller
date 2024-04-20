@@ -25,7 +25,7 @@ String convertToDigits(byte digits) {
 
 // set LED color
 void setLEDColor(uint32_t color) {
-  if (ENABLE_NEOPIXEL) {
+  if (board_config.enable_neopixel) {
     led_color = color;
     pixels.setPixelColor(0, color);
     pixels.show();
@@ -35,14 +35,14 @@ void setLEDColor(uint32_t color) {
 /**
  * Sets the state of the LEDs.
  *
- * If ENABLE_NEOPIXEL is true, sets the color of the NeoPixel LED to led_color
+ * If board_config.enable_neopixel is true, sets the color of the NeoPixel LED to led_color
  * when the state is HIGH, and clears the NeoPixel LED when the state is LOW.
  * Otherwise, sets the state of the LED_SW pin to the given state.
  *
  * @param state The state to set the LEDs to (HIGH or LOW).
  */
 void setLEDs(byte state) {
-  if (ENABLE_NEOPIXEL) {
+  if (board_config.enable_neopixel) {
     if (state == HIGH) {
       pixels.setPixelColor(0, led_color);
     } else {

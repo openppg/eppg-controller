@@ -19,6 +19,7 @@ struct HardwareConfig {
   int tft_lite;
   int esc_pin;
   bool enable_vib;
+  bool enable_neopixel;
 };
 
 
@@ -34,7 +35,8 @@ HardwareConfig v2_config = {
   .tft_dc = 5,
   .tft_lite = A3,
   .esc_pin = 3,
-  .enable_vib = true
+  .enable_vib = true,
+  .enable_neopixel = true
 };
 
 // V1 configuration
@@ -50,7 +52,8 @@ HardwareConfig v1_config = {
   .tft_dc = 11,
   .tft_lite = 25,
   .esc_pin = 14,
-  .enable_vib = false
+  .enable_vib = false,
+  .enable_neopixel = false
 };
 
 #endif  // INC_SP140_RP2040_CONFIG_H_

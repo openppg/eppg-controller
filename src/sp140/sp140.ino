@@ -95,7 +95,6 @@ void watchdogTask(void* parameter) {
   }
 }
 
-#define ENABLE_NEOPIXEL true // TODO make this a config option
 
 void blinkLEDTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
@@ -210,7 +209,7 @@ void commonSetup() {
   printDeviceData();
 
   pinMode(board_config.led_sw, OUTPUT);   // set up the internal LED2 pin
-  if(ENABLE_NEOPIXEL){
+  if(board_config.enable_neopixel){
     pixels.begin();
     setLEDColor(led_color);
   }
