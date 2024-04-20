@@ -184,11 +184,6 @@ void commonSetup() {
   usb_web.setLineStateCallback(line_state_callback);
 #endif
 
-//wait for serial connection
-  while (!Serial) {
-    delay(10);
-  }
-
   Serial.print(F("Booting up (USB) V"));
   Serial.print(VERSION_MAJOR + "." + VERSION_MINOR);
 
@@ -206,7 +201,7 @@ void commonSetup() {
   Serial.println(deviceData.revision);
 
   loadHardwareConfig();
-  printDeviceData();
+  printDeviceData(); // print device data to serial for debugging
 
   pinMode(board_config.led_sw, OUTPUT);   // set up the internal LED2 pin
   if(board_config.enable_neopixel){
@@ -214,10 +209,10 @@ void commonSetup() {
     setLEDColor(led_color);
   }
 
-  analogReadResolution(12);     // M0 family chip provides 12bit resolution
-
+  analogReadResolution(12);   // M0 family chips provides 12bit ADC resolution
   pot->setAnalogResolution(4096);
-  unsigned int startup_vibes[] = { 27, 27, 0 };
+
+  const unsigned int startup_vibes[] = { 27, 27, 0 };
 
   initButtons();
   setupTasks();
@@ -250,9 +245,6 @@ void setupM0() {
   uint8_t eepStatus = eep.begin(eep.twiClock100kHz);
 
   Serial.println(F("M0"));
-  pinMode(board_config.bmp_pin, OUTPUT);
-  digitalWrite(board_config.bmp_pin, HIGH);
-
   Watchdog.reset(); //reset since setup can take a few secs
 #endif
 }
@@ -261,18 +253,15 @@ void setupRP() {
 #ifdef RP_PIO
   watchdog_enable(5000, 1);
 
-  return;
-
   if (deviceData.revision == M0) {
     deviceData.revision = V1;
-    //writeDeviceData();
+    writeDeviceData();
   }
 
   if (deviceData.revision == MODULE) {
     pinMode(board_config.bmp_pin, OUTPUT);
     digitalWrite(board_config.bmp_pin, HIGH);
 
-    pixels.begin();
     pixels.setPixelColor(0, LED_ORANGE);
     pixels.show();
   }
@@ -403,7 +392,7 @@ void resumeLEDTask() {
 
 void runDisarmAlert() {
   u_int16_t disarm_melody[] = { 2093, 1976, 880 };
-  unsigned int disarm_vibes[] = { 100, 0 };
+  const unsigned int disarm_vibes[] = { 100, 0 };
   runVibe(disarm_vibes, 3);
   playMelody(disarm_melody, 3);
 }
@@ -577,7 +566,7 @@ int averagePotBuffer() {
 // get the PPG ready to fly
 bool armSystem() {
   uint16_t arm_melody[] = { 1760, 1976, 2093 };
-  unsigned int arm_vibes[] = { 70, 33, 0 };
+  const unsigned int arm_vibes[] = { 70, 33, 0 };
 
   armed = true;
   esc.writeMicroseconds(ESC_DISARMED_PWM);  // initialize the signal to low
