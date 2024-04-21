@@ -169,6 +169,39 @@ bool sanitizeDeviceData() {
   return changed;
 }
 
+/**
+ * Prints the hardware configuration to the Serial monitor.
+ *
+ * @param config The HardwareConfig object containing the hardware configuration.
+ */
+void debugHardwareConfig(const HardwareConfig& config) {
+  Serial.println("Hardware Configuration:");
+  Serial.print("button_top: ");
+  Serial.println(config.button_top);
+  Serial.print("buzzer_pin: ");
+  Serial.println(config.buzzer_pin);
+  Serial.print("led_sw: ");
+  Serial.println(config.led_sw);
+  Serial.print("throttle_pin: ");
+  Serial.println(config.throttle_pin);
+  Serial.print("bmp_pin: ");
+  Serial.println(config.bmp_pin);
+  Serial.print("tft_rst: ");
+  Serial.println(config.tft_rst);
+  Serial.print("tft_cs: ");
+  Serial.println(config.tft_cs);
+  Serial.print("tft_dc: ");
+  Serial.println(config.tft_dc);
+  Serial.print("tft_lite: ");
+  Serial.println(config.tft_lite);
+  Serial.print("esc_pin: ");
+  Serial.println(config.esc_pin);
+  Serial.print("enable_vib: ");
+  Serial.println(config.enable_vib ? "true" : "false");
+  Serial.print("enable_neopixel: ");
+  Serial.println(config.enable_neopixel ? "true" : "false");
+}
+
 void send_usb_serial() {
 #ifdef USE_TINYUSB
 #ifdef M0_PIO

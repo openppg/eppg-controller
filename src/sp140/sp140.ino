@@ -197,12 +197,8 @@ void commonSetup() {
 #endif
   refreshDeviceData();
 
-  Serial.print(F("revision  "));
-  Serial.println(deviceData.revision);
-
   loadHardwareConfig();
   printDeviceData(); // print device data to serial for debugging
-
   pinMode(board_config.led_sw, OUTPUT);   // set up the internal LED2 pin
   if(board_config.enable_neopixel){
     pixels.begin();
@@ -228,12 +224,15 @@ void commonSetup() {
   Watchdog.reset();
 #endif
   setLEDColor(LED_YELLOW);
+
   setupAltimeter();
   setupTelemetry();
-  setupDisplay(deviceData);
+  setupDisplay(deviceData, board_config);
+
   if (button_top->isPressedRaw()) {
     modeSwitch(false);
   }
+
   vTaskResume(updateDisplayTaskHandle);
 
   setLEDColor(LED_GREEN);
@@ -269,9 +268,7 @@ void setupRP() {
 }
 
 void setup() {
-  delay(1000);  // delay for 1 sec
   commonSetup();
-
   setupRP();
 }
 

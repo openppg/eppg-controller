@@ -73,11 +73,6 @@ void resetRotation(unsigned int rotation) {
   display->setRotation(rotation);  // 1=right hand, 3=left hand
 }
 
-#define TFT_RST 6
-#define TFT_CS 4
-#define TFT_DC 5
-#define TFT_LITE A3
-
 // Show splash screen
 void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
   display->fillScreen(currentTheme->default_bg);
@@ -103,17 +98,17 @@ void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
 }
 
 // inital screen setup and config with devicedata and boardconfig passed in
-void setupDisplay(const STR_DEVICE_DATA_140_V1& deviceData) {
+void setupDisplay(const STR_DEVICE_DATA_140_V1& deviceData, const HardwareConfig& board_config) {
 #ifdef RP_PIO
   watchdogCausedReboot = watchdog_caused_reboot();
   watchdogEnableCausedReboot = watchdog_enable_caused_reboot();
 #endif
 
-  display = new Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
+  display = new Adafruit_ST7735(board_config.tft_cs, board_config.tft_dc, board_config.tft_rst);
 
   display->initR(INITR_BLACKTAB);  // Init ST7735S chip, black tab
-  pinMode(TFT_LITE, OUTPUT);
-  digitalWrite(TFT_LITE, HIGH);  // Backlight on
+  pinMode(board_config.tft_lite, OUTPUT);
+  digitalWrite(board_config.tft_lite, HIGH);  // Backlight on
   resetRotation(deviceData.screen_rotation);
   setTheme(deviceData.theme);  // 0=light, 1=dark
   displayMeta(deviceData);
