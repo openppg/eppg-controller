@@ -161,11 +161,11 @@ void handleSerialData(byte buffer[]) {
   // Serial.print(" - ");
 
   // Motor Duty
-  raw_telemdata.MOTORDUTY_HI = buffer[15];
-  raw_telemdata.MOTORDUTY_LO = buffer[14];
+  // raw_telemdata.MOTORDUTY_HI = buffer[15];
+  // raw_telemdata.MOTORDUTY_LO = buffer[14];
 
-  int motorDuty = (int)(((raw_telemdata.MOTORDUTY_HI << 8) + raw_telemdata.MOTORDUTY_LO) / 10);
-  int currentMotorDuty = (motorDuty / 10);  // Motor duty cycle
+  // int motorDuty = (int)(((raw_telemdata.MOTORDUTY_HI << 8) + raw_telemdata.MOTORDUTY_LO) / 10);
+  // int currentMotorDuty = (motorDuty / 10);  // Motor duty cycle
 
   // Reserved
   // raw_telemdata.R1 = buffer[17];

@@ -152,17 +152,17 @@ bool sanitizeDeviceData() {
     changed = true;
   }
   // Ensure performance_mode is either 0 or 1, default to 0
-  if (deviceData.performance_mode < 0 || deviceData.performance_mode > 1) {
+  if (deviceData.performance_mode > 1) {
     deviceData.performance_mode = 0;
     changed = true;
   }
   // Ensure battery size is within acceptable limits, default to 4000
-  if (deviceData.batt_size < 0 || deviceData.batt_size > 10000) {
+  if (deviceData.batt_size < 1 || deviceData.batt_size > 10000) {
     deviceData.batt_size = 4000;
     changed = true;
   }
   // Ensure theme is either 0 or 1, default to 0
-  if (deviceData.theme < 0 || deviceData.theme > 1) {
+  if (deviceData.theme > 1) {
     deviceData.theme = 0; // 0=light, 1=dark
     changed = true;
   }
