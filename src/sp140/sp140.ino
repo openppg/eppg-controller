@@ -18,7 +18,7 @@
 #include <AceButton.h>           // button clicks
 #include <Adafruit_DRV2605.h>    // haptic controller
 #include <ArduinoJson.h>
-#include <CircularBuffer.h>      // smooth out readings
+#include <CircularBuffer.hpp>      // smooth out readings
 #include <ResponsiveAnalogRead.h>  // smoothing for throttle
 #include <Servo.h>               // to control ESCs
 #include <SPI.h>
