@@ -162,108 +162,101 @@ void loadHardwareConfig() {
   button_top = new AceButton(board_config.button_top);
   buttonConfig = button_top->getButtonConfig();
 }
-
-void commonSetup() {
+void setupSerial() {
   Serial.begin(115200);
   SerialESC.begin(ESC_BAUD_RATE);
   SerialESC.setTimeout(ESC_TIMEOUT);
+}
 
 #ifdef USE_TINYUSB
+void setupUSBWeb() {
   usb_web.begin();
   usb_web.setLandingPage(&landingPage);
   usb_web.setLineStateCallback(line_state_callback);
+}
 #endif
 
+void printBootMessage() {
   Serial.print(F("Booting up (USB) V"));
   Serial.print(VERSION_MAJOR + "." + VERSION_MINOR);
+}
 
+void setupBarometer() {
   const int bmp_enabler = 9;
   pinMode(bmp_enabler, OUTPUT);
   digitalWrite(bmp_enabler, HIGH); // barometer fix for V2 board
+}
 
+void setupEEPROM() {
  #ifdef M0_PIO
   uint8_t eepStatus = eep.begin(eep.twiClock100kHz);
 #elif RP_PIO
   EEPROM.begin(255);
 #endif
-  refreshDeviceData();
+}
 
-  loadHardwareConfig();
-  printDeviceData(); // print device data to serial for debugging
+void setupLED() {
   pinMode(board_config.led_sw, OUTPUT);   // set up the internal LED2 pin
   if(board_config.enable_neopixel){
     pixels.begin();
     setLEDColor(led_color);
   }
+}
 
+void setupAnalogRead() {
   analogReadResolution(12);   // M0 family chips provides 12bit ADC resolution
   pot->setAnalogResolution(4096);
+}
 
-  const unsigned int startup_vibes[] = { 27, 27, 0 };
-
-  initButtons();
-  setupTasks();
-
+void setupWatchdog() {
 #ifdef M0_PIO
   Watchdog.enable(5000);
 #elif RP_PIO
   watchdog_enable(4000, 1);
 #endif
+}
 
+
+void upgradeDeviceRevisionInEEPROM() {
+#ifdef RP_PIO
+  if (deviceData.revision == M0) { // onetime conversion because default is 1
+    deviceData.revision = V1;
+    writeDeviceData();
+  }
+#endif
+}
+
+/**
+ * Initializes the necessary components and configurations for the device setup.
+ * This function is called once at the beginning of the program execution.
+ */
+void setup() {
+  setupSerial();
+#ifdef USE_TINYUSB
+  setupUSBWeb();
+#endif
+  printBootMessage();
+  setupBarometer();
+  setupEEPROM();
+  refreshDeviceData();
+  upgradeDeviceRevisionInEEPROM();
+  loadHardwareConfig();
+  setupLED();
+  setupAnalogRead();
+  initButtons();
+  setupTasks();
+  setupWatchdog();
   setup140();
 #ifdef M0_PIO
   Watchdog.reset();
 #endif
   setLEDColor(LED_YELLOW);
-
-  setupTelemetry();
   setupDisplay(deviceData, board_config);
-
   if (button_top->isPressedRaw()) {
     modeSwitch(false);
   }
-
   vTaskResume(updateDisplayTaskHandle);
-
   setLEDColor(LED_GREEN);
-}
-
-void setupM0() {
-#ifdef M0_PIO
-  Watchdog.enable(5000);
-  uint8_t eepStatus = eep.begin(eep.twiClock100kHz);
-
-  Serial.println(F("M0"));
-  Watchdog.reset(); //reset since setup can take a few secs
-#endif
-}
-
-void setupRP() {
-#ifdef RP_PIO
-  watchdog_enable(5000, 1);
-
-  if (deviceData.revision == M0) {
-    deviceData.revision = V1;
-    writeDeviceData();
-  }
-
-  if (deviceData.revision == MODULE) {
-    pinMode(board_config.bmp_pin, OUTPUT);
-    digitalWrite(board_config.bmp_pin, HIGH);
-
-    pixels.setPixelColor(0, LED_ORANGE);
-    pixels.show();
-  }
-#endif
-}
-
-void setup() {
-  commonSetup();
-  setupRP();
-}
-
-void setupTelemetry() {
-  telemetryData.temperatureC = __FLT_MIN__;
 }
 
 // set up all the threads/tasks
@@ -327,7 +320,7 @@ void setup140() {
   esc.writeMicroseconds(ESC_DISARMED_PWM);
 
   initBuzz();
-  Wire1.setSDA(A0);
+  Wire1.setSDA(A0); // Have to use Wire1 because pins are assigned that in hardware
   Wire1.setSCL(A1);
   setupAltimeter(board_config.alt_wire);
   vibePresent = initVibe();
