@@ -13,6 +13,7 @@ struct HardwareConfig {
   int throttle_pin;
   int bmp_pin;
   HardwareSerial* serial_esc;
+  bool alt_wire;
   int tft_rst;
   int tft_cs;
   int tft_dc;

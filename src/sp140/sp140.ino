@@ -216,7 +216,6 @@ void commonSetup() {
 #endif
   setLEDColor(LED_YELLOW);
 
-  setupAltimeter();
   setupTelemetry();
   setupDisplay(deviceData, board_config);
 
@@ -330,7 +329,7 @@ void setup140() {
   initBuzz();
   Wire1.setSDA(A0);
   Wire1.setSCL(A1);
-  setupAltimeter();
+  setupAltimeter(board_config.alt_wire);
   vibePresent = initVibe();
 }
 
