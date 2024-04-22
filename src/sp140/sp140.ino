@@ -136,16 +136,6 @@ void trackPowerTask(void *pvParameters) {
   vTaskDelete(NULL);  // should never reach this
 }
 
-void checkButtonTask(void *pvParameters) {
-  (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
-
-  for (;;) {  // infinite loop
-    checkButtons();
-    delay(5);  // wait for 5ms
-  }
-  vTaskDelete(NULL);  // should never reach this
-}
-
 void updateDisplayTask(void *pvParameters) { //TODO set core affinity to one core only
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
@@ -187,8 +177,9 @@ void commonSetup() {
   Serial.print(F("Booting up (USB) V"));
   Serial.print(VERSION_MAJOR + "." + VERSION_MINOR);
 
-  pinMode(9, OUTPUT);
-  digitalWrite(9, HIGH); //barometer fix for V2
+  const int bmp_enabler = 9;
+  pinMode(bmp_enabler, OUTPUT);
+  digitalWrite(bmp_enabler, HIGH); // barometer fix for V2 board
 
  #ifdef M0_PIO
   uint8_t eepStatus = eep.begin(eep.twiClock100kHz);
@@ -345,7 +336,6 @@ void setup140() {
 
 // main loop - everything runs in threads
 void loop() {
-
 
 #ifdef M0_PIO
   Watchdog.reset(); // reset the watchdog timer (done in task for RP2040)
