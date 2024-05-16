@@ -22,7 +22,6 @@ String convertToDigits(byte digits) {
   return digits_string;
 }
 
-
 // set LED color
 void setLEDColor(uint32_t color) {
   if (board_config.enable_neopixel) {
