@@ -387,19 +387,18 @@ void updateArmedTime() {
 }
 
 void disarmSystem() {
-  disarmESC();
+  disarmESC(); // disarm the ESC by setting the signal to low value
 
-  resetSmoothing();
+  resetSmoothing(); // reset throttle smoothing values
 
   armed = false;
   removeCruise(false);
 
-  resumeLEDTask();
+  resumeLEDTask(); // resume LED blinking
 
   runDisarmAlert();
 
   updateArmedTime();
-
   writeDeviceData();
 
   delay(500);  // TODO just disable button thread // dont allow immediate rearming
