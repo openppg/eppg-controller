@@ -387,32 +387,22 @@ void updateArmedTime() {
 }
 
 void disarmSystem() {
-  printTime("Start time: ");
-
   disarmESC();
-  printTime("After ESC_DISARMED_PWM: ");
 
   resetSmoothing();
-  printTime("After reset smoothing: ");
 
   armed = false;
   removeCruise(false);
-  printTime("After removeCruise: ");
 
   resumeLEDTask();
 
   runDisarmAlert();
-  printTime("After playMelody: ");
 
   updateArmedTime();
-  printTime("After updating armed_time: ");
 
   writeDeviceData();
-  printTime("After writeDeviceData: ");
 
   delay(500);  // TODO just disable button thread // dont allow immediate rearming
-
-  printTime("End time: ");
 }
 
 void toggleArm() {
