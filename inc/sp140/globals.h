@@ -7,7 +7,7 @@ byte escDataV2[ESC_DATA_V2_SIZE];
 unsigned long cruisedAtMillis = 0;
 unsigned long transmitted = 0;
 unsigned long failed = 0;
-bool cruising = false;
+volatile bool cruising = false;
 int prevPotLvl = 0;
 int cruisedPotVal = 0;
 float throttlePWM = 0;
