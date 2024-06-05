@@ -4,22 +4,26 @@
 
 #include "shared-config.h"
 
-// Arduino Pins
-#define BUTTON_TOP    15  // arm/disarm button_top
-#define BUTTON_SIDE   7   // secondary button_top
-#define BUZZER_PIN    10  // output for buzzer speaker
-#define LED_SW        12  // output for LED
-#define THROTTLE_PIN  A0  // throttle pot input
-
 #define SerialESC  Serial1  // ESC UART connection
 
-// SP140
-#define POT_PIN A0
-#define TFT_RST 5
-#define TFT_CS 13
-#define TFT_DC 11
-#define TFT_LITE 25
-#define ESC_PIN 14
-#define ENABLE_VIB            false    // enable vibration
+struct HardwareConfig {
+  int button_top;
+  int buzzer_pin;
+  int led_sw;
+  int throttle_pin;
+  int bmp_pin;
+  HardwareSerial* serial_esc;
+  bool alt_wire;
+  int tft_rst;
+  int tft_cs;
+  int tft_dc;
+  int tft_lite;
+  int esc_pin;
+  bool enable_vib;
+  bool enable_neopixel;
+};
+
+extern HardwareConfig v1_config;
+extern HardwareConfig v2_config;
 
 #endif  // INC_SP140_RP2040_CONFIG_H_

@@ -1,5 +1,6 @@
 // Copyright 2020 <Zach Whitehead>
 // OpenPPG
+#include "Arduino.h"
 
 #include "../../lib/crc.c"       // packet error checking
 #ifdef M0_PIO
@@ -17,7 +18,7 @@
 #include <AceButton.h>           // button clicks
 #include <Adafruit_DRV2605.h>    // haptic controller
 #include <ArduinoJson.h>
-#include <CircularBuffer.h>      // smooth out readings
+#include <CircularBuffer.hpp>      // smooth out readings
 #include <ResponsiveAnalogRead.h>  // smoothing for throttle
 #include <Servo.h>               // to control ESCs
 #include <SPI.h>
@@ -32,19 +33,20 @@
   #include <extEEPROM.h>  // https://github.com/PaoloP74/extEEPROM
 #elif RP_PIO
   // rp2040 specific libraries here
+  #include <Adafruit_NeoPixel.h>
   #include <EEPROM.h>
   #include "hardware/watchdog.h"
   #include "pico/unique_id.h"
 #endif
 
-
 #include "../../inc/sp140/globals.h"  // device config
 
-//#include "../../inc/sp140/utilities.h"
 #include "../../inc/sp140/display.h"
 #include "../../inc/sp140/altimeter.h"
 
 using namespace ace_button;
+
+HardwareConfig board_config;
 
 Adafruit_DRV2605 vibe;
 
@@ -54,9 +56,10 @@ Adafruit_USBD_WebUSB usb_web;
 WEBUSB_URL_DEF(landingPage, 1 /*https*/, "config.openppg.com");
 #endif
 
-ResponsiveAnalogRead pot(THROTTLE_PIN, false);
-AceButton button_top(BUTTON_TOP);
-ButtonConfig* buttonConfig = button_top.getButtonConfig();
+ResponsiveAnalogRead* pot;
+AceButton* button_top;
+ButtonConfig* buttonConfig;
+
 #ifdef M0_PIO
   extEEPROM eep(kbits_64, 1, 64);
 #endif
@@ -64,23 +67,34 @@ ButtonConfig* buttonConfig = button_top.getButtonConfig();
 CircularBuffer<float, 50> voltageBuffer;
 CircularBuffer<int, 8> potBuffer;
 
+Adafruit_NeoPixel pixels(1, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
+uint32_t led_color = LED_RED; // current LED color
+
 bool armed = false;
 uint32_t armedAtMillis = 0;
 uint32_t cruisedAtMillisMilis = 0;
-unsigned int armedSecs = 0;
-unsigned int last_throttle = 0;
+unsigned long armedSecs = 0;
 
-TaskHandle_t checkButtonTaskHandle = NULL;
 TaskHandle_t blinkLEDTaskHandle = NULL;
 TaskHandle_t throttleTaskHandle = NULL;
 TaskHandle_t telemetryTaskHandle = NULL;
 TaskHandle_t trackPowerTaskHandle = NULL;
 TaskHandle_t updateDisplayTaskHandle = NULL;
+TaskHandle_t watchdogTaskHandle = NULL;
 
 SemaphoreHandle_t eepromSemaphore;
 SemaphoreHandle_t tftSemaphore;
 
+
 #pragma message "Warning: OpenPPG software is in beta"
+
+void watchdogTask(void* parameter) {
+  for (;;) {
+    watchdog_update();
+    vTaskDelay(pdMS_TO_TICKS(100));  // Delay for 100ms
+  }
+}
+
 
 void blinkLEDTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
@@ -96,7 +110,7 @@ void throttleTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
   for (;;) {  // infinite loop
-    handleThrottle();  // 
+    handleThrottle();  //
     delay(22);  // wait for 22ms
   }
   vTaskDelete(NULL); // should never reach this
@@ -106,115 +120,154 @@ void telemetryTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
   for (;;) {  // infinite loop
-    handleTelemetry();  
+    handleTelemetry();
     delay(50);  // wait for 50ms
   }
-  vTaskDelete(NULL); // should never reach this
+  vTaskDelete(NULL);  // should never reach this
 }
 
 void trackPowerTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
   for (;;) {  // infinite loop
-    trackPower();  
+    trackPower();
     delay(250);  // wait for 250ms
   }
-  vTaskDelete(NULL); // should never reach this
-}
-
-void checkButtonTask(void *pvParameters) {
-  (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
-
-  for (;;) {  // infinite loop
-    checkButtons();  
-    delay(5);  // wait for 5ms
-  }
-  vTaskDelete(NULL); // should never reach this
+  vTaskDelete(NULL);  // should never reach this
 }
 
 void updateDisplayTask(void *pvParameters) { //TODO set core affinity to one core only
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
   for (;;) {  // infinite loop
-    // TODO separate alt reading out to its own task. Avoid blocking display updates when alt reading is slow etc 
+    // TODO separate alt reading out to its own task. Avoid blocking display updates when alt reading is slow etc
     // TODO use queues to pass data between tasks (xQueueOverwrite)
-    const float altitude = getAltitude(deviceData); 
-    updateDisplay( deviceData, telemetryData, altitude, armed, cruising, armedAtMillis);
+    const float altitude = getAltitude(deviceData);
+    updateDisplay(deviceData, telemetryData, altitude, armed, cruising, armedAtMillis);
     delay(250);  // wait for 250ms
   }
-  vTaskDelete(NULL); // should never reach this
+  vTaskDelete(NULL);  // should never reach this
 }
 
-// the setup function runs once when you press reset or power the board
-void setup() {
 
+void loadHardwareConfig() {
+  if (deviceData.revision == 1) {
+    board_config = v1_config;
+  } else if (deviceData.revision == 2) {
+    board_config = v2_config;
+  } else {
+    // Handle other cases or throw an error
+  }
+  pot = new ResponsiveAnalogRead(board_config.throttle_pin, false);
+  button_top = new AceButton(board_config.button_top);
+  buttonConfig = button_top->getButtonConfig();
+}
+void setupSerial() {
   Serial.begin(115200);
   SerialESC.begin(ESC_BAUD_RATE);
   SerialESC.setTimeout(ESC_TIMEOUT);
+}
 
 #ifdef USE_TINYUSB
+void setupUSBWeb() {
   usb_web.begin();
   usb_web.setLandingPage(&landingPage);
   usb_web.setLineStateCallback(line_state_callback);
+}
 #endif
 
-  //Serial.print(F("Booting up (USB) V"));
-  //Serial.print(VERSION_MAJOR + "." + VERSION_MINOR);
+void printBootMessage() {
+  Serial.print(F("Booting up (USB) V"));
+  Serial.print(VERSION_MAJOR + "." + VERSION_MINOR);
+}
 
-  pinMode(LED_SW, OUTPUT);   // set up the internal LED2 pin
+void setupBarometer() {
+  const int bmp_enabler = 9;
+  pinMode(bmp_enabler, OUTPUT);
+  digitalWrite(bmp_enabler, HIGH); // barometer fix for V2 board
+}
 
-  analogReadResolution(12);     // M0 family chip provides 12bit resolution
-  pot.setAnalogResolution(4096);
-  unsigned int startup_vibes[] = { 27, 27, 0 };
-  initButtons();
-  setupTasks();
-
-#ifdef M0_PIO
-  Watchdog.enable(5000);
+void setupEEPROM() {
+ #ifdef M0_PIO
   uint8_t eepStatus = eep.begin(eep.twiClock100kHz);
 #elif RP_PIO
-  watchdog_enable(5000, 1);
-  EEPROM.begin(512);
+  EEPROM.begin(255);
 #endif
+}
+
+void setupLED() {
+  pinMode(board_config.led_sw, OUTPUT);   // set up the internal LED2 pin
+  if(board_config.enable_neopixel){
+    pixels.begin();
+    setLEDColor(led_color);
+  }
+}
+
+void setupAnalogRead() {
+  analogReadResolution(12);   // M0 family chips provides 12bit ADC resolution
+  pot->setAnalogResolution(4096);
+}
+
+void setupWatchdog() {
+#ifdef M0_PIO
+  Watchdog.enable(5000);
+#elif RP_PIO
+  watchdog_enable(4000, 1);
+#endif
+}
+
+
+void upgradeDeviceRevisionInEEPROM() {
+#ifdef RP_PIO
+  if (deviceData.revision == M0) { // onetime conversion because default is 1
+    deviceData.revision = V1;
+    writeDeviceData();
+  }
+#endif
+}
+
+/**
+ * Initializes the necessary components and configurations for the device setup.
+ * This function is called once at the beginning of the program execution.
+ */
+void setup() {
+  setupSerial();
+#ifdef USE_TINYUSB
+  setupUSBWeb();
+#endif
+  printBootMessage();
+  setupBarometer();
+  setupEEPROM();
   refreshDeviceData();
+  upgradeDeviceRevisionInEEPROM();
+  loadHardwareConfig();
+  setupLED();
+  setupAnalogRead();
+  initButtons();
+  setupTasks();
+  setupWatchdog();
   setup140();
 #ifdef M0_PIO
   Watchdog.reset();
 #endif
-  setupAltimeter();
-  setupTelemetry();
-
-  setupDisplay(deviceData);
-  if (button_top.isPressedRaw()) {
+  setLEDColor(LED_YELLOW);
+  setupDisplay(deviceData, board_config);
+  if (button_top->isPressedRaw()) {
     modeSwitch(false);
   }
   vTaskResume(updateDisplayTaskHandle);
-  vTaskResume(checkButtonTaskHandle);
-}
-
-void setupTelemetry() {
-  telemetryData.temperatureC = __FLT_MIN__;
+  setLEDColor(LED_GREEN);
 }
 
 // set up all the threads/tasks
 void setupTasks() {
-  xTaskCreate(
-    checkButtonTask,  // the function that implements the task
-    "checkbutton",  // a name you can use for debugging
-    1000,  // stack size in words, not bytes. For the AVR Arduino, this is the number of bytes.
-    NULL,  // parameters passed into the task
-    3,  // priority, with 3 being the highest, and 0 being the lowest.
-    &checkButtonTaskHandle);  // used to pass back a handle by which the created task can be referenced.
-  
-  if (checkButtonTaskHandle != NULL) {
-    vTaskSuspend(checkButtonTaskHandle);  // Suspend the task immediately after creation
-  }
 
   xTaskCreate(blinkLEDTask, "blinkLed", 200, NULL, 1, &blinkLEDTaskHandle);
   xTaskCreate(throttleTask, "throttle", 1000, NULL, 3, &throttleTaskHandle);
   xTaskCreate(telemetryTask, "telemetry", 1000, NULL, 2, &telemetryTaskHandle);
   xTaskCreate(trackPowerTask, "trackPower", 500, NULL, 2, &trackPowerTaskHandle);
   xTaskCreate(updateDisplayTask, "updateDisplay", 2000, NULL, 1, &updateDisplayTaskHandle);
+  xTaskCreate(watchdogTask, "watchdog", 1000, NULL, 4, &watchdogTaskHandle);
 
   if (updateDisplayTaskHandle != NULL) {
     vTaskSuspend(updateDisplayTaskHandle);  // Suspend the task immediately after creation
@@ -229,7 +282,7 @@ void ps() {
   int tasks = uxTaskGetNumberOfTasks();
   TaskStatus_t *pxTaskStatusArray = new TaskStatus_t[tasks];
   unsigned long runtime;
-  tasks = uxTaskGetSystemState( pxTaskStatusArray, tasks, &runtime );
+  tasks = uxTaskGetSystemState(pxTaskStatusArray, tasks, &runtime);
   Serial.printf("# Tasks: %d\n", tasks);
   Serial.println("ID, NAME, STATE, PRIO, CYCLES");
   for (int i=0; i < tasks; i++) {
@@ -258,26 +311,26 @@ void psTop() {
   Serial.printf("\nthrottleTask - Free Stack Space: %d", uxTaskGetStackHighWaterMark(throttleTaskHandle));
   Serial.printf("\ntelemetryTask - Free Stack Space: %d", uxTaskGetStackHighWaterMark(telemetryTaskHandle));
   Serial.printf("\ntrackPowerTask - Free Stack Space: %d", uxTaskGetStackHighWaterMark(trackPowerTaskHandle));
-  Serial.printf("\ncheckButtonTask - Free Stack Space: %d", uxTaskGetStackHighWaterMark(checkButtonTaskHandle));
   Serial.printf("\nupdateDisplayTask - Free Stack Space: %d", uxTaskGetStackHighWaterMark(updateDisplayTaskHandle));
   Serial.println("");
 }
 
 void setup140() {
-  esc.attach(ESC_PIN);
+  esc.attach(board_config.esc_pin);
   esc.writeMicroseconds(ESC_DISARMED_PWM);
 
   initBuzz();
-  setupAltimeter();
+  Wire1.setSDA(A0); // Have to use Wire1 because pins are assigned that in hardware
+  Wire1.setSCL(A1);
+  setupAltimeter(board_config.alt_wire);
   vibePresent = initVibe();
 }
 
 // main loop - everything runs in threads
 void loop() {
+
 #ifdef M0_PIO
-  Watchdog.reset();
-#elif RP_PIO
-  watchdog_update();
+  Watchdog.reset(); // reset the watchdog timer (done in task for RP2040)
 #endif
 
   // from WebUSB to both Serial & webUSB
@@ -285,43 +338,70 @@ void loop() {
   if (!armed && usb_web.available()) parse_usb_serial();
 #endif
 
-  delay(100);
+  // more stable in main loop
+  checkButtons();
+  delay(5);
   //ps();
   //psTop();
 }
 
-
 void checkButtons() {
-  button_top.check();
+  button_top->check();
 }
 
-// disarm, remove cruise, alert, save updated stats
-void disarmSystem() {
+void printTime(const char* label) {
+  Serial.print(label);
+  Serial.println(millis());
+}
+
+void disarmESC() {
   throttlePWM = ESC_DISARMED_PWM;
   esc.writeMicroseconds(ESC_DISARMED_PWM);
-  //Serial.println(F("disarmed"));
+}
 
-  // reset smoothing
+// reset smoothing
+void resetSmoothing() {
   potBuffer.clear();
   prevPotLvl = 0;
+}
 
+void resumeLEDTask() {
+  vTaskResume(blinkLEDTaskHandle);  // blink LED while disarmed
+}
+
+void runDisarmAlert() {
   u_int16_t disarm_melody[] = { 2093, 1976, 880 };
-  unsigned int disarm_vibes[] = { 100, 0 };
+  const unsigned int disarm_vibes[] = { 100, 0 };
+  runVibe(disarm_vibes, 3);
+  playMelody(disarm_melody, 3);
+}
+
+void updateArmedTime() {
+  uint16_t newArmedTime = round(armedSecs / 60);
+  if (newArmedTime <= UINT16_MAX - deviceData.armed_time) {
+    deviceData.armed_time += newArmedTime;
+  } else {
+    // If adding the new time would cause an overflow, set the value to the maximum
+    deviceData.armed_time = UINT16_MAX;
+  }
+}
+
+void disarmSystem() {
+  disarmESC(); // disarm the ESC by setting the signal to low value
+
+  resetSmoothing(); // reset throttle smoothing values
 
   armed = false;
   removeCruise(false);
 
-  vTaskResume(blinkLEDTaskHandle);  // blink LED while disarmed
-  runVibe(disarm_vibes, 3);
-  playMelody(disarm_melody, 3);
+  resumeLEDTask(); // resume LED blinking
 
-  // update armed_time
-  refreshDeviceData();
-  deviceData.armed_time += round(armedSecs / 60);  // convert to mins
-  xTaskCreate(writeDeviceDataTask, "EEPROMWrite", 128, NULL, 1, NULL);
+  runDisarmAlert();
 
-  delay(1000);  // TODO just disable button thread // dont allow immediate rearming
-    // probably not possible now that it takes longer to arm with button sequence?
+  updateArmedTime();
+  writeDeviceData();
+
+  delay(500);  // TODO just disable button thread // dont allow immediate rearming
 }
 
 void toggleArm() {
@@ -388,7 +468,7 @@ void handleButtonEvent(AceButton* btn, uint8_t eventType, uint8_t /* st */) {
 
 // initial button setup and config
 void initButtons() {
-  pinMode(BUTTON_TOP, INPUT_PULLUP);
+  pinMode(board_config.button_top, INPUT_PULLUP);
 
   buttonConfig->setEventHandler(handleButtonEvent);
   buttonConfig->setFeature(ButtonConfig::kFeatureDoubleClick);
@@ -409,8 +489,8 @@ void handleThrottle() {
   armedSecs = (millis() - armedAtMillis) / 1000;  // update time while armed
 
   static int maxPWM = ESC_MAX_PWM;
-  pot.update();
-  int potRaw = pot.getValue();
+  pot->update();
+  int potRaw = pot->getValue();
 
   if (cruising) {
     unsigned long cruisingSecs = (millis() - cruisedAtMillis) / 1000;
@@ -454,7 +534,7 @@ int averagePotBuffer() {
 // get the PPG ready to fly
 bool armSystem() {
   uint16_t arm_melody[] = { 1760, 1976, 2093 };
-  unsigned int arm_vibes[] = { 70, 33, 0 };
+  const unsigned int arm_vibes[] = { 70, 33, 0 };
 
   armed = true;
   esc.writeMicroseconds(ESC_DISARMED_PWM);  // initialize the signal to low
@@ -463,7 +543,7 @@ bool armSystem() {
   armedAtMillis = millis();
   setGroundAltitude(deviceData);
 
-  vTaskSuspend(blinkLEDTaskHandle);  
+  vTaskSuspend(blinkLEDTaskHandle);
   setLEDs(HIGH); // solid LED while armed
   runVibe(arm_vibes, 3);
   playMelody(arm_melody, 3);
@@ -474,8 +554,8 @@ bool armSystem() {
 
 // Returns true if the throttle/pot is below the safe threshold
 bool throttleSafe() {
-  pot.update();
-  if (pot.getValue() < POT_SAFE_LEVEL) {
+  pot->update();
+  if (pot->getValue() < POT_SAFE_LEVEL) {
     return true;
   }
   return false;
@@ -486,9 +566,9 @@ void setCruise() {
   // IDEA: fill a "cruise indicator" as long press activate happens
   // or gradually change color from blue to yellow with time
   if (!throttleSafe()) {  // using pot/throttle
-    cruisedPotVal = pot.getValue();  // save current throttle val
-    cruisedAtMillis = millis();  // start timer 
-    // throttle handle runs fast and a lot. need to set the timer before 
+    cruisedPotVal = pot->getValue();  // save current throttle val
+    cruisedAtMillis = millis();  // start timer
+    // throttle handle runs fast and a lot. need to set the timer before
     // setting cruise so its updated in time
     // TODO since these values are accessed in another task make sure memory safe
     cruising = true;

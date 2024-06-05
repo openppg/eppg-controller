@@ -4,73 +4,87 @@
 // ** Logic for EEPROM **
 # define EEPROM_OFFSET 0  // Address of first byte of EEPROM
 
+// Constants for device data
+const unsigned int DEFAULT_SCREEN_ROTATION = 3;
+const bool DEFAULT_METRIC_TEMP = true;
+const bool DEFAULT_METRIC_ALT = true;
+const int DEFAULT_PERFORMANCE_MODE = 0;
+const int DEFAULT_THEME = 0;  // 0=light, 1=dark
+const int DEFAULT_BATT_SIZE = 4000;  // 4kw
+
 // read saved data from EEPROM
 void refreshDeviceData() {
-  uint8_t tempBuf[sizeof(deviceData)];
   uint16_t crc;
-
   #ifdef M0_PIO
-    if (0 != eep.read(EEPROM_OFFSET, tempBuf, sizeof(deviceData))) {
+    if (0 != eep.read(EEPROM_OFFSET, deviceData, sizeof(deviceData))) {
       // Serial.println(F("error reading EEPROM"));
     }
   #elif RP_PIO
-    EEPROM.get(EEPROM_OFFSET, tempBuf);
+    EEPROM.get(EEPROM_OFFSET, deviceData);
   #endif
-
-  memcpy((uint8_t*)&deviceData, tempBuf, sizeof(deviceData));
   crc = crc16((uint8_t*)&deviceData, sizeof(deviceData) - 2);
 
-  if (crc != deviceData.crc) {
+  // If the CRC does not match, reset the device data
+  if (crc != deviceData.crc || deviceData.sea_pressure < 0) {
+    Serial.println(F("EEPROM CRC mismatch - resetting device data"));
     resetDeviceData();
-  }
+    }
+
+  // Update the revision if required
+  //updateRevisionIfRequired();
 }
 
-// One time freeRTOS task that wraps writeDeviceData()
-void writeDeviceDataTask(void *pvParameters) {
-  if (eepromSemaphore != NULL) {
-    if (xSemaphoreTake(eepromSemaphore, (TickType_t)10) == pdTRUE) {
-      // Your EEPROM write logic here
-      writeDeviceData();
-      // Once done, release the semaphore
-      xSemaphoreGive(eepromSemaphore);
+// Update the revision if required
+void updateRevisionIfRequired() {
+  #ifdef RP_PIO
+    if (deviceData.revision == 0) {
+      deviceData.revision = 1;
+      writeDeviceData();  // Save the updated revision to EEPROM
     }
-  }
-
-  // Delete the task after completion
-  vTaskDelete(NULL);
-}
-
-// write to EEPROM
-void writeDeviceData() {
-  deviceData.crc = crc16((uint8_t*)&deviceData, sizeof(deviceData) - 2);
-  #ifdef M0_PIO
-    if (0 != eep.write(EEPROM_OFFSET, (uint8_t*)&deviceData, sizeof(deviceData))) {
-      //Serial.println(F("error writing EEPROM"));
-    }
-  #elif RP_PIO
-    EEPROM.put(EEPROM_OFFSET, deviceData);
-    EEPROM.commit();
   #endif
 }
 
-// reset eeprom and deviceData to factory defaults
+// Write to EEPROM
+void writeDeviceData() {
+  deviceData.crc = crc16((uint8_t*)&deviceData, sizeof(deviceData) - 2);
+  printDeviceData();
+  EEPROM.put(EEPROM_OFFSET, deviceData);
+  if (EEPROM.commit()) {
+    Serial.println("EEPROM commit successful");
+  } else {
+    Serial.println("EEPROM commit failed");
+  }
+}
+
+// Reset EEPROM and deviceData to factory defaults
 void resetDeviceData() {
   deviceData = STR_DEVICE_DATA_140_V1();
+
+  // Set the revision based on the arch and board revision
+  #ifdef M0_PIO
+    deviceData.revision = 0;
+  #elif RP_PIO
+    deviceData.revision = 2; // Default to new 2040 board revision // TODO
+  #endif
+
   deviceData.version_major = VERSION_MAJOR;
   deviceData.version_minor = VERSION_MINOR;
-  deviceData.screen_rotation = 3;
-  deviceData.sea_pressure = DEFAULT_SEA_PRESSURE;  // 1013.25 mbar
-  deviceData.metric_temp = true;
-  deviceData.metric_alt = true;
-  deviceData.performance_mode = 0;
-  deviceData.theme = 0;
-  deviceData.batt_size = 4000;  // 4kw
+  deviceData.screen_rotation = DEFAULT_SCREEN_ROTATION;
+  deviceData.sea_pressure = DEFAULT_SEA_PRESSURE;
+  deviceData.metric_temp = DEFAULT_METRIC_TEMP;
+  deviceData.metric_alt = DEFAULT_METRIC_ALT;
+  deviceData.performance_mode = DEFAULT_PERFORMANCE_MODE;
+  deviceData.theme = DEFAULT_THEME;
+  deviceData.batt_size = DEFAULT_BATT_SIZE;
+  deviceData.armed_time = 0;
   writeDeviceData();
 }
 
 // ** Logic for WebUSB **
+// Callback for when the USB connection state changes
 void line_state_callback(bool connected) {
-  digitalWrite(LED_SW, connected);
+  setLEDColor(connected ? LED_BLUE : LED_GREEN);
+  setLEDs(connected);
 
   if ( connected ) send_usb_serial();
 }
@@ -103,8 +117,8 @@ void parse_usb_serial() {
   sanitizeDeviceData();
   writeDeviceData();
   resetRotation(deviceData.screen_rotation);  // Screen orientation may have changed
-  setTheme(deviceData.theme); // may have changed
-  
+  setTheme(deviceData.theme);  // may have changed
+
   vTaskResume(updateDisplayTaskHandle);
 
   send_usb_serial();
@@ -119,7 +133,7 @@ bool sanitizeDeviceData() {
     deviceData.screen_rotation = 3;
     changed = true;
   }
-  
+
   // Ensure sea pressure is within acceptable limits, default to 1013.25
   // 337 is the air pressure at the top of Mt. Everest
   // 1065 is the air pressure at the dead sea. Pad both a bit
@@ -127,7 +141,7 @@ bool sanitizeDeviceData() {
     deviceData.sea_pressure = 1013.25;
     changed = true;
   }
-  
+
   // Simply force metric_temp and metric_alt to be valid bool values
   if (deviceData.metric_temp != true && deviceData.metric_temp != false) {
     deviceData.metric_temp = true;
@@ -138,21 +152,54 @@ bool sanitizeDeviceData() {
     changed = true;
   }
   // Ensure performance_mode is either 0 or 1, default to 0
-  if (deviceData.performance_mode < 0 || deviceData.performance_mode > 1) {
+  if (deviceData.performance_mode > 1) {
     deviceData.performance_mode = 0;
     changed = true;
   }
   // Ensure battery size is within acceptable limits, default to 4000
-  if (deviceData.batt_size < 0 || deviceData.batt_size > 10000) {
+  if (deviceData.batt_size < 1 || deviceData.batt_size > 10000) {
     deviceData.batt_size = 4000;
     changed = true;
   }
   // Ensure theme is either 0 or 1, default to 0
-  if (deviceData.theme < 0 || deviceData.theme > 1) {
+  if (deviceData.theme > 1) {
     deviceData.theme = 0; // 0=light, 1=dark
     changed = true;
   }
   return changed;
+}
+
+/**
+ * Prints the hardware configuration to the Serial monitor.
+ *
+ * @param config The HardwareConfig object containing the hardware configuration.
+ */
+void debugHardwareConfig(const HardwareConfig& config) {
+  Serial.println("Hardware Configuration:");
+  Serial.print("button_top: ");
+  Serial.println(config.button_top);
+  Serial.print("buzzer_pin: ");
+  Serial.println(config.buzzer_pin);
+  Serial.print("led_sw: ");
+  Serial.println(config.led_sw);
+  Serial.print("throttle_pin: ");
+  Serial.println(config.throttle_pin);
+  Serial.print("bmp_pin: ");
+  Serial.println(config.bmp_pin);
+  Serial.print("tft_rst: ");
+  Serial.println(config.tft_rst);
+  Serial.print("tft_cs: ");
+  Serial.println(config.tft_cs);
+  Serial.print("tft_dc: ");
+  Serial.println(config.tft_dc);
+  Serial.print("tft_lite: ");
+  Serial.println(config.tft_lite);
+  Serial.print("esc_pin: ");
+  Serial.println(config.esc_pin);
+  Serial.print("enable_vib: ");
+  Serial.println(config.enable_vib ? "true" : "false");
+  Serial.print("enable_neopixel: ");
+  Serial.println(config.enable_neopixel ? "true" : "false");
 }
 
 void send_usb_serial() {
@@ -188,6 +235,7 @@ void send_usb_serial() {
   doc["prf"].set(deviceData.performance_mode);
   doc["sea_p"].set(deviceData.sea_pressure);
   doc["thm"].set(deviceData.theme);
+  doc["rev"].set(deviceData.revision);
   //doc["id"].set(chipId()); // webusb bug prevents anything over a certain size / this extra field from being sent
 
   char output[256];

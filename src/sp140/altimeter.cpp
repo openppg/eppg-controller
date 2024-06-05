@@ -17,16 +17,23 @@ float getAltitude(const STR_DEVICE_DATA_140_V1& deviceData) {
 
 // set the ground altitude to the current altitude
 void setGroundAltitude(const STR_DEVICE_DATA_140_V1& deviceData) {
-  groundAltitude = bmp.readAltitude(deviceData.sea_pressure);
+  if (bmpPresent) {
+    groundAltitude = bmp.readAltitude(deviceData.sea_pressure);
+  }
 }
 
-// Start the bmp388 sensor
-void setupAltimeter() {
-  if (!bmp.begin_I2C()) return;
+// Start the bmp3XX sensor
+bool setupAltimeter(bool altWire) {
+  TwoWire* wire = &Wire;
+
+  if (altWire) {wire = &Wire1; }
+
+  if (!bmp.begin_I2C(BMP3XX_DEFAULT_ADDRESS, wire)) return false;
   bmp.setOutputDataRate(BMP3_ODR_25_HZ);
   bmp.setTemperatureOversampling(BMP3_OVERSAMPLING_2X);
   bmp.setPressureOversampling(BMP3_OVERSAMPLING_4X);
   bmp.setIIRFilterCoeff(BMP3_IIR_FILTER_COEFF_15);
   bmp.readPressure();  // throw away first reading
   bmpPresent = true;
+  return true;
 }

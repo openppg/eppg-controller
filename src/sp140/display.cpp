@@ -2,7 +2,7 @@
 
 #include <Fonts/FreeSansBold12pt7b.h>
 
-#include "../../inc/sp140/rp2040-config.h"         // device config
+#include "../../inc/version.h"
 #include "sp140/structs.h"
 
 // DEBUG WATCHDOG
@@ -12,7 +12,7 @@
   bool watchdogEnableCausedReboot = false;
 #endif
 
-Adafruit_ST7735 display = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
+Adafruit_ST7735* display;
 GFXcanvas16 canvas(160, 128);
 
 // Light Mode Colors
@@ -70,42 +70,45 @@ float getBatteryPercent(float voltage) {
 
 // Clears screen and resets properties
 void resetRotation(unsigned int rotation) {
-  display.setRotation(rotation);  // 1=right hand, 3=left hand
+  display->setRotation(rotation);  // 1=right hand, 3=left hand
 }
 
 // Show splash screen
 void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
-  display.fillScreen(currentTheme->default_bg);
-  display.setTextSize(1);
-  display.setFont(&FreeSansBold12pt7b);
-  display.setTextColor(currentTheme->default_text);
-  display.setCursor(25, 30);
-  display.println("OpenPPG");
-  display.setFont();
-  display.setTextSize(2);
-  display.setCursor(60, 60);
-  display.printf("v%d.%d", VERSION_MAJOR, VERSION_MINOR);
+  display->fillScreen(currentTheme->default_bg);
+  display->setTextSize(1);
+  display->setFont(&FreeSansBold12pt7b);
+  display->setTextColor(currentTheme->default_text);
+  display->setCursor(25, 30);
+  display->println("OpenPPG");
+  display->setFont();
+  display->setTextSize(2);
+  display->setCursor(60, 60);
+  display->printf("v%d.%d", VERSION_MAJOR, VERSION_MINOR);
 #ifdef RP_PIO
-  display.print("R");
+  display->print("R");
 #endif
   // Total armed time
-  display.setCursor(54, 90);
+  display->setCursor(54, 90);
 
   const int hours = deviceData.armed_time / 60;
   const int minutes = deviceData.armed_time % 60;
-  display.printf("%02d:%02d", hours, minutes);
+  display->printf("%02d:%02d", hours, minutes);
   delay(duration);
 }
 
-// inital screen setup and config
-void setupDisplay(const STR_DEVICE_DATA_140_V1& deviceData) {
+// inital screen setup and config with devicedata and boardconfig passed in
+void setupDisplay(const STR_DEVICE_DATA_140_V1& deviceData, const HardwareConfig& board_config) {
 #ifdef RP_PIO
   watchdogCausedReboot = watchdog_caused_reboot();
   watchdogEnableCausedReboot = watchdog_enable_caused_reboot();
 #endif
-  display.initR(INITR_BLACKTAB);  // Init ST7735S chip, black tab
-  pinMode(TFT_LITE, OUTPUT);
-  digitalWrite(TFT_LITE, HIGH);  // Backlight on
+
+  display = new Adafruit_ST7735(board_config.tft_cs, board_config.tft_dc, board_config.tft_rst);
+
+  display->initR(INITR_BLACKTAB);  // Init ST7735S chip, black tab
+  pinMode(board_config.tft_lite, OUTPUT);
+  digitalWrite(board_config.tft_lite, HIGH);  // Backlight on
   resetRotation(deviceData.screen_rotation);
   setTheme(deviceData.theme);  // 0=light, 1=dark
   displayMeta(deviceData);
@@ -269,17 +272,17 @@ void updateDisplay(
 //  #endif
 
 
-  // Draw the canvas to the display.
-  display.drawRGBBitmap(0, 0, canvas.getBuffer(), canvas.width(), canvas.height());
+  // Draw the canvas to the display->
+  display->drawRGBBitmap(0, 0, canvas.getBuffer(), canvas.width(), canvas.height());
 }
 
 // Set the theme
 void setTheme(int theme) {
   if (theme == 1) {
     currentTheme = &darkModeColors;
-    Serial.println("Switched to Dark Mode");
+    // Serial.println("Switched to Dark Mode");
   } else {
     currentTheme = &lightModeColors;
-    Serial.println("Switched to Light Mode");
+    // Serial.println("Switched to Light Mode");
   }
 }
