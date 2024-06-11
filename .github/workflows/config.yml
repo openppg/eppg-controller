@@ -9,9 +9,11 @@ jobs:
     name: CPP Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+        with:
+          show-progress: false
       - name: Setup Python
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@v5
         with:
           python-version: 3.x
       - run: pip install cpplint
@@ -20,9 +22,11 @@ jobs:
     name: PlatformIO Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+        with:
+          show-progress: false
       - name: Setup Python
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@v5
         with:
           python-version: 3.x
       - name: Install Platform IO
@@ -32,17 +36,17 @@ jobs:
       - name: Build
         run: platformio run
       - name: Archive bin
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: bins
           path: .pio/build/**/firmware.bin
       - name: Save uf2 for RP2040
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: OpenPPG-CRP2040-SP140.uf2
           path: .pio/build/OpenPPG-CRP2040-SP140/firmware.uf2
   # Skip until M0 builds running by default
-  # generate-uf2: 
+  # generate-uf2:
   #   name: Save uf2 for ${{ matrix.device }}
   #   needs: pio-build
   #   runs-on: ubuntu-latest
@@ -52,7 +56,7 @@ jobs:
   #     fail-fast: false
   #   steps:
   #     - name: Setup Python
-  #       uses: actions/setup-python@v2
+  #       uses: actions/setup-python@v4
   #     - name: Checkout Microsoft uf2 repo
   #       uses: actions/checkout@v3
   #       with:
@@ -63,7 +67,7 @@ jobs:
   #         name: bins
   #     - name: Run uf2 conversion
   #       run: python3 utils/uf2conv.py ${{ matrix.device }}/firmware.bin -c -o ${{ matrix.device }}.uf2
-  #     - uses: actions/upload-artifact@v3
+  #     - uses: actions/upload-artifact@v4
   #       with:
   #         name: ${{ matrix.device }}.uf2
   #         path: ${{ matrix.device }}.uf2
