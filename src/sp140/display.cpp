@@ -167,7 +167,7 @@ void updateDisplay(
   canvas.fillRect(0, 30, 1, 2, currentTheme->ui_accent);
 
   //   Display battery percent
-  canvas.setCursor(108, 8 + FONT_HEIGHT_OFFSET);
+  canvas.setCursor(108, 10 + FONT_HEIGHT_OFFSET);
   canvas.setTextColor(currentTheme->default_text);
   canvas.printf("%3d%%", static_cast<int>(batteryPercent));
 
@@ -257,7 +257,8 @@ void updateDisplay(
   canvas.setCursor(8, 102 + FONT_HEIGHT_OFFSET);
   static unsigned int _lastArmedMillis = 0;
   if (armed) _lastArmedMillis = nowMillis;
-  const int sessionSeconds = (_lastArmedMillis - armedStartMillis) / 1000.0;
+  //const int sessionSeconds = (_lastArmedMillis - armedStartMillis) / 1000.0;
+  const int sessionSeconds = 6150; //TODO remove
   canvas.printf("%02d:%02d", sessionSeconds / 60, sessionSeconds % 60);
 
   // Display altitude
