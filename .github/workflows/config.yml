@@ -9,9 +9,11 @@ jobs:
     name: CPP Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+        with:
+          show-progress: false
       - name: Setup Python
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@v4
         with:
           python-version: 3.x
       - run: pip install cpplint
@@ -20,9 +22,11 @@ jobs:
     name: PlatformIO Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+        with:
+          show-progress: false
       - name: Setup Python
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@v4
         with:
           python-version: 3.x
       - name: Install Platform IO
@@ -42,7 +46,7 @@ jobs:
           name: OpenPPG-CRP2040-SP140.uf2
           path: .pio/build/OpenPPG-CRP2040-SP140/firmware.uf2
   # Skip until M0 builds running by default
-  # generate-uf2: 
+  # generate-uf2:
   #   name: Save uf2 for ${{ matrix.device }}
   #   needs: pio-build
   #   runs-on: ubuntu-latest
