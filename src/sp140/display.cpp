@@ -45,30 +45,30 @@ UIColors darkModeColors = {
 // Pointer to the current color set
 UIColors *currentTheme;
 
-// Map voltage to battery percentage, based on a
+// Map volts to battery percentage, based on a
 // simple set of data points from load testing.
-float getBatteryPercent(float voltage) {
+float getBatteryPercent(float volts) {
   float battPercent = 0;
-  if (voltage > 94.8) {
-    battPercent = mapd(voltage, 94.8, 99.6, 90, 100);
-  } else if (voltage > 93.36) {
-    battPercent = mapd(voltage, 93.36, 94.8, 80, 90);
-  } else if (voltage > 91.68) {
-    battPercent = mapd(voltage, 91.68, 93.36, 70, 80);
-  } else if (voltage > 89.76) {
-    battPercent = mapd(voltage, 89.76, 91.68, 60, 70);
-  } else if (voltage > 87.6) {
-    battPercent = mapd(voltage, 87.6, 89.76, 50, 60);
-  } else if (voltage > 85.2) {
-    battPercent = mapd(voltage, 85.2, 87.6, 40, 50);
-  } else if (voltage > 82.32) {
-    battPercent = mapd(voltage, 82.32, 85.2, 30, 40);
-  } else if (voltage > 80.16) {
-    battPercent = mapd(voltage, 80.16, 82.32, 20, 30);
-  } else if (voltage > 78) {
-    battPercent = mapd(voltage, 78, 80.16, 10, 20);
-  } else if (voltage > 60.96) {
-    battPercent = mapd(voltage, 60.96, 78, 0, 10);
+  if (volts > 94.8) {
+    battPercent = mapd(volts, 94.8, 99.6, 90, 100);
+  } else if (volts > 93.36) {
+    battPercent = mapd(volts, 93.36, 94.8, 80, 90);
+  } else if (volts > 91.68) {
+    battPercent = mapd(volts, 91.68, 93.36, 70, 80);
+  } else if (volts > 89.76) {
+    battPercent = mapd(volts, 89.76, 91.68, 60, 70);
+  } else if (volts > 87.6) {
+    battPercent = mapd(volts, 87.6, 89.76, 50, 60);
+  } else if (volts > 85.2) {
+    battPercent = mapd(volts, 85.2, 87.6, 40, 50);
+  } else if (volts > 82.32) {
+    battPercent = mapd(volts, 82.32, 85.2, 30, 40);
+  } else if (volts > 80.16) {
+    battPercent = mapd(volts, 80.16, 82.32, 20, 30);
+  } else if (volts > 78) {
+    battPercent = mapd(volts, 78, 80.16, 10, 20);
+  } else if (volts > 60.96) {
+    battPercent = mapd(volts, 60.96, 78, 0, 10);
   }
   return constrain(battPercent, 0, 100);
 }
@@ -128,6 +128,7 @@ void updateDisplay(
   canvas.fillScreen(currentTheme->default_bg);
   canvas.setTextWrap(false);
   canvas.setFont(&Open_Sans_Reg_16);
+  canvas.setTextSize(1);
 
   const unsigned int nowMillis = millis();
 
@@ -138,7 +139,6 @@ void updateDisplay(
   canvas.drawFastHLine(0, 92, 160, currentTheme->ui_accent);
 
   // Display battery level and status
-  canvas.setTextSize(1);
   const float batteryPercent = getBatteryPercent(escTelemetry.volts);
   //const float batteryPercent = 91.2; //TODO remove
 
@@ -150,10 +150,10 @@ void updateDisplay(
     int batteryPercentWidth = map(static_cast<int>(batteryPercent), 0, 100, 0, 100);
     canvas.fillRect(0, 0, batteryPercentWidth, 32, batteryColor);
   } else {
-    canvas.setCursor(12, 19);
+    canvas.setCursor(6, 15);
     canvas.setTextColor(currentTheme->error_text);
     canvas.print("BATTERY");
-    canvas.setCursor(12, 19 + FONT_HEIGHT_OFFSET);
+    canvas.setCursor(6, 17 + FONT_HEIGHT_OFFSET);
     if (escTelemetry.volts < 10) {
     canvas.print(" ERROR");
     } else {
@@ -184,36 +184,19 @@ void updateDisplay(
   // float amps = 10.35;
 
   canvas.setCursor(1, 40 + FONT_HEIGHT_OFFSET);
-  if (kWatts < 10) {
-    canvas.printf("  %4.1fkW", kWatts);
-  } else {
-    canvas.printf("%4.1fkW", kWatts);
-  }
+  canvas.printf(kWatts < 10 ? "  %4.1fkW" : "%4.1fkW", kWatts);
 
   canvas.setCursor(100, 40 + FONT_HEIGHT_OFFSET);
-  if (volts > 99.9) {  // remove decimal point for 3 digit voltages
-    canvas.printf("%3.0fV", volts);
-  } else {
-    canvas.printf("%4.1fV", volts);
-  }
+  canvas.printf(volts > 99.9 ? "%3.0fV" : "%4.1fV", volts);
 
   canvas.setCursor(1, 61 + FONT_HEIGHT_OFFSET);
-  if (kWh > 99.9) {  // remove decimal point for 3 digit kWh
-    canvas.printf("%3.0fkWh", kWh);
-  } else {
-    canvas.printf("%4.1fkWh", kWh);
-  }
+  canvas.printf(kWh > 99.9 ? "%3.0fkWh" : "%4.1fkWh", kWh);
 
   canvas.setCursor(100, 61 + FONT_HEIGHT_OFFSET);
-  if (amps > 99.9) {  // remove decimal point for 3 digit amperages
-    canvas.printf("%3.0fA", amps);
-  } else {
-    canvas.printf("%4.1fA", amps);
-  }
+  canvas.printf(amps > 99.9 ? "%3.0fA" : "%4.1fA", amps);
 
   // Display modes
   canvas.setCursor(8, 90);
-  canvas.setTextSize(1);
   canvas.setFont(&Open_Sans_Reg_10);
   if (deviceData.performance_mode == 0) {
     canvas.setTextColor(currentTheme->chill_text);
@@ -251,7 +234,6 @@ void updateDisplay(
   // Display armed time for the current session
   canvas.setTextColor(currentTheme->default_text);
   canvas.setFont(&Open_Sans_Reg_16);
-  canvas.setTextSize(1);
   canvas.setCursor(8, 102 + FONT_HEIGHT_OFFSET);
   static unsigned int _lastArmedMillis = 0;
   if (armed) _lastArmedMillis = nowMillis;
@@ -261,7 +243,6 @@ void updateDisplay(
 
   // Display altitude
   canvas.setCursor(80, 102 + FONT_HEIGHT_OFFSET);
-  canvas.setTextSize(1);
   if (altitude == __FLT_MIN__) {
     canvas.setTextColor(currentTheme->error_text);
     canvas.print(F("ALTERR"));
@@ -275,7 +256,6 @@ void updateDisplay(
   }
 
   // ESC temperature
-  canvas.setTextSize(1);
   canvas.setCursor(100, 90);
   canvas.setTextColor(currentTheme->default_text);
   canvas.setFont(&Open_Sans_Reg_10);
