@@ -36,12 +36,12 @@ jobs:
       - name: Build
         run: platformio run
       - name: Archive bin
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: bins
           path: .pio/build/**/firmware.bin
       - name: Save uf2 for RP2040
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: OpenPPG-CRP2040-SP140.uf2
           path: .pio/build/OpenPPG-CRP2040-SP140/firmware.uf2
@@ -56,7 +56,7 @@ jobs:
   #     fail-fast: false
   #   steps:
   #     - name: Setup Python
-  #       uses: actions/setup-python@v2
+  #       uses: actions/setup-python@v4
   #     - name: Checkout Microsoft uf2 repo
   #       uses: actions/checkout@v3
   #       with:
@@ -67,7 +67,7 @@ jobs:
   #         name: bins
   #     - name: Run uf2 conversion
   #       run: python3 utils/uf2conv.py ${{ matrix.device }}/firmware.bin -c -o ${{ matrix.device }}.uf2
-  #     - uses: actions/upload-artifact@v3
+  #     - uses: actions/upload-artifact@v4
   #       with:
   #         name: ${{ matrix.device }}.uf2
   #         path: ${{ matrix.device }}.uf2
