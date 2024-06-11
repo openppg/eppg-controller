@@ -1,9 +1,14 @@
 #include "sp140/display.h"
 
 #include <Fonts/FreeSansBold12pt7b.h>
+#include <Fonts/FreeSans9pt7b.h>
 
+#include "../../inc/sans_reg10.h"
+#include "../../inc/sans_reg16.h"
 #include "../../inc/version.h"
 #include "sp140/structs.h"
+
+#define FONT_HEIGHT_OFFSET 14
 
 // DEBUG WATCHDOG
 #ifdef RP_PIO
@@ -81,7 +86,7 @@ void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
   display->setTextColor(currentTheme->default_text);
   display->setCursor(25, 30);
   display->println("OpenPPG");
-  display->setFont();
+  display->setFont(&Open_Sans_Reg_16);
   display->setTextSize(2);
   display->setCursor(60, 60);
   display->printf("v%d.%d", VERSION_MAJOR, VERSION_MINOR);
@@ -122,6 +127,7 @@ void updateDisplay(
   ) {
   canvas.fillScreen(currentTheme->default_bg);
   canvas.setTextWrap(false);
+  canvas.setFont(&Open_Sans_Reg_16);
 
   const unsigned int nowMillis = millis();
 
@@ -132,10 +138,11 @@ void updateDisplay(
   canvas.drawFastHLine(0, 92, 160, currentTheme->ui_accent);
 
   // Display battery level and status
-  canvas.setTextSize(2);
-  const float batteryPercent = getBatteryPercent(escTelemetry.volts);
-  //   Display battery bar
+  canvas.setTextSize(1);
+  //const float batteryPercent = getBatteryPercent(escTelemetry.volts);
+  const float batteryPercent = 94.2;
 
+  //   Display battery bar
   if (batteryPercent > 0) {
     unsigned int batteryColor = RED;
     if (batteryPercent >= 30) batteryColor = GREEN;
@@ -143,9 +150,10 @@ void updateDisplay(
     int batteryPercentWidth = map(static_cast<int>(batteryPercent), 0, 100, 0, 100);
     canvas.fillRect(0, 0, batteryPercentWidth, 36, batteryColor);
   } else {
-    canvas.setCursor(12, 3);
+    canvas.setCursor(12, 19);
     canvas.setTextColor(currentTheme->error_text);
-    canvas.println("BATTERY");
+    canvas.print("BATTERY");
+    canvas.setCursor(12, 19 + FONT_HEIGHT_OFFSET);
     if (escTelemetry.volts < 10) {
     canvas.print(" ERROR");
     } else {
@@ -159,28 +167,57 @@ void updateDisplay(
   canvas.fillRect(0, 34, 1, 2, currentTheme->ui_accent);
 
   //   Display battery percent
-  canvas.setCursor(108, 10);
+  canvas.setCursor(108, 10 + FONT_HEIGHT_OFFSET);
   canvas.setTextColor(currentTheme->default_text);
   canvas.printf("%3d%%", static_cast<int>(batteryPercent));
 
 
-  const float kWatts = constrain(watts / 1000.0, 0, 50);
-  const float volts = escTelemetry.volts;
-  const float kWh = wattHoursUsed / 1000.0;
-  const float amps = escTelemetry.amps;
+  // float kWatts = constrain(watts / 1000.0, 0, 50);
+  // float volts = escTelemetry.volts;
+  // float kWh = wattHoursUsed / 1000.0;
+  // float amps = escTelemetry.amps;
 
-  canvas.setCursor(1, 42);
-  if (volts > 99.9) {  // remove decimal point for 3 digit voltages
-    canvas.printf("%4.1fkW   %3.0fV", kWatts, volts);
+  bool SCREEN_DEBUG = true;
+
+  // for testing
+  float kWatts = 5.1;
+  float volts = 98.7;
+  float kWh = 3.343;
+  float amps = 10.5;
+
+  canvas.setCursor(1, 42 + FONT_HEIGHT_OFFSET);
+  if (kWatts < 10) {
+    canvas.printf("  %4.1fkW", kWatts);
   } else {
-    canvas.printf("%4.1fkW  %4.1fV", kWatts, volts);
+    canvas.printf("%4.1fkW", kWatts);
   }
-  canvas.setCursor(1, 61);
-  canvas.printf("%4.1fkWh %4.1fA", kWh, amps);
+
+  canvas.setCursor(80, 42 + FONT_HEIGHT_OFFSET);
+  if (volts > 99.9) {  // remove decimal point for 3 digit voltages
+    canvas.printf("%3.0fV", volts);
+  } else {
+    canvas.printf("%4.1fV", volts);
+  }
+
+  canvas.setCursor(1, 61 + FONT_HEIGHT_OFFSET);
+  if (kWh > 99.9) {  // remove decimal point for 3 digit kWh
+    canvas.printf("%3.0fkWh", kWh);
+  } else {
+    canvas.printf("%4.1fkWh", kWh);
+  }
+
+
+  canvas.setCursor(100, 61 + FONT_HEIGHT_OFFSET);
+  if (amps > 99.9) {  // remove decimal point for 3 digit amperages
+    canvas.printf("%3.0fA", amps);
+  } else {
+    canvas.printf("%4.1fA", amps);
+  }
 
   // Display modes
-  canvas.setCursor(8, 83);
+  canvas.setCursor(8, 90);
   canvas.setTextSize(1);
+  canvas.setFont(&Open_Sans_Reg_10);
   if (deviceData.performance_mode == 0) {
     canvas.setTextColor(currentTheme->chill_text);
     canvas.print("CHILL");
@@ -216,22 +253,23 @@ void updateDisplay(
 
   // Display armed time for the current session
   canvas.setTextColor(currentTheme->default_text);
-  canvas.setTextSize(2);
-  canvas.setCursor(8, 102);
+  canvas.setFont(&Open_Sans_Reg_16);
+  canvas.setTextSize(1);
+  canvas.setCursor(8, 102 + FONT_HEIGHT_OFFSET);
   static unsigned int _lastArmedMillis = 0;
   if (armed) _lastArmedMillis = nowMillis;
   const int sessionSeconds = (_lastArmedMillis - armedStartMillis) / 1000.0;
   canvas.printf("%02d:%02d", sessionSeconds / 60, sessionSeconds % 60);
 
   // Display altitude
-  canvas.setCursor(72, 102);
-  canvas.setTextSize(2);
+  canvas.setCursor(80, 102 + FONT_HEIGHT_OFFSET);
+  canvas.setTextSize(1);
   if (altitude == __FLT_MIN__) {
     canvas.setTextColor(currentTheme->error_text);
     canvas.print(F("ALTERR"));
   } else {
     canvas.setTextColor(currentTheme->default_text);
-    if (deviceData.metric_alt) {
+    if (!deviceData.metric_alt) { //todo remove not for debug
       canvas.printf("%6.1fm", altitude);
     } else {
       canvas.printf("%5dft", static_cast<int>(round(altitude * 3.28084)));
@@ -240,8 +278,9 @@ void updateDisplay(
 
   // ESC temperature
   canvas.setTextSize(1);
-  canvas.setCursor(100, 83);
+  canvas.setCursor(100, 90);
   canvas.setTextColor(currentTheme->default_text);
+  canvas.setFont(&Open_Sans_Reg_10);
   canvas.print("ESC ");
   if (escTelemetry.temperatureC >= 100) { canvas.setTextColor(currentTheme->error_text); }  // If temperature is over 100C, display in red.
   if (escTelemetry.temperatureC == __FLT_MIN__) {  // If temperature is not available, display a question mark.
@@ -249,6 +288,8 @@ void updateDisplay(
   } else {  // Otherwise, display the temperature. (in degrees C)
     canvas.printf("%0.1f%cC", escTelemetry.temperatureC, 247);  // Note: 247 is the 'degree' character.
   }
+
+  canvas.setFont(&Open_Sans_Reg_16);
 
 //  // DEBUG TIMING
 //  canvas.setTextSize(1);
