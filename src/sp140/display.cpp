@@ -87,7 +87,7 @@ void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
   display->setCursor(25, 30);
   display->println("OpenPPG");
   display->setFont(&Open_Sans_Reg_16);
-  display->setTextSize(2);
+  display->setTextSize(1);
   display->setCursor(60, 60);
   display->printf("v%d.%d", VERSION_MAJOR, VERSION_MINOR);
 #ifdef RP_PIO
@@ -132,15 +132,15 @@ void updateDisplay(
   const unsigned int nowMillis = millis();
 
   // Display region lines
-  canvas.drawFastHLine(0, 36, 160, currentTheme->ui_accent);
-  canvas.drawFastVLine(100, 0, 36, currentTheme->ui_accent);
+  canvas.drawFastHLine(0, 32, 160, currentTheme->ui_accent);
+  canvas.drawFastVLine(100, 0, 32, currentTheme->ui_accent);
   canvas.drawFastHLine(0, 80, 160, currentTheme->ui_accent);
   canvas.drawFastHLine(0, 92, 160, currentTheme->ui_accent);
 
   // Display battery level and status
   canvas.setTextSize(1);
   //const float batteryPercent = getBatteryPercent(escTelemetry.volts);
-  const float batteryPercent = 94.2;
+  const float batteryPercent = 94.2; //TODO remove
 
   //   Display battery bar
   if (batteryPercent > 0) {
@@ -148,7 +148,7 @@ void updateDisplay(
     if (batteryPercent >= 30) batteryColor = GREEN;
     else if (batteryPercent >= 15) batteryColor = YELLOW;
     int batteryPercentWidth = map(static_cast<int>(batteryPercent), 0, 100, 0, 100);
-    canvas.fillRect(0, 0, batteryPercentWidth, 36, batteryColor);
+    canvas.fillRect(0, 0, batteryPercentWidth, 32, batteryColor);
   } else {
     canvas.setCursor(12, 19);
     canvas.setTextColor(currentTheme->error_text);
@@ -162,12 +162,12 @@ void updateDisplay(
   }
   // Draw ends of battery outline
   canvas.fillRect(97, 0, 3, 9, currentTheme->ui_accent);
-  canvas.fillRect(97, 27, 3, 9, currentTheme->ui_accent);
+  canvas.fillRect(97, 23, 3, 9, currentTheme->ui_accent);
   canvas.fillRect(0, 0, 1, 2, currentTheme->ui_accent);
-  canvas.fillRect(0, 34, 1, 2, currentTheme->ui_accent);
+  canvas.fillRect(0, 30, 1, 2, currentTheme->ui_accent);
 
   //   Display battery percent
-  canvas.setCursor(108, 10 + FONT_HEIGHT_OFFSET);
+  canvas.setCursor(108, 8 + FONT_HEIGHT_OFFSET);
   canvas.setTextColor(currentTheme->default_text);
   canvas.printf("%3d%%", static_cast<int>(batteryPercent));
 
@@ -185,14 +185,14 @@ void updateDisplay(
   float kWh = 3.343;
   float amps = 10.5;
 
-  canvas.setCursor(1, 42 + FONT_HEIGHT_OFFSET);
+  canvas.setCursor(1, 40 + FONT_HEIGHT_OFFSET);
   if (kWatts < 10) {
     canvas.printf("  %4.1fkW", kWatts);
   } else {
     canvas.printf("%4.1fkW", kWatts);
   }
 
-  canvas.setCursor(80, 42 + FONT_HEIGHT_OFFSET);
+  canvas.setCursor(100, 40 + FONT_HEIGHT_OFFSET);
   if (volts > 99.9) {  // remove decimal point for 3 digit voltages
     canvas.printf("%3.0fV", volts);
   } else {
@@ -205,7 +205,6 @@ void updateDisplay(
   } else {
     canvas.printf("%4.1fkWh", kWh);
   }
-
 
   canvas.setCursor(100, 61 + FONT_HEIGHT_OFFSET);
   if (amps > 99.9) {  // remove decimal point for 3 digit amperages
