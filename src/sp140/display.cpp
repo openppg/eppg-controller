@@ -140,7 +140,7 @@ void updateDisplay(
   // Display battery level and status
   canvas.setTextSize(1);
   //const float batteryPercent = getBatteryPercent(escTelemetry.volts);
-  const float batteryPercent = 94.2; //TODO remove
+  const float batteryPercent = 91.2; //TODO remove
 
   //   Display battery bar
   if (batteryPercent > 0) {
@@ -282,11 +282,15 @@ void updateDisplay(
   canvas.setTextColor(currentTheme->default_text);
   canvas.setFont(&Open_Sans_Reg_10);
   canvas.print("ESC ");
-  if (escTelemetry.temperatureC >= 100) { canvas.setTextColor(currentTheme->error_text); }  // If temperature is over 100C, display in red.
-  if (escTelemetry.temperatureC == __FLT_MIN__) {  // If temperature is not available, display a question mark.
+  float escTemp;
+  escTemp = 37.5; //TODO remove
+  //escTemp = escTelemetry.temperatureC;
+
+  if (escTemp >= 100) { canvas.setTextColor(currentTheme->error_text); }  // If temperature is over 100C, display in red.
+  if (escTemp == __FLT_MIN__ || escTemp == 0.0) {  // If temperature is not available, display a question mark.
     canvas.printf("?%c", 247);
   } else {  // Otherwise, display the temperature. (in degrees C)
-    canvas.printf("%0.1f%cC", escTelemetry.temperatureC, 247);  // Note: 247 is the 'degree' character.
+    canvas.printf("%0.0fC", escTemp);
   }
 
   canvas.setFont(&Open_Sans_Reg_16);
