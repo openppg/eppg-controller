@@ -139,8 +139,8 @@ void updateDisplay(
 
   // Display battery level and status
   canvas.setTextSize(1);
-  //const float batteryPercent = getBatteryPercent(escTelemetry.volts);
-  const float batteryPercent = 91.2; //TODO remove
+  const float batteryPercent = getBatteryPercent(escTelemetry.volts);
+  //const float batteryPercent = 91.2; //TODO remove
 
   //   Display battery bar
   if (batteryPercent > 0) {
@@ -172,18 +172,16 @@ void updateDisplay(
   canvas.printf("%3d%%", static_cast<int>(batteryPercent));
 
 
-  // float kWatts = constrain(watts / 1000.0, 0, 50);
-  // float volts = escTelemetry.volts;
-  // float kWh = wattHoursUsed / 1000.0;
-  // float amps = escTelemetry.amps;
-
-  bool SCREEN_DEBUG = true;
+  float kWatts = constrain(watts / 1000.0, 0, 50);
+  float volts = escTelemetry.volts;
+  float kWh = wattHoursUsed / 1000.0;
+  float amps = escTelemetry.amps;
 
   // for testing
-  float kWatts = 5.1;
-  float volts = 98.7;
-  float kWh = 3.343;
-  float amps = 10.5;
+  // float kWatts = 15.1;
+  // float volts = 98.7;
+  // float kWh = 3.343;
+  // float amps = 10.35;
 
   canvas.setCursor(1, 40 + FONT_HEIGHT_OFFSET);
   if (kWatts < 10) {
@@ -257,8 +255,8 @@ void updateDisplay(
   canvas.setCursor(8, 102 + FONT_HEIGHT_OFFSET);
   static unsigned int _lastArmedMillis = 0;
   if (armed) _lastArmedMillis = nowMillis;
-  //const int sessionSeconds = (_lastArmedMillis - armedStartMillis) / 1000.0;
-  const int sessionSeconds = 6150; //TODO remove
+  const int sessionSeconds = (_lastArmedMillis - armedStartMillis) / 1000.0;
+  // const int sessionSeconds = 6150; //TODO remove
   canvas.printf("%02d:%02d", sessionSeconds / 60, sessionSeconds % 60);
 
   // Display altitude
@@ -269,7 +267,7 @@ void updateDisplay(
     canvas.print(F("ALTERR"));
   } else {
     canvas.setTextColor(currentTheme->default_text);
-    if (!deviceData.metric_alt) { //todo remove not for debug
+    if (deviceData.metric_alt) { //todo remove not for debug
       canvas.printf("%6.1fm", altitude);
     } else {
       canvas.printf("%5dft", static_cast<int>(round(altitude * 3.28084)));
@@ -283,8 +281,8 @@ void updateDisplay(
   canvas.setFont(&Open_Sans_Reg_10);
   canvas.print("ESC ");
   float escTemp;
-  escTemp = 37.5; //TODO remove
-  //escTemp = escTelemetry.temperatureC;
+  //escTemp = 37.5; //TODO remove
+  escTemp = escTelemetry.temperatureC;
 
   if (escTemp >= 100) { canvas.setTextColor(currentTheme->error_text); }  // If temperature is over 100C, display in red.
   if (escTemp == __FLT_MIN__ || escTemp == 0.0) {  // If temperature is not available, display a question mark.
@@ -292,8 +290,6 @@ void updateDisplay(
   } else {  // Otherwise, display the temperature. (in degrees C)
     canvas.printf("%0.0fC", escTemp);
   }
-
-  canvas.setFont(&Open_Sans_Reg_16);
 
 //  // DEBUG TIMING
 //  canvas.setTextSize(1);
