@@ -1,6 +1,5 @@
 name: Continuous Integration
 on:
-  push:
   pull_request:
     types: [opened, reopened]
 
@@ -42,7 +41,7 @@ jobs:
           name: OpenPPG-CRP2040-SP140.uf2
           path: .pio/build/OpenPPG-CRP2040-SP140/firmware.uf2
   # Skip until M0 builds running by default
-  # generate-uf2: 
+  # generate-uf2:
   #   name: Save uf2 for ${{ matrix.device }}
   #   needs: pio-build
   #   runs-on: ubuntu-latest

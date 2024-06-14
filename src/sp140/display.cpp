@@ -3,8 +3,8 @@
 #include <Fonts/FreeSansBold12pt7b.h>
 #include <Fonts/FreeSans9pt7b.h>
 
-#include "../../inc/sans_reg10.h"
-#include "../../inc/sans_reg16.h"
+#include "../../inc/fonts/sans_reg10.h"
+#include "../../inc/fonmts/sans_reg16.h"
 #include "../../inc/version.h"
 #include "sp140/structs.h"
 
