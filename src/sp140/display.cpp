@@ -154,14 +154,17 @@ void updateDisplay(
     int batteryPercentWidth = map(static_cast<int>(batteryPercent), 0, 100, 0, 100);
     canvas.fillRect(0, 0, batteryPercentWidth, 32, batteryColor);
   } else {
-    canvas.setCursor(6, 15);
     canvas.setTextColor(currentTheme->error_text);
-    canvas.print("BATTERY");
-    canvas.setCursor(6, 17 + FONT_HEIGHT_OFFSET);
-    if (escTelemetry.volts < 10) {
-    canvas.print(" ERROR");
+    if (escTelemetry.volts > 10) {
+      canvas.setCursor(6, 15);
+      canvas.print("BATTERY");
+      canvas.setCursor(6, 17 + FONT_HEIGHT_OFFSET);
+      canvas.print(" DEAD");
     } else {
-    canvas.print(" DEAD");
+      canvas.setCursor(9, 15);
+      canvas.print("SIGNAL");
+      canvas.setCursor(6, 17 + FONT_HEIGHT_OFFSET);
+      canvas.print(" ERROR");
     }
   }
   // Draw ends of battery outline
@@ -173,8 +176,11 @@ void updateDisplay(
   //   Display battery percent
   canvas.setCursor(108, 10 + FONT_HEIGHT_OFFSET);
   canvas.setTextColor(currentTheme->default_text);
-  canvas.printf("%3d%%", static_cast<int>(batteryPercent));
-
+  if (batteryPercent > 0) {
+    canvas.printf("%3d%%", static_cast<int>(batteryPercent));
+  } else {
+    canvas.print(" ?%");
+  }
 
   float kWatts = constrain(watts / 1000.0, 0, 50);
   float volts = escTelemetry.volts;
