@@ -161,10 +161,10 @@ void updateDisplay(
       canvas.setCursor(6, 17 + FONT_HEIGHT_OFFSET);
       canvas.print(" DEAD");
     } else {
-      canvas.setCursor(9, 15);
-      canvas.print("SIGNAL");
-      canvas.setCursor(6, 17 + FONT_HEIGHT_OFFSET);
-      canvas.print(" ERROR");
+      canvas.setCursor(10, 15);
+      canvas.print("NO");
+      canvas.setCursor(10, 17 + FONT_HEIGHT_OFFSET);
+      canvas.print("TELEM");
     }
   }
   // Draw ends of battery outline
