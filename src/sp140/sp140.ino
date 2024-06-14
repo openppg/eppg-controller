@@ -266,7 +266,7 @@ void setupTasks() {
   xTaskCreate(throttleTask, "throttle", 1000, NULL, 3, &throttleTaskHandle);
   xTaskCreate(telemetryTask, "telemetry", 1000, NULL, 2, &telemetryTaskHandle);
   xTaskCreate(trackPowerTask, "trackPower", 500, NULL, 2, &trackPowerTaskHandle);
-  xTaskCreate(updateDisplayTask, "updateDisplay", 2000, NULL, 1, &updateDisplayTaskHandle);
+  xTaskCreate(updateDisplayTask, "updateDisplay", 3000, NULL, 1, &updateDisplayTaskHandle);
   xTaskCreate(watchdogTask, "watchdog", 1000, NULL, 4, &watchdogTaskHandle);
 
   if (updateDisplayTaskHandle != NULL) {

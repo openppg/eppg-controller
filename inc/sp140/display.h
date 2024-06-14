@@ -11,20 +11,12 @@
   #include "../../inc/sp140/rp2040-config.h"
 #endif
 
-#include <Adafruit_ST7735.h>
+#include <Arduino_GFX_Library.h>
 #include "utilities.h"
 
 // Library config
 #define NO_ADAFRUIT_SSD1306_COLOR_COMPATIBILITY
 
-#define BLACK                 ST77XX_BLACK
-#define WHITE                 ST77XX_WHITE
-#define GREEN                 ST77XX_GREEN
-#define YELLOW                ST77XX_YELLOW
-#define RED                   ST77XX_RED
-#define BLUE                  ST77XX_BLUE
-#define ORANGE                ST77XX_ORANGE
-#define CYAN                  ST77XX_CYAN
 #define PURPLE                0x780F
 #define GRAY                  0xDEFB
 
