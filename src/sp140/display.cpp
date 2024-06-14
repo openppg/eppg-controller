@@ -4,7 +4,7 @@
 #include <Fonts/FreeSans9pt7b.h>
 
 #include "../../inc/fonts/sans_reg10.h"
-#include "../../inc/fonmts/sans_reg16.h"
+#include "../../inc/fonts/sans_reg16.h"
 #include "../../inc/version.h"
 #include "sp140/structs.h"
 
@@ -144,7 +144,6 @@ void updateDisplay(
 
   // Display battery level and status
   const float batteryPercent = getBatteryPercent(escTelemetry.volts);
-  //const float batteryPercent = 91.2; //TODO remove
 
   //   Display battery bar
   if (batteryPercent > 0) {
@@ -248,7 +247,6 @@ void updateDisplay(
   static unsigned int _lastArmedMillis = 0;
   if (armed) _lastArmedMillis = nowMillis;
   const int sessionSeconds = (_lastArmedMillis - armedStartMillis) / 1000.0;
-  // const int sessionSeconds = 6150; //TODO remove
   canvas.printf("%02d:%02d", sessionSeconds / 60, sessionSeconds % 60);
 
   // Display altitude
@@ -258,7 +256,7 @@ void updateDisplay(
     canvas.print(F("ALTERR"));
   } else {
     canvas.setTextColor(currentTheme->default_text);
-    if (deviceData.metric_alt) { //todo remove not for debug
+    if (deviceData.metric_alt) {
       canvas.printf("%6.1fm", altitude);
     } else {
       canvas.printf("%5dft", static_cast<int>(round(altitude * 3.28084)));
@@ -271,7 +269,6 @@ void updateDisplay(
   canvas.setFont(&Open_Sans_Reg_10);
   canvas.print("ESC ");
   float escTemp;
-  //escTemp = 37.5; //TODO remove
   escTemp = escTelemetry.temperatureC;
 
   if (escTemp >= 100) { canvas.setTextColor(currentTheme->error_text); }  // If temperature is over 100C, display in red.
