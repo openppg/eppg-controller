@@ -45,32 +45,36 @@ UIColors darkModeColors = {
 // Pointer to the current color set
 UIColors *currentTheme;
 
-// Map volts to battery percentage, based on a
-// simple set of data points from load testing.
-float getBatteryPercent(float volts) {
-  float battPercent = 0;
-  if (volts > 94.8) {
-    battPercent = mapd(volts, 94.8, 99.6, 90, 100);
-  } else if (volts > 93.36) {
-    battPercent = mapd(volts, 93.36, 94.8, 80, 90);
-  } else if (volts > 91.68) {
-    battPercent = mapd(volts, 91.68, 93.36, 70, 80);
-  } else if (volts > 89.76) {
-    battPercent = mapd(volts, 89.76, 91.68, 60, 70);
-  } else if (volts > 87.6) {
-    battPercent = mapd(volts, 87.6, 89.76, 50, 60);
-  } else if (volts > 85.2) {
-    battPercent = mapd(volts, 85.2, 87.6, 40, 50);
-  } else if (volts > 82.32) {
-    battPercent = mapd(volts, 82.32, 85.2, 30, 40);
-  } else if (volts > 80.16) {
-    battPercent = mapd(volts, 80.16, 82.32, 20, 30);
-  } else if (volts > 78) {
-    battPercent = mapd(volts, 78, 80.16, 10, 20);
-  } else if (volts > 60.96) {
-    battPercent = mapd(volts, 60.96, 78, 0, 10);
+/**
+ * This function takes a voltage level as input and returns the corresponding
+ * battery percentage. It uses a lookup table (`batteryLevels`) to map voltage
+ * levels to percentages. Thats based  on a simple set of data points from load testing.
+ * If the input voltage is greater than a threshold
+ * voltage, linear interpolation is used to calculate the percentage between
+ * two consecutive voltage-percentage mappings.
+ *
+ * @param voltage The input voltage level.
+ * @return The calculated battery percentage (0-100).
+ */
+float getBatteryPercent(float voltage) {
+  // Calculate the number of voltage-percentage mappings
+  int numLevels = sizeof(batteryLevels) / sizeof(BatteryVoltagePoint);
+
+  // Initialize the percentage to 0
+  float percentage = 0;
+
+  // Iterate through the voltage-percentage mappings
+  for (int i = 0; i < numLevels - 1; i++) {
+    // Check if the input voltage is greater than the current mapping's voltage
+    if (voltage > batteryLevels[i].voltage) {
+      // Interpolate the percentage between the current and next mapping
+      percentage = mapd(voltage, batteryLevels[i].voltage, batteryLevels[i + 1].voltage,
+                        batteryLevels[i].percent, batteryLevels[i + 1].percent);
+      break;
+    }
   }
-  return constrain(battPercent, 0, 100);
+
+  return constrain(percentage, 0, 100);
 }
 
 // Clears screen and resets properties
