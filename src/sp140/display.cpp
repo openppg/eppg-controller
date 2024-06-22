@@ -57,26 +57,28 @@ UIColors *currentTheme;
  * @return The calculated battery percentage (0-100).
  */
 float getBatteryPercent(float voltage) {
-  // Calculate the number of voltage-percentage mappings
-  int numLevels = sizeof(batteryLevels) / sizeof(BatteryVoltagePoint);
+    // Calculate the number of voltage-percentage mappings
+    int numLevels = sizeof(batteryLevels) / sizeof(BatteryVoltagePoint);
 
-  // Initialize the percentage to 0
-  float percentage = 0;
-
-  // Iterate through the voltage-percentage mappings
-  for (int i = 0; i < numLevels - 1; i++) {
-    // Check if the input voltage is greater than the current mapping's voltage
-    if (voltage > batteryLevels[i].voltage) {
-      // Interpolate the percentage between the current and next mapping
-      percentage = mapd(voltage, batteryLevels[i].voltage, batteryLevels[i + 1].voltage,
-                        batteryLevels[i].percent, batteryLevels[i + 1].percent);
-      break;
+    // Handle edge cases where the voltage is outside the defined range
+    if (voltage >= batteryLevels[0].voltage) {
+        return batteryLevels[0].percent;
+    } else if (voltage <= batteryLevels[numLevels - 1].voltage) {
+        return batteryLevels[numLevels - 1].percent;
     }
-  }
 
-  return constrain(percentage, 0, 100);
+    // Iterate through the voltage-percentage mappings
+    for (int i = 0; i < numLevels - 1; i++) {
+        // Check if the input voltage is between the current and next mapping
+        if (voltage <= batteryLevels[i].voltage && voltage > batteryLevels[i + 1].voltage) {
+            // Interpolate the percentage between the current and next mapping
+            return mapd(voltage, batteryLevels[i + 1].voltage, batteryLevels[i].voltage,
+                        batteryLevels[i + 1].percent, batteryLevels[i].percent);
+        }
+    }
+
+    return 0; // Fallback, should never reach here
 }
-
 // Clears screen and resets properties
 void resetRotation(unsigned int rotation) {
   display->setRotation(rotation);  // 1=right hand, 3=left hand
