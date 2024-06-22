@@ -66,6 +66,7 @@ ButtonConfig* buttonConfig;
 
 CircularBuffer<float, 50> voltageBuffer;
 CircularBuffer<int, 8> potBuffer;
+# define PIN_NEOPIXEL 10
 
 Adafruit_NeoPixel pixels(1, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
 uint32_t led_color = LED_RED; // current LED color
