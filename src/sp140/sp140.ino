@@ -14,6 +14,19 @@
   #include <map>
 #endif
 
+#ifdef configUSE_CORE_AFFINITY
+  #if configUSE_CORE_AFFINITY == 1
+    #pragma message("configUSE_CORE_AFFINITY is set to 1")
+  #else
+    #pragma message("configUSE_CORE_AFFINITY is not set to 1")
+  #endif
+#else
+  #pragma message("configUSE_CORE_AFFINITY is not defined")
+#endif
+
+UBaseType_t uxCoreAffinityMask0 = (1 << 0); // Core 0
+UBaseType_t uxCoreAffinityMask1 = (1 << 1); // Core 1
+
 #include "../../inc/sp140/structs.h"         // data structs
 #include <AceButton.h>           // button clicks
 #include <Adafruit_DRV2605.h>    // haptic controller
@@ -91,7 +104,7 @@ SemaphoreHandle_t tftSemaphore;
 
 void watchdogTask(void* parameter) {
   for (;;) {
-    watchdog_update();
+    //watchdog_update();
     vTaskDelay(pdMS_TO_TICKS(100));  // Delay for 100ms
   }
 }
@@ -213,7 +226,7 @@ void setupWatchdog() {
 #ifdef M0_PIO
   Watchdog.enable(5000);
 #elif RP_PIO
-  watchdog_enable(4000, 1);
+  //watchdog_enable(4000, 1);
 #endif
 }
 
@@ -260,15 +273,14 @@ void setup() {
   setLEDColor(LED_GREEN);
 }
 
-// set up all the threads/tasks
+// set up all the threads/tasks with core 0 affinity
 void setupTasks() {
-
-  xTaskCreate(blinkLEDTask, "blinkLed", 200, NULL, 1, &blinkLEDTaskHandle);
-  xTaskCreate(throttleTask, "throttle", 1000, NULL, 3, &throttleTaskHandle);
-  xTaskCreate(telemetryTask, "telemetry", 1000, NULL, 2, &telemetryTaskHandle);
-  xTaskCreate(trackPowerTask, "trackPower", 500, NULL, 2, &trackPowerTaskHandle);
-  xTaskCreate(updateDisplayTask, "updateDisplay", 2000, NULL, 1, &updateDisplayTaskHandle);
-  xTaskCreate(watchdogTask, "watchdog", 1000, NULL, 4, &watchdogTaskHandle);
+  xTaskCreateAffinitySet(blinkLEDTask, "blinkLed", 200, NULL, 1, uxCoreAffinityMask0, &blinkLEDTaskHandle);
+  xTaskCreateAffinitySet(throttleTask, "throttle", 1000, NULL, 3, uxCoreAffinityMask0, &throttleTaskHandle);
+  xTaskCreateAffinitySet(telemetryTask, "TelemetryTask", 2048, NULL, 2, uxCoreAffinityMask0, &telemetryTaskHandle);
+  xTaskCreateAffinitySet(trackPowerTask, "trackPower", 500, NULL, 2, uxCoreAffinityMask0, &trackPowerTaskHandle);
+  xTaskCreateAffinitySet(updateDisplayTask, "updateDisplay", 2000, NULL, 1, uxCoreAffinityMask0, &updateDisplayTaskHandle);
+  xTaskCreateAffinitySet(watchdogTask, "watchdog", 1000, NULL, 4, uxCoreAffinityMask0, &watchdogTaskHandle);
 
   if (updateDisplayTaskHandle != NULL) {
     vTaskSuspend(updateDisplayTaskHandle);  // Suspend the task immediately after creation
