@@ -14,19 +14,6 @@
   #include <map>
 #endif
 
-#ifdef configUSE_CORE_AFFINITY
-  #if configUSE_CORE_AFFINITY == 1
-    #pragma message("configUSE_CORE_AFFINITY is set to 1")
-  #else
-    #pragma message("configUSE_CORE_AFFINITY is not set to 1")
-  #endif
-#else
-  #pragma message("configUSE_CORE_AFFINITY is not defined")
-#endif
-
-UBaseType_t uxCoreAffinityMask0 = (1 << 0); // Core 0
-UBaseType_t uxCoreAffinityMask1 = (1 << 1); // Core 1
-
 #include "../../inc/sp140/structs.h"         // data structs
 #include <AceButton.h>           // button clicks
 #include <Adafruit_DRV2605.h>    // haptic controller
@@ -58,6 +45,9 @@ UBaseType_t uxCoreAffinityMask1 = (1 << 1); // Core 1
 #include "../../inc/sp140/altimeter.h"
 
 using namespace ace_button;
+
+UBaseType_t uxCoreAffinityMask0 = (1 << 0); // Core 0
+UBaseType_t uxCoreAffinityMask1 = (1 << 1); // Core 1
 
 HardwareConfig board_config;
 
@@ -104,7 +94,9 @@ SemaphoreHandle_t tftSemaphore;
 
 void watchdogTask(void* parameter) {
   for (;;) {
-    //watchdog_update();
+    #ifndef OPENPPG_DEBUG
+    watchdog_update();
+    #endif
     vTaskDelay(pdMS_TO_TICKS(100));  // Delay for 100ms
   }
 }
@@ -176,6 +168,7 @@ void loadHardwareConfig() {
   button_top = new AceButton(board_config.button_top);
   buttonConfig = button_top->getButtonConfig();
 }
+
 void setupSerial() {
   Serial.begin(115200);
   SerialESC.begin(ESC_BAUD_RATE);
@@ -223,11 +216,13 @@ void setupAnalogRead() {
 }
 
 void setupWatchdog() {
-#ifdef M0_PIO
-  Watchdog.enable(5000);
-#elif RP_PIO
-  //watchdog_enable(4000, 1);
-#endif
+#ifndef OPENPPG_DEBUG
+  #ifdef M0_PIO
+    Watchdog.enable(5000);
+  #elif RP_PIO
+    watchdog_enable(4000, 1);
+  #endif
+#endif // OPENPPG_DEBUG
 }
 
 
@@ -273,9 +268,9 @@ void setup() {
   setLEDColor(LED_GREEN);
 }
 
-// set up all the threads/tasks with core 0 affinity
+// set up all the main threads/tasks with core 0 affinity
 void setupTasks() {
-  xTaskCreateAffinitySet(blinkLEDTask, "blinkLed", 200, NULL, 1, uxCoreAffinityMask0, &blinkLEDTaskHandle);
+  xTaskCreateAffinitySet(blinkLEDTask, "blinkLed", 200, NULL, 1, uxCoreAffinityMask1, &blinkLEDTaskHandle);
   xTaskCreateAffinitySet(throttleTask, "throttle", 1000, NULL, 3, uxCoreAffinityMask0, &throttleTaskHandle);
   xTaskCreateAffinitySet(telemetryTask, "TelemetryTask", 2048, NULL, 2, uxCoreAffinityMask0, &telemetryTaskHandle);
   xTaskCreateAffinitySet(trackPowerTask, "trackPower", 500, NULL, 2, uxCoreAffinityMask0, &trackPowerTaskHandle);
