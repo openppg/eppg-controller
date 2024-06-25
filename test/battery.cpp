@@ -63,8 +63,8 @@ void test_battery_percent_below_min_voltage() {
 }
 
 void test_battery_percent_between_voltages() {
-    float voltage = 88.0;
-    float expected = 55.0;  // Interpolated value between 60% (89.76V) and 50% (87.6V)
+    float voltage = 86.4;
+    float expected = 45.0;  // Interpolated value between 60% (89.76V) and 50% (87.6V)
     TEST_ASSERT_EQUAL_FLOAT(expected, getBatteryPercent(voltage));
 }
 

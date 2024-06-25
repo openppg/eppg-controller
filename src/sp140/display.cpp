@@ -77,7 +77,7 @@ float getBatteryPercent(float voltage) {
         }
     }
 
-    return 0; // Fallback, should never reach here
+    return 0;  // Fallback, should never reach here
 }
 // Clears screen and resets properties
 void resetRotation(unsigned int rotation) {
