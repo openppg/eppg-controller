@@ -1,8 +1,7 @@
 name: Continuous Integration
 on:
-  push:
   pull_request:
-    types: [opened, reopened]
+    types: [opened, reopened, synchronize]
 
 jobs:
   cpplint:

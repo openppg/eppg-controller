@@ -80,9 +80,20 @@ typedef struct {
   uint16_t freq;
   uint16_t duration;
 }STR_NOTE;
+
+struct BatteryVoltagePoint {
+  float voltage;
+  float percent;
+};
 #pragma pack(pop)
 
 static STR_ESC_TELEMETRY_140 telemetryData;
 static telem_t raw_telemdata;
+
+static BatteryVoltagePoint batteryLevels[] = {
+  {99.6, 100},  // 99+ volts corresponds to 100%
+  {94.8, 90}, {93.36, 80}, {91.68, 70}, {89.76, 60}, {87.6, 50},
+  {85.2, 40}, {82.32, 30}, {80.16, 20}, {78, 10}, {60.96, 0}
+};
 
 #endif  // INC_SP140_STRUCTS_H_
