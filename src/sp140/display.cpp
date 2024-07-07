@@ -1,9 +1,14 @@
 #include "sp140/display.h"
 
 #include <Fonts/FreeSansBold12pt7b.h>
+#include <Fonts/FreeSans9pt7b.h>
 
+#include "../../inc/fonts/sans_reg10.h"
+#include "../../inc/fonts/sans_reg16.h"
 #include "../../inc/version.h"
 #include "sp140/structs.h"
+
+#define FONT_HEIGHT_OFFSET 14
 
 // DEBUG WATCHDOG
 #ifdef RP_PIO
@@ -40,34 +45,40 @@ UIColors darkModeColors = {
 // Pointer to the current color set
 UIColors *currentTheme;
 
-// Map voltage to battery percentage, based on a
-// simple set of data points from load testing.
+/**
+ * This function takes a voltage level as input and returns the corresponding
+ * battery percentage. It uses a lookup table (`batteryLevels`) to map voltage
+ * levels to percentages. Thats based  on a simple set of data points from load testing.
+ * If the input voltage is greater than a threshold
+ * voltage, linear interpolation is used to calculate the percentage between
+ * two consecutive voltage-percentage mappings.
+ *
+ * @param voltage The input voltage level.
+ * @return The calculated battery percentage (0-100).
+ */
 float getBatteryPercent(float voltage) {
-  float battPercent = 0;
-  if (voltage > 94.8) {
-    battPercent = mapd(voltage, 94.8, 99.6, 90, 100);
-  } else if (voltage > 93.36) {
-    battPercent = mapd(voltage, 93.36, 94.8, 80, 90);
-  } else if (voltage > 91.68) {
-    battPercent = mapd(voltage, 91.68, 93.36, 70, 80);
-  } else if (voltage > 89.76) {
-    battPercent = mapd(voltage, 89.76, 91.68, 60, 70);
-  } else if (voltage > 87.6) {
-    battPercent = mapd(voltage, 87.6, 89.76, 50, 60);
-  } else if (voltage > 85.2) {
-    battPercent = mapd(voltage, 85.2, 87.6, 40, 50);
-  } else if (voltage > 82.32) {
-    battPercent = mapd(voltage, 82.32, 85.2, 30, 40);
-  } else if (voltage > 80.16) {
-    battPercent = mapd(voltage, 80.16, 82.32, 20, 30);
-  } else if (voltage > 78) {
-    battPercent = mapd(voltage, 78, 80.16, 10, 20);
-  } else if (voltage > 60.96) {
-    battPercent = mapd(voltage, 60.96, 78, 0, 10);
-  }
-  return constrain(battPercent, 0, 100);
-}
+    // Calculate the number of voltage-percentage mappings
+    int numLevels = sizeof(batteryLevels) / sizeof(BatteryVoltagePoint);
 
+    // Handle edge cases where the voltage is outside the defined range
+    if (voltage >= batteryLevels[0].voltage) {
+        return batteryLevels[0].percent;
+    } else if (voltage <= batteryLevels[numLevels - 1].voltage) {
+        return batteryLevels[numLevels - 1].percent;
+    }
+
+    // Iterate through the voltage-percentage mappings
+    for (int i = 0; i < numLevels - 1; i++) {
+        // Check if the input voltage is between the current and next mapping
+        if (voltage <= batteryLevels[i].voltage && voltage > batteryLevels[i + 1].voltage) {
+            // Interpolate the percentage between the current and next mapping
+            return mapd(voltage, batteryLevels[i + 1].voltage, batteryLevels[i].voltage,
+                        batteryLevels[i + 1].percent, batteryLevels[i].percent);
+        }
+    }
+
+    return 0;  // Fallback, should never reach here
+}
 // Clears screen and resets properties
 void resetRotation(unsigned int rotation) {
   display->setRotation(rotation);  // 1=right hand, 3=left hand
@@ -81,15 +92,15 @@ void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
   display->setTextColor(currentTheme->default_text);
   display->setCursor(25, 30);
   display->println("OpenPPG");
-  display->setFont();
-  display->setTextSize(2);
+  display->setFont(&Open_Sans_Reg_16);
+  display->setTextSize(1);
   display->setCursor(60, 60);
   display->printf("v%d.%d", VERSION_MAJOR, VERSION_MINOR);
 #ifdef RP_PIO
   display->print("R");
 #endif
   // Total armed time
-  display->setCursor(54, 90);
+  display->setCursor(60, 90);
 
   const int hours = deviceData.armed_time / 60;
   const int minutes = deviceData.armed_time % 60;
@@ -122,65 +133,82 @@ void updateDisplay(
   ) {
   canvas.fillScreen(currentTheme->default_bg);
   canvas.setTextWrap(false);
+  canvas.setFont(&Open_Sans_Reg_16);
+  canvas.setTextSize(1);
 
   const unsigned int nowMillis = millis();
 
   // Display region lines
-  canvas.drawFastHLine(0, 36, 160, currentTheme->ui_accent);
-  canvas.drawFastVLine(100, 0, 36, currentTheme->ui_accent);
+  canvas.drawFastHLine(0, 32, 160, currentTheme->ui_accent);
+  canvas.drawFastVLine(100, 0, 32, currentTheme->ui_accent);
   canvas.drawFastHLine(0, 80, 160, currentTheme->ui_accent);
   canvas.drawFastHLine(0, 92, 160, currentTheme->ui_accent);
 
   // Display battery level and status
-  canvas.setTextSize(2);
   const float batteryPercent = getBatteryPercent(escTelemetry.volts);
-  //   Display battery bar
 
+  //   Display battery bar
   if (batteryPercent > 0) {
     unsigned int batteryColor = RED;
     if (batteryPercent >= 30) batteryColor = GREEN;
     else if (batteryPercent >= 15) batteryColor = YELLOW;
     int batteryPercentWidth = map(static_cast<int>(batteryPercent), 0, 100, 0, 100);
-    canvas.fillRect(0, 0, batteryPercentWidth, 36, batteryColor);
+    canvas.fillRect(0, 0, batteryPercentWidth, 32, batteryColor);
   } else {
-    canvas.setCursor(12, 3);
     canvas.setTextColor(currentTheme->error_text);
-    canvas.println("BATTERY");
-    if (escTelemetry.volts < 10) {
-    canvas.print(" ERROR");
+    if (escTelemetry.volts > 10) {
+      canvas.setCursor(6, 15);
+      canvas.print("BATTERY");
+      canvas.setCursor(6, 17 + FONT_HEIGHT_OFFSET);
+      canvas.print(" DEAD");
     } else {
-    canvas.print(" DEAD");
+      canvas.setCursor(10, 15);
+      canvas.print("NO");
+      canvas.setCursor(10, 17 + FONT_HEIGHT_OFFSET);
+      canvas.print("TELEM");
     }
   }
   // Draw ends of battery outline
   canvas.fillRect(97, 0, 3, 9, currentTheme->ui_accent);
-  canvas.fillRect(97, 27, 3, 9, currentTheme->ui_accent);
+  canvas.fillRect(97, 23, 3, 9, currentTheme->ui_accent);
   canvas.fillRect(0, 0, 1, 2, currentTheme->ui_accent);
-  canvas.fillRect(0, 34, 1, 2, currentTheme->ui_accent);
+  canvas.fillRect(0, 30, 1, 2, currentTheme->ui_accent);
 
   //   Display battery percent
-  canvas.setCursor(108, 10);
+  canvas.setCursor(108, 10 + FONT_HEIGHT_OFFSET);
   canvas.setTextColor(currentTheme->default_text);
-  canvas.printf("%3d%%", static_cast<int>(batteryPercent));
-
-
-  const float kWatts = constrain(watts / 1000.0, 0, 50);
-  const float volts = escTelemetry.volts;
-  const float kWh = wattHoursUsed / 1000.0;
-  const float amps = escTelemetry.amps;
-
-  canvas.setCursor(1, 42);
-  if (volts > 99.9) {  // remove decimal point for 3 digit voltages
-    canvas.printf("%4.1fkW   %3.0fV", kWatts, volts);
+  if (batteryPercent > 0) {
+    canvas.printf("%3d%%", static_cast<int>(batteryPercent));
   } else {
-    canvas.printf("%4.1fkW  %4.1fV", kWatts, volts);
+    canvas.print(" ?%");
   }
-  canvas.setCursor(1, 61);
-  canvas.printf("%4.1fkWh %4.1fA", kWh, amps);
+
+  float kWatts = constrain(watts / 1000.0, 0, 50);
+  float volts = escTelemetry.volts;
+  float kWh = wattHoursUsed / 1000.0;
+  float amps = escTelemetry.amps;
+
+  // for testing
+  // float kWatts = 15.1;
+  // float volts = 98.7;
+  // float kWh = 3.343;
+  // float amps = 10.35;
+
+  canvas.setCursor(1, 40 + FONT_HEIGHT_OFFSET);
+  canvas.printf(kWatts < 10 ? "  %4.1fkW" : "%4.1fkW", kWatts);
+
+  canvas.setCursor(100, 40 + FONT_HEIGHT_OFFSET);
+  canvas.printf(volts > 99.9 ? "%3.0fV" : "%4.1fV", volts);
+
+  canvas.setCursor(1, 61 + FONT_HEIGHT_OFFSET);
+  canvas.printf(kWh > 99.9 ? "%3.0fkWh" : "%4.1fkWh", kWh);
+
+  canvas.setCursor(100, 61 + FONT_HEIGHT_OFFSET);
+  canvas.printf(amps > 99.9 ? "%3.0fA" : "%4.1fA", amps);
 
   // Display modes
-  canvas.setCursor(8, 83);
-  canvas.setTextSize(1);
+  canvas.setCursor(8, 90);
+  canvas.setFont(&Open_Sans_Reg_10);
   if (deviceData.performance_mode == 0) {
     canvas.setTextColor(currentTheme->chill_text);
     canvas.print("CHILL");
@@ -216,16 +244,15 @@ void updateDisplay(
 
   // Display armed time for the current session
   canvas.setTextColor(currentTheme->default_text);
-  canvas.setTextSize(2);
-  canvas.setCursor(8, 102);
+  canvas.setFont(&Open_Sans_Reg_16);
+  canvas.setCursor(8, 102 + FONT_HEIGHT_OFFSET);
   static unsigned int _lastArmedMillis = 0;
   if (armed) _lastArmedMillis = nowMillis;
   const int sessionSeconds = (_lastArmedMillis - armedStartMillis) / 1000.0;
   canvas.printf("%02d:%02d", sessionSeconds / 60, sessionSeconds % 60);
 
   // Display altitude
-  canvas.setCursor(72, 102);
-  canvas.setTextSize(2);
+  canvas.setCursor(80, 102 + FONT_HEIGHT_OFFSET);
   if (altitude == __FLT_MIN__) {
     canvas.setTextColor(currentTheme->error_text);
     canvas.print(F("ALTERR"));
@@ -239,15 +266,18 @@ void updateDisplay(
   }
 
   // ESC temperature
-  canvas.setTextSize(1);
-  canvas.setCursor(100, 83);
+  canvas.setCursor(100, 90);
   canvas.setTextColor(currentTheme->default_text);
+  canvas.setFont(&Open_Sans_Reg_10);
   canvas.print("ESC ");
-  if (escTelemetry.temperatureC >= 100) { canvas.setTextColor(currentTheme->error_text); }  // If temperature is over 100C, display in red.
-  if (escTelemetry.temperatureC == __FLT_MIN__) {  // If temperature is not available, display a question mark.
+  float escTemp;
+  escTemp = escTelemetry.temperatureC;
+
+  if (escTemp >= 100) { canvas.setTextColor(currentTheme->error_text); }  // If temperature is over 100C, display in red.
+  if (escTemp == __FLT_MIN__ || escTemp == 0.0) {  // If temperature is not available, display a question mark.
     canvas.printf("?%c", 247);
   } else {  // Otherwise, display the temperature. (in degrees C)
-    canvas.printf("%0.1f%cC", escTelemetry.temperatureC, 247);  // Note: 247 is the 'degree' character.
+    canvas.printf("%0.0fC", escTemp);
   }
 
 //  // DEBUG TIMING

@@ -46,6 +46,9 @@
 
 using namespace ace_button;
 
+UBaseType_t uxCoreAffinityMask0 = (1 << 0); // Core 0
+UBaseType_t uxCoreAffinityMask1 = (1 << 1); // Core 1
+
 HardwareConfig board_config;
 
 Adafruit_DRV2605 vibe;
@@ -66,6 +69,7 @@ ButtonConfig* buttonConfig;
 
 CircularBuffer<float, 50> voltageBuffer;
 CircularBuffer<int, 8> potBuffer;
+# define PIN_NEOPIXEL 10
 
 Adafruit_NeoPixel pixels(1, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
 uint32_t led_color = LED_RED; // current LED color
@@ -90,7 +94,9 @@ SemaphoreHandle_t tftSemaphore;
 
 void watchdogTask(void* parameter) {
   for (;;) {
+    #ifndef OPENPPG_DEBUG
     watchdog_update();
+    #endif
     vTaskDelay(pdMS_TO_TICKS(100));  // Delay for 100ms
   }
 }
@@ -162,6 +168,7 @@ void loadHardwareConfig() {
   button_top = new AceButton(board_config.button_top);
   buttonConfig = button_top->getButtonConfig();
 }
+
 void setupSerial() {
   Serial.begin(115200);
   SerialESC.begin(ESC_BAUD_RATE);
@@ -209,11 +216,13 @@ void setupAnalogRead() {
 }
 
 void setupWatchdog() {
-#ifdef M0_PIO
-  Watchdog.enable(5000);
-#elif RP_PIO
-  watchdog_enable(4000, 1);
-#endif
+#ifndef OPENPPG_DEBUG
+  #ifdef M0_PIO
+    Watchdog.enable(5000);
+  #elif RP_PIO
+    watchdog_enable(4000, 1);
+  #endif
+#endif // OPENPPG_DEBUG
 }
 
 
@@ -259,15 +268,14 @@ void setup() {
   setLEDColor(LED_GREEN);
 }
 
-// set up all the threads/tasks
+// set up all the main threads/tasks with core 0 affinity
 void setupTasks() {
-
-  xTaskCreate(blinkLEDTask, "blinkLed", 200, NULL, 1, &blinkLEDTaskHandle);
-  xTaskCreate(throttleTask, "throttle", 1000, NULL, 3, &throttleTaskHandle);
-  xTaskCreate(telemetryTask, "telemetry", 1000, NULL, 2, &telemetryTaskHandle);
-  xTaskCreate(trackPowerTask, "trackPower", 500, NULL, 2, &trackPowerTaskHandle);
-  xTaskCreate(updateDisplayTask, "updateDisplay", 2000, NULL, 1, &updateDisplayTaskHandle);
-  xTaskCreate(watchdogTask, "watchdog", 1000, NULL, 4, &watchdogTaskHandle);
+  xTaskCreateAffinitySet(blinkLEDTask, "blinkLed", 200, NULL, 1, uxCoreAffinityMask1, &blinkLEDTaskHandle);
+  xTaskCreateAffinitySet(throttleTask, "throttle", 1000, NULL, 3, uxCoreAffinityMask0, &throttleTaskHandle);
+  xTaskCreateAffinitySet(telemetryTask, "TelemetryTask", 2048, NULL, 2, uxCoreAffinityMask0, &telemetryTaskHandle);
+  xTaskCreateAffinitySet(trackPowerTask, "trackPower", 500, NULL, 2, uxCoreAffinityMask0, &trackPowerTaskHandle);
+  xTaskCreateAffinitySet(updateDisplayTask, "updateDisplay", 2000, NULL, 1, uxCoreAffinityMask0, &updateDisplayTaskHandle);
+  xTaskCreateAffinitySet(watchdogTask, "watchdog", 1000, NULL, 4, uxCoreAffinityMask0, &watchdogTaskHandle);
 
   if (updateDisplayTaskHandle != NULL) {
     vTaskSuspend(updateDisplayTaskHandle);  // Suspend the task immediately after creation

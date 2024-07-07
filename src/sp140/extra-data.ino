@@ -103,7 +103,7 @@ void parse_usb_serial() {
     return;  // run only the command
   }
 
-  if (doc["major_v"] < 5) return;
+  if (doc["major_v"] < 5) return; // ignore old versions
 
   vTaskSuspend(updateDisplayTaskHandle); // Prevent display from updating while we're changing settings
 
