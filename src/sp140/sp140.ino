@@ -17,10 +17,13 @@
 #include "../../inc/sp140/structs.h"         // data structs
 #include <AceButton.h>           // button clicks
 #include <Adafruit_DRV2605.h>    // haptic controller
+#include <Adafruit_NeoPixel.h>   // LEDs
 #include <ArduinoJson.h>
 #include <CircularBuffer.hpp>      // smooth out readings
 #include <ResponsiveAnalogRead.h>  // smoothing for throttle
-#include <Servo.h>               // to control ESCs
+#ifndef CAN_PIO
+  #include <Servo.h>               // to control ESCs
+#endif
 #include <SPI.h>
 #include <TimeLib.h>  // convert time to hours mins etc
 #include <Wire.h>
@@ -33,10 +36,11 @@
   #include <extEEPROM.h>  // https://github.com/PaoloP74/extEEPROM
 #elif RP_PIO
   // rp2040 specific libraries here
-  #include <Adafruit_NeoPixel.h>
   #include <EEPROM.h>
   #include "hardware/watchdog.h"
   #include "pico/unique_id.h"
+#elif CAN_PIO
+  #include "EEPROM.h"
 #endif
 
 #include "../../inc/sp140/globals.h"  // device config
@@ -95,7 +99,10 @@ SemaphoreHandle_t tftSemaphore;
 void watchdogTask(void* parameter) {
   for (;;) {
     #ifndef OPENPPG_DEBUG
-    watchdog_update();
+      #ifdef RP_PIO
+      watchdog_update();
+      #elif CAN_PIO
+      #endif
     #endif
     vTaskDelay(pdMS_TO_TICKS(100));  // Delay for 100ms
   }
@@ -270,13 +277,21 @@ void setup() {
 
 // set up all the main threads/tasks with core 0 affinity
 void setupTasks() {
+  #ifdef RP_PIO
   xTaskCreateAffinitySet(blinkLEDTask, "blinkLed", 200, NULL, 1, uxCoreAffinityMask1, &blinkLEDTaskHandle);
   xTaskCreateAffinitySet(throttleTask, "throttle", 1000, NULL, 3, uxCoreAffinityMask0, &throttleTaskHandle);
   xTaskCreateAffinitySet(telemetryTask, "TelemetryTask", 2048, NULL, 2, uxCoreAffinityMask0, &telemetryTaskHandle);
   xTaskCreateAffinitySet(trackPowerTask, "trackPower", 500, NULL, 2, uxCoreAffinityMask0, &trackPowerTaskHandle);
   xTaskCreateAffinitySet(updateDisplayTask, "updateDisplay", 2000, NULL, 1, uxCoreAffinityMask0, &updateDisplayTaskHandle);
   xTaskCreateAffinitySet(watchdogTask, "watchdog", 1000, NULL, 4, uxCoreAffinityMask0, &watchdogTaskHandle);
-
+ #else
+  xTaskCreatePinnedToCore(blinkLEDTask, "blinkLed", 200, NULL, 1, &blinkLEDTaskHandle, uxCoreAffinityMask1);
+  xTaskCreatePinnedToCore(throttleTask, "throttle", 1000, NULL, 3, &throttleTaskHandle, uxCoreAffinityMask0);
+  xTaskCreatePinnedToCore(telemetryTask, "TelemetryTask", 2048, NULL, 2, &telemetryTaskHandle, uxCoreAffinityMask0);
+  xTaskCreatePinnedToCore(trackPowerTask, "trackPower", 500, NULL, 2, &trackPowerTaskHandle, uxCoreAffinityMask0);
+  xTaskCreatePinnedToCore(updateDisplayTask, "updateDisplay", 2000, NULL, 1, &updateDisplayTaskHandle, uxCoreAffinityMask0);
+  xTaskCreatePinnedToCore(watchdogTask, "watchdog", 1000, NULL, 4, &watchdogTaskHandle, uxCoreAffinityMask0);
+  #endif
   if (updateDisplayTaskHandle != NULL) {
     vTaskSuspend(updateDisplayTaskHandle);  // Suspend the task immediately after creation
   }
@@ -285,51 +300,20 @@ void setupTasks() {
   xSemaphoreGive(eepromSemaphore);
 }
 
-std::map<eTaskState, const char *> eTaskStateName { {eReady, "Ready"}, { eRunning, "Running" }, {eBlocked, "Blocked"}, {eSuspended, "Suspended"}, {eDeleted, "Deleted"} };
-void ps() {
-  int tasks = uxTaskGetNumberOfTasks();
-  TaskStatus_t *pxTaskStatusArray = new TaskStatus_t[tasks];
-  unsigned long runtime;
-  tasks = uxTaskGetSystemState(pxTaskStatusArray, tasks, &runtime);
-  Serial.printf("# Tasks: %d\n", tasks);
-  Serial.println("ID, NAME, STATE, PRIO, CYCLES");
-  for (int i=0; i < tasks; i++) {
-    Serial.printf("%d: %-16s %-10s %d %lu\n", i, pxTaskStatusArray[i].pcTaskName, eTaskStateName[pxTaskStatusArray[i].eCurrentState], (int)pxTaskStatusArray[i].uxCurrentPriority, pxTaskStatusArray[i].ulRunTimeCounter);
-  }
-  delete[] pxTaskStatusArray;
-}
-
-
-void printTaskMemoryUsage(TaskHandle_t taskHandle, const char* taskName) {
-    UBaseType_t stackHighWaterMark;
-    if (taskHandle == NULL) {
-        taskHandle = xTaskGetCurrentTaskHandle(); // Get current task handle if NULL is passed
-    }
-    stackHighWaterMark = uxTaskGetStackHighWaterMark(taskHandle);
-    printf("Task: %s\n", taskName);
-    printf("Stack High Watermark: %lu words\n", stackHighWaterMark);
-    printf("Estimated Memory Usage: %lu bytes\n", (configTOTAL_HEAP_SIZE - stackHighWaterMark * sizeof(StackType_t)));
-    printf("-------------------------\n");
-}
-
-void psTop() {
-  // Print memory usage for each task
-  Serial.printf("\nLoop() - Free Stack Space: %d", uxTaskGetStackHighWaterMark(NULL));
-  Serial.printf("\nblinkLEDTask - Free Stack Space: %d", uxTaskGetStackHighWaterMark(blinkLEDTaskHandle));
-  Serial.printf("\nthrottleTask - Free Stack Space: %d", uxTaskGetStackHighWaterMark(throttleTaskHandle));
-  Serial.printf("\ntelemetryTask - Free Stack Space: %d", uxTaskGetStackHighWaterMark(telemetryTaskHandle));
-  Serial.printf("\ntrackPowerTask - Free Stack Space: %d", uxTaskGetStackHighWaterMark(trackPowerTaskHandle));
-  Serial.printf("\nupdateDisplayTask - Free Stack Space: %d", uxTaskGetStackHighWaterMark(updateDisplayTaskHandle));
-  Serial.println("");
-}
 
 void setup140() {
-  esc.attach(board_config.esc_pin);
-  esc.writeMicroseconds(ESC_DISARMED_PWM);
+  #ifdef CAN_PIO
+  // todo write to CAN bus
+  #else
+    esc.attach(board_config.esc_pin);
+    esc.writeMicroseconds(ESC_DISARMED_PWM);
+  #endif
 
   initBuzz();
+  #ifdef RP_PIO
   Wire1.setSDA(A0); // Have to use Wire1 because pins are assigned that in hardware
   Wire1.setSCL(A1);
+  #endif
   setupAltimeter(board_config.alt_wire);
   vibePresent = initVibe();
 }
@@ -364,7 +348,11 @@ void printTime(const char* label) {
 
 void disarmESC() {
   throttlePWM = ESC_DISARMED_PWM;
-  esc.writeMicroseconds(ESC_DISARMED_PWM);
+  #ifdef CAN_PIO
+  // todo write to CAN bus
+  #else
+    esc.writeMicroseconds(ESC_DISARMED_PWM);
+  #endif
 }
 
 // reset smoothing
@@ -527,8 +515,11 @@ void handleThrottle() {
     // mapping val to min and max pwm
     throttlePWM = mapd(potLvl, 0, 4095, ESC_MIN_PWM, maxPWM);
   }
-
+#ifdef CAN_PIO
+// todo write to CAN bus
+#else
   esc.writeMicroseconds(throttlePWM);  // using val as the signal to esc
+#endif
 }
 
 int averagePotBuffer() {
@@ -545,7 +536,11 @@ bool armSystem() {
   const unsigned int arm_vibes[] = { 70, 33, 0 };
 
   armed = true;
-  esc.writeMicroseconds(ESC_DISARMED_PWM);  // initialize the signal to low
+  #ifdef CAN_PIO
+  // todo write to CAN bus
+  #else
+    esc.writeMicroseconds(ESC_DISARMED_PWM);  // initialize the signal to low
+  #endif
 
   //ledBlinkThread.enabled = false;
   armedAtMillis = millis();

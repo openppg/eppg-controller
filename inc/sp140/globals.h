@@ -18,9 +18,9 @@ float wattHoursUsed = 0;
 bool vibePresent = false;
 
 int16_t _amps = 0;
-
+#ifndef CAN_PIO
 Servo esc;  // Creating a servo class with name of esc
-
+#endif
 static STR_DEVICE_DATA_140_V1 deviceData;
 
 #endif  // INC_SP140_GLOBALS_H_
