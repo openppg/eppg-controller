@@ -34,17 +34,15 @@ void modeSwitch(bool update_display) {
   playMelody(notify_melody, 2);
 }
 
-void prepareSerialRead() {  // TODO needed?
-  while (SerialESC.available() > 0) {
-    SerialESC.read();
-  }
-}
-
 void handleTelemetry() {
-  prepareSerialRead();
+  #ifdef CAN_PIO
+    // TODO
+  #else
+  while (SerialESC.available() > 0) { SerialESC.read(); }
   SerialESC.readBytes(escDataV2, ESC_DATA_V2_SIZE);
   //printRawSentence();
   handleSerialData(escDataV2);
+  #endif
 }
 
 // new for v2 ESC telemetry

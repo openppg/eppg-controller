@@ -194,8 +194,6 @@ void debugHardwareConfig(const HardwareConfig& config) {
   Serial.println(config.tft_dc);
   Serial.print("tft_lite: ");
   Serial.println(config.tft_lite);
-  Serial.print("esc_pin: ");
-  Serial.println(config.esc_pin);
   Serial.print("enable_vib: ");
   Serial.println(config.enable_vib ? "true" : "false");
   Serial.print("enable_neopixel: ");
