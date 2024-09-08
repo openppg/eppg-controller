@@ -1,15 +1,13 @@
 #include <Arduino.h>
 
 #include "../../inc/sp140/esp32s3-config.h"
-#define LED_BUILTIN 18
 
 // V1 configuration
 HardwareConfig v1_config = {
   .button_top = 15,
   .buzzer_pin = 10,
-  .led_sw = 12,
+  .led_sw = 18,
   .throttle_pin = A0,
-  .serial_esc = &Serial1,
   .alt_wire = false,
   .tft_rst = 5,
   .tft_cs = 13,
