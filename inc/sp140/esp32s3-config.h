@@ -15,6 +15,9 @@ struct HardwareConfig {
   int tft_cs;
   int tft_dc;
   int tft_lite;
+  int vibe_pwm;
+  int sda_pin;
+  int scl_pin;
   bool enable_vib;
   bool enable_neopixel;
 };
