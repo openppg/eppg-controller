@@ -88,6 +88,8 @@ TaskHandle_t watchdogTaskHandle = NULL;
 
 SemaphoreHandle_t eepromSemaphore;
 SemaphoreHandle_t tftSemaphore;
+SemaphoreHandle_t stateMutex;
+SemaphoreHandle_t throttleMutex;
 
 
 #pragma message "Warning: OpenPPG software is in beta"
@@ -283,6 +285,8 @@ void setupTasks() {
 
   eepromSemaphore = xSemaphoreCreateBinary();
   xSemaphoreGive(eepromSemaphore);
+  stateMutex = xSemaphoreCreateMutex();
+  throttleMutex = xSemaphoreCreateMutex();
 }
 
 std::map<eTaskState, const char *> eTaskStateName { {eReady, "Ready"}, { eRunning, "Running" }, {eBlocked, "Blocked"}, {eSuspended, "Suspended"}, {eDeleted, "Deleted"} };
@@ -398,8 +402,6 @@ void disarmSystem() {
   disarmESC(); // disarm the ESC by setting the signal to low value
 
   resetSmoothing(); // reset throttle smoothing values
-
-  armed = false;
   removeCruise(false);
 
   resumeLEDTask(); // resume LED blinking
@@ -413,12 +415,19 @@ void disarmSystem() {
 }
 
 void toggleArm() {
-  if (armed) {
-    disarmSystem();
-  } else if (throttleSafe()) {
-    armSystem();
-  } else {
-    handleArmFail();
+  if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
+    if (armed) {
+      armed = false;
+      xSemaphoreGive(stateMutex);
+      disarmSystem();
+    } else if (throttleSafe()) {
+      armed = true;
+      xSemaphoreGive(stateMutex);
+      armSystem();
+    } else {
+      xSemaphoreGive(stateMutex);
+      handleArmFail();
+    }
   }
 }
 
@@ -492,7 +501,16 @@ void initButtons() {
 // read throttle and send to hub
 // read throttle
 void handleThrottle() {
-  if (!armed) return;  // safe
+  bool isArmed = false;
+  bool isCruising = false;
+  
+  if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
+    isArmed = armed;
+    isCruising = cruising;
+    xSemaphoreGive(stateMutex);
+  }
+
+  if (!isArmed) return;  // safe
 
   armedSecs = (millis() - armedAtMillis) / 1000;  // update time while armed
 
@@ -500,13 +518,15 @@ void handleThrottle() {
   pot->update();
   int potRaw = pot->getValue();
 
-  if (cruising) {
+  int localThrottlePWM = ESC_DISARMED_PWM;
+
+  if (isCruising) {
     unsigned long cruisingSecs = (millis() - cruisedAtMillis) / 1000;
 
     if (cruisingSecs >= CRUISE_GRACE && potRaw > POT_SAFE_LEVEL) {
       removeCruise(true);  // deactivate cruise
     } else {
-      throttlePWM = mapd(cruisedPotVal, 0, POT_MAX_VALUE, ESC_MIN_PWM, maxPWM);
+      localThrottlePWM = mapd(cruisedPotVal, 0, POT_MAX_VALUE, ESC_MIN_PWM, maxPWM);
     }
   } else {
     // no need to save & smooth throttle etc when in cruise mode (& pot == 0)
@@ -525,10 +545,15 @@ void handleThrottle() {
       maxPWM = ESC_MAX_PWM;
     }
     // mapping val to min and max pwm
-    throttlePWM = mapd(potLvl, 0, 4095, ESC_MIN_PWM, maxPWM);
+    localThrottlePWM = mapd(potLvl, 0, 4095, ESC_MIN_PWM, maxPWM);
   }
 
-  esc.writeMicroseconds(throttlePWM);  // using val as the signal to esc
+  if (xSemaphoreTake(throttleMutex, portMAX_DELAY) == pdTRUE) {
+    throttlePWM = localThrottlePWM;
+    xSemaphoreGive(throttleMutex);
+  }
+
+  esc.writeMicroseconds(localThrottlePWM);  // using val as the signal to esc
 }
 
 int averagePotBuffer() {
@@ -571,31 +596,32 @@ bool throttleSafe() {
 
 
 void setCruise() {
-  // IDEA: fill a "cruise indicator" as long press activate happens
-  // or gradually change color from blue to yellow with time
-  if (!throttleSafe()) {  // using pot/throttle
-    cruisedPotVal = pot->getValue();  // save current throttle val
-    cruisedAtMillis = millis();  // start timer
-    // throttle handle runs fast and a lot. need to set the timer before
-    // setting cruise so its updated in time
-    // TODO since these values are accessed in another task make sure memory safe
-    cruising = true;
-    vibrateNotify();
-
-    uint16_t notify_melody[] = { 900, 900 };
-    playMelody(notify_melody, 2);
+  if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
+    if (!throttleSafe()) {
+      cruisedPotVal = pot->getValue();
+      cruisedAtMillis = millis();
+      cruising = true;
+      xSemaphoreGive(stateMutex);
+      vibrateNotify();
+      uint16_t notify_melody[] = { 900, 900 };
+      playMelody(notify_melody, 2);
+    } else {
+      xSemaphoreGive(stateMutex);
+    }
   }
 }
 
 void removeCruise(bool alert) {
-  cruising = false;
-
-  if (alert) {
-    vibrateNotify();
-
-    if (ENABLE_BUZ) {
-      uint16_t notify_melody[] = { 500, 500 };
-      playMelody(notify_melody, 2);
+  if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
+    cruising = false;
+    xSemaphoreGive(stateMutex);
+    
+    if (alert) {
+      vibrateNotify();
+      if (ENABLE_BUZ) {
+        uint16_t notify_melody[] = { 500, 500 };
+        playMelody(notify_melody, 2);
+      }
     }
   }
 }
