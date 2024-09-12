@@ -620,24 +620,25 @@ bool throttleEngaged() {
   return false;
 }
 
+void playCruiseSound() {
+  vibrateNotify();
+  if (ENABLE_BUZ) {
+    uint16_t notify_melody[] = { 900, 900 };
+    playMelody(notify_melody, 2);
+  }
+}
 
 void setCruise() {
   cruisedPotVal = pot->getValue();
   cruisedAtMillis = millis();
-  vibrateNotify();
-  uint16_t notify_melody[] = { 900, 900 };
-  playMelody(notify_melody, 2);
+  playCruiseSound();
 }
 
 void removeCruise(bool alert) {
   if (currentState == ARMED_CRUISING) {
     changeDeviceState(ARMED);
     if (alert) {
-      vibrateNotify();
-      if (ENABLE_BUZ) {
-        uint16_t notify_melody[] = { 500, 500 };
-        playMelody(notify_melody, 2);
-      }
+      playCruiseSound();
     }
   }
 }
