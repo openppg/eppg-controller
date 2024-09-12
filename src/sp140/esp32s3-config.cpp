@@ -18,6 +18,6 @@ HardwareConfig v1_config = {
   .vibe_pwm = 27,
   .sda_pin = 44,
   .scl_pin = 41,
-  .enable_vib = false,
-  .enable_neopixel = false
+  .enable_vib = true,
+  .enable_neopixel = true
 };
