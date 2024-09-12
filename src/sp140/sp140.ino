@@ -74,7 +74,41 @@ CircularBuffer<int, 8> potBuffer;
 Adafruit_NeoPixel pixels(1, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
 uint32_t led_color = LED_RED; // current LED color
 
-bool armed = false;
+// New enum for device state
+enum DeviceState {
+  DISARMED,
+  ARMED,
+  ARMED_CRUISING
+};
+
+// Global variable for device state
+volatile DeviceState currentState = DISARMED;
+
+// Function to safely change the device state
+void changeDeviceState(DeviceState newState) {
+  if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
+    currentState = newState;
+    switch (newState) {
+      case DISARMED:
+        armed = false;
+        cruising = false;
+        disarmSystem();
+        break;
+      case ARMED:
+        armed = true;
+        cruising = false;
+        armSystem();
+        break;
+      case ARMED_CRUISING:
+        armed = true;
+        cruising = true;
+        setCruise();
+        break;
+    }
+    xSemaphoreGive(stateMutex);
+  }
+}
+
 uint32_t armedAtMillis = 0;
 uint32_t cruisedAtMillisMilis = 0;
 unsigned long armedSecs = 0;
@@ -412,34 +446,35 @@ void disarmSystem() {
 }
 
 void toggleArm() {
-  if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
-    if (armed) {
-      armed = false;
-      disarmSystem();
-    } else if (throttleSafe()) {
-      armed = true;
-      armSystem();
+  if (currentState == DISARMED) {
+    if (throttleSafe()) {
+      changeDeviceState(ARMED);
     } else {
       handleArmFail();
     }
-    xSemaphoreGive(stateMutex);  // Always release before exiting
+  } else {
+    changeDeviceState(DISARMED);
   }
 }
 
 void toggleCruise() {
-  if (armed) {
-    if (cruising) {
-      removeCruise(true);
-    } else if (throttleSafe()) {
-      modeSwitch(true);
-    } else {
-      setCruise();
-    }
-  } else {
-    // show stats screen
-    vTaskSuspend(updateDisplayTaskHandle);
-    displayMeta(deviceData);
-    vTaskResume(updateDisplayTaskHandle);
+  switch (currentState) {
+    case ARMED:
+      if (throttleSafe()) {
+        changeDeviceState(ARMED_CRUISING);
+      } else {
+        // Notify user that cruise can't be engaged (throttle not safe)
+      }
+      break;
+    case ARMED_CRUISING:
+      changeDeviceState(ARMED);
+      break;
+    case DISARMED:
+      // show stats screen
+      vTaskSuspend(updateDisplayTaskHandle);
+      displayMeta(deviceData);
+      vTaskResume(updateDisplayTaskHandle);
+      break;
   }
 }
 
@@ -496,16 +531,7 @@ void initButtons() {
 // read throttle and send to hub
 // read throttle
 void handleThrottle() {
-  bool isArmed = false;
-  bool isCruising = false;
-  
-  if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
-    isArmed = armed;
-    isCruising = cruising;
-    xSemaphoreGive(stateMutex);
-  }
-
-  if (!isArmed) return;  // safe
+  if (currentState == DISARMED) return;  // safe
 
   armedSecs = (millis() - armedAtMillis) / 1000;  // update time while armed
 
@@ -515,11 +541,11 @@ void handleThrottle() {
 
   int localThrottlePWM = ESC_DISARMED_PWM;
 
-  if (isCruising) {
+  if (currentState == ARMED_CRUISING) {
     unsigned long cruisingSecs = (millis() - cruisedAtMillis) / 1000;
 
     if (cruisingSecs >= CRUISE_GRACE && potRaw > POT_SAFE_LEVEL) {
-      removeCruise(true);  // deactivate cruise
+      changeDeviceState(ARMED);  // deactivate cruise
     } else {
       localThrottlePWM = mapd(cruisedPotVal, 0, POT_MAX_VALUE, ESC_MIN_PWM, maxPWM);
     }
@@ -586,26 +612,16 @@ bool throttleSafe() {
 
 
 void setCruise() {
-  if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
-    if (!throttleSafe()) {
-      cruisedPotVal = pot->getValue();
-      cruisedAtMillis = millis();
-      cruising = true;
-      xSemaphoreGive(stateMutex);
-      vibrateNotify();
-      uint16_t notify_melody[] = { 900, 900 };
-      playMelody(notify_melody, 2);
-    } else {
-      xSemaphoreGive(stateMutex);
-    }
-  }
+  cruisedPotVal = pot->getValue();
+  cruisedAtMillis = millis();
+  vibrateNotify();
+  uint16_t notify_melody[] = { 900, 900 };
+  playMelody(notify_melody, 2);
 }
 
 void removeCruise(bool alert) {
-  if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
-    cruising = false;
-    xSemaphoreGive(stateMutex);
-    
+  if (currentState == ARMED_CRUISING) {
+    changeDeviceState(ARMED);
     if (alert) {
       vibrateNotify();
       if (ENABLE_BUZ) {
