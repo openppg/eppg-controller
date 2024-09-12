@@ -26,7 +26,7 @@ void modeSwitch(bool update_display) {
     deviceData.performance_mode = 0;
   }
 
-  if (!armed) {
+  if (currentState == DISARMED) {
     writeDeviceData();
   }
 

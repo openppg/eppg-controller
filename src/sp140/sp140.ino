@@ -84,24 +84,22 @@ enum DeviceState {
 // Global variable for device state
 volatile DeviceState currentState = DISARMED;
 
+SemaphoreHandle_t eepromSemaphore;
+SemaphoreHandle_t tftSemaphore;
+SemaphoreHandle_t stateMutex;
+
 // Function to safely change the device state
 void changeDeviceState(DeviceState newState) {
   if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
     currentState = newState;
     switch (newState) {
       case DISARMED:
-        armed = false;
-        cruising = false;
         disarmSystem();
         break;
       case ARMED:
-        armed = true;
-        cruising = false;
         armSystem();
         break;
       case ARMED_CRUISING:
-        armed = true;
-        cruising = true;
         setCruise();
         break;
     }
@@ -120,10 +118,8 @@ TaskHandle_t trackPowerTaskHandle = NULL;
 TaskHandle_t updateDisplayTaskHandle = NULL;
 TaskHandle_t watchdogTaskHandle = NULL;
 
-SemaphoreHandle_t eepromSemaphore;
-SemaphoreHandle_t tftSemaphore;
-SemaphoreHandle_t stateMutex;
-
+unsigned long lastDisarmTime = 0;
+const unsigned long DISARM_COOLDOWN = 500; // 500ms cooldown
 
 #pragma message "Warning: OpenPPG software is in beta"
 
@@ -177,15 +173,15 @@ void trackPowerTask(void *pvParameters) {
   vTaskDelete(NULL);  // should never reach this
 }
 
-void updateDisplayTask(void *pvParameters) { //TODO set core affinity to one core only
+void updateDisplayTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
-  for (;;) {  // infinite loop
-    // TODO separate alt reading out to its own task. Avoid blocking display updates when alt reading is slow etc
-    // TODO use queues to pass data between tasks (xQueueOverwrite)
+  for (;;) {
     const float altitude = getAltitude(deviceData);
-    updateDisplay(deviceData, telemetryData, altitude, armed, cruising, armedAtMillis);
-    delay(250);  // wait for 250ms
+    bool isArmed = (currentState != DISARMED);
+    bool isCruising = (currentState == ARMED_CRUISING);
+    updateDisplay(deviceData, telemetryData, altitude, isArmed, isCruising, armedAtMillis);
+    delay(250);
   }
   vTaskDelete(NULL);  // should never reach this
 }
@@ -379,7 +375,7 @@ void loop() {
 
   // from WebUSB to both Serial & webUSB
 #ifdef USE_TINYUSB
-  if (!armed && usb_web.available()) parse_usb_serial();
+  if (currentState == DISARMED && usb_web.available()) parse_usb_serial();
 #endif
 
   // more stable in main loop
@@ -430,28 +426,29 @@ void updateArmedTime() {
 }
 
 void disarmSystem() {
-  disarmESC(); // disarm the ESC by setting the signal to low value
-
-  resetSmoothing(); // reset throttle smoothing values
+  disarmESC();
+  resetSmoothing();
   removeCruise(false);
-
-  resumeLEDTask(); // resume LED blinking
-
+  resumeLEDTask();
   runDisarmAlert();
-
   updateArmedTime();
   writeDeviceData();
-
-  delay(500);  // TODO just disable button thread // dont allow immediate rearming
+  
+  // Set the last disarm time
+  lastDisarmTime = millis();
 }
 
 void toggleArm() {
   if (currentState == DISARMED) {
-    if (throttleSafe()) {
-      changeDeviceState(ARMED);
-    } else {
-      handleArmFail();
+    // Check if enough time has passed since last disarm
+    if (millis() - lastDisarmTime >= DISARM_COOLDOWN) {
+      if (throttleSafe()) {
+        changeDeviceState(ARMED);
+      } else {
+        handleArmFail();
+      }
     }
+    // If we're still in the cooldown period, do nothing
   } else {
     changeDeviceState(DISARMED);
   }
@@ -585,7 +582,6 @@ bool armSystem() {
   uint16_t arm_melody[] = { 1760, 1976, 2093 };
   const unsigned int arm_vibes[] = { 70, 33, 0 };
 
-  armed = true;
   esc.writeMicroseconds(ESC_DISARMED_PWM);  // initialize the signal to low
 
   //ledBlinkThread.enabled = false;
@@ -639,7 +635,7 @@ void trackPower() {
   unsigned long msec_diff = (currentPwrMillis - prevPwrMillis);  // eg 0.30 sec
   prevPwrMillis = currentPwrMillis;
 
-  if (armed) {
+  if (currentState != DISARMED) {
     wattHoursUsed += round(watts/60/60*msec_diff)/1000.0;
   }
 }
