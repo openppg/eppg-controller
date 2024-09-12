@@ -8,7 +8,6 @@ unsigned long cruisedAtMillis = 0;
 volatile bool cruising = false;
 int prevPotLvl = 0;
 int cruisedPotVal = 0;
-volatile float throttlePWM = 0;
 bool throttledFlag = true;
 
 float watts = 0;

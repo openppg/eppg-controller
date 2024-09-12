@@ -89,7 +89,6 @@ TaskHandle_t watchdogTaskHandle = NULL;
 SemaphoreHandle_t eepromSemaphore;
 SemaphoreHandle_t tftSemaphore;
 SemaphoreHandle_t stateMutex;
-SemaphoreHandle_t throttleMutex;
 
 
 #pragma message "Warning: OpenPPG software is in beta"
@@ -273,11 +272,11 @@ void setup() {
 // set up all the main threads/tasks with core 0 affinity
 void setupTasks() {
   xTaskCreateAffinitySet(blinkLEDTask, "blinkLed", 200, NULL, 1, uxCoreAffinityMask1, &blinkLEDTaskHandle);
-  xTaskCreateAffinitySet(throttleTask, "throttle", 1000, NULL, 3, uxCoreAffinityMask0, &throttleTaskHandle);
-  xTaskCreateAffinitySet(telemetryTask, "TelemetryTask", 2048, NULL, 2, uxCoreAffinityMask0, &telemetryTaskHandle);
+  xTaskCreateAffinitySet(throttleTask, "throttle", 2048, NULL, 4, uxCoreAffinityMask0, &throttleTaskHandle);
+  xTaskCreateAffinitySet(telemetryTask, "TelemetryTask", 2048, NULL, 3, uxCoreAffinityMask0, &telemetryTaskHandle);
   xTaskCreateAffinitySet(trackPowerTask, "trackPower", 500, NULL, 2, uxCoreAffinityMask0, &trackPowerTaskHandle);
   xTaskCreateAffinitySet(updateDisplayTask, "updateDisplay", 2000, NULL, 1, uxCoreAffinityMask0, &updateDisplayTaskHandle);
-  xTaskCreateAffinitySet(watchdogTask, "watchdog", 1000, NULL, 4, uxCoreAffinityMask0, &watchdogTaskHandle);
+  xTaskCreateAffinitySet(watchdogTask, "watchdog", 1000, NULL, 5, uxCoreAffinityMask0, &watchdogTaskHandle);
 
   if (updateDisplayTaskHandle != NULL) {
     vTaskSuspend(updateDisplayTaskHandle);  // Suspend the task immediately after creation
@@ -286,7 +285,6 @@ void setupTasks() {
   eepromSemaphore = xSemaphoreCreateBinary();
   xSemaphoreGive(eepromSemaphore);
   stateMutex = xSemaphoreCreateMutex();
-  throttleMutex = xSemaphoreCreateMutex();
 }
 
 std::map<eTaskState, const char *> eTaskStateName { {eReady, "Ready"}, { eRunning, "Running" }, {eBlocked, "Blocked"}, {eSuspended, "Suspended"}, {eDeleted, "Deleted"} };
@@ -367,7 +365,6 @@ void printTime(const char* label) {
 }
 
 void disarmESC() {
-  throttlePWM = ESC_DISARMED_PWM;
   esc.writeMicroseconds(ESC_DISARMED_PWM);
 }
 
@@ -418,16 +415,14 @@ void toggleArm() {
   if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
     if (armed) {
       armed = false;
-      xSemaphoreGive(stateMutex);
       disarmSystem();
     } else if (throttleSafe()) {
       armed = true;
-      xSemaphoreGive(stateMutex);
       armSystem();
     } else {
-      xSemaphoreGive(stateMutex);
       handleArmFail();
     }
+    xSemaphoreGive(stateMutex);  // Always release before exiting
   }
 }
 
@@ -546,11 +541,6 @@ void handleThrottle() {
     }
     // mapping val to min and max pwm
     localThrottlePWM = mapd(potLvl, 0, 4095, ESC_MIN_PWM, maxPWM);
-  }
-
-  if (xSemaphoreTake(throttleMutex, portMAX_DELAY) == pdTRUE) {
-    throttlePWM = localThrottlePWM;
-    xSemaphoreGive(throttleMutex);
   }
 
   esc.writeMicroseconds(localThrottlePWM);  // using val as the signal to esc
