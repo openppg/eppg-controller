@@ -88,19 +88,33 @@ SemaphoreHandle_t eepromSemaphore;
 SemaphoreHandle_t tftSemaphore;
 SemaphoreHandle_t stateMutex;
 
-// Function to safely change the device state
 void changeDeviceState(DeviceState newState) {
   if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
+    DeviceState oldState = currentState;
     currentState = newState;
     switch (newState) {
       case DISARMED:
         disarmSystem();
         break;
       case ARMED:
-        armSystem();
+        if (oldState == DISARMED) {
+          // Perform full arm sequence when transitioning from DISARMED to ARMED
+          armSystem();
+        } else if (oldState == ARMED_CRUISING) {
+          // When transitioning from ARMED_CRUISING to ARMED, only remove cruise
+          // This avoids re-arming the system unnecessarily
+          removeCruise(true);
+        }
+        // Note: No action needed if already in ARMED state
         break;
       case ARMED_CRUISING:
-        setCruise();
+        if (oldState == ARMED) {
+          setCruise();
+        } else {
+          // Should never happen
+          // Do nothing if not already in ARMED state
+          currentState = oldState;  // Revert to the previous state
+        }
         break;
     }
     xSemaphoreGive(stateMutex);
@@ -433,7 +447,7 @@ void disarmSystem() {
   runDisarmAlert();
   updateArmedTime();
   writeDeviceData();
-  
+
   // Set the last disarm time
   lastDisarmTime = millis();
 }
@@ -442,7 +456,7 @@ void toggleArm() {
   if (currentState == DISARMED) {
     // Check if enough time has passed since last disarm
     if (millis() - lastDisarmTime >= DISARM_COOLDOWN) {
-      if (throttleSafe()) {
+      if (!throttleEngaged()) {
         changeDeviceState(ARMED);
       } else {
         handleArmFail();
@@ -457,14 +471,14 @@ void toggleArm() {
 void toggleCruise() {
   switch (currentState) {
     case ARMED:
-      if (throttleSafe()) {
+      if (throttleEngaged()) {
         changeDeviceState(ARMED_CRUISING);
       } else {
-        // Notify user that cruise can't be engaged (throttle not safe)
+        // We can only cruise when throttle is on
       }
       break;
     case ARMED_CRUISING:
-      changeDeviceState(ARMED);
+      changeDeviceState(ARMED);  // This will now call removeCruise
       break;
     case DISARMED:
       // show stats screen
@@ -541,7 +555,7 @@ void handleThrottle() {
   if (currentState == ARMED_CRUISING) {
     unsigned long cruisingSecs = (millis() - cruisedAtMillis) / 1000;
 
-    if (cruisingSecs >= CRUISE_GRACE && potRaw > POT_SAFE_LEVEL) {
+    if (cruisingSecs >= CRUISE_GRACE && potRaw > POT_ENGAGEMENT_LEVEL) {
       changeDeviceState(ARMED);  // deactivate cruise
     } else {
       localThrottlePWM = mapd(cruisedPotVal, 0, POT_MAX_VALUE, ESC_MIN_PWM, maxPWM);
@@ -597,10 +611,10 @@ bool armSystem() {
 }
 
 
-// Returns true if the throttle/pot is below the safe threshold
-bool throttleSafe() {
+// Returns true if the throttle/pot is above the engagement threshold
+bool throttleEngaged() {
   pot->update();
-  if (pot->getValue() < POT_SAFE_LEVEL) {
+  if (pot->getValue() >= POT_ENGAGEMENT_LEVEL) {
     return true;
   }
   return false;
