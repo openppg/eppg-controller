@@ -472,7 +472,8 @@ void toggleCruise() {
       if (throttleEngaged()) {
         changeDeviceState(ARMED_CRUISING);
       } else {
-        // We can only cruise when throttle is on
+        // Call modeSwitch when armed but throttle not engaged
+        modeSwitch(false);
       }
       break;
     case ARMED_CRUISING:
