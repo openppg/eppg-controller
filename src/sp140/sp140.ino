@@ -103,13 +103,12 @@ void changeDeviceState(DeviceState newState) {
         } else if (oldState == ARMED_CRUISING) {
           // When transitioning from ARMED_CRUISING to ARMED, only remove cruise
           // This avoids re-arming the system unnecessarily
-          removeCruise(true);
+           afterCruiseEnd();
         }
-        // Note: No action needed if already in ARMED state
         break;
       case ARMED_CRUISING:
         if (oldState == ARMED) {
-          setCruise();
+          afterCruiseStart();
         } else {
           // Should never happen
           // Do nothing if not already in ARMED state
@@ -442,7 +441,6 @@ void updateArmedTime() {
 void disarmSystem() {
   disarmESC();
   resetSmoothing();
-  removeCruise(false);
   resumeLEDTask();
   runDisarmAlert();
   updateArmedTime();
@@ -628,19 +626,15 @@ void playCruiseSound() {
   }
 }
 
-void setCruise() {
+void afterCruiseStart() {
   cruisedPotVal = pot->getValue();
   cruisedAtMillis = millis();
   playCruiseSound();
 }
 
-void removeCruise(bool alert) {
-  if (currentState == ARMED_CRUISING) {
-    changeDeviceState(ARMED);
-    if (alert) {
-      playCruiseSound();
-    }
-  }
+void afterCruiseEnd() {
+  cruisedPotVal = 0;
+  playCruiseSound();
 }
 
 unsigned long prevPwrMillis = 0;
