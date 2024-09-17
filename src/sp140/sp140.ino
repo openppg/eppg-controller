@@ -563,7 +563,7 @@ bool armSystem() {
 // Returns true if the throttle/pot is below the safe threshold
 bool throttleSafe() {
   pot->update();
-  if (pot->getValue() < POT_SAFE_LEVEL) {
+  if (pot->getRawValue() < POT_SAFE_LEVEL) {
     return true;
   }
   return false;
