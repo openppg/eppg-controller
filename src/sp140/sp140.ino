@@ -609,11 +609,10 @@ bool armSystem() {
   return true;
 }
 
-
 // Returns true if the throttle/pot is above the engagement threshold
 bool throttleEngaged() {
   pot->update();
-  if (pot->getValue() >= POT_ENGAGEMENT_LEVEL) {
+  if (pot->getRawValue() >= POT_ENGAGEMENT_LEVEL) {
     return true;
   }
   return false;
