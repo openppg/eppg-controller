@@ -17,11 +17,8 @@ bool initVibe() {
 }
 
 void vibrateNotify() {
-  if (!vibePresent) { return; }
-
-  vibe.setWaveform(0, 15);  // 1 through 117 (see example sketch)
-  vibe.setWaveform(1, 0);
-  vibe.go();
+  const unsigned int notify_vibes[] = { 15, 0 };
+  runVibe(notify_vibes, 2);
 }
 
 bool runVibe(const unsigned int sequence[], int siz) {
