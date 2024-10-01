@@ -330,7 +330,7 @@ void setup140() {
   Wire1.setSCL(A1);
   setupAltimeter(board_config.alt_wire);
   if (board_config.enable_vib) {
-    initVibe();
+    initVibeMotor();
   }
 }
 
@@ -379,8 +379,8 @@ void resumeLEDTask() {
 
 void runDisarmAlert() {
   u_int16_t disarm_melody[] = { 2093, 1976, 880 };
-  const unsigned int disarm_vibes[] = { 76, 48 };
-  runVibe(disarm_vibes, 3);
+  const unsigned int disarm_vibes[] = { 76, 49 };
+  runVibePattern(disarm_vibes, 2);
   playMelody(disarm_melody, 3);
 }
 
@@ -553,7 +553,7 @@ bool armSystem() {
 
   vTaskSuspend(blinkLEDTaskHandle);
   setLEDs(HIGH); // solid LED while armed
-  runVibe(arm_vibes, 3);
+  runVibePattern(arm_vibes, 3);
   playMelody(arm_melody, 3);
 
   return true;
@@ -580,7 +580,7 @@ void setCruise() {
     // setting cruise so its updated in time
     // TODO since these values are accessed in another task make sure memory safe
     cruising = true;
-    vibrateNotify();
+    pulseVibeMotor();
 
     uint16_t notify_melody[] = { 900, 900 };
     playMelody(notify_melody, 2);
@@ -591,7 +591,7 @@ void removeCruise(bool alert) {
   cruising = false;
 
   if (alert) {
-    vibrateNotify();
+    pulseVibeMotor();
 
     if (ENABLE_BUZ) {
       uint16_t notify_melody[] = { 500, 500 };

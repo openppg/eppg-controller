@@ -2,31 +2,31 @@
 #include "sp140/structs.h"
 #include <Adafruit_DRV2605.h>
 
-Adafruit_DRV2605 vibe;
+Adafruit_DRV2605 vibeMotor;
 
-bool vibePresent = false;
+bool vibeMotorInitialized = false;
 
-bool initVibe() {
-  if (!vibe.begin(&Wire1)) { return false; }
-  vibe.selectLibrary(3);
-  vibe.setMode(DRV2605_MODE_INTTRIG);
-  vibePresent = true;
-
-  vibrateNotify();  // initial boot vibration
+bool initVibeMotor() {
+  if (!vibeMotor.begin(&Wire1)) { return false; }
+  vibeMotor.selectLibrary(3);
+  vibeMotor.setMode(DRV2605_MODE_INTTRIG);
+  vibeMotorInitialized = true;
+  
+  pulseVibeMotor();  // initial boot vibration
   return true;
 }
 
-void vibrateNotify() {
-  const unsigned int notify_vibes[] = { 14, 1, 14 };
-  runVibe(notify_vibes, 3);
+void pulseVibeMotor() {
+  const unsigned int pulsePattern[] = { 14, 1, 14 };
+  runVibePattern(pulsePattern, 3);
 }
 
-bool runVibe(const unsigned int sequence[], int siz) {
-  if (!vibePresent) { return false; }
+bool runVibePattern(const unsigned int pattern[], int patternSize) {
+  if (!vibeMotorInitialized) { return false; }
 
-  for (int thisVibe = 0; thisVibe < siz; thisVibe++) {
-    vibe.setWaveform(thisVibe, sequence[thisVibe]);
+  for (int i = 0; i < patternSize; i++) {
+    vibeMotor.setWaveform(i, pattern[i]);
   }
-  vibe.go();
+  vibeMotor.go();
   return true;
 }
