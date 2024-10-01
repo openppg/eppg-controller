@@ -8,17 +8,17 @@ bool vibePresent = false;
 
 bool initVibe() {
   if (!vibe.begin(&Wire1)) { return false; }
-  vibe.selectLibrary(1);
+  vibe.selectLibrary(3);
   vibe.setMode(DRV2605_MODE_INTTRIG);
   vibePresent = true;
-  
+
   vibrateNotify();  // initial boot vibration
   return true;
 }
 
 void vibrateNotify() {
-  const unsigned int notify_vibes[] = { 15, 0 };
-  runVibe(notify_vibes, 2);
+  const unsigned int notify_vibes[] = { 14, 1, 14 };
+  runVibe(notify_vibes, 3);
 }
 
 bool runVibe(const unsigned int sequence[], int siz) {
