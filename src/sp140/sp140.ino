@@ -471,6 +471,10 @@ void setup140() {
   #ifdef RP_PIO
   Wire1.setSDA(A0); // Have to use Wire1 because pins are assigned that in hardware
   Wire1.setSCL(A1);
+  #elif CAN_PIO
+  const int SDA_PIN = 44;
+  const int SCL_PIN = 41;
+  Wire.setPins(SDA_PIN, SCL_PIN);
   #endif
   setupAltimeter(board_config.alt_wire);
   vibePresent = initVibe();
