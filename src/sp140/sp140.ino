@@ -16,7 +16,6 @@
 
 #include "../../inc/sp140/structs.h"         // data structs
 #include <AceButton.h>           // button clicks
-#include <Adafruit_DRV2605.h>    // haptic controller
 #include <ArduinoJson.h>
 #include <CircularBuffer.hpp>      // smooth out readings
 #include <ResponsiveAnalogRead.h>  // smoothing for throttle
@@ -43,6 +42,7 @@
 
 #include "../../inc/sp140/display.h"
 #include "../../inc/sp140/altimeter.h"
+#include "../../inc/sp140/vibration.h"
 
 using namespace ace_button;
 
@@ -50,8 +50,6 @@ UBaseType_t uxCoreAffinityMask0 = (1 << 0); // Core 0
 UBaseType_t uxCoreAffinityMask1 = (1 << 1); // Core 1
 
 HardwareConfig board_config;
-
-Adafruit_DRV2605 vibe;
 
 // USB WebUSB object
 #ifdef USE_TINYUSB
@@ -331,7 +329,9 @@ void setup140() {
   Wire1.setSDA(A0); // Have to use Wire1 because pins are assigned that in hardware
   Wire1.setSCL(A1);
   setupAltimeter(board_config.alt_wire);
-  vibePresent = initVibe();
+  if (board_config.enable_vib) {
+    initVibe();
+  }
 }
 
 // main loop - everything runs in threads
