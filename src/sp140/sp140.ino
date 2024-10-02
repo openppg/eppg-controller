@@ -617,35 +617,22 @@ bool throttleEngaged() {
   return false;
 }
 
-
-void setCruise() {
-  // IDEA: fill a "cruise indicator" as long press activate happens
-  // or gradually change color from blue to yellow with time
-  if (!throttleSafe()) {  // using pot/throttle
-    cruisedPotVal = pot->getValue();  // save current throttle val
-    cruisedAtMillis = millis();  // start timer
-    // throttle handle runs fast and a lot. need to set the timer before
-    // setting cruise so its updated in time
-    // TODO since these values are accessed in another task make sure memory safe
-    cruising = true;
-    pulseVibeMotor();
-
-    if (ENABLE_BUZ) {
-      uint16_t notify_melody[] = { 900, 900 };
-      playMelody(notify_melody, 2);
-    }
-
-  }
-}
-
 void afterCruiseStart() {
   cruisedPotVal = pot->getValue();
   cruisedAtMillis = millis();
   playCruiseSound();
   pulseVibeMotor();
+}
 
+void afterCruiseEnd() {
+  cruisedPotVal = 0;
+  playCruiseSound();
+  pulseVibeMotor();
+}
+
+void playCruiseSound() {
   if (ENABLE_BUZ) {
-    uint16_t notify_melody[] = { 500, 500 };
+    uint16_t notify_melody[] = { 900, 900 };
     playMelody(notify_melody, 2);
   }
 }
