@@ -11,7 +11,7 @@ bool initVibeMotor() {
   vibeMotor.selectLibrary(3);
   vibeMotor.setMode(DRV2605_MODE_INTTRIG);
   vibeMotorInitialized = true;
-  
+
   pulseVibeMotor();  // initial boot vibration
   return true;
 }
