@@ -27,6 +27,8 @@ bool runVibePattern(const unsigned int pattern[], int patternSize) {
   for (int i = 0; i < patternSize; i++) {
     vibeMotor.setWaveform(i, pattern[i]);
   }
+  // add one extra empty cycle to ensure the motor is off at the end
+  vibeMotor.setWaveform(patternSize, 0);
   vibeMotor.go();
   return true;
 }
