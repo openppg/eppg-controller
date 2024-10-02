@@ -16,7 +16,6 @@
 
 #include "../../inc/sp140/structs.h"         // data structs
 #include <AceButton.h>           // button clicks
-#include <Adafruit_DRV2605.h>    // haptic controller
 #include <ArduinoJson.h>
 #include <CircularBuffer.hpp>      // smooth out readings
 #include <ResponsiveAnalogRead.h>  // smoothing for throttle
@@ -43,6 +42,7 @@
 
 #include "../../inc/sp140/display.h"
 #include "../../inc/sp140/altimeter.h"
+#include "../../inc/sp140/vibration.h"
 
 using namespace ace_button;
 
@@ -50,8 +50,6 @@ UBaseType_t uxCoreAffinityMask0 = (1 << 0); // Core 0
 UBaseType_t uxCoreAffinityMask1 = (1 << 1); // Core 1
 
 HardwareConfig board_config;
-
-Adafruit_DRV2605 vibe;
 
 // USB WebUSB object
 #ifdef USE_TINYUSB
@@ -375,7 +373,9 @@ void setup140() {
   Wire1.setSDA(A0); // Have to use Wire1 because pins are assigned that in hardware
   Wire1.setSCL(A1);
   setupAltimeter(board_config.alt_wire);
-  vibePresent = initVibe();
+  if (board_config.enable_vib) {
+    initVibeMotor();
+  }
 }
 
 // main loop - everything runs in threads
@@ -422,8 +422,8 @@ void resumeLEDTask() {
 
 void runDisarmAlert() {
   u_int16_t disarm_melody[] = { 2093, 1976, 880 };
-  const unsigned int disarm_vibes[] = { 100, 0 };
-  runVibe(disarm_vibes, 3);
+  const unsigned int disarm_vibes[] = { 78, 49 };
+  runVibePattern(disarm_vibes, 2);
   playMelody(disarm_melody, 3);
 }
 
@@ -592,7 +592,7 @@ int averagePotBuffer() {
 // get the PPG ready to fly
 bool armSystem() {
   uint16_t arm_melody[] = { 1760, 1976, 2093 };
-  const unsigned int arm_vibes[] = { 70, 33, 0 };
+  const unsigned int arm_vibes[] = { 1, 85, 1, 85, 1, 85, 1 };
 
   esc.writeMicroseconds(ESC_DISARMED_PWM);  // initialize the signal to low
 
@@ -602,7 +602,7 @@ bool armSystem() {
 
   vTaskSuspend(blinkLEDTaskHandle);
   setLEDs(HIGH); // solid LED while armed
-  runVibe(arm_vibes, 3);
+  runVibePattern(arm_vibes, 7);
   playMelody(arm_melody, 3);
 
   return true;
@@ -617,11 +617,24 @@ bool throttleEngaged() {
   return false;
 }
 
-void playCruiseSound() {
-  vibrateNotify();
-  if (ENABLE_BUZ) {
-    uint16_t notify_melody[] = { 900, 900 };
-    playMelody(notify_melody, 2);
+
+void setCruise() {
+  // IDEA: fill a "cruise indicator" as long press activate happens
+  // or gradually change color from blue to yellow with time
+  if (!throttleSafe()) {  // using pot/throttle
+    cruisedPotVal = pot->getValue();  // save current throttle val
+    cruisedAtMillis = millis();  // start timer
+    // throttle handle runs fast and a lot. need to set the timer before
+    // setting cruise so its updated in time
+    // TODO since these values are accessed in another task make sure memory safe
+    cruising = true;
+    pulseVibeMotor();
+
+    if (ENABLE_BUZ) {
+      uint16_t notify_melody[] = { 900, 900 };
+      playMelody(notify_melody, 2);
+    }
+
   }
 }
 
@@ -629,11 +642,12 @@ void afterCruiseStart() {
   cruisedPotVal = pot->getValue();
   cruisedAtMillis = millis();
   playCruiseSound();
-}
+  pulseVibeMotor();
 
-void afterCruiseEnd() {
-  cruisedPotVal = 0;
-  playCruiseSound();
+  if (ENABLE_BUZ) {
+    uint16_t notify_melody[] = { 500, 500 };
+    playMelody(notify_melody, 2);
+  }
 }
 
 unsigned long prevPwrMillis = 0;

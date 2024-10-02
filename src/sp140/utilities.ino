@@ -61,16 +61,6 @@ void blinkLED() {
   setLEDs(ledState);
 }
 
-bool runVibe(const unsigned int sequence[], int siz) {
-  if (!vibePresent) { return false; }
-
-  for (int thisVibe = 0; thisVibe < siz; thisVibe++) {
-    vibe.setWaveform(thisVibe, sequence[thisVibe]);
-  }
-  vibe.go();
-  return true;
-}
-
 /**
  * Plays a melody using a piezo buzzer.
  *
