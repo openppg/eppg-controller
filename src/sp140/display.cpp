@@ -84,14 +84,24 @@ void resetRotation(unsigned int rotation) {
   display->setRotation(rotation);  // 1=right hand, 3=left hand
 }
 
-// Show splash screen
+// Show splash screen with animated text
 void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
   display->fillScreen(currentTheme->default_bg);
   display->setTextSize(1);
   display->setFont(&FreeSansBold12pt7b);
   display->setTextColor(currentTheme->default_text);
-  display->setCursor(25, 30);
-  display->println("OpenPPG");
+
+  // Animate "OpenPPG" text
+  const char* text = "OpenPPG";
+  int x = 25;
+  int y = 30;
+  for (int i = 0; text[i] != '\0'; i++) {
+    display->setCursor(x, y);
+    display->print(text[i]);
+    x += display->getCursorX() - x;  // Move cursor to the right
+    delay(100);  // Adjust delay for animation speed
+  }
+
   display->setFont(&Open_Sans_Reg_16);
   display->setTextSize(1);
   display->setCursor(60, 60);
@@ -174,7 +184,7 @@ void updateDisplay(
   canvas.fillRect(0, 0, 1, 2, currentTheme->ui_accent);
   canvas.fillRect(0, 30, 1, 2, currentTheme->ui_accent);
 
-  //   Display battery percent
+  // Display battery percent
   canvas.setCursor(108, 10 + FONT_HEIGHT_OFFSET);
   canvas.setTextColor(currentTheme->default_text);
   if (batteryPercent > 0) {
@@ -273,7 +283,7 @@ void updateDisplay(
   float escTemp;
   escTemp = escTelemetry.temperatureC;
 
-  if (escTemp >= 100) { canvas.setTextColor(currentTheme->error_text); }  // If temperature is over 100C, display in red.
+  if (escTemp >= 100) { canvas.setTextColor(currentTheme->error_text); }  // If temperature is 100C+, display in red.
   if (escTemp == __FLT_MIN__ || escTemp == 0.0) {  // If temperature is not available, display a question mark.
     canvas.printf("?%c", 247);
   } else {  // Otherwise, display the temperature. (in degrees C)
