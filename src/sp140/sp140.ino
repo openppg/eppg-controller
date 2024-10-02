@@ -379,7 +379,7 @@ void resumeLEDTask() {
 
 void runDisarmAlert() {
   u_int16_t disarm_melody[] = { 2093, 1976, 880 };
-  const unsigned int disarm_vibes[] = { 76, 49 };
+  const unsigned int disarm_vibes[] = { 78, 49 };
   runVibePattern(disarm_vibes, 2);
   playMelody(disarm_melody, 3);
 }
@@ -542,7 +542,7 @@ int averagePotBuffer() {
 // get the PPG ready to fly
 bool armSystem() {
   uint16_t arm_melody[] = { 1760, 1976, 2093 };
-  const unsigned int arm_vibes[] = { 1, 82, 0 };
+  const unsigned int arm_vibes[] = { 1, 85, 1, 85, 1, 85, 1 };
 
   armed = true;
   esc.writeMicroseconds(ESC_DISARMED_PWM);  // initialize the signal to low
@@ -553,7 +553,7 @@ bool armSystem() {
 
   vTaskSuspend(blinkLEDTaskHandle);
   setLEDs(HIGH); // solid LED while armed
-  runVibePattern(arm_vibes, 3);
+  runVibePattern(arm_vibes, 7);
   playMelody(arm_melody, 3);
 
   return true;
