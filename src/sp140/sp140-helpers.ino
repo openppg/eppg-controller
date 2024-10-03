@@ -5,18 +5,6 @@ void initBuzz() {
   pinMode(board_config.buzzer_pin, OUTPUT);
 }
 
-// initialize the vibration motor
-bool initVibe() {
-  if (!board_config.enable_vib) { return false; }
-  if (!vibe.begin(&Wire1)) { return false; }
-
-  vibe.selectLibrary(1);
-  vibe.setMode(DRV2605_MODE_INTTRIG);
-  vibrateNotify();  // initial boot vibration
-
-  return true;
-}
-
 // on boot check for button to switch mode
 void modeSwitch(bool update_display) {
   // 0=CHILL 1=SPORT 2=LUDICROUS?!
@@ -209,14 +197,6 @@ void printRawSentence() {
     Serial.print(F(" "));
   }
   Serial.println();
-}
-
-void vibrateNotify() {
-  if (!board_config.enable_vib) { return; }
-
-  vibe.setWaveform(0, 15);  // 1 through 117 (see example sketch)
-  vibe.setWaveform(1, 0);
-  vibe.go();
 }
 
 // throttle easing function based on threshold/performance mode

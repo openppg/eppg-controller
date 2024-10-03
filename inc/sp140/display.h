@@ -66,7 +66,7 @@ extern float wattHoursUsed;
 // Set up the display and show splash screen
 void setupDisplay(const STR_DEVICE_DATA_140_V1& deviceData, const HardwareConfig& board_config);
 
-void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration = 2000);
+void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration = 1500);
 
 // Clear screen and reset properties
 void resetRotation(unsigned int orientation);

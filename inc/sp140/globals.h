@@ -14,9 +14,6 @@ bool throttledFlag = true;
 float watts = 0;
 float wattHoursUsed = 0;
 
-// sensor states
-bool vibePresent = false;
-
 int16_t _amps = 0;
 #ifndef CAN_PIO
 Servo esc;  // Creating a servo class with name of esc
