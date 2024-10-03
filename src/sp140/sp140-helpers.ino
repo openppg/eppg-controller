@@ -54,7 +54,7 @@ void handleSerialData(byte buffer[]) {
   raw_telemdata.CSUM_HI = buffer[19];
   raw_telemdata.CSUM_LO = buffer[18];
 
-  //TODO alert if no new data in 3 seconds
+  //TODO: alert if no new data in 3 seconds
   int checkCalc = (int)(((raw_telemdata.CSUM_HI << 8) + raw_telemdata.CSUM_LO));
 
   // Checksums do not match
@@ -203,7 +203,7 @@ void printRawSentence() {
 int limitedThrottle(int current, int last, int threshold) {
   if (current - last >= threshold) {  // accelerating too fast. limit
     int limitedThrottle = last + threshold;
-    // TODO: cleanup global var use
+    // TODO:  cleanup global var use
     prevPotLvl = limitedThrottle;  // save for next time
     return limitedThrottle;
   } else if (last - current >= threshold * 2) {  // decelerating too fast. limit

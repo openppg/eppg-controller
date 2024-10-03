@@ -98,7 +98,7 @@ void parse_usb_serial() {
 
   if (doc["command"] && doc["command"] == "rbl") {
     // display.fillScreen(DEFAULT_BG_COLOR);
-    //TODO display ("BL - UF2");
+    //TODO: display ("BL - UF2");
     rebootBootloader();
     return;  // run only the command
   }

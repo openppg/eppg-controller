@@ -5,7 +5,7 @@
 #include "../../lib/crc.c"       // packet error checking
 #ifdef M0_PIO
   #include "../../inc/sp140/m0-config.h"          // device config
-  // TODO find best SAMD21 FreeRTOS port
+  // TODO: find best SAMD21 FreeRTOS port
 #elif RP_PIO
   #include "../../inc/sp140/rp2040-config.h"         // device config
   #include <FreeRTOS.h>
@@ -169,12 +169,12 @@ void trackPowerTask(void *pvParameters) {
   vTaskDelete(NULL);  // should never reach this
 }
 
-void updateDisplayTask(void *pvParameters) { //TODO set core affinity to one core only
+void updateDisplayTask(void *pvParameters) { //TODO: set core affinity to one core only
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
   for (;;) {  // infinite loop
-    // TODO separate alt reading out to its own task. Avoid blocking display updates when alt reading is slow etc
-    // TODO use queues to pass data between tasks (xQueueOverwrite)
+    // TODO: separate alt reading out to its own task. Avoid blocking display updates when alt reading is slow etc
+    // TODO: use queues to pass data between tasks (xQueueOverwrite)
     const float altitude = getAltitude(deviceData);
     updateDisplay(deviceData, telemetryData, altitude, armed, cruising, armedAtMillis);
     delay(250);  // wait for 250ms
@@ -459,7 +459,7 @@ void setupTasks() {
 
 void setup140() {
   #ifdef CAN_PIO
-  // todo write to CAN bus
+  // TODO: write to CAN bus
   #else
     esc.attach(board_config.esc_pin);
     esc.writeMicroseconds(ESC_DISARMED_PWM);
@@ -510,7 +510,7 @@ void printTime(const char* label) {
 void disarmESC() {
   throttlePWM = ESC_DISARMED_PWM;
   #ifdef CAN_PIO
-  // todo write to CAN bus
+  // TODO: write to CAN bus
   #else
     esc.writeMicroseconds(ESC_DISARMED_PWM);
   #endif
@@ -558,7 +558,7 @@ void disarmSystem() {
   updateArmedTime();
   writeDeviceData();
 
-  delay(500);  // TODO just disable button thread // dont allow immediate rearming
+  delay(500);  // TODO: just disable button thread // dont allow immediate rearming
 }
 
 void toggleArm() {
@@ -677,7 +677,7 @@ void handleThrottle() {
     throttlePWM = mapd(potLvl, 0, 4095, ESC_MIN_PWM, maxPWM);
   }
 #ifdef CAN_PIO
-// todo write to CAN bus
+// TODO: write to CAN bus
 #else
   esc.writeMicroseconds(throttlePWM);  // using val as the signal to esc
 #endif
@@ -698,7 +698,7 @@ bool armSystem() {
 
   armed = true;
   #ifdef CAN_PIO
-  // todo write to CAN bus
+  // TODO: write to CAN bus
   #else
     esc.writeMicroseconds(ESC_DISARMED_PWM);  // initialize the signal to low
   #endif
@@ -734,7 +734,7 @@ void setCruise() {
     cruisedAtMillis = millis();  // start timer
     // throttle handle runs fast and a lot. need to set the timer before
     // setting cruise so its updated in time
-    // TODO since these values are accessed in another task make sure memory safe
+    // TODO:  since these values are accessed in another task make sure memory safe
     cruising = true;
     pulseVibeMotor();
 
