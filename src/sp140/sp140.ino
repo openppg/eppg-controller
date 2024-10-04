@@ -19,7 +19,6 @@
 #include <ArduinoJson.h>
 #include <CircularBuffer.hpp>      // smooth out readings
 #include <ResponsiveAnalogRead.h>  // smoothing for throttle
-#include <Servo.h>               // to control ESCs
 #include <SPI.h>
 #include <TimeLib.h>  // convert time to hours mins etc
 #include <Wire.h>
@@ -39,7 +38,7 @@
 #endif
 
 #include "../../inc/sp140/globals.h"  // device config
-
+#include "../../inc/sp140/esc.h"
 #include "../../inc/sp140/display.h"
 #include "../../inc/sp140/altimeter.h"
 #include "../../inc/sp140/vibration.h"
@@ -124,7 +123,7 @@ void telemetryTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
   for (;;) {  // infinite loop
-    handleTelemetry();
+    readESCTelemetry();
     delay(50);  // wait for 50ms
   }
   vTaskDelete(NULL);  // should never reach this
@@ -147,7 +146,7 @@ void updateDisplayTask(void *pvParameters) { //TODO set core affinity to one cor
     // TODO separate alt reading out to its own task. Avoid blocking display updates when alt reading is slow etc
     // TODO use queues to pass data between tasks (xQueueOverwrite)
     const float altitude = getAltitude(deviceData);
-    updateDisplay(deviceData, telemetryData, altitude, armed, cruising, armedAtMillis);
+    updateDisplay(deviceData, escTelemetryData, altitude, armed, cruising, armedAtMillis);
     delay(250);  // wait for 250ms
   }
   vTaskDelete(NULL);  // should never reach this
@@ -165,12 +164,6 @@ void loadHardwareConfig() {
   pot = new ResponsiveAnalogRead(board_config.throttle_pin, false);
   button_top = new AceButton(board_config.button_top);
   buttonConfig = button_top->getButtonConfig();
-}
-
-void setupSerial() {
-  Serial.begin(115200);
-  SerialESC.begin(ESC_BAUD_RATE);
-  SerialESC.setTimeout(ESC_TIMEOUT);
 }
 
 #ifdef USE_TINYUSB
@@ -238,7 +231,7 @@ void upgradeDeviceRevisionInEEPROM() {
  * This function is called once at the beginning of the program execution.
  */
 void setup() {
-  setupSerial();
+  Serial.begin(115200);  // For debugging
 #ifdef USE_TINYUSB
   setupUSBWeb();
 #endif
@@ -322,8 +315,7 @@ void psTop() {
 }
 
 void setup140() {
-  esc.attach(board_config.esc_pin);
-  esc.writeMicroseconds(ESC_DISARMED_PWM);
+  initESC(board_config.esc_pin);
 
   initBuzz();
   Wire1.setSDA(A0); // Have to use Wire1 because pins are assigned that in hardware
@@ -364,7 +356,7 @@ void printTime(const char* label) {
 
 void disarmESC() {
   throttlePWM = ESC_DISARMED_PWM;
-  esc.writeMicroseconds(ESC_DISARMED_PWM);
+  setESCThrottle(ESC_DISARMED_PWM);
 }
 
 // reset smoothing
@@ -528,7 +520,7 @@ void handleThrottle() {
     throttlePWM = mapd(potLvl, 0, 4095, ESC_MIN_PWM, maxPWM);
   }
 
-  esc.writeMicroseconds(throttlePWM);  // using val as the signal to esc
+  setESCThrottle(throttlePWM);
 }
 
 int averagePotBuffer() {
@@ -545,7 +537,7 @@ bool armSystem() {
   const unsigned int arm_vibes[] = { 1, 85, 1, 85, 1, 85, 1 };
 
   armed = true;
-  esc.writeMicroseconds(ESC_DISARMED_PWM);  // initialize the signal to low
+  setESCThrottle(ESC_DISARMED_PWM);
 
   //ledBlinkThread.enabled = false;
   armedAtMillis = millis();

@@ -73,7 +73,7 @@ typedef struct  {
   // checksum
   int CSUM_HI;
   int CSUM_LO;
-} telem_t;
+} telem_esc_t;
 
 // Tone struct (passed between cores)
 typedef struct {
@@ -87,8 +87,6 @@ struct BatteryVoltagePoint {
 };
 #pragma pack(pop)
 
-static STR_ESC_TELEMETRY_140 telemetryData;
-static telem_t raw_telemdata;
 
 static BatteryVoltagePoint batteryLevels[] = {
   {99.6, 100},  // 99+ volts corresponds to 100%
