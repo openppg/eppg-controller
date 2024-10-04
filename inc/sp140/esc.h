@@ -10,6 +10,7 @@
   #include "../../inc/sp140/rp2040-config.h"
 #endif
 
+// ESC communication parameters
 #define ESC_BAUD_RATE         115200
 #define ESC_DATA_V2_SIZE      22
 #define READ_INTERVAL         0
@@ -23,6 +24,7 @@ void handleESCSerialData(byte buffer[]);
 void prepareESCSerialRead();
 int checkFletcher16(byte byteBuffer[]);
 
+// External declaration of telemetry data structure
 extern STR_ESC_TELEMETRY_140 escTelemetryData;
 
 #endif  // INC_SP140_ESC_H_

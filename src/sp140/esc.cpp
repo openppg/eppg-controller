@@ -110,7 +110,7 @@ void handleESCSerialData(byte buffer[]) {
   }
 
   // Current
-  int16_t _amps = 0; 
+  int16_t _amps = 0;
   _amps = word(buffer[5], buffer[4]);
   escTelemetryData.amps = _amps / 12.5;
 
