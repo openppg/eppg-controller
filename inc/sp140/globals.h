@@ -6,10 +6,8 @@
 #include "sp140/structs.h"
 
 extern unsigned long cruisedAtMillis;
-extern volatile bool cruising;
 extern int prevPotLvl;
 extern int cruisedPotVal;
-extern volatile float throttlePWM;
 
 extern float watts;
 extern float wattHoursUsed;
