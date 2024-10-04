@@ -22,11 +22,6 @@ void modeSwitch(bool update_display) {
   playMelody(notify_melody, 2);
 }
 
-
-void handleTelemetry() {
-  readESCTelemetry();  // TODO: merge functions
-}
-
 // throttle easing function based on threshold/performance mode
 int limitedThrottle(int current, int last, int threshold) {
   if (current - last >= threshold) {  // accelerating too fast. limit

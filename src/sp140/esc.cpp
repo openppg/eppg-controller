@@ -45,19 +45,19 @@ void handleESCSerialData(byte buffer[]) {
   // }
 
   if (buffer[20] != 255 || buffer[21] != 255) {
-    //Serial.println("no stop byte");
+    // Serial.println("no stop byte");
 
-    return; //Stop byte of 65535 not received
+    return;  // Stop byte of 65535 not received
   }
 
-  //Check the fletcher checksum
+  // Check the fletcher checksum
   int checkFletch = checkFletcher16(buffer);
 
   // checksum
   raw_esc_telemdata.CSUM_HI = buffer[19];
   raw_esc_telemdata.CSUM_LO = buffer[18];
 
-  //TODO alert if no new data in 3 seconds
+  // TODO: alert if no new data in 3 seconds
   int checkCalc = (int)(((raw_esc_telemdata.CSUM_HI << 8) + raw_esc_telemdata.CSUM_LO));
 
   // Checksums do not match
@@ -88,18 +88,18 @@ void handleESCSerialData(byte buffer[]) {
   static int NOMINAL_TEMPERATURE = 25;
   static int BCOEFFICIENT = 3455;
 
-  //convert value to resistance
+  // convert value to resistance
   float Rntc = (4096 / (float) rawVal) - 1;
   Rntc = SERIESRESISTOR / Rntc;
 
   // Get the temperature
   float temperature = Rntc / (float) NOMINAL_RESISTANCE;  // (R/Ro)
-  temperature = (float) log(temperature); // ln(R/Ro)
-  temperature /= BCOEFFICIENT; // 1/B * ln(R/Ro)
+  temperature = (float) log(temperature);  // ln(R/Ro)
+  temperature /= BCOEFFICIENT;  // 1/B * ln(R/Ro)
 
   temperature += 1.0 / ((float) NOMINAL_TEMPERATURE + 273.15);  // + (1/To)
-  temperature = 1.0 / temperature; // Invert
-  temperature -= 273.15; // convert to Celsius
+  temperature = 1.0 / temperature;  // Invert
+  temperature -= 273.15;  // convert to Celsius
 
   // filter bad values
   if (temperature < 0 || temperature > 200) {
@@ -130,7 +130,11 @@ void handleESCSerialData(byte buffer[]) {
   raw_esc_telemdata.RPM3 = buffer[8];
 
   int poleCount = 62;
-  int currentERPM = (int)((raw_esc_telemdata.RPM0 << 24) + (raw_esc_telemdata.RPM1 << 16) + (raw_esc_telemdata.RPM2 << 8) + (raw_esc_telemdata.RPM3 << 0)); //ERPM output
+  uint32_t rawERPM = (raw_esc_telemdata.RPM0 << 24) |
+                     (raw_esc_telemdata.RPM1 << 16) |
+                     (raw_esc_telemdata.RPM2 << 8) |
+                     raw_esc_telemdata.RPM3;
+  int currentERPM = static_cast<int>(rawERPM);  // ERPM output
   int currentRPM = currentERPM / poleCount;  // Real RPM output
   escTelemetryData.eRPM = currentRPM;
 
@@ -175,7 +179,7 @@ void handleESCSerialData(byte buffer[]) {
   // Serial.println(" ");
 }
 
-// new V2 
+// new V2 ESC checking
 int checkFletcher16(byte byteBuffer[]) {
   int fCCRC16;
   int i;
@@ -183,12 +187,12 @@ int checkFletcher16(byte byteBuffer[]) {
   int c1 = 0;
 
   // Calculate checksum intermediate bytesUInt16
-  for (i = 0; i < 18; i++) { //Check only first 18 bytes, skip crc bytes
+  for (i = 0; i < 18; i++) {  // Check only first 18 bytes, skip crc bytes
     c0 = (int)(c0 + ((int)byteBuffer[i])) % 255;
     c1 = (int)(c1 + c0) % 255;
   }
   // Assemble the 16-bit checksum value
-  fCCRC16 = ( c1 << 8 ) | c0;
+  fCCRC16 = (c1 << 8) | c0;
   return (int)fCCRC16;
 }
 
