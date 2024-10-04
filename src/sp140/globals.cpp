@@ -32,11 +32,8 @@ volatile bool cruising = false;
 int prevPotLvl = 0;
 int cruisedPotVal = 0;
 volatile float throttlePWM = 0;
-bool throttledFlag = true;
 
 float watts = 0;
 float wattHoursUsed = 0;
-
-int16_t _amps = 0;
 
 STR_DEVICE_DATA_140_V1 deviceData;

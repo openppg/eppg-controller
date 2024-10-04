@@ -10,12 +10,9 @@ extern volatile bool cruising;
 extern int prevPotLvl;
 extern int cruisedPotVal;
 extern volatile float throttlePWM;
-extern bool throttledFlag;
 
 extern float watts;
 extern float wattHoursUsed;
-
-extern int16_t _amps;
 
 extern STR_DEVICE_DATA_140_V1 deviceData;
 
