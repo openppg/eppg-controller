@@ -123,7 +123,7 @@ void telemetryTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
   for (;;) {  // infinite loop
-    readESCTelemetry();  // TODO: merge functions
+    readESCTelemetry();
     delay(50);  // wait for 50ms
   }
   vTaskDelete(NULL);  // should never reach this
