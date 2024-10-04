@@ -5,8 +5,6 @@
 #include "sp140/shared-config.h"
 #include "sp140/structs.h"
 
-extern byte escData[ESC_DATA_SIZE];
-extern byte escDataV2[ESC_DATA_V2_SIZE];
 extern unsigned long cruisedAtMillis;
 extern volatile bool cruising;
 extern int prevPotLvl;

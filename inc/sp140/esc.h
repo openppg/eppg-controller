@@ -10,6 +10,11 @@
   #include "../../inc/sp140/rp2040-config.h"
 #endif
 
+#define ESC_BAUD_RATE         115200
+#define ESC_DATA_V2_SIZE      22
+#define READ_INTERVAL         0
+#define ESC_TIMEOUT           15
+
 void initESC(int escPin);
 void setupESCSerial();
 void setESCThrottle(int throttlePWM);

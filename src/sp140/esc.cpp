@@ -26,7 +26,7 @@ void setESCThrottle(int throttlePWM) {
 
 void readESCTelemetry() {
   prepareESCSerialRead();
-  byte escDataV2[ESC_DATA_V2_SIZE];
+  static byte escDataV2[ESC_DATA_V2_SIZE];
   SerialESC.readBytes(escDataV2, ESC_DATA_V2_SIZE);
   handleESCSerialData(escDataV2);
 }
@@ -197,10 +197,10 @@ int checkFletcher16(byte byteBuffer[]) {
 }
 
 // for debugging
-void printRawSentence() {
+static void printRawSentence(byte buffer[]) {
   Serial.print(F("DATA: "));
   for (int i = 0; i < ESC_DATA_V2_SIZE; i++) {
-    Serial.print(escDataV2[i], HEX);
+    Serial.print(buffer[i], HEX);
     Serial.print(F(" "));
   }
   Serial.println();

@@ -27,8 +27,6 @@
 
 #include "sp140/globals.h"
 
-byte escData[ESC_DATA_SIZE];
-byte escDataV2[ESC_DATA_V2_SIZE];
 unsigned long cruisedAtMillis = 0;
 volatile bool cruising = false;
 int prevPotLvl = 0;
