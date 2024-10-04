@@ -66,12 +66,56 @@ ButtonConfig* buttonConfig;
 
 CircularBuffer<float, 50> voltageBuffer;
 CircularBuffer<int, 8> potBuffer;
-# define PIN_NEOPIXEL 10
 
-Adafruit_NeoPixel pixels(1, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel pixels(1, LED_BUILTIN, NEO_GRB + NEO_KHZ800);
 uint32_t led_color = LED_RED; // current LED color
 
-bool armed = false;
+// New enum for device state
+enum DeviceState {
+  DISARMED,
+  ARMED,
+  ARMED_CRUISING
+};
+
+// Global variable for device state
+volatile DeviceState currentState = DISARMED;
+
+SemaphoreHandle_t eepromSemaphore;
+SemaphoreHandle_t tftSemaphore;
+SemaphoreHandle_t stateMutex;
+
+void changeDeviceState(DeviceState newState) {
+  if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
+    DeviceState oldState = currentState;
+    currentState = newState;
+    switch (newState) {
+      case DISARMED:
+        disarmSystem();
+        break;
+      case ARMED:
+        if (oldState == DISARMED) {
+          // Perform full arm sequence when transitioning from DISARMED to ARMED
+          armSystem();
+        } else if (oldState == ARMED_CRUISING) {
+          // When transitioning from ARMED_CRUISING to ARMED, only remove cruise
+          // This avoids re-arming the system unnecessarily
+           afterCruiseEnd();
+        }
+        break;
+      case ARMED_CRUISING:
+        if (oldState == ARMED) {
+          afterCruiseStart();
+        } else {
+          // Should never happen
+          // Do nothing if not already in ARMED state
+          currentState = oldState;  // Revert to the previous state
+        }
+        break;
+    }
+    xSemaphoreGive(stateMutex);
+  }
+}
+
 uint32_t armedAtMillis = 0;
 uint32_t cruisedAtMillisMilis = 0;
 unsigned long armedSecs = 0;
@@ -83,9 +127,8 @@ TaskHandle_t trackPowerTaskHandle = NULL;
 TaskHandle_t updateDisplayTaskHandle = NULL;
 TaskHandle_t watchdogTaskHandle = NULL;
 
-SemaphoreHandle_t eepromSemaphore;
-SemaphoreHandle_t tftSemaphore;
-
+unsigned long lastDisarmTime = 0;
+const unsigned long DISARM_COOLDOWN = 500; // 500ms cooldown
 
 #pragma message "Warning: OpenPPG software is in beta"
 
@@ -139,15 +182,15 @@ void trackPowerTask(void *pvParameters) {
   vTaskDelete(NULL);  // should never reach this
 }
 
-void updateDisplayTask(void *pvParameters) { //TODO set core affinity to one core only
+void updateDisplayTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
-  for (;;) {  // infinite loop
-    // TODO separate alt reading out to its own task. Avoid blocking display updates when alt reading is slow etc
-    // TODO use queues to pass data between tasks (xQueueOverwrite)
+  for (;;) {
     const float altitude = getAltitude(deviceData);
-    updateDisplay(deviceData, escTelemetryData, altitude, armed, cruising, armedAtMillis);
-    delay(250);  // wait for 250ms
+    bool isArmed = (currentState != DISARMED);
+    bool isCruising = (currentState == ARMED_CRUISING);
+    updateDisplay(deviceData, escTelemetryData, altitude, isArmed, isCruising, armedAtMillis);
+    delay(250);
   }
   vTaskDelete(NULL);  // should never reach this
 }
@@ -262,11 +305,11 @@ void setup() {
 // set up all the main threads/tasks with core 0 affinity
 void setupTasks() {
   xTaskCreateAffinitySet(blinkLEDTask, "blinkLed", 200, NULL, 1, uxCoreAffinityMask1, &blinkLEDTaskHandle);
-  xTaskCreateAffinitySet(throttleTask, "throttle", 1000, NULL, 3, uxCoreAffinityMask0, &throttleTaskHandle);
-  xTaskCreateAffinitySet(telemetryTask, "TelemetryTask", 2048, NULL, 2, uxCoreAffinityMask0, &telemetryTaskHandle);
+  xTaskCreateAffinitySet(throttleTask, "throttle", 2048, NULL, 4, uxCoreAffinityMask0, &throttleTaskHandle);
+  xTaskCreateAffinitySet(telemetryTask, "TelemetryTask", 2048, NULL, 3, uxCoreAffinityMask0, &telemetryTaskHandle);
   xTaskCreateAffinitySet(trackPowerTask, "trackPower", 500, NULL, 2, uxCoreAffinityMask0, &trackPowerTaskHandle);
   xTaskCreateAffinitySet(updateDisplayTask, "updateDisplay", 2000, NULL, 1, uxCoreAffinityMask0, &updateDisplayTaskHandle);
-  xTaskCreateAffinitySet(watchdogTask, "watchdog", 1000, NULL, 4, uxCoreAffinityMask0, &watchdogTaskHandle);
+  xTaskCreateAffinitySet(watchdogTask, "watchdog", 1000, NULL, 5, uxCoreAffinityMask0, &watchdogTaskHandle);
 
   if (updateDisplayTaskHandle != NULL) {
     vTaskSuspend(updateDisplayTaskHandle);  // Suspend the task immediately after creation
@@ -274,6 +317,7 @@ void setupTasks() {
 
   eepromSemaphore = xSemaphoreCreateBinary();
   xSemaphoreGive(eepromSemaphore);
+  stateMutex = xSemaphoreCreateMutex();
 }
 
 std::map<eTaskState, const char *> eTaskStateName { {eReady, "Ready"}, { eRunning, "Running" }, {eBlocked, "Blocked"}, {eSuspended, "Suspended"}, {eDeleted, "Deleted"} };
@@ -335,7 +379,7 @@ void loop() {
 
   // from WebUSB to both Serial & webUSB
 #ifdef USE_TINYUSB
-  if (!armed && usb_web.available()) parse_usb_serial();
+  if (currentState == DISARMED && usb_web.available()) parse_usb_serial();
 #endif
 
   // more stable in main loop
@@ -355,7 +399,6 @@ void printTime(const char* label) {
 }
 
 void disarmESC() {
-  throttlePWM = ESC_DISARMED_PWM;
   setESCThrottle(ESC_DISARMED_PWM);
 }
 
@@ -387,47 +430,52 @@ void updateArmedTime() {
 }
 
 void disarmSystem() {
-  disarmESC(); // disarm the ESC by setting the signal to low value
-
-  resetSmoothing(); // reset throttle smoothing values
-
-  armed = false;
-  removeCruise(false);
-
-  resumeLEDTask(); // resume LED blinking
-
+  disarmESC();
+  resetSmoothing();
+  resumeLEDTask();
   runDisarmAlert();
-
   updateArmedTime();
   writeDeviceData();
 
-  delay(500);  // TODO just disable button thread // dont allow immediate rearming
+  // Set the last disarm time
+  lastDisarmTime = millis();
 }
 
 void toggleArm() {
-  if (armed) {
-    disarmSystem();
-  } else if (throttleSafe()) {
-    armSystem();
+  if (currentState == DISARMED) {
+    // Check if enough time has passed since last disarm
+    if (millis() - lastDisarmTime >= DISARM_COOLDOWN) {
+      if (!throttleEngaged()) {
+        changeDeviceState(ARMED);
+      } else {
+        handleArmFail();
+      }
+    }
+    // If we're still in the cooldown period, do nothing
   } else {
-    handleArmFail();
+    changeDeviceState(DISARMED);
   }
 }
 
 void toggleCruise() {
-  if (armed) {
-    if (cruising) {
-      removeCruise(true);
-    } else if (throttleSafe()) {
-      modeSwitch(true);
-    } else {
-      setCruise();
-    }
-  } else {
-    // show stats screen
-    vTaskSuspend(updateDisplayTaskHandle);
-    displayMeta(deviceData);
-    vTaskResume(updateDisplayTaskHandle);
+  switch (currentState) {
+    case ARMED:
+      if (throttleEngaged()) {
+        changeDeviceState(ARMED_CRUISING);
+      } else {
+        // Call modeSwitch when armed but throttle not engaged
+        modeSwitch(false);
+      }
+      break;
+    case ARMED_CRUISING:
+      changeDeviceState(ARMED);  // This will now call removeCruise
+      break;
+    case DISARMED:
+      // show stats screen
+      vTaskSuspend(updateDisplayTaskHandle);
+      displayMeta(deviceData);
+      vTaskResume(updateDisplayTaskHandle);
+      break;
   }
 }
 
@@ -484,7 +532,7 @@ void initButtons() {
 // read throttle and send to hub
 // read throttle
 void handleThrottle() {
-  if (!armed) return;  // safe
+  if (currentState == DISARMED) return;  // safe
 
   armedSecs = (millis() - armedAtMillis) / 1000;  // update time while armed
 
@@ -492,13 +540,15 @@ void handleThrottle() {
   pot->update();
   int potRaw = pot->getValue();
 
-  if (cruising) {
+  int localThrottlePWM = ESC_DISARMED_PWM;
+
+  if (currentState == ARMED_CRUISING) {
     unsigned long cruisingSecs = (millis() - cruisedAtMillis) / 1000;
 
-    if (cruisingSecs >= CRUISE_GRACE && potRaw > POT_SAFE_LEVEL) {
-      removeCruise(true);  // deactivate cruise
+    if (cruisingSecs >= CRUISE_GRACE && potRaw > POT_ENGAGEMENT_LEVEL) {
+      changeDeviceState(ARMED);  // deactivate cruise
     } else {
-      throttlePWM = mapd(cruisedPotVal, 0, POT_MAX_VALUE, ESC_MIN_PWM, maxPWM);
+      localThrottlePWM = mapd(cruisedPotVal, 0, POT_MAX_VALUE, ESC_MIN_PWM, maxPWM);
     }
   } else {
     // no need to save & smooth throttle etc when in cruise mode (& pot == 0)
@@ -517,10 +567,10 @@ void handleThrottle() {
       maxPWM = ESC_MAX_PWM;
     }
     // mapping val to min and max pwm
-    throttlePWM = mapd(potLvl, 0, 4095, ESC_MIN_PWM, maxPWM);
+    localThrottlePWM = mapd(potLvl, 0, 4095, ESC_MIN_PWM, maxPWM);
   }
 
-  setESCThrottle(throttlePWM);
+  setESCThrottle(localThrottlePWM);  // using val as the signal to esc
 }
 
 int averagePotBuffer() {
@@ -536,8 +586,7 @@ bool armSystem() {
   uint16_t arm_melody[] = { 1760, 1976, 2093 };
   const unsigned int arm_vibes[] = { 1, 85, 1, 85, 1, 85, 1 };
 
-  armed = true;
-  setESCThrottle(ESC_DISARMED_PWM);
+  setESCThrottle(ESC_DISARMED_PWM);  // initialize the signal to low
 
   //ledBlinkThread.enabled = false;
   armedAtMillis = millis();
@@ -551,44 +600,32 @@ bool armSystem() {
   return true;
 }
 
-
-// Returns true if the throttle/pot is below the safe threshold
-bool throttleSafe() {
+// Returns true if the throttle/pot is above the engagement threshold
+bool throttleEngaged() {
   pot->update();
-  if (pot->getRawValue() < POT_SAFE_LEVEL) {
+  if (pot->getRawValue() >= POT_ENGAGEMENT_LEVEL) {
     return true;
   }
   return false;
 }
 
-
-void setCruise() {
-  // IDEA: fill a "cruise indicator" as long press activate happens
-  // or gradually change color from blue to yellow with time
-  if (!throttleSafe()) {  // using pot/throttle
-    cruisedPotVal = pot->getValue();  // save current throttle val
-    cruisedAtMillis = millis();  // start timer
-    // throttle handle runs fast and a lot. need to set the timer before
-    // setting cruise so its updated in time
-    // TODO since these values are accessed in another task make sure memory safe
-    cruising = true;
-    pulseVibeMotor();
-
-    uint16_t notify_melody[] = { 900, 900 };
-    playMelody(notify_melody, 2);
-  }
+void afterCruiseStart() {
+  cruisedPotVal = pot->getValue();
+  cruisedAtMillis = millis();
+  playCruiseSound();
+  pulseVibeMotor();
 }
 
-void removeCruise(bool alert) {
-  cruising = false;
+void afterCruiseEnd() {
+  cruisedPotVal = 0;
+  playCruiseSound();
+  pulseVibeMotor();
+}
 
-  if (alert) {
-    pulseVibeMotor();
-
-    if (ENABLE_BUZ) {
-      uint16_t notify_melody[] = { 500, 500 };
-      playMelody(notify_melody, 2);
-    }
+void playCruiseSound() {
+  if (ENABLE_BUZ) {
+    uint16_t notify_melody[] = { 900, 900 };
+    playMelody(notify_melody, 2);
   }
 }
 
@@ -599,7 +636,7 @@ void trackPower() {
   unsigned long msec_diff = (currentPwrMillis - prevPwrMillis);  // eg 0.30 sec
   prevPwrMillis = currentPwrMillis;
 
-  if (armed) {
+  if (currentState != DISARMED) {
     wattHoursUsed += round(watts/60/60*msec_diff)/1000.0;
   }
 }

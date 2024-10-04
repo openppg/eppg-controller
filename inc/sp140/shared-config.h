@@ -13,7 +13,7 @@
 
 
 #define CRUISE_GRACE 1.5  // 1.5 sec period to get off throttle
-#define POT_SAFE_LEVEL 0.05 * 4096  // 5% or less
+#define POT_ENGAGEMENT_LEVEL 0.05 * 4096  // 5% or less // TODO calibrate for each device
 
 #define DEFAULT_SEA_PRESSURE 1013.25
 
