@@ -2,22 +2,18 @@
 #ifndef INC_SP140_GLOBALS_H_
 #define INC_SP140_GLOBALS_H_
 
-byte escData[ESC_DATA_SIZE];
-byte escDataV2[ESC_DATA_V2_SIZE];
-unsigned long cruisedAtMillis = 0;
-volatile bool cruising = false;
-int prevPotLvl = 0;
-int cruisedPotVal = 0;
-volatile float throttlePWM = 0;
-bool throttledFlag = true;
+#include "sp140/shared-config.h"
+#include "sp140/structs.h"
 
-float watts = 0;
-float wattHoursUsed = 0;
+extern unsigned long cruisedAtMillis;
+extern int prevPotLvl;
+extern int cruisedPotVal;
 
-int16_t _amps = 0;
-#ifndef CAN_PIO
-Servo esc;  // Creating a servo class with name of esc
-#endif
-static STR_DEVICE_DATA_140_V1 deviceData;
+extern float watts;
+extern float wattHoursUsed;
+
+extern STR_DEVICE_DATA_140_V1 deviceData;
+
+extern STR_ESC_TELEMETRY_140 escTelemetryData;
 
 #endif  // INC_SP140_GLOBALS_H_
