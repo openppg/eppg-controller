@@ -316,7 +316,7 @@ void setup() {
   USBSerial.println("ESP32-S3 is ready!");
   initESC(0);
   setESCThrottle(ESC_DISARMED_PWM);
-  xTaskCreate(testTask, "TestTask", 1000, NULL, 1, &testTaskHandle);
+  xTaskCreate(testTask, "TestTask", 10000, NULL, 1, &testTaskHandle);
 }
 
 #else

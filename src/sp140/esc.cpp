@@ -58,7 +58,9 @@ void setupESCSerial() {
 
 void setESCThrottle(int throttlePWM) {
   USBSerial.println("setESCThrottle");
-  esc.setThrottleSettings2(throttlePWM * 10);
+  uint16_t scaledThrottle = map(throttlePWM, 1000, 2000, 9000, 20000);
+  esc.setThrottleSettings2(scaledThrottle);
+  // Remove the immediate call to processTxRxOnce here
   adapter.processTxRxOnce(); // Process CAN messages
 }
 
