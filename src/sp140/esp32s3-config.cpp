@@ -2,7 +2,7 @@
 
 #include "../../inc/sp140/esp32s3-config.h"
 
-#define LED_BUILTIN  21 // m5 stack
+#define LED_BUILTIN  21  // m5 stack
 // V1 configuration
 // Some SPI pins are defined in platformio.ini
 HardwareConfig v1_config = {
@@ -11,7 +11,7 @@ HardwareConfig v1_config = {
   .led_sw = 21,
   .throttle_pin = 7,
   .alt_wire = false,
-  .tft_rst = 15,  //TODO: check
+  .tft_rst = 15,  // TODO: check
   .tft_cs = 13,
   .tft_dc = 14,
   .tft_lite = 25,  // NA

@@ -6,8 +6,10 @@
 
 #ifdef M0_PIO
   #include "../../inc/sp140/m0-config.h"
-#else
+#elif RP_PIO
   #include "../../inc/sp140/rp2040-config.h"
+#elif CAN_PIO
+  #include "../../inc/sp140/esp32s3-config.h"
 #endif
 
 // ESC communication parameters
@@ -23,7 +25,7 @@ void readESCTelemetry();
 void handleESCSerialData(byte buffer[]);
 void prepareESCSerialRead();
 int checkFletcher16(byte byteBuffer[]);
-void setupTWAI();
+bool setupTWAI();
 void dumpMessages();
 
 // External declaration of telemetry data structure

@@ -75,7 +75,11 @@ ButtonConfig* buttonConfig;
 CircularBuffer<float, 50> voltageBuffer;
 CircularBuffer<int, 8> potBuffer;
 
-Adafruit_NeoPixel pixels(1, LED_BUILTIN, NEO_GRB + NEO_KHZ800);
+#ifndef CAN_PIO
+  Adafruit_NeoPixel pixels(1, LED_BUILTIN, NEO_GRB + NEO_KHZ800);
+#else
+  Adafruit_NeoPixel pixels(1, 21, NEO_GRB + NEO_KHZ800);
+#endif
 uint32_t led_color = LED_RED; // current LED color
 
 // New enum for device state
