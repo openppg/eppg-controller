@@ -41,6 +41,11 @@
 #elif CAN_PIO
   // ESP32S3 (CAN) specific libraries here
   #include "EEPROM.h"
+  #include <SineEsc.h>
+  #include <CanardAdapter.h>
+
+  #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+  #include "driver/twai.h"
 #endif
 
 #include "../../inc/sp140/globals.h"  // device config
@@ -49,11 +54,7 @@
 #include "../../inc/sp140/altimeter.h"
 #include "../../inc/sp140/vibration.h"
 
-#include <SineEsc.h>
-#include <CanardAdapter.h>
 
-#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
-#include "driver/twai.h"
 
 using namespace ace_button;
 
@@ -139,8 +140,10 @@ TaskHandle_t trackPowerTaskHandle = NULL;
 TaskHandle_t updateDisplayTaskHandle = NULL;
 TaskHandle_t watchdogTaskHandle = NULL;
 
-SemaphoreHandle_t eepromSemaphore;
-SemaphoreHandle_t tftSemaphore;
+unsigned long lastDisarmTime = 0;
+const unsigned long DISARM_COOLDOWN = 500; // 500ms cooldown
+
+#ifdef CAN_PIO
 
 #define RX_PIN 4
 #define TX_PIN 5
@@ -155,6 +158,8 @@ static unsigned long lastThrottleUpdate = 0;
 static const unsigned long THROTTLE_UPDATE_INTERVAL = 250; // 250ms
 unsigned long lastDisarmTime = 0;
 const unsigned long DISARM_COOLDOWN = 500; // 500ms cooldown
+
+#endif
 
 #pragma message "Warning: OpenPPG software is in beta"
 
@@ -218,6 +223,7 @@ void updateDisplayTask(void *pvParameters) {
   for (;;) {
     // TODO: separate alt reading out to its own task. Avoid blocking display updates when alt reading is slow etc
     // TODO: use queues to pass data between tasks (xQueueOverwrite)const float altitude = getAltitude(deviceData);
+    const float altitude = getAltitude(deviceData);
     bool isArmed = (currentState != DISARMED);
     bool isCruising = (currentState == ARMED_CRUISING);
     updateDisplay(deviceData, escTelemetryData, altitude, isArmed, isCruising, armedAtMillis);
@@ -307,6 +313,7 @@ void testTask(void *pvParameters) {
   }
 }
 
+#ifdef CAN_PIO
 //just for testing
 void setup() {
   Serial.begin(115200);
@@ -435,15 +442,11 @@ static void periodicDumpMessages(bool resetTimer, unsigned long dumpPeriod_ms) {
         dumpMessages();
     }
 }
-
+#else
 /**
  * Initializes the necessary components and configurations for the device setup.
  * This function is called once at the beginning of the program execution.
  */
-void setup2() {
-  Serial.begin(115200);  // For debugging
-}
-
 void setup() {
 #ifdef USE_TINYUSB
   setupUSBWeb();
@@ -471,6 +474,7 @@ void setup() {
   vTaskResume(updateDisplayTaskHandle);
   setLEDColor(LED_GREEN);
 }
+#endif
 
 // set up all the main threads/tasks with core 0 affinity
 void setupTasks() {
@@ -549,7 +553,6 @@ void printTime(const char* label) {
 }
 
 void disarmESC() {
-  throttlePWM = ESC_DISARMED_PWM;
   #ifdef CAN_PIO
   // TODO: write to CAN bus
   #else

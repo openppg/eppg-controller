@@ -1,9 +1,13 @@
 #include "sp140/esc.h"
-#include <Servo.h>
 #include "sp140/globals.h"
 #include <CircularBuffer.hpp>
 
-Servo esc;
+#ifndef CAN_PIO
+#include <Servo.h>
+
+Servo esc;  // Creating a servo class with name of esc
+#endif
+
 extern CircularBuffer<float, 50> voltageBuffer;
 
 STR_ESC_TELEMETRY_140 escTelemetryData;
