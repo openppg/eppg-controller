@@ -52,6 +52,7 @@ void setESCThrottle(int throttlePWM) {
   esc.setThrottleSettings2(throttlePWM * 10);
 #endif
 }
+  static unsigned long lastDumpTime = 0;
 
 void readESCTelemetry() {
 #ifndef CAN_PIO
@@ -60,7 +61,12 @@ void readESCTelemetry() {
   SerialESC.readBytes(escDataV2, ESC_DATA_V2_SIZE);
   handleESCSerialData(escDataV2);
 #else
-  dumpMessages();  // TODO: set esc telemetry data
+  unsigned long currentTime = millis();
+  
+  if (currentTime - lastDumpTime >= 200) {  // Check if 200ms have passed
+    dumpMessages();  // TODO: set esc telemetry data
+    lastDumpTime = currentTime;  // Update the last dump time
+  }
 #endif
 }
 
