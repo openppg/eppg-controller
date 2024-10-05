@@ -300,6 +300,7 @@ void upgradeDeviceRevisionInEEPROM() {
 void testTask(void *pvParameters) {
   for (;;) {
     USBSerial.println(".");
+    setESCThrottle(ESC_DISARMED_PWM);
     dumpMessages();
     delay(500);
   }

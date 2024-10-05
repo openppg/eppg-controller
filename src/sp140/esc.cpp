@@ -13,8 +13,8 @@
   #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
   #include "driver/twai.h"
 
-  #define RX_PIN 4
-  #define TX_PIN 5
+  #define RX_PIN 10
+  #define TX_PIN 9
   #define LOCAL_NODE_ID 0x01
 
   static CanardAdapter adapter;
@@ -29,64 +29,77 @@ STR_ESC_TELEMETRY_140 escTelemetryData;
 static telem_esc_t raw_esc_telemdata;
 
 void initESC(int escPin) {
-#ifndef CAN_PIO
-  esc.attach(escPin);
-  esc.writeMicroseconds(ESC_DISARMED_PWM);
-  setupESCSerial();
-#else
   setupTWAI();
-#endif
+  adapter.begin(memory_pool, sizeof(memory_pool));
+  adapter.setLocalNodeId(LOCAL_NODE_ID);
+  esc.begin(0x20); // Default ID for the ESC
+
+  // Find ESC
+  while (!esc.getModel().hasGetHardwareInfoResponse) {
+    esc.getHardwareInfo();
+    adapter.processTxRxOnce();
+    USBSerial.println("Waiting for ESC");
+    delay(1000);
+  }
+
+  // Set idle throttle
+  const uint16_t IdleThrottle_us = 10000; // 1000us (0.1us resolution)
+  esc.setThrottleSettings2(IdleThrottle_us);
+  delay(1000); // Wait for ESC to process the command
+  adapter.processTxRxOnce();
 }
 
 void setupESCSerial() {
 #ifndef CAN_PIO
-  SerialESC.begin(ESC_BAUD_RATE);
-  SerialESC.setTimeout(ESC_TIMEOUT);
+  USBSerialESC.begin(ESC_BAUD_RATE);
+  USBSerialESC.setTimeout(ESC_TIMEOUT);
 #endif
 }
 
 void setESCThrottle(int throttlePWM) {
-#ifndef CAN_PIO
-  esc.writeMicroseconds(throttlePWM);
-#else
+  USBSerial.println("setESCThrottle");
   esc.setThrottleSettings2(throttlePWM * 10);
-#endif
+  adapter.processTxRxOnce(); // Process CAN messages
 }
-  static unsigned long lastDumpTime = 0;
+
+static unsigned long lastDumpTime = 0;
 
 void readESCTelemetry() {
+  USBSerial.println("readESCTelemetry");
 #ifndef CAN_PIO
   prepareESCSerialRead();
   static byte escDataV2[ESC_DATA_V2_SIZE];
-  SerialESC.readBytes(escDataV2, ESC_DATA_V2_SIZE);
+  USBSerialESC.readBytes(escDataV2, ESC_DATA_V2_SIZE);
   handleESCSerialData(escDataV2);
 #else
   unsigned long currentTime = millis();
-  
+
   if (currentTime - lastDumpTime >= 200) {  // Check if 200ms have passed
     dumpMessages();  // TODO: set esc telemetry data
     lastDumpTime = currentTime;  // Update the last dump time
   }
+
+  adapter.processTxRxOnce(); // Process CAN messages
 #endif
 }
 
 void prepareESCSerialRead() {
 #ifndef CAN_PIO
   while (SerialESC.available() > 0) {
-    SerialESC.read();
+    USBSerialESC.read();
   }
 #endif
 }
 
 void handleESCSerialData(byte buffer[]) {
   // if(sizeof(buffer) != 22) {
-  //     Serial.print("wrong size ");
-  //     Serial.println(sizeof(buffer));
+  //     USBSerial.print("wrong size ");
+  //     USBSerial.println(sizeof(buffer));
   //     return; //Ignore malformed packets
   // }
 
   if (buffer[20] != 255 || buffer[21] != 255) {
-    // Serial.println("no stop byte");
+    // USBSerial.println("no stop byte");
 
     return;  // Stop byte of 65535 not received
   }
@@ -155,9 +168,9 @@ void handleESCSerialData(byte buffer[]) {
   _amps = word(buffer[5], buffer[4]);
   escTelemetryData.amps = _amps / 12.5;
 
-  // Serial.print("amps ");
-  // Serial.print(currentAmpsInput);
-  // Serial.print(" - ");
+  // USBSerial.print("amps ");
+  // USBSerial.print(currentAmpsInput);
+  // USBSerial.print(" - ");
 
   watts = escTelemetryData.amps * escTelemetryData.volts;
 
@@ -180,9 +193,9 @@ void handleESCSerialData(byte buffer[]) {
   int currentRPM = currentERPM / poleCount;  // Real RPM output
   escTelemetryData.eRPM = currentRPM;
 
-  // Serial.print("RPM ");
-  // Serial.print(currentRPM);
-  // Serial.print(" - ");
+  // USBSerial.print("RPM ");
+  // USBSerial.print(currentRPM);
+  // USBSerial.print(" - ");
 
   // Input Duty
   raw_esc_telemdata.DUTYIN_HI = buffer[13];
@@ -191,9 +204,9 @@ void handleESCSerialData(byte buffer[]) {
   int throttleDuty = (int)(((raw_esc_telemdata.DUTYIN_HI << 8) + raw_esc_telemdata.DUTYIN_LO) / 10);
   escTelemetryData.inPWM = (throttleDuty / 10);  // Input throttle
 
-  // Serial.print("throttle ");
-  // Serial.print(escTelemetryData.inPWM);
-  // Serial.print(" - ");
+  // USBSerial.print("throttle ");
+  // USBSerial.print(escTelemetryData.inPWM);
+  // USBSerial.print(" - ");
 
   // Motor Duty
   // raw_esc_telemdata.MOTORDUTY_HI = buffer[15];
@@ -215,10 +228,10 @@ void handleESCSerialData(byte buffer[]) {
   # Bit 5: Startup error detected, motor stall detected upon trying to start*/
   raw_esc_telemdata.statusFlag = buffer[16];
   escTelemetryData.statusFlag = raw_esc_telemdata.statusFlag;
-  // Serial.print("status ");
-  // Serial.print(raw_esc_telemdata.statusFlag, BIN);
-  // Serial.print(" - ");
-  // Serial.println(" ");
+  // USBSerial.print("status ");
+  // USBSerial.print(raw_esc_telemdata.statusFlag, BIN);
+  // USBSerial.print(" - ");
+  // USBSerial.println(" ");
 }
 
 // new V2 ESC checking
@@ -240,12 +253,12 @@ int checkFletcher16(byte byteBuffer[]) {
 
 // for debugging
 static void printRawSentence(byte buffer[]) {
-  Serial.print(F("DATA: "));
+  USBSerial.print(F("DATA: "));
   for (int i = 0; i < ESC_DATA_V2_SIZE; i++) {
-    Serial.print(buffer[i], HEX);
-    Serial.print(F(" "));
+    USBSerial.print(buffer[i], HEX);
+    USBSerial.print(F(" "));
   }
-  Serial.println();
+  USBSerial.println();
 }
 
 
@@ -259,16 +272,16 @@ bool setupTWAI() {
   twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
   if (twai_driver_install(&g_config, &t_config, &f_config) == ESP_OK) {
-      Serial.println("Driver installed");
+      USBSerial.println("Driver installed");
   } else {
-      Serial.println("Failed to install driver");
+      USBSerial.println("Failed to install driver");
       return false;
   }
 
   if (twai_start() == ESP_OK) {
-      Serial.println("Driver started");
+      USBSerial.println("Driver started");
   } else {
-      Serial.println("Failed to start driver");
+      USBSerial.println("Failed to start driver");
       return false;
   }
 
@@ -278,9 +291,9 @@ bool setupTWAI() {
                               | TWAI_ALERT_BUS_ERROR
                               | TWAI_ALERT_RX_QUEUE_FULL;
   if (twai_reconfigure_alerts(alerts_to_enable, NULL) == ESP_OK) {
-      Serial.println("CAN Alerts reconfigured");
+      USBSerial.println("CAN Alerts reconfigured");
   } else {
-      Serial.println("Failed to reconfigure alerts");
+      USBSerial.println("Failed to reconfigure alerts");
       return false;
   }
 
@@ -291,66 +304,66 @@ void dumpMessages(void) {
     const SineEscModel &model = esc.getModel();
 
     if (model.hasGetHardwareInfoResponse) {
-        Serial.println("Got HwInfo response");
+        USBSerial.println("Got HwInfo response");
 
         const sine_esc_GetHwInfoResponse *b = &model.getHardwareInfoResponse;
-        Serial.print("\thardware_id: ");
-        Serial.println(b->hardware_id, HEX);
-        Serial.print("\tbootloader_version: ");
-        Serial.println(b->bootloader_version, HEX);
-        Serial.print("\tapp_version: ");
-        Serial.println(b->app_version, HEX);
+        USBSerial.print("\thardware_id: ");
+        USBSerial.println(b->hardware_id, HEX);
+        USBSerial.print("\tbootloader_version: ");
+        USBSerial.println(b->bootloader_version, HEX);
+        USBSerial.print("\tapp_version: ");
+        USBSerial.println(b->app_version, HEX);
     }
 
     if (model.hasSetThrottleSettings2Response) {
-        Serial.println("Got SetThrottleSettings2 response");
+        USBSerial.println("Got SetThrottleSettings2 response");
         const sine_esc_SetThrottleSettings2Response *b = &model.setThrottleSettings2Response;
 
-        Serial.print("\trecv_pwm: ");
-        Serial.println(b->recv_pwm);
+        USBSerial.print("\trecv_pwm: ");
+        USBSerial.println(b->recv_pwm);
 
-        Serial.print("\tcomm_pwm: ");
-        Serial.println(b->comm_pwm);
+        USBSerial.print("\tcomm_pwm: ");
+        USBSerial.println(b->comm_pwm);
 
-        Serial.print("\tspeed: ");
-        Serial.println(b->speed);
+        USBSerial.print("\tspeed: ");
+        USBSerial.println(b->speed);
 
-        Serial.print("\tcurrent: ");
-        Serial.println(b->current);
+        USBSerial.print("\tcurrent: ");
+        USBSerial.println(b->current);
 
-        Serial.print("\tbus_current: ");
-        Serial.println(b->bus_current);
+        USBSerial.print("\tbus_current: ");
+        USBSerial.println(b->bus_current);
 
-        Serial.print("\tvoltage: ");
-        Serial.println(b->voltage);
+        USBSerial.print("\tvoltage: ");
+        USBSerial.println(b->voltage);
 
-        Serial.print("\tv_modulation: ");
-        Serial.println(b->v_modulation);
+        USBSerial.print("\tv_modulation: ");
+        USBSerial.println(b->v_modulation);
 
-        Serial.print("\tmos_temp: ");
-        Serial.println(b->mos_temp);
+        USBSerial.print("\tmos_temp: ");
+        USBSerial.println(b->mos_temp);
 
-        Serial.print("\tcap_temp: ");
-        Serial.println(b->cap_temp);
+        USBSerial.print("\tcap_temp: ");
+        USBSerial.println(b->cap_temp);
 
-        Serial.print("\tmcu_temp: ");
-        Serial.println(b->mcu_temp);
+        USBSerial.print("\tmcu_temp: ");
+        USBSerial.println(b->mcu_temp);
 
-        Serial.print("\trunning_error: ");
-        Serial.println(b->running_error);
+        USBSerial.print("\trunning_error: ");
+        USBSerial.println(b->running_error);
 
-        Serial.print("\tselfcheck_error: ");
-        Serial.println(b->selfcheck_error);
+        USBSerial.print("\tselfcheck_error: ");
+        USBSerial.println(b->selfcheck_error);
 
-        Serial.print("\tmotor_temp: ");
-        Serial.println(b->motor_temp);
+        USBSerial.print("\tmotor_temp: ");
+        USBSerial.println(b->motor_temp);
 
-        Serial.print("\ttime_10ms: ");
-        Serial.println(b->time_10ms);
+        USBSerial.print("\ttime_10ms: ");
+        USBSerial.println(b->time_10ms);
     }
 
     if (model.hasSetRotationSpeedSettingsResponse) {
-        Serial.println("Got SetRotationSpeedSettings response");
+        USBSerial.println("Got SetRotationSpeedSettings response");
     }
 }
 
