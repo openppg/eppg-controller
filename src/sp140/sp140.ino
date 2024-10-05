@@ -169,7 +169,7 @@ void blinkLEDTask(void *pvParameters) {
 
   for (;;) {  // infinite loop
     //blinkLED();  // call blinkLED function
-    Serial.println("blinkLEDTask");
+    USBSerial.println("blinkLEDTask");
     delay(500);  // wait for 500ms
   }
   vTaskDelete(NULL); // should never reach this
@@ -282,7 +282,7 @@ void setupWatchdog() {
     watchdog_enable(4000, 1);
   #elif CAN_PIO
     // Initialize Task Watchdog
-    ESP_ERROR_CHECK(esp_task_wdt_init(3000, true)); // 3 second timeout, panic on timeout
+    ESP_ERROR_CHECK(esp_task_wdt_init(3000, true));  // 3 second timeout, panic on timeout
   #endif
 #endif // OPENPPG_DEBUG
 }
@@ -290,7 +290,7 @@ void setupWatchdog() {
 
 void upgradeDeviceRevisionInEEPROM() {
 #ifdef RP_PIO
-  if (deviceData.revision == M0) { // onetime conversion because default is 1
+  if (deviceData.revision == M0) {  // onetime conversion because default is 1
     deviceData.revision = V1;
     writeDeviceData();
   }
@@ -299,21 +299,22 @@ void upgradeDeviceRevisionInEEPROM() {
 
 void testTask(void *pvParameters) {
   for (;;) {
-    Serial.println(".");
+    USBSerial.println(".");
+    dumpMessages();
     delay(500);
   }
 }
 
+TaskHandle_t testTaskHandle = NULL;
+
 #ifdef CAN_PIO
 //just for testing
 void setup() {
-  Serial.begin(115200);
+  USBSerial.begin(115200);
   delay(100);  // Give some time for USB CDC to initialize
-  while (!Serial) delay(10);  // Wait for Serial to be ready
-  delay(100);
-  Serial.println("ESP32-S3 is ready!");
-  // simple task that prints "." to serial every 1000ms
-  TaskHandle_t testTaskHandle = NULL;
+  USBSerial.println("ESP32-S3 is ready!");
+  initESC(0);
+  setESCThrottle(ESC_DISARMED_PWM);
   xTaskCreate(testTask, "TestTask", 1000, NULL, 1, &testTaskHandle);
 }
 
@@ -322,32 +323,33 @@ void setup() {
  * Initializes the necessary components and configurations for the device setup.
  * This function is called once at the beginning of the program execution.
  */
+
 void setup() {
-#ifdef USE_TINYUSB
-  setupUSBWeb();
-#endif
-  printBootMessage();
-  setupBarometer();
-  setupEEPROM();
-  refreshDeviceData();
-  upgradeDeviceRevisionInEEPROM();
-  loadHardwareConfig();
-  setupLED();
-  setupAnalogRead();
-  initButtons();
-  setupTasks();
-  setupWatchdog();
-  setup140();
-#ifdef M0_PIO
-  Watchdog.reset();
-#endif
-  setLEDColor(LED_YELLOW);
-  setupDisplay(deviceData, board_config);
-  if (button_top->isPressedRaw()) {
-    modeSwitch(false);
-  }
-  vTaskResume(updateDisplayTaskHandle);
-  setLEDColor(LED_GREEN);
+  #ifdef USE_TINYUSB
+    setupUSBWeb();
+  #endif
+    printBootMessage();
+    setupBarometer();
+    setupEEPROM();
+    refreshDeviceData();
+    upgradeDeviceRevisionInEEPROM();
+    loadHardwareConfig();
+    setupLED();
+    setupAnalogRead();
+    initButtons();
+    setupTasks();
+    setupWatchdog();
+    setup140();
+  #ifdef M0_PIO
+    Watchdog.reset();
+  #endif
+    setLEDColor(LED_YELLOW);
+    setupDisplay(deviceData, board_config);
+    if (button_top->isPressedRaw()) {
+      modeSwitch(false);
+    }
+    vTaskResume(updateDisplayTaskHandle);
+    setLEDColor(LED_GREEN);
 }
 #endif
 
@@ -404,19 +406,19 @@ void setup140() {
 // main loop - everything runs in threads
 void loop() {
 
-#ifdef M0_PIO
-  Watchdog.reset(); // reset the watchdog timer (done in task for RP2040)
-#endif
+// #ifdef M0_PIO
+//   Watchdog.reset(); // reset the watchdog timer (done in task for RP2040)
+// #endif
 
-  // from WebUSB to both Serial & webUSB
-#ifdef USE_TINYUSB
-  if (currentState == DISARMED && usb_web.available()) parse_usb_serial();
-#endif
+//   // from WebUSB to both Serial & webUSB
+// #ifdef USE_TINYUSB
+//   if (currentState == DISARMED && usb_web.available()) parse_usb_serial();
+// #endif
 
   // more stable in main loop
   //checkButtons();
-  delay(5);
-
+  delay(50);
+  //USBSerial.println("loop");
 }
 
 void checkButtons() {
