@@ -3,9 +3,25 @@
 #include <CircularBuffer.hpp>
 
 #ifndef CAN_PIO
-#include <Servo.h>
+  #include <Servo.h>
 
-Servo esc;  // Creating a servo class with name of esc
+  Servo esc;  // Creating a servo class with name of esc
+#else
+  #include <SineEsc.h>
+  #include <CanardAdapter.h>
+
+  #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+  #include "driver/twai.h"
+
+  
+  #define RX_PIN 4
+  #define TX_PIN 5
+  #define LOCAL_NODE_ID 0x01
+
+  static CanardAdapter adapter;
+  static uint8_t memory_pool[1024] __attribute__((aligned(8)));
+  static SineEsc esc(adapter);
+  static bool twaiDriverInstalled = false;
 #endif
 
 extern CircularBuffer<float, 50> voltageBuffer;
@@ -14,9 +30,13 @@ STR_ESC_TELEMETRY_140 escTelemetryData;
 static telem_esc_t raw_esc_telemdata;
 
 void initESC(int escPin) {
+#ifndef CAN_PIO
   esc.attach(escPin);
   esc.writeMicroseconds(ESC_DISARMED_PWM);
   setupESCSerial();
+#else
+  setupTWAI();
+#endif
 }
 
 void setupESCSerial() {
@@ -25,14 +45,22 @@ void setupESCSerial() {
 }
 
 void setESCThrottle(int throttlePWM) {
+#ifndef CAN_PIO
   esc.writeMicroseconds(throttlePWM);
+#else
+  esc.setThrottleSettings2(throttlePWM * 10);
+#endif
 }
 
 void readESCTelemetry() {
+#ifndef CAN_PIO
   prepareESCSerialRead();
   static byte escDataV2[ESC_DATA_V2_SIZE];
   SerialESC.readBytes(escDataV2, ESC_DATA_V2_SIZE);
   handleESCSerialData(escDataV2);
+#else
+  dumpMessages();  // TODO: set esc telemetry data
+#endif
 }
 
 void prepareESCSerialRead() {
@@ -209,4 +237,122 @@ static void printRawSentence(byte buffer[]) {
     Serial.print(F(" "));
   }
   Serial.println();
+}
+
+
+// CAN specific setup
+bool setupTWAI() {
+    twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(
+                                        (gpio_num_t)TX_PIN,
+                                        (gpio_num_t)RX_PIN,
+                                        TWAI_MODE_NORMAL);
+    twai_timing_config_t t_config = TWAI_TIMING_CONFIG_1MBITS();
+    twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
+
+    if (twai_driver_install(&g_config, &t_config, &f_config) == ESP_OK) {
+        Serial.println("Driver installed");
+    } else {
+        Serial.println("Failed to install driver");
+        return false;
+    }
+
+    if (twai_start() == ESP_OK) {
+        Serial.println("Driver started");
+    } else {
+        Serial.println("Failed to start driver");
+        return false;
+    }
+
+    // Reconfigure alerts to detect frame receive, Bus-Off error and RX queue full states
+    uint32_t alerts_to_enable = TWAI_ALERT_RX_DATA
+                                | TWAI_ALERT_ERR_PASS
+                                | TWAI_ALERT_BUS_ERROR
+                                | TWAI_ALERT_RX_QUEUE_FULL;
+    if (twai_reconfigure_alerts(alerts_to_enable, NULL) == ESP_OK) {
+        Serial.println("CAN Alerts reconfigured");
+    } else {
+        Serial.println("Failed to reconfigure alerts");
+        return false;
+    }
+
+    return true;
+}
+
+void dumpMessages(void) {
+    const SineEscModel &model = esc.getModel();
+
+    if (model.hasGetHardwareInfoResponse) {
+        Serial.println("Got HwInfo response");
+
+        const sine_esc_GetHwInfoResponse *b = &model.getHardwareInfoResponse;
+        Serial.print("\thardware_id: ");
+        Serial.println(b->hardware_id, HEX);
+        Serial.print("\tbootloader_version: ");
+        Serial.println(b->bootloader_version, HEX);
+        Serial.print("\tapp_version: ");
+        Serial.println(b->app_version, HEX);
+    }
+
+    if (model.hasSetThrottleSettings2Response) {
+        Serial.println("Got SetThrottleSettings2 response");
+        const sine_esc_SetThrottleSettings2Response *b = &model.setThrottleSettings2Response;
+
+        Serial.print("\trecv_pwm: ");
+        Serial.println(b->recv_pwm);
+
+        Serial.print("\tcomm_pwm: ");
+        Serial.println(b->comm_pwm);
+
+        Serial.print("\tspeed: ");
+        Serial.println(b->speed);
+
+        Serial.print("\tcurrent: ");
+        Serial.println(b->current);
+
+        Serial.print("\tbus_current: ");
+        Serial.println(b->bus_current);
+
+        Serial.print("\tvoltage: ");
+        Serial.println(b->voltage);
+
+        Serial.print("\tv_modulation: ");
+        Serial.println(b->v_modulation);
+
+        Serial.print("\tmos_temp: ");
+        Serial.println(b->mos_temp);
+
+        Serial.print("\tcap_temp: ");
+        Serial.println(b->cap_temp);
+
+        Serial.print("\tmcu_temp: ");
+        Serial.println(b->mcu_temp);
+
+        Serial.print("\trunning_error: ");
+        Serial.println(b->running_error);
+
+        Serial.print("\tselfcheck_error: ");
+        Serial.println(b->selfcheck_error);
+
+        Serial.print("\tmotor_temp: ");
+        Serial.println(b->motor_temp);
+
+        Serial.print("\ttime_10ms: ");
+        Serial.println(b->time_10ms);
+    }
+
+    if (model.hasSetRotationSpeedSettingsResponse) {
+        Serial.println("Got SetRotationSpeedSettings response");
+    }
+}
+
+static void periodicDumpMessages(bool resetTimer, unsigned long dumpPeriod_ms) {
+    static unsigned long lastMillis = millis();
+    unsigned long now = millis();
+
+    if (resetTimer) {
+        lastMillis = now;
+    } else if ((now - lastMillis) >= dumpPeriod_ms) {
+        lastMillis = now;
+        dumpMessages();
+    }
 }

@@ -40,12 +40,8 @@
   #include "pico/unique_id.h"
 #elif CAN_PIO
   // ESP32S3 (CAN) specific libraries here
+  #include "esp_task_wdt.h"
   #include "EEPROM.h"
-  #include <SineEsc.h>
-  #include <CanardAdapter.h>
-
-  #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
-  #include "driver/twai.h"
 #endif
 
 #include "../../inc/sp140/globals.h"  // device config
@@ -53,7 +49,6 @@
 #include "../../inc/sp140/display.h"
 #include "../../inc/sp140/altimeter.h"
 #include "../../inc/sp140/vibration.h"
-
 
 
 using namespace ace_button;
@@ -140,26 +135,14 @@ TaskHandle_t trackPowerTaskHandle = NULL;
 TaskHandle_t updateDisplayTaskHandle = NULL;
 TaskHandle_t watchdogTaskHandle = NULL;
 
-unsigned long lastDisarmTime = 0;
-const unsigned long DISARM_COOLDOWN = 500; // 500ms cooldown
-
 #ifdef CAN_PIO
-
-#define RX_PIN 4
-#define TX_PIN 5
 #define POTENTIOMETER_PIN 8
-#define LOCAL_NODE_ID 0x01
 
-static CanardAdapter adapter;
-static uint8_t memory_pool[1024] __attribute__((aligned(8)));
-static SineEsc esc(adapter);
-static bool twaiDriverInstalled = false;
-static unsigned long lastThrottleUpdate = 0;
-static const unsigned long THROTTLE_UPDATE_INTERVAL = 250; // 250ms
-unsigned long lastDisarmTime = 0;
-const unsigned long DISARM_COOLDOWN = 500; // 500ms cooldown
 
 #endif
+
+unsigned long lastDisarmTime = 0;
+const unsigned long DISARM_COOLDOWN = 500; // 500ms cooldown
 
 #pragma message "Warning: OpenPPG software is in beta"
 
@@ -167,8 +150,9 @@ void watchdogTask(void* parameter) {
   for (;;) {
     #ifndef OPENPPG_DEBUG
       #ifdef RP_PIO
-      watchdog_update();
+        watchdog_update();
       #elif CAN_PIO
+       ESP_ERROR_CHECK(esp_task_wdt_reset());
       #endif
     #endif
     vTaskDelay(pdMS_TO_TICKS(100));  // Delay for 100ms
@@ -292,6 +276,9 @@ void setupWatchdog() {
     Watchdog.enable(5000);
   #elif RP_PIO
     watchdog_enable(4000, 1);
+  #elif CAN_PIO
+    // Initialize Task Watchdog
+    ESP_ERROR_CHECK(esp_task_wdt_init(3000, true)); // 3 second timeout, panic on timeout
   #endif
 #endif // OPENPPG_DEBUG
 }
@@ -324,124 +311,8 @@ void setup() {
   // simple task that prints "." to serial every 1000ms
   TaskHandle_t testTaskHandle = NULL;
   xTaskCreate(testTask, "TestTask", 1000, NULL, 1, &testTaskHandle);
-  setupTWAI();
 }
 
-static bool setupTWAI() {
-    twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(
-                                        (gpio_num_t)TX_PIN,
-                                        (gpio_num_t)RX_PIN,
-                                        TWAI_MODE_NORMAL);
-    twai_timing_config_t t_config = TWAI_TIMING_CONFIG_1MBITS();
-    twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
-
-    if (twai_driver_install(&g_config, &t_config, &f_config) == ESP_OK) {
-        Serial.println("Driver installed");
-    } else {
-        Serial.println("Failed to install driver");
-        return false;
-    }
-
-    if (twai_start() == ESP_OK) {
-        Serial.println("Driver started");
-    } else {
-        Serial.println("Failed to start driver");
-        return false;
-    }
-
-    // Reconfigure alerts to detect frame receive, Bus-Off error and RX queue full states
-    uint32_t alerts_to_enable = TWAI_ALERT_RX_DATA
-                                | TWAI_ALERT_ERR_PASS
-                                | TWAI_ALERT_BUS_ERROR
-                                | TWAI_ALERT_RX_QUEUE_FULL;
-    if (twai_reconfigure_alerts(alerts_to_enable, NULL) == ESP_OK) {
-        Serial.println("CAN Alerts reconfigured");
-    } else {
-        Serial.println("Failed to reconfigure alerts");
-        return false;
-    }
-
-    return true;
-}
-
-static void dumpMessages(void) {
-    const SineEscModel &model = esc.getModel();
-
-    if (model.hasGetHardwareInfoResponse) {
-        Serial.println("Got HwInfo response");
-
-        const sine_esc_GetHwInfoResponse *b = &model.getHardwareInfoResponse;
-        Serial.print("\thardware_id: ");
-        Serial.println(b->hardware_id, HEX);
-        Serial.print("\tbootloader_version: ");
-        Serial.println(b->bootloader_version, HEX);
-        Serial.print("\tapp_version: ");
-        Serial.println(b->app_version, HEX);
-    }
-
-    if (model.hasSetThrottleSettings2Response) {
-        Serial.println("Got SetThrottleSettings2 response");
-        const sine_esc_SetThrottleSettings2Response *b = &model.setThrottleSettings2Response;
-
-        Serial.print("\trecv_pwm: ");
-        Serial.println(b->recv_pwm);
-
-        Serial.print("\tcomm_pwm: ");
-        Serial.println(b->comm_pwm);
-
-        Serial.print("\tspeed: ");
-        Serial.println(b->speed);
-
-        Serial.print("\tcurrent: ");
-        Serial.println(b->current);
-
-        Serial.print("\tbus_current: ");
-        Serial.println(b->bus_current);
-
-        Serial.print("\tvoltage: ");
-        Serial.println(b->voltage);
-
-        Serial.print("\tv_modulation: ");
-        Serial.println(b->v_modulation);
-
-        Serial.print("\tmos_temp: ");
-        Serial.println(b->mos_temp);
-
-        Serial.print("\tcap_temp: ");
-        Serial.println(b->cap_temp);
-
-        Serial.print("\tmcu_temp: ");
-        Serial.println(b->mcu_temp);
-
-        Serial.print("\trunning_error: ");
-        Serial.println(b->running_error);
-
-        Serial.print("\tselfcheck_error: ");
-        Serial.println(b->selfcheck_error);
-
-        Serial.print("\tmotor_temp: ");
-        Serial.println(b->motor_temp);
-
-        Serial.print("\ttime_10ms: ");
-        Serial.println(b->time_10ms);
-    }
-
-    if (model.hasSetRotationSpeedSettingsResponse) {
-        Serial.println("Got SetRotationSpeedSettings response");
-    }
-}
-
-static void periodicDumpMessages(bool resetTimer, unsigned long dumpPeriod_ms) {
-    static unsigned long lastMillis = millis();
-    unsigned long now = millis();
-
-    if (resetTimer) {
-        lastMillis = now;
-    } else if ((now - lastMillis) >= dumpPeriod_ms) {
-        lastMillis = now;
-        dumpMessages();
-    }
-}
 #else
 /**
  * Initializes the necessary components and configurations for the device setup.
@@ -491,8 +362,9 @@ void setupTasks() {
   xTaskCreate(telemetryTask, "TelemetryTask", 2048, NULL, 2, &telemetryTaskHandle);
   xTaskCreate(trackPowerTask, "trackPower", 500, NULL, 2, &trackPowerTaskHandle);
   xTaskCreate(updateDisplayTask, "updateDisplay", 2000, NULL, 1, &updateDisplayTaskHandle);
-  xTaskCreate(watchdogTask, "watchdog", 1000, NULL, 5, &watchdogTaskHandle);
-  #endif
+  xTaskCreatePinnedToCore(watchdogTask, "watchdog", 1000, NULL, 5, &watchdogTaskHandle, 0);  // Run on core 0
+  ESP_ERROR_CHECK(esp_task_wdt_add(watchdogTaskHandle));
+ #endif
   if (updateDisplayTaskHandle != NULL) {
     vTaskSuspend(updateDisplayTaskHandle);  // Suspend the task immediately after creation
   }

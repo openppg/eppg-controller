@@ -23,6 +23,8 @@ void readESCTelemetry();
 void handleESCSerialData(byte buffer[]);
 void prepareESCSerialRead();
 int checkFletcher16(byte byteBuffer[]);
+void setupTWAI();
+void dumpMessages();
 
 // External declaration of telemetry data structure
 extern STR_ESC_TELEMETRY_140 escTelemetryData;
