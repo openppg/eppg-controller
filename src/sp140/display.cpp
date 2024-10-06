@@ -138,7 +138,7 @@ void displayMeta(int duration) {
   display->setFont(&Open_Sans_Reg_16);
   display->setTextSize(1);
   display->setCursor(60, 60);
-  display->printf("v%d.%d", VERSION_MAJOR, VERSION_MINOR);
+  display->print(VERSION_STRING);
 #ifdef RP_PIO
   display->print("R");
 #endif
