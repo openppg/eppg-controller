@@ -68,6 +68,8 @@ void setupDisplay(const STR_DEVICE_DATA_140_V1& deviceData, const HardwareConfig
 
 void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration = 1500);
 
+void setupDisplay();
+void displayMeta(int duration = 2000);
 // Clear screen and reset properties
 void resetRotation(unsigned int orientation);
 

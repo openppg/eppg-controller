@@ -47,6 +47,7 @@ void updateRevisionIfRequired() {
 // Write to EEPROM
 void writeDeviceData() {
   deviceData.crc = crc16((uint8_t*)&deviceData, sizeof(deviceData) - 2);
+  #ifdef RP_PIO
   printDeviceData();
   EEPROM.put(EEPROM_OFFSET, deviceData);
   if (EEPROM.commit()) {
@@ -54,6 +55,7 @@ void writeDeviceData() {
   } else {
     Serial.println("EEPROM commit failed");
   }
+  #endif
 }
 
 // Reset EEPROM and deviceData to factory defaults

@@ -112,26 +112,74 @@ void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
   // Total armed time
   display->setCursor(60, 90);
 
-  const int hours = deviceData.armed_time / 60;
-  const int minutes = deviceData.armed_time % 60;
-  display->printf("%02d:%02d", hours, minutes);
+  //const int hours = deviceData.armed_time / 60;
+  //const int minutes = deviceData.armed_time % 60;
+  //display->printf("%02d:%02d", hours, minutes);
   delay(duration);
 }
 
+void displayMeta(int duration) {
+  display->fillScreen(WHITE);
+  display->setTextSize(1);
+  display->setFont(&FreeSansBold12pt7b);
+  display->setTextColor(BLACK);
+
+  // Animate "OpenPPG" text
+  const char* text = "OpenPPG";
+  int x = 25;
+  int y = 30;
+  for (int i = 0; text[i] != '\0'; i++) {
+    display->setCursor(x, y);
+    display->print(text[i]);
+    x += display->getCursorX() - x;  // Move cursor to the right
+    delay(100);  // Adjust delay for animation speed
+  }
+
+  display->setFont(&Open_Sans_Reg_16);
+  display->setTextSize(1);
+  display->setCursor(60, 60);
+  display->printf("v%d.%d", VERSION_MAJOR, VERSION_MINOR);
+#ifdef RP_PIO
+  display->print("R");
+#endif
+  delay(duration);
+}
+
+void setupDisplay() {
+  USBSerial.println("setupDisplay");
+
+  //display = new Adafruit_ST7735(board_config.tft_cs, board_config.tft_dc, board_config.tft_rst);
+  display = new Adafruit_ST7735(13, 14, 4, 2, 15);
+  //Adafruit_ST7735::Adafruit_ST7735(int8_t cs, int8_t dc, int8_t mosi, int8_t sclk, int8_t rst)
+
+  display->initR(INITR_BLACKTAB);  // Init ST7735S chip, black tab
+  //pinMode(board_config.tft_lite, OUTPUT);
+  //digitalWrite(board_config.tft_lite, HIGH);  // Backlight on
+  resetRotation(1);
+  //setTheme(deviceData.theme);  // 0=light, 1=dark
+  display->fillScreen(ST77XX_BLACK);
+  displayMeta();
+}
+
+
 // inital screen setup and config with devicedata and boardconfig passed in
 void setupDisplay(const STR_DEVICE_DATA_140_V1& deviceData, const HardwareConfig& board_config) {
+  USBSerial.println("setupDisplay");
 #ifdef RP_PIO
   watchdogCausedReboot = watchdog_caused_reboot();
   watchdogEnableCausedReboot = watchdog_enable_caused_reboot();
 #endif
 
-  display = new Adafruit_ST7735(board_config.tft_cs, board_config.tft_dc, board_config.tft_rst);
+  //display = new Adafruit_ST7735(board_config.tft_cs, board_config.tft_dc, board_config.tft_rst);
+  display = new Adafruit_ST7735(13, 14, 4, 2, 15);
+  //Adafruit_ST7735::Adafruit_ST7735(int8_t cs, int8_t dc, int8_t mosi, int8_t sclk, int8_t rst)
 
   display->initR(INITR_BLACKTAB);  // Init ST7735S chip, black tab
-  pinMode(board_config.tft_lite, OUTPUT);
-  digitalWrite(board_config.tft_lite, HIGH);  // Backlight on
-  resetRotation(deviceData.screen_rotation);
-  setTheme(deviceData.theme);  // 0=light, 1=dark
+  //pinMode(board_config.tft_lite, OUTPUT);
+  //digitalWrite(board_config.tft_lite, HIGH);  // Backlight on
+  //resetRotation(deviceData.screen_rotation);
+  //setTheme(deviceData.theme);  // 0=light, 1=dark
+  display->fillScreen(ST77XX_BLACK);
   displayMeta(deviceData);
 }
 

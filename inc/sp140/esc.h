@@ -18,7 +18,7 @@
 #define READ_INTERVAL         0
 #define ESC_TIMEOUT           15
 
-void initESC(int escPin);
+bool initESC(int escPin);
 void setupESCSerial();
 void setESCThrottle(int throttlePWM);
 void readESCTelemetry();
@@ -26,7 +26,7 @@ void handleESCSerialData(byte buffer[]);
 void prepareESCSerialRead();
 int checkFletcher16(byte byteBuffer[]);
 bool setupTWAI();
-void dumpMessages();
+void dumpESCMessages();
 
 // External declaration of telemetry data structure
 extern STR_ESC_TELEMETRY_140 escTelemetryData;

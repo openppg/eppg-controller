@@ -28,18 +28,26 @@ extern CircularBuffer<float, 50> voltageBuffer;
 STR_ESC_TELEMETRY_140 escTelemetryData;
 static telem_esc_t raw_esc_telemdata;
 
-void initESC(int escPin) {
+bool initESC(int escPin) {
   setupTWAI();
   adapter.begin(memory_pool, sizeof(memory_pool));
   adapter.setLocalNodeId(LOCAL_NODE_ID);
   esc.begin(0x20); // Default ID for the ESC
 
   // Find ESC
-  while (!esc.getModel().hasGetHardwareInfoResponse) {
+  int attempts = 0;
+  const int maxAttempts = 5;
+  while (!esc.getModel().hasGetHardwareInfoResponse && attempts < maxAttempts) {
     esc.getHardwareInfo();
     adapter.processTxRxOnce();
     USBSerial.println("Waiting for ESC");
-    delay(1000);
+    delay(100);
+    attempts++;
+  }
+
+  if (attempts >= maxAttempts) {
+    USBSerial.println("Failed to find ESC after 5 attempts");
+    return false;
   }
 
   // Set idle throttle
@@ -47,6 +55,8 @@ void initESC(int escPin) {
   esc.setThrottleSettings2(IdleThrottle_us);
   delay(1000); // Wait for ESC to process the command
   adapter.processTxRxOnce();
+
+  return true;
 }
 
 void setupESCSerial() {
@@ -77,7 +87,7 @@ void readESCTelemetry() {
   unsigned long currentTime = millis();
 
   if (currentTime - lastDumpTime >= 200) {  // Check if 200ms have passed
-    dumpMessages();  // TODO: set esc telemetry data
+    dumpESCMessages();  // TODO: set esc telemetry data
     lastDumpTime = currentTime;  // Update the last dump time
   }
 
@@ -302,7 +312,7 @@ bool setupTWAI() {
   return true;
 }
 
-void dumpMessages(void) {
+void dumpESCMessages(void) {
     const SineEscModel &model = esc.getModel();
 
     if (model.hasGetHardwareInfoResponse) {
@@ -369,7 +379,7 @@ void dumpMessages(void) {
     }
 }
 
-static void periodicDumpMessages(bool resetTimer, unsigned long dumpPeriod_ms) {
+static void periodicdumpESCMessages(bool resetTimer, unsigned long dumpPeriod_ms) {
     static unsigned long lastMillis = millis();
     unsigned long now = millis();
 
@@ -377,6 +387,6 @@ static void periodicDumpMessages(bool resetTimer, unsigned long dumpPeriod_ms) {
         lastMillis = now;
     } else if ((now - lastMillis) >= dumpPeriod_ms) {
         lastMillis = now;
-        dumpMessages();
+        dumpESCMessages();
     }
 }

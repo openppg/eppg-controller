@@ -300,8 +300,8 @@ void upgradeDeviceRevisionInEEPROM() {
 void testTask(void *pvParameters) {
   for (;;) {
     USBSerial.println(".");
-    setESCThrottle(ESC_DISARMED_PWM);
-    dumpMessages();
+    //setESCThrottle(ESC_DISARMED_PWM);
+    //dumpESCMessages();
     delay(500);
   }
 }
@@ -314,8 +314,11 @@ void setup() {
   USBSerial.begin(115200);
   delay(100);  // Give some time for USB CDC to initialize
   USBSerial.println("ESP32-S3 is ready!");
-  initESC(0);
-  setESCThrottle(ESC_DISARMED_PWM);
+  resetDeviceData();
+
+  setupDisplay();
+  //initESC(0);
+  //setESCThrottle(ESC_DISARMED_PWM);
   xTaskCreate(testTask, "TestTask", 10000, NULL, 1, &testTaskHandle);
 }
 
