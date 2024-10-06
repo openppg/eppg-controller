@@ -21,6 +21,12 @@ void refreshDeviceData() {
     }
   #elif RP_PIO
     EEPROM.get(EEPROM_OFFSET, deviceData);
+  #elif CAN_PIO
+    if (!EEPROM.begin(sizeof(deviceData))) {
+      Serial.println(F("Failed to initialise EEPROM"));
+      return;
+    }
+    EEPROM.get(EEPROM_OFFSET, deviceData);
   #endif
   crc = crc16((uint8_t*)&deviceData, sizeof(deviceData) - 2);
 
@@ -55,6 +61,13 @@ void writeDeviceData() {
   } else {
     Serial.println("EEPROM commit failed");
   }
+  #elif CAN_PIO
+  EEPROM.put(EEPROM_OFFSET, deviceData);
+  if (EEPROM.commit()) {
+    Serial.println("EEPROM commit successful");
+  } else {
+    Serial.println("EEPROM commit failed");
+  }
   #endif
 }
 
@@ -67,6 +80,8 @@ void resetDeviceData() {
     deviceData.revision = 0;
   #elif RP_PIO
     deviceData.revision = 2; // Default to new 2040 board revision // TODO
+  #elif CAN_PIO
+    deviceData.revision = 3; // Set appropriate revision for ESP32-S3
   #endif
 
   deviceData.version_major = VERSION_MAJOR;
@@ -246,3 +261,4 @@ void send_usb_serial() {
 #endif // M0_PIO/RP_PIO
 #endif // USE_TINYUSB
 }
+

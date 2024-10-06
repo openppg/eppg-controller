@@ -253,11 +253,19 @@ void setupBarometer() {
   digitalWrite(bmp_enabler, HIGH); // barometer fix for V2 board
 }
 
-void setupEEPROM() {
- #ifdef M0_PIO
+void setupEEPROM() {  // TODO: move to extra-data.ino or own file
+#ifdef M0_PIO
   uint8_t eepStatus = eep.begin(eep.twiClock100kHz);
 #elif RP_PIO
   EEPROM.begin(255);
+#elif CAN_PIO
+  // Initialize EEPROM
+  if (!EEPROM.begin(sizeof(deviceData))) {
+    USBSerial.println("Failed to initialise EEPROM");
+    // You might want to add some error handling here
+  } else {
+    USBSerial.println("EEPROM initialized successfully");
+  }
 #endif
 }
 
@@ -313,9 +321,12 @@ TaskHandle_t testTaskHandle = NULL;
 void setup() {
   USBSerial.begin(115200);
   delay(100);  // Give some time for USB CDC to initialize
+  while (!USBSerial) {  // TODO: remove
+    delay(100);
+  }
   USBSerial.println("ESP32-S3 is ready!");
-  resetDeviceData();
 
+  setupEEPROM();
   setupDisplay();
   //initESC(0);
   //setESCThrottle(ESC_DISARMED_PWM);
