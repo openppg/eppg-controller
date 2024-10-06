@@ -10,6 +10,8 @@
   #include "../../inc/sp140/rp2040-config.h"
 #elif CAN_PIO
   #include "../../inc/sp140/esp32s3-config.h"
+  #include <SineEsc.h>
+  #include <CanardAdapter.h>
 #endif
 
 // ESC communication parameters
@@ -26,7 +28,10 @@ void handleESCSerialData(byte buffer[]);
 void prepareESCSerialRead();
 int checkFletcher16(byte byteBuffer[]);
 bool setupTWAI();
-void dumpESCMessages();
+
+// for debugging
+void dumpThrottleResponse(const sine_esc_SetThrottleSettings2Response *res);
+void dumpESCMessages();  // dumps all messages to USBSerial
 
 // External declaration of telemetry data structure
 extern STR_ESC_TELEMETRY_140 escTelemetryData;

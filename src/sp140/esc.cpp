@@ -3,19 +3,16 @@
 #include <CircularBuffer.hpp>
 
 #ifndef CAN_PIO
-  #include <Servo.h>
+  #include <Servo.h>  // For generating PWM for ESC
 
   Servo esc;  // Creating a servo class with name of esc
 #else
-  #include <SineEsc.h>
-  #include <CanardAdapter.h>
-
   #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
   #include "driver/twai.h"
 
-  #define RX_PIN 10
-  #define TX_PIN 9
-  #define LOCAL_NODE_ID 0x01
+  #define RX_PIN 10  // CAN RX pin to transceiver
+  #define TX_PIN 9  // CAN TX pin to transceiver
+  #define LOCAL_NODE_ID 0x01  // The ID on the network of this device
 
   static CanardAdapter adapter;
   static uint8_t memory_pool[1024] __attribute__((aligned(8)));
@@ -32,7 +29,7 @@ bool initESC(int escPin) {
   setupTWAI();
   adapter.begin(memory_pool, sizeof(memory_pool));
   adapter.setLocalNodeId(LOCAL_NODE_ID);
-  esc.begin(0x20); // Default ID for the ESC
+  esc.begin(0x20);  // Default ID for the ESC
 
   // Find ESC
   int attempts = 0;
@@ -84,11 +81,34 @@ void readESCTelemetry() {
   USBSerialESC.readBytes(escDataV2, ESC_DATA_V2_SIZE);
   handleESCSerialData(escDataV2);
 #else
-  unsigned long currentTime = millis();
+  // TODO: Skip if the esc is not initialized
 
-  if (currentTime - lastDumpTime >= 200) {  // Check if 200ms have passed
-    dumpESCMessages();  // TODO: set esc telemetry data
-    lastDumpTime = currentTime;  // Update the last dump time
+  const SineEscModel &model = esc.getModel();
+
+  if (model.hasSetThrottleSettings2Response) {
+    const sine_esc_SetThrottleSettings2Response *res = &model.setThrottleSettings2Response;
+    dumpThrottleResponse(res);
+    // Voltage
+    escTelemetryData.volts = res->voltage / 100.0f;
+    voltageBuffer.push(escTelemetryData.volts);
+
+    // Current
+    escTelemetryData.amps = res->current / 100.0f;
+
+    // Temperature (using MOS temperature as an example)
+    escTelemetryData.temperatureC = res->mos_temp / 100.0f;
+
+    // eRPM (assuming 'speed' is in eRPM)
+    escTelemetryData.eRPM = res->speed;
+
+    // Input PWM (assuming 'recv_pwm' is equivalent)
+    escTelemetryData.inPWM = res->recv_pwm / 100.0f;
+
+    // Status flags (combining running_error and selfcheck_error)
+    //escTelemetryData.statusFlag = (res->running_error & 0xFF) | ((res->selfcheck_error & 0xFF) << 8);
+
+    // Calculate watts
+    watts = escTelemetryData.amps * escTelemetryData.volts;
   }
 
   adapter.processTxRxOnce(); // Process CAN messages
@@ -312,81 +332,72 @@ bool setupTWAI() {
   return true;
 }
 
-void dumpESCMessages(void) {
-    const SineEscModel &model = esc.getModel();
+void dumpThrottleResponse(const sine_esc_SetThrottleSettings2Response *res) {
+  USBSerial.println("Got SetThrottleSettings2 response");
 
-    if (model.hasGetHardwareInfoResponse) {
-        USBSerial.println("Got HwInfo response");
+  USBSerial.print("\trecv_pwm: ");
+  USBSerial.println(res->recv_pwm);
 
-        const sine_esc_GetHwInfoResponse *b = &model.getHardwareInfoResponse;
-        USBSerial.print("\thardware_id: ");
-        USBSerial.println(b->hardware_id, HEX);
-        USBSerial.print("\tbootloader_version: ");
-        USBSerial.println(b->bootloader_version, HEX);
-        USBSerial.print("\tapp_version: ");
-        USBSerial.println(b->app_version, HEX);
-    }
+  USBSerial.print("\tcomm_pwm: ");
+  USBSerial.println(res->comm_pwm);
 
-    if (model.hasSetThrottleSettings2Response) {
-        USBSerial.println("Got SetThrottleSettings2 response");
-        const sine_esc_SetThrottleSettings2Response *b = &model.setThrottleSettings2Response;
+  USBSerial.print("\tspeed: ");
+  USBSerial.println(res->speed);
 
-        USBSerial.print("\trecv_pwm: ");
-        USBSerial.println(b->recv_pwm);
+  USBSerial.print("\tcurrent: ");
+  USBSerial.println(res->current);
 
-        USBSerial.print("\tcomm_pwm: ");
-        USBSerial.println(b->comm_pwm);
+  USBSerial.print("\tbus_current: ");
+  USBSerial.println(res->bus_current);
 
-        USBSerial.print("\tspeed: ");
-        USBSerial.println(b->speed);
+  USBSerial.print("\tvoltage: ");
+  USBSerial.println(res->voltage);
 
-        USBSerial.print("\tcurrent: ");
-        USBSerial.println(b->current);
+  USBSerial.print("\tv_modulation: ");
+  USBSerial.println(res->v_modulation);
 
-        USBSerial.print("\tbus_current: ");
-        USBSerial.println(b->bus_current);
+  USBSerial.print("\tmos_temp: ");
+  USBSerial.println(res->mos_temp);
 
-        USBSerial.print("\tvoltage: ");
-        USBSerial.println(b->voltage);
+  USBSerial.print("\tcap_temp: ");
+  USBSerial.println(res->cap_temp);
 
-        USBSerial.print("\tv_modulation: ");
-        USBSerial.println(b->v_modulation);
+  USBSerial.print("\tmcu_temp: ");
+  USBSerial.println(res->mcu_temp);
 
-        USBSerial.print("\tmos_temp: ");
-        USBSerial.println(b->mos_temp);
+  USBSerial.print("\trunning_error: ");
+  USBSerial.println(res->running_error);
 
-        USBSerial.print("\tcap_temp: ");
-        USBSerial.println(b->cap_temp);
+  USBSerial.print("\tselfcheck_error: ");
+  USBSerial.println(res->selfcheck_error);
 
-        USBSerial.print("\tmcu_temp: ");
-        USBSerial.println(b->mcu_temp);
+  USBSerial.print("\tmotor_temp: ");
+  USBSerial.println(res->motor_temp);
 
-        USBSerial.print("\trunning_error: ");
-        USBSerial.println(b->running_error);
-
-        USBSerial.print("\tselfcheck_error: ");
-        USBSerial.println(b->selfcheck_error);
-
-        USBSerial.print("\tmotor_temp: ");
-        USBSerial.println(b->motor_temp);
-
-        USBSerial.print("\ttime_10ms: ");
-        USBSerial.println(b->time_10ms);
-    }
-
-    if (model.hasSetRotationSpeedSettingsResponse) {
-        USBSerial.println("Got SetRotationSpeedSettings response");
-    }
+  USBSerial.print("\ttime_10ms: ");
+  USBSerial.println(res->time_10ms);
 }
 
-static void periodicdumpESCMessages(bool resetTimer, unsigned long dumpPeriod_ms) {
-    static unsigned long lastMillis = millis();
-    unsigned long now = millis();
+void dumpESCMessages(void) {
+  const SineEscModel &model = esc.getModel();
 
-    if (resetTimer) {
-        lastMillis = now;
-    } else if ((now - lastMillis) >= dumpPeriod_ms) {
-        lastMillis = now;
-        dumpESCMessages();
-    }
+  if (model.hasGetHardwareInfoResponse) {
+    USBSerial.println("Got HwInfo response");
+
+    const sine_esc_GetHwInfoResponse *b = &model.getHardwareInfoResponse;
+    USBSerial.print("\thardware_id: ");
+    USBSerial.println(b->hardware_id, HEX);
+    USBSerial.print("\tbootloader_version: ");
+    USBSerial.println(b->bootloader_version, HEX);
+    USBSerial.print("\tapp_version: ");
+    USBSerial.println(b->app_version, HEX);
+  }
+
+  if (model.hasSetThrottleSettings2Response) {
+    dumpThrottleResponse(&model.setThrottleSettings2Response);
+  }
+
+  if (model.hasSetRotationSpeedSettingsResponse) {
+    USBSerial.println("Got SetRotationSpeedSettings response");
+  }
 }
