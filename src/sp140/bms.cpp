@@ -4,12 +4,15 @@
 BMS_CAN bms_can(MCP_CS, MCP_BAUDRATE, MCP_MOSI, MCP_MISO, MCP_SCK);
 
 bool initBMSCAN() {
+  USBSerial.println("Initializing BMS CAN...");
   if (!bms_can.begin()) {
     USBSerial.println("Error initializing BMS_CAN");
     return false;
   }
+  USBSerial.println("BMS CAN initialized successfully");
   return true;
 }
+
 
 void updateBMSData() {
   bms_can.update();

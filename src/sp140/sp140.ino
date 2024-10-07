@@ -136,6 +136,7 @@ unsigned long armedSecs = 0;
 TaskHandle_t blinkLEDTaskHandle = NULL;
 TaskHandle_t throttleTaskHandle = NULL;
 TaskHandle_t telemetryEscTaskHandle = NULL;
+TaskHandle_t telemetryBmsTaskHandle = NULL;
 TaskHandle_t trackPowerTaskHandle = NULL;
 TaskHandle_t updateDisplayTaskHandle = NULL;
 TaskHandle_t watchdogTaskHandle = NULL;
@@ -164,7 +165,6 @@ void watchdogTask(void* parameter) {
   }
 }
 
-
 void blinkLEDTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
@@ -192,6 +192,17 @@ void telemetryEscTask(void *pvParameters) {
   for (;;) {  // infinite loop
     readESCTelemetry();
     delay(100);  // wait for 100ms
+  }
+  vTaskDelete(NULL);  // should never reach this
+}
+
+void telemetryBmsTask(void *pvParameters) {
+  (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
+
+  for (;;) {  // infinite loop
+    updateBMSData();
+    printBMSData();
+    delay(200);  // wait for 100ms
   }
   vTaskDelete(NULL);  // should never reach this
 }
@@ -352,16 +363,18 @@ void setup() {
   //initButtons();
   setupWatchdog();
   setup140();
+  initBMSCAN();
 
   setLEDColor(LED_YELLOW);
   setupDisplay(deviceData, board_config);
   initESC(0);
   setESCThrottle(ESC_DISARMED_PWM);
   xTaskCreate(testTask, "TestTask", 10000, NULL, 1, &testTaskHandle);
-  xTaskCreate(telemetryEscTask, "telemetryEscTask", 2048, NULL, 2, &telemetryEscTaskHandle);
+  xTaskCreate(telemetryEscTask, "telemetryEscTask", 4048, NULL, 2, &telemetryEscTaskHandle);
   xTaskCreate(updateDisplayTask, "updateDisplay", 2800, NULL, 1, &updateDisplayTaskHandle);
   //xTaskCreate(blinkLEDTask, "blinkLed", 400, NULL, 1, &blinkLEDTaskHandle);
   xTaskCreate(throttleTask, "throttle", 4000, NULL, 3, &throttleTaskHandle);
+  xTaskCreate(telemetryBmsTask, "telemetryBmsTask", 8000, NULL, 3, &telemetryBmsTaskHandle);
 }
 
 #else
@@ -404,14 +417,14 @@ void setupTasks() {
   #ifdef RP_PIO
   xTaskCreateAffinitySet(blinkLEDTask, "blinkLed", 200, NULL, 1, uxCoreAffinityMask1, &blinkLEDTaskHandle);
   xTaskCreateAffinitySet(throttleTask, "throttle", 2048, NULL, 4, uxCoreAffinityMask0, &throttleTaskHandle);
-  xTaskCreateAffinitySet(telemetryEscTask, "telemetryEscTask", 2048, NULL, 3, uxCoreAffinityMask0, &telemetryEscTaskHandle);
+  xTaskCreateAffinitySet(telemetryEscTask, "telemetryEscTask", 4048, NULL, 3, uxCoreAffinityMask0, &telemetryEscTaskHandle);
   xTaskCreateAffinitySet(trackPowerTask, "trackPower", 500, NULL, 2, uxCoreAffinityMask0, &trackPowerTaskHandle);
   xTaskCreateAffinitySet(updateDisplayTask, "updateDisplay", 2000, NULL, 1, uxCoreAffinityMask0, &updateDisplayTaskHandle);
   xTaskCreateAffinitySet(watchdogTask, "watchdog", 1000, NULL, 5, uxCoreAffinityMask0, &watchdogTaskHandle);
  #else
   xTaskCreate(blinkLEDTask, "blinkLed", 400, NULL, 1, &blinkLEDTaskHandle);
   xTaskCreate(throttleTask, "throttle", 1000, NULL, 3, &throttleTaskHandle);
-  xTaskCreate(telemetryEscTask, "telemetryEscTask", 2048, NULL, 2, &telemetryEscTaskHandle);
+  xTaskCreate(telemetryEscTask, "telemetryEscTask", 4048, NULL, 2, &telemetryEscTaskHandle);
   xTaskCreate(trackPowerTask, "trackPower", 500, NULL, 2, &trackPowerTaskHandle);
   xTaskCreate(updateDisplayTask, "updateDisplay", 2600, NULL, 1, &updateDisplayTaskHandle);
   xTaskCreatePinnedToCore(watchdogTask, "watchdog", 1000, NULL, 5, &watchdogTaskHandle, 0);  // Run on core 0
