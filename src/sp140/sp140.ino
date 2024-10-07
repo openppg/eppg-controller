@@ -47,6 +47,7 @@
 #include "../../inc/sp140/globals.h"  // device config
 #include "../../inc/sp140/esc.h"
 #include "../../inc/sp140/display.h"
+#include "../../inc/sp140/bms.h"
 #include "../../inc/sp140/altimeter.h"
 #include "../../inc/sp140/vibration.h"
 
