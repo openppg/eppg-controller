@@ -34,7 +34,7 @@ void refreshDeviceData() {
   if (crc != deviceData.crc || deviceData.sea_pressure < 0) {
     Serial.println(F("EEPROM CRC mismatch - resetting device data"));
     resetDeviceData();
-    }
+  }
 
   // Update the revision if required
   //updateRevisionIfRequired();
@@ -79,9 +79,9 @@ void resetDeviceData() {
   #ifdef M0_PIO
     deviceData.revision = 0;
   #elif RP_PIO
-    deviceData.revision = 2; // Default to new 2040 board revision // TODO
+    deviceData.revision = 2;  // Default to new 2040 board revision
   #elif CAN_PIO
-    deviceData.revision = 3; // Set appropriate revision for ESP32-S3
+    deviceData.revision = 3;  // Set appropriate revision for ESP32-S3
   #endif
 
   deviceData.version_major = VERSION_MAJOR;

@@ -245,8 +245,13 @@ void setupUSBWeb() {
 #endif
 
 void printBootMessage() {
+  #ifdef CAN_PIO
+  USBSerial.print(F("Booting up V"));
+  USBSerial.print(VERSION_STRING);
+  #else
   Serial.print(F("Booting up (USB) V"));
-  Serial.print(VERSION_MAJOR + "." + VERSION_MINOR);
+  Serial.print(VERSION_STRING);
+  #endif
 }
 
 void setupBarometer() {
@@ -280,7 +285,7 @@ void setupLED() {
 }
 
 void setupAnalogRead() {
-  analogReadResolution(12);   // M0 family chips provides 12bit ADC resolution
+  //analogReadResolution(12);   // M0 family chips provides 12bit ADC resolution
   pot->setAnalogResolution(4096);
 }
 
@@ -304,6 +309,9 @@ void upgradeDeviceRevisionInEEPROM() {
     deviceData.revision = V1;
     writeDeviceData();
   }
+#elif CAN_PIO
+  deviceData.revision = ESPCAN;
+  writeDeviceData();
 #endif
 }
 
@@ -329,12 +337,27 @@ void setup() {
   USBSerial.println("ESP32-S3 is ready!");
 
   setupEEPROM();
-  setupDisplay();
+  refreshDeviceData();
+  upgradeDeviceRevisionInEEPROM();
+
+  printBootMessage();
+  setupBarometer();
+  setupEEPROM();
+  refreshDeviceData();
+  upgradeDeviceRevisionInEEPROM();
+  loadHardwareConfig();
+  setupLED();
+  setupAnalogRead();
+  //initButtons();
+  setupWatchdog();
+  setup140();
+
+  setLEDColor(LED_YELLOW);
+  setupDisplay(deviceData, board_config);
   initESC(0);
   setESCThrottle(ESC_DISARMED_PWM);
   xTaskCreate(testTask, "TestTask", 10000, NULL, 1, &testTaskHandle);
   xTaskCreate(telemetryEscTask, "telemetryEscTask", 2048, NULL, 2, &telemetryEscTaskHandle);
-
 }
 
 #else

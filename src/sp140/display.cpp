@@ -155,7 +155,8 @@ void setupDisplay() {
   display->initR(INITR_BLACKTAB);  // Init ST7735S chip, black tab
   //pinMode(board_config.tft_lite, OUTPUT);
   //digitalWrite(board_config.tft_lite, HIGH);  // Backlight on
-  resetRotation(1);
+  //resetRotation(deviceData.screen_rotation);
+
   //setTheme(deviceData.theme);  // 0=light, 1=dark
   display->fillScreen(ST77XX_BLACK);
   displayMeta();
@@ -177,8 +178,8 @@ void setupDisplay(const STR_DEVICE_DATA_140_V1& deviceData, const HardwareConfig
   display->initR(INITR_BLACKTAB);  // Init ST7735S chip, black tab
   //pinMode(board_config.tft_lite, OUTPUT);
   //digitalWrite(board_config.tft_lite, HIGH);  // Backlight on
-  //resetRotation(deviceData.screen_rotation);
-  //setTheme(deviceData.theme);  // 0=light, 1=dark
+  resetRotation(deviceData.screen_rotation);
+  setTheme(deviceData.theme);  // 0=light, 1=dark
   display->fillScreen(ST77XX_BLACK);
   displayMeta(deviceData);
 }
