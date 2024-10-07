@@ -33,19 +33,19 @@ bool initESC(int escPin) {
 
   // Find ESC
   int attempts = 0;
-  const int maxAttempts = 5;
+  const int maxAttempts = 20;
   while (!esc.getModel().hasGetHardwareInfoResponse && attempts < maxAttempts) {
     esc.getHardwareInfo();
     adapter.processTxRxOnce();
     USBSerial.println("Waiting for ESC");
-    delay(100);
+    delay(200);
     attempts++;
   }
 
-  if (attempts >= maxAttempts) {
-    USBSerial.println("Failed to find ESC after 5 attempts");
-    return false;
-  }
+  // if (attempts >= maxAttempts) {
+  //   USBSerial.println("Failed to find ESC after 5 attempts");
+  //   return false;
+  // }
 
   // Set idle throttle
   const uint16_t IdleThrottle_us = 10000; // 1000us (0.1us resolution)
@@ -65,13 +65,15 @@ void setupESCSerial() {
 
 void setESCThrottle(int throttlePWM) {
   USBSerial.println("setESCThrottle");
-  uint16_t scaledThrottle = map(throttlePWM, 1000, 2000, 9000, 20000);
+
+  // TODO: Calibrate and use constants
+  uint16_t scaledThrottle = map(throttlePWM, 1000, 2000, 9000, 12000);
+  USBSerial.print("Setting throttle to: ");
+  USBSerial.println(scaledThrottle);
   esc.setThrottleSettings2(scaledThrottle);
   // Remove the immediate call to processTxRxOnce here
   adapter.processTxRxOnce(); // Process CAN messages
 }
-
-static unsigned long lastDumpTime = 0;
 
 void readESCTelemetry() {
   USBSerial.println("readESCTelemetry");
@@ -81,6 +83,7 @@ void readESCTelemetry() {
   USBSerialESC.readBytes(escDataV2, ESC_DATA_V2_SIZE);
   handleESCSerialData(escDataV2);
 #else
+
   // TODO: Skip if the esc is not initialized
 
   const SineEscModel &model = esc.getModel();

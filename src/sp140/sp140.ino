@@ -190,7 +190,7 @@ void telemetryTask(void *pvParameters) {
 
   for (;;) {  // infinite loop
     readESCTelemetry();
-    delay(50);  // wait for 50ms
+    delay(100);  // wait for 100ms
   }
   vTaskDelete(NULL);  // should never reach this
 }
@@ -321,16 +321,18 @@ TaskHandle_t testTaskHandle = NULL;
 void setup() {
   USBSerial.begin(115200);
   delay(100);  // Give some time for USB CDC to initialize
-  while (!USBSerial) {  // TODO: remove
-    delay(100);
-  }
+  // while (!USBSerial) {  // TODO: remove
+  //   delay(100);
+  // }
   USBSerial.println("ESP32-S3 is ready!");
 
   setupEEPROM();
   setupDisplay();
-  //initESC(0);
-  //setESCThrottle(ESC_DISARMED_PWM);
+  initESC(0);
+  setESCThrottle(ESC_DISARMED_PWM);
   xTaskCreate(testTask, "TestTask", 10000, NULL, 1, &testTaskHandle);
+  xTaskCreate(telemetryTask, "TelemetryTask", 2048, NULL, 2, &telemetryTaskHandle);
+
 }
 
 #else
