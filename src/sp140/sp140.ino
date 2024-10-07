@@ -358,6 +358,8 @@ void setup() {
   setESCThrottle(ESC_DISARMED_PWM);
   xTaskCreate(testTask, "TestTask", 10000, NULL, 1, &testTaskHandle);
   xTaskCreate(telemetryEscTask, "telemetryEscTask", 2048, NULL, 2, &telemetryEscTaskHandle);
+  xTaskCreate(updateDisplayTask, "updateDisplay", 2600, NULL, 1, &updateDisplayTaskHandle);
+
 }
 
 #else
@@ -409,7 +411,7 @@ void setupTasks() {
   xTaskCreate(throttleTask, "throttle", 1000, NULL, 3, &throttleTaskHandle);
   xTaskCreate(telemetryEscTask, "telemetryEscTask", 2048, NULL, 2, &telemetryEscTaskHandle);
   xTaskCreate(trackPowerTask, "trackPower", 500, NULL, 2, &trackPowerTaskHandle);
-  xTaskCreate(updateDisplayTask, "updateDisplay", 2000, NULL, 1, &updateDisplayTaskHandle);
+  xTaskCreate(updateDisplayTask, "updateDisplay", 2600, NULL, 1, &updateDisplayTaskHandle);
   xTaskCreatePinnedToCore(watchdogTask, "watchdog", 1000, NULL, 5, &watchdogTaskHandle, 0);  // Run on core 0
   ESP_ERROR_CHECK(esp_task_wdt_add(watchdogTaskHandle));
  #endif
