@@ -31,7 +31,8 @@
 enum DeviceRevision {
   M0 = 0,
   V1 = 1,
-  MODULE = 2
+  MODULE = 2,
+  ESPCAN = 3
 };
 
 #endif  // INC_SP140_SHARED_CONFIG_H_

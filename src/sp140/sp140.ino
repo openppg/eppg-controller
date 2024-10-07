@@ -226,6 +226,8 @@ void loadHardwareConfig() {
     board_config = v1_config;
   } else if (deviceData.revision == 2) {
     board_config = v2_config;
+  } else if (deviceData.revision == 3) {
+    board_config = v3_config;
   } else {
     // Handle other cases or throw an error
   }

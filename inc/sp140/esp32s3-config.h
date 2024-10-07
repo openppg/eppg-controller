@@ -24,5 +24,5 @@ struct HardwareConfig {
 
 extern HardwareConfig v1_config;
 extern HardwareConfig v2_config;  // not used
-
+extern HardwareConfig v3_config;
 #endif  // INC_SP140_ESP32S3_CONFIG_H_

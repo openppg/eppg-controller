@@ -5,10 +5,10 @@
 #define LED_BUILTIN  21  // m5 stack
 // V1 configuration
 // Some SPI pins are defined in platformio.ini
-HardwareConfig v1_config = {
+HardwareConfig v3_config = {
   .button_top = 1,
   .buzzer_pin = 8,
-  .led_sw = 21,
+  .led_sw = LED_BUILTIN,
   .throttle_pin = 7,
   .alt_wire = false,
   .tft_rst = 15,
