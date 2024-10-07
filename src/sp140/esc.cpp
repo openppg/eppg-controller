@@ -67,7 +67,7 @@ void setESCThrottle(int throttlePWM) {
   USBSerial.println("setESCThrottle");
 
   // TODO: Calibrate and use constants
-  uint16_t scaledThrottle = map(throttlePWM, 1000, 2000, 9000, 12000);
+  uint16_t scaledThrottle = map(throttlePWM, 1000, 2000, 10000, 14000);
   USBSerial.print("Setting throttle to: ");
   USBSerial.println(scaledThrottle);
   esc.setThrottleSettings2(scaledThrottle);
@@ -92,20 +92,20 @@ void readESCTelemetry() {
     const sine_esc_SetThrottleSettings2Response *res = &model.setThrottleSettings2Response;
     dumpThrottleResponse(res);
     // Voltage
-    escTelemetryData.volts = res->voltage / 100.0f;
+    escTelemetryData.volts = res->voltage / 10.0f;
     voltageBuffer.push(escTelemetryData.volts);
 
     // Current
-    escTelemetryData.amps = res->current / 100.0f;
+    escTelemetryData.amps = res->current / 10.0f;
 
     // Temperature (using MOS temperature as an example)
-    escTelemetryData.temperatureC = res->mos_temp / 100.0f;
+    escTelemetryData.temperatureC = res->mos_temp / 10.0f;
 
     // eRPM (assuming 'speed' is in eRPM)
     escTelemetryData.eRPM = res->speed;
 
     // Input PWM (assuming 'recv_pwm' is equivalent)
-    escTelemetryData.inPWM = res->recv_pwm / 100.0f;
+    escTelemetryData.inPWM = res->recv_pwm / 10.0f;
 
     // Status flags (combining running_error and selfcheck_error)
     //escTelemetryData.statusFlag = (res->running_error & 0xFF) | ((res->selfcheck_error & 0xFF) << 8);

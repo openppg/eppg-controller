@@ -358,8 +358,9 @@ void setup() {
   setESCThrottle(ESC_DISARMED_PWM);
   xTaskCreate(testTask, "TestTask", 10000, NULL, 1, &testTaskHandle);
   xTaskCreate(telemetryEscTask, "telemetryEscTask", 2048, NULL, 2, &telemetryEscTaskHandle);
-  xTaskCreate(updateDisplayTask, "updateDisplay", 2600, NULL, 1, &updateDisplayTaskHandle);
-
+  xTaskCreate(updateDisplayTask, "updateDisplay", 2800, NULL, 1, &updateDisplayTaskHandle);
+  //xTaskCreate(blinkLEDTask, "blinkLed", 400, NULL, 1, &blinkLEDTaskHandle);
+  xTaskCreate(throttleTask, "throttle", 4000, NULL, 3, &throttleTaskHandle);
 }
 
 #else
@@ -407,7 +408,7 @@ void setupTasks() {
   xTaskCreateAffinitySet(updateDisplayTask, "updateDisplay", 2000, NULL, 1, uxCoreAffinityMask0, &updateDisplayTaskHandle);
   xTaskCreateAffinitySet(watchdogTask, "watchdog", 1000, NULL, 5, uxCoreAffinityMask0, &watchdogTaskHandle);
  #else
-  xTaskCreate(blinkLEDTask, "blinkLed", 200, NULL, 1, &blinkLEDTaskHandle);
+  xTaskCreate(blinkLEDTask, "blinkLed", 400, NULL, 1, &blinkLEDTaskHandle);
   xTaskCreate(throttleTask, "throttle", 1000, NULL, 3, &throttleTaskHandle);
   xTaskCreate(telemetryEscTask, "telemetryEscTask", 2048, NULL, 2, &telemetryEscTaskHandle);
   xTaskCreate(trackPowerTask, "trackPower", 500, NULL, 2, &trackPowerTaskHandle);
@@ -613,11 +614,13 @@ void initButtons() {
 // read throttle and send to hub
 // read throttle
 void handleThrottle() {
-  if (currentState == DISARMED) return;  // safe
+  //  TODO: remove
+  //if (currentState == DISARMED) return;  // safe
 
-  armedSecs = (millis() - armedAtMillis) / 1000;  // update time while armed
+  //armedSecs = (millis() - armedAtMillis) / 1000;  // update time while armed
 
   static int maxPWM = ESC_MAX_PWM;
+
   pot->update();
   int potRaw = pot->getValue();
 
@@ -651,7 +654,9 @@ void handleThrottle() {
     localThrottlePWM = mapd(potLvl, 0, 4095, ESC_MIN_PWM, maxPWM);
   }
 #ifdef CAN_PIO
-// TODO: write to CAN bus
+  USBSerial.print("Setting throttle to: ");
+  USBSerial.println(localThrottlePWM);
+  setESCThrottle(localThrottlePWM);  // using val as the signal to esc
 #else
   setESCThrottle(localThrottlePWM);  // using val as the signal to esc
 #endif
