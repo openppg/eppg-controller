@@ -140,6 +140,7 @@ TaskHandle_t telemetryBmsTaskHandle = NULL;
 TaskHandle_t trackPowerTaskHandle = NULL;
 TaskHandle_t updateDisplayTaskHandle = NULL;
 TaskHandle_t watchdogTaskHandle = NULL;
+TaskHandle_t spiCommunicationTaskHandle = NULL;
 
 #ifdef CAN_PIO
 #define POTENTIOMETER_PIN 8
@@ -201,7 +202,6 @@ void telemetryBmsTask(void *pvParameters) {
 
   for (;;) {  // infinite loop
     updateBMSData();
-    printBMSData();
     delay(200);  // wait for 100ms
   }
   vTaskDelete(NULL);  // should never reach this
@@ -217,21 +217,42 @@ void trackPowerTask(void *pvParameters) {
   vTaskDelete(NULL);  // should never reach this
 }
 
+void refreshDisplay() {
+  const float altitude = getAltitude(deviceData);
+  bool isArmed = (currentState != DISARMED);
+  bool isCruising = (currentState == ARMED_CRUISING);
+  updateDisplay(deviceData, escTelemetryData, altitude, isArmed, isCruising, armedAtMillis);
+}
+
 void updateDisplayTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
   for (;;) {
     // TODO: separate alt reading out to its own task. Avoid blocking display updates when alt reading is slow etc
     // TODO: use queues to pass data between tasks (xQueueOverwrite)const float altitude = getAltitude(deviceData);
-    const float altitude = getAltitude(deviceData);
-    bool isArmed = (currentState != DISARMED);
-    bool isCruising = (currentState == ARMED_CRUISING);
-    updateDisplay(deviceData, escTelemetryData, altitude, isArmed, isCruising, armedAtMillis);
+    refreshDisplay();
     delay(250);
   }
   vTaskDelete(NULL);  // should never reach this
 }
 
+void spiCommunicationTask(void *pvParameters) {
+  TickType_t xLastWakeTime;
+  const TickType_t xFrequency = pdMS_TO_TICKS(250); // Adjust as needed
+
+  xLastWakeTime = xTaskGetTickCount();
+
+  for(;;) {
+      // Update BMS data
+      updateBMSData();
+
+      // Update display
+      refreshDisplay();
+
+      // Wait for the next cycle.
+      vTaskDelayUntil(&xLastWakeTime, xFrequency);
+  }
+}
 
 void loadHardwareConfig() {
   if (deviceData.revision == 1) {
@@ -367,14 +388,16 @@ void setup() {
 
   setLEDColor(LED_YELLOW);
   setupDisplay(deviceData, board_config);
-  initESC(0);
-  setESCThrottle(ESC_DISARMED_PWM);
+  //initESC(0);
+  //setESCThrottle(ESC_DISARMED_PWM);
   xTaskCreate(testTask, "TestTask", 10000, NULL, 1, &testTaskHandle);
-  xTaskCreate(telemetryEscTask, "telemetryEscTask", 4048, NULL, 2, &telemetryEscTaskHandle);
+  //xTaskCreate(telemetryEscTask, "telemetryEscTask", 4048, NULL, 2, &telemetryEscTaskHandle);
   xTaskCreate(updateDisplayTask, "updateDisplay", 2800, NULL, 1, &updateDisplayTaskHandle);
   //xTaskCreate(blinkLEDTask, "blinkLed", 400, NULL, 1, &blinkLEDTaskHandle);
-  xTaskCreate(throttleTask, "throttle", 4000, NULL, 3, &throttleTaskHandle);
-  xTaskCreate(telemetryBmsTask, "telemetryBmsTask", 8000, NULL, 3, &telemetryBmsTaskHandle);
+  //xTaskCreate(throttleTask, "throttle", 4000, NULL, 3, &throttleTaskHandle);
+  //xTaskCreate(telemetryBmsTask, "telemetryBmsTask", 8000, NULL, 3, &telemetryBmsTaskHandle);
+  xTaskCreatePinnedToCore(spiCommunicationTask, "SPIComm", 4096, NULL, 5, &spiCommunicationTaskHandle, 1);
+
 }
 
 #else
@@ -426,7 +449,7 @@ void setupTasks() {
   xTaskCreate(throttleTask, "throttle", 1000, NULL, 3, &throttleTaskHandle);
   xTaskCreate(telemetryEscTask, "telemetryEscTask", 4048, NULL, 2, &telemetryEscTaskHandle);
   xTaskCreate(trackPowerTask, "trackPower", 500, NULL, 2, &trackPowerTaskHandle);
-  xTaskCreate(updateDisplayTask, "updateDisplay", 2600, NULL, 1, &updateDisplayTaskHandle);
+  //xTaskCreate(updateDisplayTask, "updateDisplay", 2600, NULL, 1, &updateDisplayTaskHandle);
   xTaskCreatePinnedToCore(watchdogTask, "watchdog", 1000, NULL, 5, &watchdogTaskHandle, 0);  // Run on core 0
   ESP_ERROR_CHECK(esp_task_wdt_add(watchdogTaskHandle));
  #endif
@@ -437,6 +460,8 @@ void setupTasks() {
   eepromSemaphore = xSemaphoreCreateBinary();
   xSemaphoreGive(eepromSemaphore);
   stateMutex = xSemaphoreCreateMutex();
+
+  xTaskCreatePinnedToCore(spiCommunicationTask, "SPIComm", 4096, NULL, 5, &spiCommunicationTaskHandle, 1);
 }
 
 
