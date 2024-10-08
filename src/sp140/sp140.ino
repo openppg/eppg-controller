@@ -54,8 +54,8 @@
 
 using namespace ace_button;
 
-UBaseType_t uxCoreAffinityMask0 = (1 << 0); // Core 0
-UBaseType_t uxCoreAffinityMask1 = (1 << 1); // Core 1
+UBaseType_t uxCoreAffinityMask0 = (1 << 0);  // Core 0
+UBaseType_t uxCoreAffinityMask1 = (1 << 1);  // Core 1
 
 HardwareConfig board_config;
 
@@ -145,11 +145,10 @@ TaskHandle_t spiCommTaskHandle = NULL;
 #ifdef CAN_PIO
 #define POTENTIOMETER_PIN 8
 
-
 #endif
 
 unsigned long lastDisarmTime = 0;
-const unsigned long DISARM_COOLDOWN = 500; // 500ms cooldown
+const unsigned long DISARM_COOLDOWN = 500;  // 500ms cooldown
 
 #pragma message "Warning: OpenPPG software is in beta"
 
@@ -375,7 +374,7 @@ void setup() {
   loadHardwareConfig();
   setupLED();
   setupAnalogRead();
-  //initButtons();
+  initButtons();
   setupWatchdog();
   setup140();
   initBMSCAN();
@@ -492,12 +491,13 @@ void loop() {
 // #endif
 
   // more stable in main loop
-  //checkButtons();
+  checkButtons();
   delay(50);
   //USBSerial.println("loop");
 }
 
 void checkButtons() {
+  //USBSerial.println("checkButtons");
   button_top->check();
 }
 
@@ -507,11 +507,7 @@ void printTime(const char* label) {
 }
 
 void disarmESC() {
-  #ifdef CAN_PIO
-  // TODO: write to CAN bus
-  #else
-    setESCThrottle(ESC_DISARMED_PWM);
-  #endif
+  setESCThrottle(ESC_DISARMED_PWM);
 }
 
 // reset smoothing
@@ -599,29 +595,30 @@ bool wasClicked = false;
 unsigned long releaseTime = 0;
 
 // Time threshold for LongClick after release (in milliseconds)
-const unsigned long longClickThreshold = 3500; // adjust as necessary
+const unsigned long longClickThreshold = 3500;  // adjust as necessary
 
 void handleButtonEvent(AceButton* btn, uint8_t eventType, uint8_t /* st */) {
   switch (eventType) {
   case AceButton::kEventClicked:
     wasClicked = true;
+    USBSerial.println("Button Clicked");
     break;
   case AceButton::kEventReleased:
     if (wasClicked) {
       releaseTime = millis();
       wasClicked = false;
-      //Serial.println("Button Released after Click");
+      USBSerial.println("Button Released after Click");
     }
     break;
   case AceButton::kEventDoubleClicked:
     break;
   case AceButton::kEventLongPressed:
     if (!wasClicked && (millis() - releaseTime <= longClickThreshold)) {
-      toggleArm(); //
-      //Serial.println("Long Press after Click and Release");
+      //toggleArm();
+      USBSerial.println("Long Press after Click and Release");
     } else {
-      toggleCruise();
-      //Serial.println("Long Press");
+      //toggleCruise();
+      USBSerial.println("Long Press");
     }
     break;
   }
@@ -684,13 +681,8 @@ void handleThrottle() {
     // mapping val to min and max pwm
     localThrottlePWM = mapd(potLvl, 0, 4095, ESC_MIN_PWM, maxPWM);
   }
-#ifdef CAN_PIO
-  USBSerial.print("Setting throttle to: ");
-  USBSerial.println(localThrottlePWM);
+
   setESCThrottle(localThrottlePWM);  // using val as the signal to esc
-#else
-  setESCThrottle(localThrottlePWM);  // using val as the signal to esc
-#endif
 }
 
 int averagePotBuffer() {
@@ -705,12 +697,7 @@ int averagePotBuffer() {
 bool armSystem() {
   uint16_t arm_melody[] = { 1760, 1976, 2093 };
   const unsigned int arm_vibes[] = { 1, 85, 1, 85, 1, 85, 1 };
-
-  #ifdef CAN_PIO
-  // TODO: write to CAN bus
-  #else
-    setESCThrottle(ESC_DISARMED_PWM);  // initialize the signal to low
-  #endif
+  setESCThrottle(ESC_DISARMED_PWM);  // initialize the signal to low
 
   //ledBlinkThread.enabled = false;
   armedAtMillis = millis();
