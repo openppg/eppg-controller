@@ -17,4 +17,4 @@ void printBMSData();
 // Declare the BMS_CAN object as extern so it can be used in other files
 extern BMS_CAN bms_can;
 
-#endif // INC_SP140_BMS_H_
+#endif  // INC_SP140_BMS_H_

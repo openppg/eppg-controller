@@ -64,8 +64,6 @@ void setupESCSerial() {
 }
 
 void setESCThrottle(int throttlePWM) {
-  USBSerial.println("setESCThrottle");
-
   // TODO: Calibrate and use constants
   uint16_t scaledThrottle = map(throttlePWM, 1000, 2000, 10000, 14000);
   USBSerial.print("Setting throttle to: ");

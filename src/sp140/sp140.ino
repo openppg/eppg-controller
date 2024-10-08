@@ -140,7 +140,7 @@ TaskHandle_t telemetryBmsTaskHandle = NULL;
 TaskHandle_t trackPowerTaskHandle = NULL;
 TaskHandle_t updateDisplayTaskHandle = NULL;
 TaskHandle_t watchdogTaskHandle = NULL;
-TaskHandle_t spiCommunicationTaskHandle = NULL;
+TaskHandle_t spiCommTaskHandle = NULL;
 
 #ifdef CAN_PIO
 #define POTENTIOMETER_PIN 8
@@ -236,21 +236,15 @@ void updateDisplayTask(void *pvParameters) {
   vTaskDelete(NULL);  // should never reach this
 }
 
-void spiCommunicationTask(void *pvParameters) {
-  TickType_t xLastWakeTime;
-  const TickType_t xFrequency = pdMS_TO_TICKS(250); // Adjust as needed
-
-  xLastWakeTime = xTaskGetTickCount();
-
-  for(;;) {
+void spiCommTask(void *pvParameters) {
+  for (;;) {
       // Update BMS data
       updateBMSData();
 
       // Update display
       refreshDisplay();
 
-      // Wait for the next cycle.
-      vTaskDelayUntil(&xLastWakeTime, xFrequency);
+      delay(250);
   }
 }
 
@@ -388,16 +382,14 @@ void setup() {
 
   setLEDColor(LED_YELLOW);
   setupDisplay(deviceData, board_config);
-  //initESC(0);
-  //setESCThrottle(ESC_DISARMED_PWM);
+  initESC(0);
+  setESCThrottle(ESC_DISARMED_PWM);
   xTaskCreate(testTask, "TestTask", 10000, NULL, 1, &testTaskHandle);
-  //xTaskCreate(telemetryEscTask, "telemetryEscTask", 4048, NULL, 2, &telemetryEscTaskHandle);
-  xTaskCreate(updateDisplayTask, "updateDisplay", 2800, NULL, 1, &updateDisplayTaskHandle);
+  xTaskCreate(telemetryEscTask, "telemetryEscTask", 4048, NULL, 2, &telemetryEscTaskHandle);
+  //xTaskCreate(updateDisplayTask, "updateDisplay", 2800, NULL, 1, &updateDisplayTaskHandle);
   //xTaskCreate(blinkLEDTask, "blinkLed", 400, NULL, 1, &blinkLEDTaskHandle);
-  //xTaskCreate(throttleTask, "throttle", 4000, NULL, 3, &throttleTaskHandle);
-  //xTaskCreate(telemetryBmsTask, "telemetryBmsTask", 8000, NULL, 3, &telemetryBmsTaskHandle);
-  xTaskCreatePinnedToCore(spiCommunicationTask, "SPIComm", 4096, NULL, 5, &spiCommunicationTaskHandle, 1);
-
+  xTaskCreate(throttleTask, "throttle", 4000, NULL, 3, &throttleTaskHandle);
+  xTaskCreatePinnedToCore(spiCommTask, "SPIComm", 10096, NULL, 5, &spiCommTaskHandle, 1);
 }
 
 #else
@@ -430,7 +422,7 @@ void setup() {
     if (button_top->isPressedRaw()) {
       modeSwitch(false);
     }
-    vTaskResume(updateDisplayTaskHandle);
+    //vTaskResume(updateDisplayTaskHandle);
     setLEDColor(LED_GREEN);
 }
 #endif
@@ -442,7 +434,7 @@ void setupTasks() {
   xTaskCreateAffinitySet(throttleTask, "throttle", 2048, NULL, 4, uxCoreAffinityMask0, &throttleTaskHandle);
   xTaskCreateAffinitySet(telemetryEscTask, "telemetryEscTask", 4048, NULL, 3, uxCoreAffinityMask0, &telemetryEscTaskHandle);
   xTaskCreateAffinitySet(trackPowerTask, "trackPower", 500, NULL, 2, uxCoreAffinityMask0, &trackPowerTaskHandle);
-  xTaskCreateAffinitySet(updateDisplayTask, "updateDisplay", 2000, NULL, 1, uxCoreAffinityMask0, &updateDisplayTaskHandle);
+  //xTaskCreateAffinitySet(updateDisplayTask, "updateDisplay", 2000, NULL, 1, uxCoreAffinityMask0, &updateDisplayTaskHandle);
   xTaskCreateAffinitySet(watchdogTask, "watchdog", 1000, NULL, 5, uxCoreAffinityMask0, &watchdogTaskHandle);
  #else
   xTaskCreate(blinkLEDTask, "blinkLed", 400, NULL, 1, &blinkLEDTaskHandle);
@@ -461,7 +453,7 @@ void setupTasks() {
   xSemaphoreGive(eepromSemaphore);
   stateMutex = xSemaphoreCreateMutex();
 
-  xTaskCreatePinnedToCore(spiCommunicationTask, "SPIComm", 4096, NULL, 5, &spiCommunicationTaskHandle, 1);
+ //xTaskCreatePinnedToCore(spiCommTask, "SPIComm", 4096, NULL, 5, &spiCommTaskHandle, 1);
 }
 
 
