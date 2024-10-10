@@ -66,15 +66,15 @@ void setupESCSerial() {
 void setESCThrottle(int throttlePWM) {
   // TODO: Calibrate and use constants
   uint16_t scaledThrottle = map(throttlePWM, 1000, 2000, 10000, 14000);
-  USBSerial.print("Setting throttle to: ");
-  USBSerial.println(scaledThrottle);
+  //USBSerial.print("Setting throttle to: ");
+  //USBSerial.println(scaledThrottle);
   esc.setThrottleSettings2(scaledThrottle);
   // Remove the immediate call to processTxRxOnce here
-  adapter.processTxRxOnce(); // Process CAN messages
+  adapter.processTxRxOnce();  // Process CAN messages
 }
 
 void readESCTelemetry() {
-  USBSerial.println("readESCTelemetry");
+  //USBSerial.println("readESCTelemetry");
 #ifndef CAN_PIO
   prepareESCSerialRead();
   static byte escDataV2[ESC_DATA_V2_SIZE];

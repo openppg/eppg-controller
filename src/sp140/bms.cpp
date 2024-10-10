@@ -16,7 +16,7 @@ bool initBMSCAN() {
 
 void updateBMSData() {
   bms_can.update();
-  printBMSData();
+  //printBMSData();
 }
 
 void printBMSData() {
