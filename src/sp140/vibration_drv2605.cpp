@@ -1,5 +1,6 @@
-#include "sp140/vibration.h"
-#include "sp140/structs.h"
+#ifdef USE_DRV2605
+
+#include "sp140/vibration_drv2605.h"
 #include <Adafruit_DRV2605.h>
 
 Adafruit_DRV2605 vibeMotor;
@@ -27,8 +28,9 @@ bool runVibePattern(const unsigned int pattern[], int patternSize) {
   for (int i = 0; i < patternSize; i++) {
     vibeMotor.setWaveform(i, pattern[i]);
   }
-  // add one extra empty cycle to ensure the motor is off at the end
   vibeMotor.setWaveform(patternSize, 0);
   vibeMotor.go();
   return true;
 }
+
+#endif // USE_DRV2605

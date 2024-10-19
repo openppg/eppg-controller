@@ -1,5 +1,5 @@
-#ifndef INC_SP140_VIBRATION_H_
-#define INC_SP140_VIBRATION_H_
+#ifndef INC_SP140_VIBRATION_DRV2605_H_
+#define INC_SP140_VIBRATION_DRV2605_H_
 
 #include <Arduino.h>
 
@@ -11,4 +11,4 @@ void pulseVibeMotor();
 
 // Run a vibration sequence
 bool runVibePattern(const unsigned int sequence[], int siz);
-#endif  // INC_SP140_VIBRATION_H_
+#endif  // INC_SP140_VIBRATION_DRV2605_H_
