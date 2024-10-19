@@ -44,6 +44,15 @@
   #include "EEPROM.h"
 #endif
 
+#ifdef WIFI_DEBUG
+  #include "Insights.h"
+  #include "WiFi.h"
+  #include "inttypes.h"
+  #include "esp_err.h"
+
+
+#endif
+
 #include "../../inc/sp140/globals.h"  // device config
 #include "../../inc/sp140/esc.h"
 #include "../../inc/sp140/display.h"
@@ -352,6 +361,24 @@ void testTask(void *pvParameters) {
 
 TaskHandle_t testTaskHandle = NULL;
 
+#ifdef WIFI_DEBUG
+
+void setupWiFi() {
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASSPHRASE);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    USBSerial.println("Wifi connecting...");
+  }
+  USBSerial.println("");
+  USBSerial.println("WiFi connected");
+
+  if(!Insights.begin(insights_auth_key)){
+    USBSerial.println("Failed to initialize Insights");
+  }
+}
+#endif
+
 #ifdef CAN_PIO
 //just for testing
 void setup() {
@@ -361,6 +388,10 @@ void setup() {
   //   delay(100);
   // }
   USBSerial.println("ESP32-S3 is ready!");
+
+#ifdef WIFI_DEBUG
+  setupWiFi();
+#endif
 
   setupEEPROM();
   refreshDeviceData();
