@@ -136,6 +136,7 @@ void changeDeviceState(DeviceState newState) {
     }
     xSemaphoreGive(stateMutex);
   }
+  Insights.metrics.setInt("device_state", static_cast<int>(newState));
 }
 
 uint32_t armedAtMillis = 0;
@@ -350,12 +351,45 @@ void upgradeDeviceRevisionInEEPROM() {
 #endif
 }
 
+#define TAG "OpenPPG"
+
 void testTask(void *pvParameters) {
+  TickType_t xLastWakeTime;
+  const TickType_t xFrequency = pdMS_TO_TICKS(500); // 500ms
+  xLastWakeTime = xTaskGetTickCount();
+  int count = 0;
+
   for (;;) {
+    vTaskDelayUntil(&xLastWakeTime, xFrequency);
+    count++;
+
+    TickType_t period = xTaskGetTickCount() - xLastWakeTime;
+    xLastWakeTime = xTaskGetTickCount();
+
     USBSerial.println(".");
     //setESCThrottle(ESC_DISARMED_PWM);
     //dumpESCMessages();
-    delay(500);
+
+    // Log the heartbeat event
+    Insights.event(TAG, "[heartbeat][%d] [period_ms][%u]", count, period * portTICK_PERIOD_MS);
+
+    // Every 20 iterations (roughly every 10 seconds), dump the heap info
+    if (count % 20 == 0) {
+      Insights.metrics.dumpHeap();
+    }
+
+    // Every 120 iterations (roughly every minute), log some system info
+    if (count % 120 == 0) {
+      Insights.event(TAG, "[uptime_min][%d] [free_heap][%u] [min_free_heap][%u]",
+                     count / 120,
+                     esp_get_free_heap_size(),
+                     esp_get_minimum_free_heap_size());
+    }
+
+    // Log throttle level and device state every 10 iterations (roughly every 5 seconds)
+    if (count % 10 == 0) {
+      Insights.metrics.dumpHeap();
+    }
   }
 }
 
@@ -781,4 +815,6 @@ void trackPower() {
   if (currentState != DISARMED) {
     wattHoursUsed += round(watts/60/60*msec_diff)/1000.0;
   }
+  Insights.metrics.setInt("flight_duration", (millis() - armedAtMillis) / 1000);
+  Insights.metrics.setFloat("watt_hours_used", wattHoursUsed);
 }
