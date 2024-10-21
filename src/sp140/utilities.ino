@@ -69,6 +69,8 @@ void blinkLED() {
  * @return Returns true if the melody was played successfully, false otherwise.
  */
 bool playMelody(uint16_t melody[], int siz) {
+  USBSerial.println("playMelody");
+
   if (!ENABLE_BUZ) { return false; }
   for (int thisNote = 0; thisNote < siz; thisNote++) {
     // quarter note = 1000 / 4, eighth note = 1000/8, etc.
@@ -80,10 +82,11 @@ bool playMelody(uint16_t melody[], int siz) {
 
 // blocking tone function that delays for notes
 void playNote(uint16_t note, uint16_t duration) {
+  USBSerial.println("playNote");
   // quarter note = 1000 / 4, eighth note = 1000/8, etc.
-  tone(board_config.buzzer_pin, note);
+  tone(8, note);
   delay(duration);  // to distinguish the notes, delay between them
-  noTone(board_config.buzzer_pin);
+  noTone(8);
 }
 
 /**

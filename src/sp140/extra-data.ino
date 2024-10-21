@@ -106,7 +106,7 @@ void line_state_callback(bool connected) {
   if ( connected ) send_usb_serial();
 }
 
-// customized for sp140
+// Not implemented for ESP32-S3 yet
 void parse_usb_serial() {
 #ifdef USE_TINYUSB
   const size_t capacity = JSON_OBJECT_SIZE(13) + 90;

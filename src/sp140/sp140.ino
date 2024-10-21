@@ -58,8 +58,12 @@
 #include "../../inc/sp140/display.h"
 #include "../../inc/sp140/bms.h"
 #include "../../inc/sp140/altimeter.h"
-#include "../../inc/sp140/vibration.h"
 
+#ifdef USE_DRV2605
+  #include "../../inc/sp140/vibration_drv2605.h"
+#else
+  #include "../../inc/sp140/vibration_pwm.h"
+#endif
 
 using namespace ace_button;
 
@@ -447,6 +451,11 @@ void setup() {
   setLEDColor(LED_YELLOW);
   setupDisplay(deviceData, board_config);
   initESC(0);
+
+    eepromSemaphore = xSemaphoreCreateBinary();
+  xSemaphoreGive(eepromSemaphore);
+  stateMutex = xSemaphoreCreateMutex();
+  // TODO: move all the into the setupTasks() function etc
   setESCThrottle(ESC_DISARMED_PWM);
   xTaskCreate(testTask, "TestTask", 10000, NULL, 1, &testTaskHandle);
   xTaskCreate(telemetryEscTask, "telemetryEscTask", 4048, NULL, 2, &telemetryEscTaskHandle);
@@ -493,6 +502,9 @@ void setup() {
 
 // set up all the main threads/tasks with core 0 affinity
 void setupTasks() {
+  eepromSemaphore = xSemaphoreCreateBinary();
+  xSemaphoreGive(eepromSemaphore);
+  stateMutex = xSemaphoreCreateMutex();
   #ifdef RP_PIO
   xTaskCreateAffinitySet(blinkLEDTask, "blinkLed", 200, NULL, 1, uxCoreAffinityMask1, &blinkLEDTaskHandle);
   xTaskCreateAffinitySet(throttleTask, "throttle", 2048, NULL, 4, uxCoreAffinityMask0, &throttleTaskHandle);
@@ -512,10 +524,6 @@ void setupTasks() {
   if (updateDisplayTaskHandle != NULL) {
     vTaskSuspend(updateDisplayTaskHandle);  // Suspend the task immediately after creation
   }
-
-  eepromSemaphore = xSemaphoreCreateBinary();
-  xSemaphoreGive(eepromSemaphore);
-  stateMutex = xSemaphoreCreateMutex();
 
  //xTaskCreatePinnedToCore(spiCommTask, "SPIComm", 4096, NULL, 5, &spiCommTaskHandle, 1);
 }
@@ -557,7 +565,7 @@ void loop() {
 
   // more stable in main loop
   checkButtons();
-  delay(50);
+  delay(10);  // TODO change to 5ms
   //USBSerial.println("loop");
 }
 
@@ -679,11 +687,11 @@ void handleButtonEvent(AceButton* btn, uint8_t eventType, uint8_t /* st */) {
     break;
   case AceButton::kEventLongPressed:
     if (!wasClicked && (millis() - releaseTime <= longClickThreshold)) {
-      //toggleArm();
+      toggleArm();
       USBSerial.println("Long Press after Click and Release");
     } else {
       //toggleCruise();
-      USBSerial.println("Long Press");
+      USBSerial.println("Long Press - cruise");
     }
     break;
   }
