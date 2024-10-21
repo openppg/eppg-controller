@@ -185,7 +185,7 @@ void blinkLEDTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
   for (;;) {  // infinite loop
-    //blinkLED();  // call blinkLED function
+    blinkLED();  // call blinkLED function
     USBSerial.println("blinkLEDTask");
     delay(500);  // wait for 500ms
   }
@@ -457,11 +457,12 @@ void setup() {
   stateMutex = xSemaphoreCreateMutex();
   // TODO: move all the into the setupTasks() function etc
   setESCThrottle(ESC_DISARMED_PWM);
-  xTaskCreate(testTask, "TestTask", 10000, NULL, 1, &testTaskHandle);
-  xTaskCreate(telemetryEscTask, "telemetryEscTask", 4048, NULL, 2, &telemetryEscTaskHandle);
+  //xTaskCreate(testTask, "TestTask", 10000, NULL, 1, &testTaskHandle);
+
+  xTaskCreate(telemetryEscTask, "telemetryEscTask", 4096, NULL, 2, &telemetryEscTaskHandle);
   //xTaskCreate(updateDisplayTask, "updateDisplay", 2800, NULL, 1, &updateDisplayTaskHandle);
-  //xTaskCreate(blinkLEDTask, "blinkLed", 400, NULL, 1, &blinkLEDTaskHandle);
-  xTaskCreate(throttleTask, "throttle", 4000, NULL, 3, &throttleTaskHandle);
+  xTaskCreate(blinkLEDTask, "blinkLed", 1536, NULL, 1, &blinkLEDTaskHandle);
+  xTaskCreate(throttleTask, "throttle", 4096, NULL, 3, &throttleTaskHandle);
   xTaskCreatePinnedToCore(spiCommTask, "SPIComm", 10096, NULL, 5, &spiCommTaskHandle, 1);
   initVibeMotor();
   pulseVibeMotor();
