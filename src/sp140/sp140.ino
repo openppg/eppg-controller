@@ -114,6 +114,8 @@ void changeDeviceState(DeviceState newState) {
   if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
     DeviceState oldState = currentState;
     currentState = newState;
+    USBSerial.print("changeDeviceState: ");
+    USBSerial.println(newState);
     switch (newState) {
       case DISARMED:
         disarmSystem();
@@ -125,7 +127,7 @@ void changeDeviceState(DeviceState newState) {
         } else if (oldState == ARMED_CRUISING) {
           // When transitioning from ARMED_CRUISING to ARMED, only remove cruise
           // This avoids re-arming the system unnecessarily
-           afterCruiseEnd();
+          afterCruiseEnd();
         }
         break;
       case ARMED_CRUISING:
@@ -417,42 +419,40 @@ void setupWiFi() {
 }
 #endif
 
-#ifdef CAN_PIO
-//just for testing
+
+/**
+ * Initializes the necessary components and configurations for the device setup.
+ * This function is called once at the beginning of the program execution.
+ */
+
 void setup() {
-  USBSerial.begin(115200);
-  delay(100);  // Give some time for USB CDC to initialize
-  // while (!USBSerial) {  // TODO: remove
-  //   delay(100);
-  // }
-  USBSerial.println("ESP32-S3 is ready!");
-
-#ifdef WIFI_DEBUG
-  setupWiFi();
-#endif
-
+  #ifdef USE_TINYUSB
+    setupUSBWeb();
+  #endif
   setupEEPROM();
   refreshDeviceData();
-  upgradeDeviceRevisionInEEPROM();
-
   printBootMessage();
   setupBarometer();
-  setupEEPROM();
-  refreshDeviceData();
+
   upgradeDeviceRevisionInEEPROM();
   loadHardwareConfig();
   setupLED();
   setupAnalogRead();
   initButtons();
+  //setupTasks();
   setupWatchdog();
   setup140();
-  initBMSCAN();
-
+#ifdef M0_PIO
+  Watchdog.reset();
+#endif
+#ifdef WIFI_DEBUG
+  setupWiFi();
+#endif
   setLEDColor(LED_YELLOW);
   setupDisplay(deviceData, board_config);
+  initBMSCAN();
   initESC(0);
-
-    eepromSemaphore = xSemaphoreCreateBinary();
+  eepromSemaphore = xSemaphoreCreateBinary();
   xSemaphoreGive(eepromSemaphore);
   stateMutex = xSemaphoreCreateMutex();
   // TODO: move all the into the setupTasks() function etc
@@ -463,42 +463,14 @@ void setup() {
   //xTaskCreate(blinkLEDTask, "blinkLed", 400, NULL, 1, &blinkLEDTaskHandle);
   xTaskCreate(throttleTask, "throttle", 4000, NULL, 3, &throttleTaskHandle);
   xTaskCreatePinnedToCore(spiCommTask, "SPIComm", 10096, NULL, 5, &spiCommTaskHandle, 1);
+  initVibeMotor();
+  pulseVibeMotor();
+  if (button_top->isPressedRaw()) {
+    modeSwitch(false);
+  }
+  //vTaskResume(updateDisplayTaskHandle);
+  setLEDColor(LED_GREEN);
 }
-
-#else
-/**
- * Initializes the necessary components and configurations for the device setup.
- * This function is called once at the beginning of the program execution.
- */
-
-void setup() {
-  #ifdef USE_TINYUSB
-    setupUSBWeb();
-  #endif
-    printBootMessage();
-    setupBarometer();
-    setupEEPROM();
-    refreshDeviceData();
-    upgradeDeviceRevisionInEEPROM();
-    loadHardwareConfig();
-    setupLED();
-    setupAnalogRead();
-    initButtons();
-    setupTasks();
-    setupWatchdog();
-    setup140();
-  #ifdef M0_PIO
-    Watchdog.reset();
-  #endif
-    setLEDColor(LED_YELLOW);
-    setupDisplay(deviceData, board_config);
-    if (button_top->isPressedRaw()) {
-      modeSwitch(false);
-    }
-    //vTaskResume(updateDisplayTaskHandle);
-    setLEDColor(LED_GREEN);
-}
-#endif
 
 // set up all the main threads/tasks with core 0 affinity
 void setupTasks() {
@@ -826,3 +798,4 @@ void trackPower() {
   Insights.metrics.setInt("flight_duration", (millis() - armedAtMillis) / 1000);
   Insights.metrics.setFloat("watt_hours_used", wattHoursUsed);
 }
+
