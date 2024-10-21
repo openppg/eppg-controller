@@ -146,7 +146,15 @@ String chipId() {
   pico_get_unique_board_id_string((char *)buff, len);
   return String((char *)buff);
 }
-#endif // M0_PIO/RP_PIO
+#elif CAN_PIO
+String chipId() {
+  uint32_t chipId = 0;
+  for (int i = 0; i < 17; i = i + 8) {
+    chipId |= ((ESP.getEfuseMac() >> (40 - i)) & 0xff) << i;
+  }
+  return String(chipId);
+}
+#endif
 
 #ifdef M0_PIO
 // reboot/reset controller
