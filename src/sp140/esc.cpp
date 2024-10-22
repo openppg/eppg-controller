@@ -33,7 +33,7 @@ bool initESC(int escPin) {
 
   // Find ESC
   int attempts = 0;
-  const int maxAttempts = 20;
+  const int maxAttempts = 10;
   while (!esc.getModel().hasGetHardwareInfoResponse && attempts < maxAttempts) {
     esc.getHardwareInfo();
     adapter.processTxRxOnce();

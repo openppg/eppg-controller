@@ -254,12 +254,13 @@ void updateDisplayTask(void *pvParameters) {
 void spiCommTask(void *pvParameters) {
   for (;;) {
       // Update BMS data
-      updateBMSData();
+      #ifdef CAN_PIO
+        updateBMSData();
+      #endif
 
       // Update display
       refreshDisplay();
-
-      delay(250);
+      delay(200);
   }
 }
 
@@ -339,7 +340,7 @@ void setupWatchdog() {
     watchdog_enable(4000, 1);
   #elif CAN_PIO
     // Initialize Task Watchdog
-    ESP_ERROR_CHECK(esp_task_wdt_init(3000, true));  // 3 second timeout, panic on timeout
+    //ESP_ERROR_CHECK(esp_task_wdt_init(3000, true));  // 3 second timeout, panic on timeout
   #endif
 #endif // OPENPPG_DEBUG
 }
@@ -436,10 +437,9 @@ void setup() {
 
   upgradeDeviceRevisionInEEPROM();
   loadHardwareConfig();
-  setupLED();
+  setupLED();  // Defaults to RED
   setupAnalogRead();
   initButtons();
-  //setupTasks();
   setupWatchdog();
   setup140();
 #ifdef M0_PIO
@@ -448,23 +448,17 @@ void setup() {
 #ifdef WIFI_DEBUG
   setupWiFi();
 #endif
-  setLEDColor(LED_YELLOW);
+  setLEDColor(LED_YELLOW);  // Booting up
   setupDisplay(deviceData, board_config);
   initBMSCAN();
   initESC(0);
   eepromSemaphore = xSemaphoreCreateBinary();
   xSemaphoreGive(eepromSemaphore);
   stateMutex = xSemaphoreCreateMutex();
-  // TODO: move all the into the setupTasks() function etc
   setESCThrottle(ESC_DISARMED_PWM);
-  //xTaskCreate(testTask, "TestTask", 10000, NULL, 1, &testTaskHandle);
-
-  xTaskCreate(telemetryEscTask, "telemetryEscTask", 4096, NULL, 2, &telemetryEscTaskHandle);
-  //xTaskCreate(updateDisplayTask, "updateDisplay", 2800, NULL, 1, &updateDisplayTaskHandle);
-  xTaskCreate(blinkLEDTask, "blinkLed", 1536, NULL, 1, &blinkLEDTaskHandle);
-  xTaskCreate(throttleTask, "throttle", 4096, NULL, 3, &throttleTaskHandle);
-  xTaskCreatePinnedToCore(spiCommTask, "SPIComm", 10096, NULL, 5, &spiCommTaskHandle, 1);
   initVibeMotor();
+  setupTasks();
+
   pulseVibeMotor();
   if (button_top->isPressedRaw()) {
     modeSwitch(false);
@@ -475,16 +469,20 @@ void setup() {
 
 // set up all the main threads/tasks with core 0 affinity
 void setupTasks() {
-  eepromSemaphore = xSemaphoreCreateBinary();
-  xSemaphoreGive(eepromSemaphore);
-  stateMutex = xSemaphoreCreateMutex();
-  #ifdef RP_PIO
+ #ifdef RP_PIO
   xTaskCreateAffinitySet(blinkLEDTask, "blinkLed", 200, NULL, 1, uxCoreAffinityMask1, &blinkLEDTaskHandle);
   xTaskCreateAffinitySet(throttleTask, "throttle", 2048, NULL, 4, uxCoreAffinityMask0, &throttleTaskHandle);
   xTaskCreateAffinitySet(telemetryEscTask, "telemetryEscTask", 4048, NULL, 3, uxCoreAffinityMask0, &telemetryEscTaskHandle);
   xTaskCreateAffinitySet(trackPowerTask, "trackPower", 500, NULL, 2, uxCoreAffinityMask0, &trackPowerTaskHandle);
-  //xTaskCreateAffinitySet(updateDisplayTask, "updateDisplay", 2000, NULL, 1, uxCoreAffinityMask0, &updateDisplayTaskHandle);
+  xTaskCreateAffinitySet(spiCommTask, "SPIComm", 2000, NULL, 1, uxCoreAffinityMask0, &spiCommTaskHandle);
   xTaskCreateAffinitySet(watchdogTask, "watchdog", 1000, NULL, 5, uxCoreAffinityMask0, &watchdogTaskHandle);
+ #elif CAN_PIO
+  xTaskCreate(telemetryEscTask, "telemetryEscTask", 4096, NULL, 2, &telemetryEscTaskHandle);
+  xTaskCreate(blinkLEDTask, "blinkLed", 1536, NULL, 1, &blinkLEDTaskHandle);
+  xTaskCreate(throttleTask, "throttle", 4096, NULL, 3, &throttleTaskHandle);
+  xTaskCreatePinnedToCore(spiCommTask, "SPIComm", 10096, NULL, 5, &spiCommTaskHandle, 1);
+  //xTaskCreatePinnedToCore(watchdogTask, "watchdog", 1000, NULL, 5, &watchdogTaskHandle, 0);  // Run on core 0
+
  #else
   xTaskCreate(blinkLEDTask, "blinkLed", 400, NULL, 1, &blinkLEDTaskHandle);
   xTaskCreate(throttleTask, "throttle", 1000, NULL, 3, &throttleTaskHandle);
@@ -492,13 +490,12 @@ void setupTasks() {
   xTaskCreate(trackPowerTask, "trackPower", 500, NULL, 2, &trackPowerTaskHandle);
   //xTaskCreate(updateDisplayTask, "updateDisplay", 2600, NULL, 1, &updateDisplayTaskHandle);
   xTaskCreatePinnedToCore(watchdogTask, "watchdog", 1000, NULL, 5, &watchdogTaskHandle, 0);  // Run on core 0
-  ESP_ERROR_CHECK(esp_task_wdt_add(watchdogTaskHandle));
- #endif
+
   if (updateDisplayTaskHandle != NULL) {
     vTaskSuspend(updateDisplayTaskHandle);  // Suspend the task immediately after creation
   }
+#endif
 
- //xTaskCreatePinnedToCore(spiCommTask, "SPIComm", 4096, NULL, 5, &spiCommTaskHandle, 1);
 }
 
 
@@ -799,4 +796,3 @@ void trackPower() {
   Insights.metrics.setInt("flight_duration", (millis() - armedAtMillis) / 1000);
   Insights.metrics.setFloat("watt_hours_used", wattHoursUsed);
 }
-
