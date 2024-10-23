@@ -33,49 +33,6 @@ typedef struct {
   uint16_t crc;        // error check
 }STR_DEVICE_DATA_140_V1;
 
-// v2 ESC telemetry
-typedef struct  {
-  // Voltage
-  int V_HI;
-  int V_LO;
-
-  // Temperature
-  int T_HI;
-  int T_LO;
-
-  // Current
-  int I_HI;
-  int I_LO;
-
-  // Reserved
-  int R0_HI;
-  int R0_LO;
-
-  // eRPM
-  int RPM0;
-  int RPM1;
-  int RPM2;
-  int RPM3;
-
-  // Input Duty
-  int DUTYIN_HI;
-  int DUTYIN_LO;
-
-  // Motor Duty
-  int MOTORDUTY_HI;
-  int MOTORDUTY_LO;
-
-  // Reserved
-  int R1;
-
-  // Status Flags
-  int statusFlag;
-
-  // checksum
-  int CSUM_HI;
-  int CSUM_LO;
-} telem_esc_t;
-
 // Tone struct (passed between cores)
 typedef struct {
   uint16_t freq;
