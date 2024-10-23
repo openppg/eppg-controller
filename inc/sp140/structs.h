@@ -14,6 +14,7 @@ typedef struct {
   float outPWM;
   uint8_t statusFlag;
   word checksum;
+  unsigned long lastUpdateMs;  // Timestamp of last telemetry update
 }STR_ESC_TELEMETRY_140;
 
 // Internal device data

@@ -77,7 +77,7 @@ void readESCTelemetry() {
   handleESCSerialData(escDataV2);
 #else
 
-  // TODO: Skip if the esc is not initialized
+  // TODO: Skip if the esc is not initialized?
 
   const SineEscModel &model = esc.getModel();
 
@@ -105,9 +105,12 @@ void readESCTelemetry() {
 
     // Calculate watts
     watts = escTelemetryData.amps * escTelemetryData.volts;
+
+    // Update timestamp
+    escTelemetryData.lastUpdateMs = millis();
   }
 
-  adapter.processTxRxOnce(); // Process CAN messages
+  adapter.processTxRxOnce();  // Process CAN messages
 #endif
 }
 
@@ -146,6 +149,10 @@ void handleESCSerialData(byte buffer[]) {
   if (checkFletch != checkCalc) {
     return;
   }
+
+  // Update timestamp for valid data
+  escTelemetryData.lastUpdateMs = millis();
+
   // Voltage
   raw_esc_telemdata.V_HI = buffer[1];
   raw_esc_telemdata.V_LO = buffer[0];
@@ -279,6 +286,7 @@ int checkFletcher16(byte byteBuffer[]) {
   return (int)fCCRC16;
 }
 
+#ifndef CAN_PIO
 // for debugging
 static void printRawSentence(byte buffer[]) {
   USBSerial.print(F("DATA: "));
@@ -286,8 +294,9 @@ static void printRawSentence(byte buffer[]) {
     USBSerial.print(buffer[i], HEX);
     USBSerial.print(F(" "));
   }
-  USBSerial.println();
+    USBSerial.println();
 }
+#endif
 
 
 // CAN specific setup
