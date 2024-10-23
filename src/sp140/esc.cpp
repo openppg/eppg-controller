@@ -42,11 +42,6 @@ bool initESC(int escPin) {
     attempts++;
   }
 
-  // if (attempts >= maxAttempts) {
-  //   USBSerial.println("Failed to find ESC after 5 attempts");
-  //   return false;
-  // }
-
   // Set idle throttle
   const uint16_t IdleThrottle_us = 10000; // 1000us (0.1us resolution)
   esc.setThrottleSettings2(IdleThrottle_us);

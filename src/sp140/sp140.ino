@@ -142,7 +142,7 @@ void changeDeviceState(DeviceState newState) {
     }
     xSemaphoreGive(stateMutex);
   }
-  Insights.metrics.setInt("device_state", static_cast<int>(newState));
+  //Insights.metrics.setInt("device_state", static_cast<int>(newState));
 }
 
 uint32_t armedAtMillis = 0;
@@ -463,7 +463,7 @@ void setup() {
   if (button_top->isPressedRaw()) {
     modeSwitch(false);
   }
-  //vTaskResume(updateDisplayTaskHandle);
+  // vTaskResume(updateDisplayTaskHandle); // TODO: refactor to use queue etc
   setLEDColor(LED_GREEN);
 }
 
@@ -481,6 +481,7 @@ void setupTasks() {
   xTaskCreate(blinkLEDTask, "blinkLed", 1536, NULL, 1, &blinkLEDTaskHandle);
   xTaskCreate(throttleTask, "throttle", 4096, NULL, 3, &throttleTaskHandle);
   xTaskCreatePinnedToCore(spiCommTask, "SPIComm", 10096, NULL, 5, &spiCommTaskHandle, 1);
+  // TODO: add watchdog task (based on esc writing to CAN)
   //xTaskCreatePinnedToCore(watchdogTask, "watchdog", 1000, NULL, 5, &watchdogTaskHandle, 0);  // Run on core 0
 
  #else
@@ -523,7 +524,6 @@ void setup140() {
 
 // main loop - everything runs in threads
 void loop() {
-
 // #ifdef M0_PIO
 //   Watchdog.reset(); // reset the watchdog timer (done in task for RP2040)
 // #endif
@@ -535,7 +535,7 @@ void loop() {
 
   // more stable in main loop
   checkButtons();
-  delay(10);  // TODO change to 5ms
+  delay(5);
   //USBSerial.println("loop");
 }
 
@@ -588,7 +588,7 @@ void disarmSystem() {
   updateArmedTime();
   writeDeviceData();
 
-  delay(500);  // TODO: just disable button thread // dont allow immediate rearming
+  delay(500);  // TODO: just disable button thread to not allow immediate rearming
   // Set the last disarm time
   lastDisarmTime = millis();
 }
@@ -624,9 +624,13 @@ void toggleCruise() {
       break;
     case DISARMED:
       // show stats screen
-      vTaskSuspend(updateDisplayTaskHandle);
-      displayMeta(deviceData);
-      vTaskResume(updateDisplayTaskHandle);
+      //TODO refactor updateDisplayTaskHandle since now its shared spiCommTask.
+      // the screen updates should be aware of this and
+      // suspend/resume in their own funcitons vs at a task level.
+
+      // vTaskSuspend(updateDisplayTaskHandle);
+      // displayMeta(deviceData);
+      // vTaskResume(updateDisplayTaskHandle);
       break;
   }
 }
@@ -742,7 +746,6 @@ bool armSystem() {
   const unsigned int arm_vibes[] = { 1, 85, 1, 85, 1, 85, 1 };
   setESCThrottle(ESC_DISARMED_PWM);  // initialize the signal to low
 
-  //ledBlinkThread.enabled = false;
   armedAtMillis = millis();
   setGroundAltitude(deviceData);
 

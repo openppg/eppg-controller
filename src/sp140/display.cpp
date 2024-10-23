@@ -112,9 +112,9 @@ void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
   // Total armed time
   display->setCursor(60, 90);
 
-  //const int hours = deviceData.armed_time / 60;
-  //const int minutes = deviceData.armed_time % 60;
-  //display->printf("%02d:%02d", hours, minutes);
+  const int hours = deviceData.armed_time / 60;
+  const int minutes = deviceData.armed_time % 60;
+  display->printf("%02d:%02d", hours, minutes);
   delay(duration);
 }
 
