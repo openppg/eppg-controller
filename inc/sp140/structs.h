@@ -7,7 +7,9 @@
 // v1 ESC telemetry
 typedef struct {
   float volts;
-  float temperatureC;
+  float mos_temp;
+  float cap_temp;
+  float mcu_temp;
   float amps;
   float eRPM;
   float inPWM;

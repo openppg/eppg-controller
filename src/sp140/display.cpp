@@ -324,19 +324,46 @@ void updateDisplay(
     }
   }
 
-  // ESC temperature
-  canvas.setCursor(100, 90);
+  // ESC temperatures
+  // Display MOSFET temperature
+  canvas.setCursor(120, 90);
   canvas.setTextColor(currentTheme->default_text);
   canvas.setFont(&Open_Sans_Reg_10);
-  canvas.print("ESC ");
-  float escTemp;
-  escTemp = escTelemetry.temperatureC;
+  canvas.print("F:");
+  float mos_temp;
+  mos_temp = escTelemetry.mos_temp;
 
-  if (escTemp >= 100) { canvas.setTextColor(currentTheme->error_text); }  // If temperature is 100C+, display in red.
-  if (escTemp == __FLT_MIN__ || escTemp == 0.0) {  // If temperature is not available, display a question mark.
-    canvas.printf("?%c", 247);
+  if (mos_temp >= 100) { canvas.setTextColor(currentTheme->error_text); }  // If temperature is 100C+, display in red.
+  if (mos_temp == __FLT_MIN__ || mos_temp == 0.0) {  // If temperature is not available, display a question mark.
+    canvas.print("?c");
   } else {  // Otherwise, display the temperature. (in degrees C)
-    canvas.printf("%0.0fC", escTemp);
+    canvas.printf("%0.0f", mos_temp);
+  }
+
+  // Display capacitor temperature
+  canvas.setCursor(80, 90);
+  canvas.setTextColor(currentTheme->default_text);
+  canvas.print("C:");
+  float cap_temp;
+  cap_temp = escTelemetry.cap_temp;
+
+  if (cap_temp == __FLT_MIN__ || cap_temp == 0.0) {  // If temperature is not available, display a question mark.
+    canvas.print("?c");
+  } else {  // Otherwise, display the temperature. (in degrees C)
+    canvas.printf("%0.0f", cap_temp);
+  }
+
+  // Display MCU temperature
+  canvas.setCursor(45, 90);
+  canvas.setTextColor(currentTheme->default_text);
+  canvas.print("M:");
+  float mcu_temp;
+  mcu_temp = escTelemetry.mcu_temp;
+
+  if (mcu_temp == __FLT_MIN__ || mcu_temp == 0.0) {  // If temperature is not available, display a question mark.
+    canvas.print("?c");
+  } else {  // Otherwise, display the temperature. (in degrees C)
+    canvas.printf("%0.0f", mcu_temp);
   }
 
 //  // DEBUG TIMING
