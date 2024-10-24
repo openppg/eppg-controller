@@ -45,6 +45,13 @@ struct BatteryVoltagePoint {
   float voltage;
   float percent;
 };
+
+// Used to hold data from either BMS or ESC
+struct UnifiedBatteryData {
+  float volts;
+  float amps;
+  float soc;    // State of Charge
+};
 #pragma pack(pop)
 
 

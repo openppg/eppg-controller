@@ -3,18 +3,26 @@
 // Initialize the BMS_CAN object
 BMS_CAN bms_can(MCP_CS, MCP_BAUDRATE, MCP_MOSI, MCP_MISO, MCP_SCK);
 
+// Define the global flag and battery data
+bool isBMSPresent = false;
+UnifiedBatteryData batteryData = {0.0f, 0.0f, 0.0f};
+
 bool initBMSCAN() {
   USBSerial.println("Initializing BMS CAN...");
   if (!bms_can.begin()) {
-    USBSerial.println("Error initializing BMS_CAN");
-    return false;
+      USBSerial.println("Error initializing BMS_CAN");
+      isBMSPresent = false;  // BMS initialization failed
+      return false;
   }
   USBSerial.println("BMS CAN initialized successfully");
+  isBMSPresent = true;  // BMS successfully initialized
   return true;
 }
 
-
+// Update BMS data and populate unified battery data
 void updateBMSData() {
+  if (!isBMSPresent) return;  // Exit if BMS is not present
+
   USBSerial.println("Updating BMS Data");
   bms_can.update();
   //printBMSData();
@@ -42,31 +50,10 @@ void printBMSData() {
   USBSerial.print(bms_can.getHighestCellVoltage());
   USBSerial.println(" V");
 
-  USBSerial.print("Lowest Cell Voltage: ");
-  USBSerial.print(bms_can.getLowestCellVoltage());
-  USBSerial.println(" V");
-
-  USBSerial.print("Battery Charging: ");
-  USBSerial.println(bms_can.isBatteryCharging() ? "Yes" : "No");
-
-  USBSerial.print("Battery Low SOC: ");
-  USBSerial.println(bms_can.isBatteryLowSOC() ? "Yes" : "No");
-
-  USBSerial.print("Highest Temperature: ");
-  USBSerial.print(bms_can.getHighestTemperature());
-  USBSerial.println(" °C");
-
-  USBSerial.print("Lowest Temperature: ");
-  USBSerial.print(bms_can.getLowestTemperature());
-  USBSerial.println(" °C");
-
-  USBSerial.print("Battery Cycle: ");
-  USBSerial.println(bms_can.getBatteryCycle());
-
-  USBSerial.print("Energy Cycle: ");
-  USBSerial.print(bms_can.getEnergyCycle());
-  USBSerial.println(" Wh");
-
-  USBSerial.print("Battery Failure Level: ");
-  USBSerial.println(bms_can.getBatteryFailureLevel());
+  // Populate unified battery data
+  batteryData.volts = bms_can.getBatteryVoltage();
+  batteryData.amps = bms_can.getBatteryCurrent();
+  batteryData.soc = bms_can.getSOC();
+    // Add other data mappings as needed
 }
+

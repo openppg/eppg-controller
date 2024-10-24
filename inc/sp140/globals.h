@@ -16,4 +16,6 @@ extern STR_DEVICE_DATA_140_V1 deviceData;
 
 extern STR_ESC_TELEMETRY_140 escTelemetryData;
 
+extern UnifiedBatteryData batteryData;  // Instance to hold battery data
+
 #endif  // INC_SP140_GLOBALS_H_
