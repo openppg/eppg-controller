@@ -29,9 +29,25 @@ void updateBMSData() {
   USBSerial.println("Updating BMS Data");
   bms_can.update();
 
+  // Basic measurements
   bmsTelemetryData.battery_voltage = bms_can.getBatteryVoltage();
   bmsTelemetryData.battery_current = bms_can.getBatteryCurrent();
   bmsTelemetryData.soc = bms_can.getSOC();
+  bmsTelemetryData.power = bms_can.getPower();
+
+  // Cell voltages
+  bmsTelemetryData.highest_cell_voltage = bms_can.getHighestCellVoltage();
+  bmsTelemetryData.lowest_cell_voltage = bms_can.getLowestCellVoltage();
+
+  // Temperature readings
+  bmsTelemetryData.highest_temperature = bms_can.getHighestTemperature();
+  bmsTelemetryData.lowest_temperature = bms_can.getLowestTemperature();
+
+  // Battery statistics
+  bmsTelemetryData.battery_cycle = bms_can.getBatteryCycle();
+  bmsTelemetryData.energy_cycle = bms_can.getEnergyCycle();
+  bmsTelemetryData.battery_failure_level = bms_can.getBatteryFailureLevel();
+
   bmsTelemetryData.lastUpdateMs = millis();
 
   //printBMSData();
