@@ -122,7 +122,6 @@ void parse_usb_serial() {
 
   if (doc["major_v"] < 5) return; // ignore old versions
 
-  vTaskSuspend(updateDisplayTaskHandle); // Prevent display from updating while we're changing settings
 
   deviceData.screen_rotation = doc["screen_rot"].as<unsigned int>();  // "3/1"
   deviceData.sea_pressure = doc["sea_pressure"];  // 1013.25 mbar
@@ -135,8 +134,6 @@ void parse_usb_serial() {
   writeDeviceData();
   resetRotation(deviceData.screen_rotation);  // Screen orientation may have changed
   setTheme(deviceData.theme);  // may have changed
-
-  vTaskResume(updateDisplayTaskHandle);
 
   send_usb_serial();
 #endif

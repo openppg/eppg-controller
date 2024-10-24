@@ -15,12 +15,13 @@ bool initBMSCAN() {
 
 
 void updateBMSData() {
+  USBSerial.println("Updating BMS Data");
   bms_can.update();
   //printBMSData();
 }
 
 void printBMSData() {
-  USBSerial.println("BMS Data:");
+  //USBSerial.println("BMS Data:");
   USBSerial.print("SOC: ");  // State of Charge
   USBSerial.print(bms_can.getSOC());
   USBSerial.println(" %");

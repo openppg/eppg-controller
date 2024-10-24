@@ -51,13 +51,6 @@ bool initESC(int escPin) {
   return true;
 }
 
-void setupESCSerial() {
-#ifndef CAN_PIO
-  USBSerialESC.begin(ESC_BAUD_RATE);
-  USBSerialESC.setTimeout(ESC_TIMEOUT);
-#endif
-}
-
 void setESCThrottle(int throttlePWM) {
   // TODO: Calibrate and use constants
   uint16_t scaledThrottle = map(throttlePWM, 1000, 2000, 10000, 14000);

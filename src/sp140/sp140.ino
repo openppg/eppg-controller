@@ -152,9 +152,7 @@ unsigned long armedSecs = 0;
 TaskHandle_t blinkLEDTaskHandle = NULL;
 TaskHandle_t throttleTaskHandle = NULL;
 TaskHandle_t telemetryEscTaskHandle = NULL;
-TaskHandle_t telemetryBmsTaskHandle = NULL;
 TaskHandle_t trackPowerTaskHandle = NULL;
-TaskHandle_t updateDisplayTaskHandle = NULL;
 TaskHandle_t watchdogTaskHandle = NULL;
 TaskHandle_t spiCommTaskHandle = NULL;
 
@@ -186,7 +184,6 @@ void blinkLEDTask(void *pvParameters) {
 
   for (;;) {  // infinite loop
     blinkLED();  // call blinkLED function
-    USBSerial.println("blinkLEDTask");
     delay(500);  // wait for 500ms
   }
   vTaskDelete(NULL); // should never reach this
@@ -212,15 +209,6 @@ void telemetryEscTask(void *pvParameters) {
   vTaskDelete(NULL);  // should never reach this
 }
 
-void telemetryBmsTask(void *pvParameters) {
-  (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
-
-  for (;;) {  // infinite loop
-    updateBMSData();
-    delay(200);  // wait for 100ms
-  }
-  vTaskDelete(NULL);  // should never reach this
-}
 
 void trackPowerTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
@@ -239,24 +227,11 @@ void refreshDisplay() {
   updateDisplay(deviceData, escTelemetryData, altitude, isArmed, isCruising, armedAtMillis);
 }
 
-void updateDisplayTask(void *pvParameters) {
-  (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
-
-  for (;;) {
-    // TODO: separate alt reading out to its own task. Avoid blocking display updates when alt reading is slow etc
-    // TODO: use queues to pass data between tasks (xQueueOverwrite)const float altitude = getAltitude(deviceData);
-    refreshDisplay();
-    delay(250);
-  }
-  vTaskDelete(NULL);  // should never reach this
-}
 
 void spiCommTask(void *pvParameters) {
   for (;;) {
       // Update BMS data
-      #ifdef CAN_PIO
-        updateBMSData();
-      #endif
+      updateBMSData();
 
       // Update display
       refreshDisplay();
@@ -427,6 +402,7 @@ void setupWiFi() {
  */
 
 void setup() {
+  USBSerial.begin(115200);
   #ifdef USE_TINYUSB
     setupUSBWeb();
   #endif
@@ -463,40 +439,20 @@ void setup() {
   if (button_top->isPressedRaw()) {
     modeSwitch(false);
   }
-  // vTaskResume(updateDisplayTaskHandle); // TODO: refactor to use queue etc
+  // TODO: refactor to use queue etc
   setLEDColor(LED_GREEN);
 }
 
 // set up all the main threads/tasks with core 0 affinity
 void setupTasks() {
- #ifdef RP_PIO
-  xTaskCreateAffinitySet(blinkLEDTask, "blinkLed", 200, NULL, 1, uxCoreAffinityMask1, &blinkLEDTaskHandle);
-  xTaskCreateAffinitySet(throttleTask, "throttle", 2048, NULL, 4, uxCoreAffinityMask0, &throttleTaskHandle);
-  xTaskCreateAffinitySet(telemetryEscTask, "telemetryEscTask", 4048, NULL, 3, uxCoreAffinityMask0, &telemetryEscTaskHandle);
-  xTaskCreateAffinitySet(trackPowerTask, "trackPower", 500, NULL, 2, uxCoreAffinityMask0, &trackPowerTaskHandle);
-  xTaskCreateAffinitySet(spiCommTask, "SPIComm", 2000, NULL, 1, uxCoreAffinityMask0, &spiCommTaskHandle);
-  xTaskCreateAffinitySet(watchdogTask, "watchdog", 1000, NULL, 5, uxCoreAffinityMask0, &watchdogTaskHandle);
- #elif CAN_PIO
+ #ifdef CAN_PIO
   xTaskCreate(telemetryEscTask, "telemetryEscTask", 4096, NULL, 2, &telemetryEscTaskHandle);
   xTaskCreate(blinkLEDTask, "blinkLed", 1536, NULL, 1, &blinkLEDTaskHandle);
   xTaskCreate(throttleTask, "throttle", 4096, NULL, 3, &throttleTaskHandle);
   xTaskCreatePinnedToCore(spiCommTask, "SPIComm", 10096, NULL, 5, &spiCommTaskHandle, 1);
   // TODO: add watchdog task (based on esc writing to CAN)
   //xTaskCreatePinnedToCore(watchdogTask, "watchdog", 1000, NULL, 5, &watchdogTaskHandle, 0);  // Run on core 0
-
- #else
-  xTaskCreate(blinkLEDTask, "blinkLed", 400, NULL, 1, &blinkLEDTaskHandle);
-  xTaskCreate(throttleTask, "throttle", 1000, NULL, 3, &throttleTaskHandle);
-  xTaskCreate(telemetryEscTask, "telemetryEscTask", 4048, NULL, 2, &telemetryEscTaskHandle);
-  xTaskCreate(trackPowerTask, "trackPower", 500, NULL, 2, &trackPowerTaskHandle);
-  //xTaskCreate(updateDisplayTask, "updateDisplay", 2600, NULL, 1, &updateDisplayTaskHandle);
-  xTaskCreatePinnedToCore(watchdogTask, "watchdog", 1000, NULL, 5, &watchdogTaskHandle, 0);  // Run on core 0
-
-  if (updateDisplayTaskHandle != NULL) {
-    vTaskSuspend(updateDisplayTaskHandle);  // Suspend the task immediately after creation
-  }
 #endif
-
 }
 
 
@@ -628,9 +584,7 @@ void toggleCruise() {
       // the screen updates should be aware of this and
       // suspend/resume in their own funcitons vs at a task level.
 
-      // vTaskSuspend(updateDisplayTaskHandle);
       // displayMeta(deviceData);
-      // vTaskResume(updateDisplayTaskHandle);
       break;
   }
 }
