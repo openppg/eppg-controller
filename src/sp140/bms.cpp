@@ -39,6 +39,9 @@ void updateBMSData() {
   bmsTelemetryData.highest_cell_voltage = bms_can.getHighestCellVoltage();
   bmsTelemetryData.lowest_cell_voltage = bms_can.getLowestCellVoltage();
 
+  // Calculated highest cell minus lowest cell voltage
+  bmsTelemetryData.voltage_differential = bms_can.getHighestCellVoltage() - bms_can.getLowestCellVoltage();
+
   // Temperature readings
   bmsTelemetryData.highest_temperature = bms_can.getHighestTemperature();
   bmsTelemetryData.lowest_temperature = bms_can.getLowestTemperature();

@@ -4,11 +4,13 @@
 #include <Fonts/FreeSans9pt7b.h>
 
 #include "../../inc/fonts/sans_reg10.h"
+#include "../../inc/fonts/sans_reg12.h"
+#include "../../inc/fonts/sans_reg14.h"
 #include "../../inc/fonts/sans_reg16.h"
 #include "../../inc/version.h"
 #include "sp140/structs.h"
 
-#define FONT_HEIGHT_OFFSET 14
+#define FONT_HEIGHT_OFFSET 8
 
 // DEBUG WATCHDOG
 #ifdef RP_PIO
@@ -137,12 +139,12 @@ void updateDisplay(
     if (unifiedBatteryData.volts > 10) {
       canvas.setCursor(6, 15);
       canvas.print("BATTERY");
-      canvas.setCursor(6, 17 + FONT_HEIGHT_OFFSET);
+      canvas.setCursor(6, 31);
       canvas.print(" DEAD");
     } else {
       canvas.setCursor(10, 15);
       canvas.print("NO");
-      canvas.setCursor(10, 17 + FONT_HEIGHT_OFFSET);
+      canvas.setCursor(10, 31);
       canvas.print("TELEM");
     }
   }
@@ -153,7 +155,7 @@ void updateDisplay(
   canvas.fillRect(0, 30, 1, 2, currentTheme->ui_accent);
 
   // Display battery percent
-  canvas.setCursor(108, 10 + FONT_HEIGHT_OFFSET);
+  canvas.setCursor(108, 16 + FONT_HEIGHT_OFFSET);
   canvas.setTextColor(currentTheme->default_text);
   if (batteryPercent > 0) {
     canvas.printf("%3d%%", static_cast<int>(batteryPercent));
@@ -172,17 +174,28 @@ void updateDisplay(
   // float kWh = 3.343;
   // float amps = 10.35;
 
+  canvas.setFont(&Open_Sans_Reg_14);
+
   canvas.setCursor(1, 40 + FONT_HEIGHT_OFFSET);
   canvas.printf(kWatts < 10 ? "  %4.1fkW" : "%4.1fkW", kWatts);
 
   canvas.setCursor(100, 40 + FONT_HEIGHT_OFFSET);
   canvas.printf(volts > 99.9 ? "%3.0fV" : "%4.1fV", volts);
 
-  canvas.setCursor(1, 61 + FONT_HEIGHT_OFFSET);
+  canvas.setCursor(1, 55 + FONT_HEIGHT_OFFSET);
   canvas.printf(kWh > 99.9 ? "%3.0fkWh" : "%4.1fkWh", kWh);
 
-  canvas.setCursor(100, 61 + FONT_HEIGHT_OFFSET);
+  canvas.setCursor(100, 55 + FONT_HEIGHT_OFFSET);
   canvas.printf(amps > 99.9 ? "%3.0fA" : "%4.1fA", amps);
+
+  canvas.setCursor(5, 70 + FONT_HEIGHT_OFFSET);
+  canvas.printf("%2.2fV", bmsTelemetry.lowest_cell_voltage);
+
+  canvas.setCursor(50, 70 + FONT_HEIGHT_OFFSET);
+  canvas.printf("%0.3fV", bmsTelemetry.voltage_differential);
+
+  canvas.setCursor(100, 70 + FONT_HEIGHT_OFFSET);
+  canvas.printf(bmsTelemetry.highest_temperature > 99.9 ? "%3.0fC" : "%4.1fC", bmsTelemetry.highest_temperature);
 
   // Display modes
   canvas.setCursor(8, 90);
@@ -223,14 +236,14 @@ void updateDisplay(
   // Display armed time for the current session
   canvas.setTextColor(currentTheme->default_text);
   canvas.setFont(&Open_Sans_Reg_16);
-  canvas.setCursor(8, 102 + FONT_HEIGHT_OFFSET);
+  canvas.setCursor(8, 108 + FONT_HEIGHT_OFFSET);
   static unsigned int _lastArmedMillis = 0;
   if (armed) _lastArmedMillis = nowMillis;
   const int sessionSeconds = (_lastArmedMillis - armedStartMillis) / 1000.0;
   canvas.printf("%02d:%02d", sessionSeconds / 60, sessionSeconds % 60);
 
   // Display altitude
-  canvas.setCursor(80, 102 + FONT_HEIGHT_OFFSET);
+  canvas.setCursor(80, 108 + FONT_HEIGHT_OFFSET);
   if (altitude == __FLT_MIN__) {
     canvas.setTextColor(currentTheme->error_text);
     canvas.print(F("ALTERR"));

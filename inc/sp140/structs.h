@@ -65,6 +65,7 @@ typedef struct {
   float energy_cycle;          // Energy per cycle (kWh)
   uint32_t battery_cycle;      // Battery cycle count
   uint8_t battery_failure_level;  // Battery failure status
+  float voltage_differential;   // Highest cell minus lowest cell voltage (V)
   unsigned long lastUpdateMs;   // Timestamp of last telemetry update
 } STR_BMS_TELEMETRY_140;
 #pragma pack(pop)
