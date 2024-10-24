@@ -31,6 +31,7 @@ void handleESCSerialData(byte buffer[]);
 void prepareESCSerialRead();
 int checkFletcher16(byte byteBuffer[]);
 bool setupTWAI();
+float getBatteryPercent(float voltage);
 
 // for debugging
 void dumpThrottleResponse(const sine_esc_SetThrottleSettings2Response *res);

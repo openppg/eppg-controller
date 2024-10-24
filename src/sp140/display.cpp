@@ -45,40 +45,6 @@ UIColors darkModeColors = {
 // Pointer to the current color set
 UIColors *currentTheme;
 
-/**
- * This function takes a voltage level as input and returns the corresponding
- * battery percentage. It uses a lookup table (`batteryLevels`) to map voltage
- * levels to percentages. Thats based  on a simple set of data points from load testing.
- * If the input voltage is greater than a threshold
- * voltage, linear interpolation is used to calculate the percentage between
- * two consecutive voltage-percentage mappings.
- *
- * @param voltage The input voltage level.
- * @return The calculated battery percentage (0-100).
- */
-float getBatteryPercent(float voltage) {
-    // Calculate the number of voltage-percentage mappings
-    int numLevels = sizeof(batteryLevels) / sizeof(BatteryVoltagePoint);
-
-    // Handle edge cases where the voltage is outside the defined range
-    if (voltage >= batteryLevels[0].voltage) {
-        return batteryLevels[0].percent;
-    } else if (voltage <= batteryLevels[numLevels - 1].voltage) {
-        return batteryLevels[numLevels - 1].percent;
-    }
-
-    // Iterate through the voltage-percentage mappings
-    for (int i = 0; i < numLevels - 1; i++) {
-        // Check if the input voltage is between the current and next mapping
-        if (voltage <= batteryLevels[i].voltage && voltage > batteryLevels[i + 1].voltage) {
-            // Interpolate the percentage between the current and next mapping
-            return mapd(voltage, batteryLevels[i + 1].voltage, batteryLevels[i].voltage,
-                        batteryLevels[i + 1].percent, batteryLevels[i].percent);
-        }
-    }
-
-    return 0;  // Fallback, should never reach here
-}
 // Clears screen and resets properties
 void resetRotation(unsigned int rotation) {
   display->setRotation(rotation);  // 1=right hand, 3=left hand
@@ -187,6 +153,8 @@ void setupDisplay(const STR_DEVICE_DATA_140_V1& deviceData, const HardwareConfig
 void updateDisplay(
   const STR_DEVICE_DATA_140_V1& deviceData,
   const STR_ESC_TELEMETRY_140& escTelemetry,
+  const STR_BMS_TELEMETRY_140& bmsTelemetry,
+  const UnifiedBatteryData& unifiedBatteryData,
   float altitude, bool armed, bool cruising,
   unsigned int armedStartMillis
   ) {
@@ -204,7 +172,7 @@ void updateDisplay(
   canvas.drawFastHLine(0, 92, 160, currentTheme->ui_accent);
 
   // Display battery level and status
-  const float batteryPercent = getBatteryPercent(escTelemetry.volts);
+  const float batteryPercent = unifiedBatteryData.soc;
 
   //   Display battery bar
   if (batteryPercent > 0) {
@@ -215,7 +183,7 @@ void updateDisplay(
     canvas.fillRect(0, 0, batteryPercentWidth, 32, batteryColor);
   } else {
     canvas.setTextColor(currentTheme->error_text);
-    if (escTelemetry.volts > 10) {
+    if (unifiedBatteryData.volts > 10) {
       canvas.setCursor(6, 15);
       canvas.print("BATTERY");
       canvas.setCursor(6, 17 + FONT_HEIGHT_OFFSET);
@@ -243,9 +211,9 @@ void updateDisplay(
   }
 
   float kWatts = constrain(watts / 1000.0, 0, 50);
-  float volts = escTelemetry.volts;
+  float volts = unifiedBatteryData.volts;
   float kWh = wattHoursUsed / 1000.0;
-  float amps = escTelemetry.amps;
+  float amps = unifiedBatteryData.amps;
 
   // for testing
   // float kWatts = 15.1;

@@ -52,6 +52,21 @@ struct UnifiedBatteryData {
   float amps;
   float soc;    // State of Charge
 };
+// BMS telemetry data
+typedef struct {
+  float soc;                    // State of Charge (%)
+  float battery_voltage;        // Total battery voltage (V)
+  float battery_current;        // Battery current (A)
+  float power;                  // Power (kW)
+  float highest_cell_voltage;   // Highest individual cell voltage (V)
+  float lowest_cell_voltage;    // Lowest individual cell voltage (V)
+  float highest_temperature;    // Highest temperature reading (°C)
+  float lowest_temperature;     // Lowest temperature reading (°C)
+  float energy_cycle;          // Energy per cycle (kWh)
+  uint32_t battery_cycle;      // Battery cycle count
+  uint8_t battery_failure_level;  // Battery failure status
+  unsigned long lastUpdateMs;   // Timestamp of last telemetry update
+} STR_BMS_TELEMETRY_140;
 #pragma pack(pop)
 
 

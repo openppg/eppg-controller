@@ -76,6 +76,8 @@ void resetRotation(unsigned int orientation);
 // Show data on screen
 void updateDisplay(const STR_DEVICE_DATA_140_V1& deviceData,
                    const STR_ESC_TELEMETRY_140& escTelemetry,
+                   const STR_BMS_TELEMETRY_140& bmsTelemetry,
+                   const UnifiedBatteryData& unifiedBatteryData,
                    float altitude, bool armed, bool cruising,
                    unsigned int armedStartMillis);
 

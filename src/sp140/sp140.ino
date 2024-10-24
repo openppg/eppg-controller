@@ -71,6 +71,7 @@ UBaseType_t uxCoreAffinityMask0 = (1 << 0);  // Core 0
 UBaseType_t uxCoreAffinityMask1 = (1 << 1);  // Core 1
 
 HardwareConfig board_config;
+bool isBMSPresent = false;
 
 // USB WebUSB object
 #ifdef USE_TINYUSB
@@ -81,6 +82,8 @@ WEBUSB_URL_DEF(landingPage, 1 /*https*/, "config.openppg.com");
 ResponsiveAnalogRead* pot;
 AceButton* button_top;
 ButtonConfig* buttonConfig;
+
+UnifiedBatteryData unifiedBatteryData = {0.0f, 0.0f, 0.0f};
 
 #ifdef M0_PIO
   extEEPROM eep(kbits_64, 1, 64);
@@ -204,6 +207,11 @@ void telemetryEscTask(void *pvParameters) {
 
   for (;;) {  // infinite loop
     readESCTelemetry();
+    if (!isBMSPresent) {
+      unifiedBatteryData.volts = escTelemetryData.volts;
+      unifiedBatteryData.amps = escTelemetryData.amps;
+      unifiedBatteryData.soc = getBatteryPercent(escTelemetryData.volts);
+    }
     delay(100);  // wait for 100ms
   }
   vTaskDelete(NULL);  // should never reach this
@@ -224,14 +232,26 @@ void refreshDisplay() {
   const float altitude = getAltitude(deviceData);
   bool isArmed = (currentState != DISARMED);
   bool isCruising = (currentState == ARMED_CRUISING);
-  updateDisplay(deviceData, escTelemetryData, altitude, isArmed, isCruising, armedAtMillis);
+  updateDisplay(deviceData,
+    escTelemetryData,
+    bmsTelemetryData,
+    unifiedBatteryData,
+    altitude,
+    isArmed,
+    isCruising,
+    armedAtMillis);
 }
 
-
+// For tasks that use the SPI bus cant run in parallel
 void spiCommTask(void *pvParameters) {
   for (;;) {
       // Update BMS data
-      updateBMSData();
+      if (isBMSPresent) {
+        updateBMSData();
+        unifiedBatteryData.volts = bmsTelemetryData.battery_voltage;
+        unifiedBatteryData.amps = bmsTelemetryData.battery_current;
+        unifiedBatteryData.soc = bmsTelemetryData.soc;
+      }
 
       // Update display
       refreshDisplay();
@@ -426,7 +446,7 @@ void setup() {
 #endif
   setLEDColor(LED_YELLOW);  // Booting up
   setupDisplay(deviceData, board_config);
-  initBMSCAN();
+  isBMSPresent = initBMSCAN();
   initESC(0);
   eepromSemaphore = xSemaphoreCreateBinary();
   xSemaphoreGive(eepromSemaphore);
