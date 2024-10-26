@@ -52,13 +52,14 @@ bool initESC(int escPin) {
 }
 
 void setESCThrottle(int throttlePWM) {
-  // TODO: Calibrate and use constants
-  uint16_t scaledThrottle = map(throttlePWM, 1000, 2000, 10000, 14000);
-  //USBSerial.print("Setting throttle to: ");
-  //USBSerial.println(scaledThrottle);
+  // Input validation
+  if (throttlePWM < 1000 || throttlePWM > 2000) {
+    return;  // Ignore invalid throttle values
+  }
+
+  // Direct calculation: multiply by 10 to convert μs to 0.1μs resolution
+  uint16_t scaledThrottle = throttlePWM * 10;
   esc.setThrottleSettings2(scaledThrottle);
-  // Remove the immediate call to processTxRxOnce here
-  adapter.processTxRxOnce();  // Process CAN messages
 }
 
 void readESCTelemetry() {
@@ -70,13 +71,13 @@ void readESCTelemetry() {
 
   if (model.hasSetThrottleSettings2Response) {
     const sine_esc_SetThrottleSettings2Response *res = &model.setThrottleSettings2Response;
-    dumpThrottleResponse(res);
+    //dumpThrottleResponse(res);
     // Voltage
     escTelemetryData.volts = res->voltage / 10.0f;
     voltageBuffer.push(escTelemetryData.volts);
 
     // Current
-    escTelemetryData.amps = res->current / 10.0f;
+    escTelemetryData.amps = res->bus_current / 10.0f;
 
     // Temperature (using MOS temperature as an example)
     escTelemetryData.mos_temp = res->mos_temp / 10.0f;
@@ -99,6 +100,9 @@ void readESCTelemetry() {
 
     // Update timestamp
     escTelemetryData.lastUpdateMs = millis();
+
+    // debug the esc recpwm
+    USBSerial.println(res->comm_pwm);
   }
 
   adapter.processTxRxOnce();  // Process CAN messages

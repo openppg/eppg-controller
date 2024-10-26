@@ -197,7 +197,7 @@ void throttleTask(void *pvParameters) {
 
   for (;;) {  // infinite loop
     handleThrottle();  //
-    delay(22);  // wait for 22ms
+    delay(20);  // wait for 20ms
   }
   vTaskDelete(NULL); // should never reach this
 }
@@ -400,18 +400,18 @@ TaskHandle_t testTaskHandle = NULL;
 #ifdef WIFI_DEBUG
 
 void setupWiFi() {
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSPHRASE);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    USBSerial.println("Wifi connecting...");
-  }
-  USBSerial.println("");
-  USBSerial.println("WiFi connected");
+//   WiFi.mode(WIFI_STA);
+//   WiFi.begin(WIFI_SSID, WIFI_PASSPHRASE);
+//   while (WiFi.status() != WL_CONNECTED) {
+//     delay(500);
+//     USBSerial.println("Wifi connecting...");
+//   }
+//   USBSerial.println("");
+//   USBSerial.println("WiFi connected");
 
-  if(!Insights.begin(insights_auth_key)){
-    USBSerial.println("Failed to initialize Insights");
-  }
+//   if(!Insights.begin(insights_auth_key)){
+//     USBSerial.println("Failed to initialize Insights");
+//   }
 }
 #endif
 
@@ -663,47 +663,18 @@ void initButtons() {
 // read throttle and send to hub
 // read throttle
 void handleThrottle() {
-  //  TODO: remove
-  //if (currentState == DISARMED) return;  // safe
-
-  //armedSecs = (millis() - armedAtMillis) / 1000;  // update time while armed
-
   static int maxPWM = ESC_MAX_PWM;
-
   pot->update();
-  int potRaw = pot->getValue();
+  int potRaw = pot->getRawValue();
+  int localThrottlePWM = map(potRaw, 0, 4095, ESC_MIN_PWM, maxPWM);
 
-  int localThrottlePWM = ESC_DISARMED_PWM;
+  // Debug output
+  USBSerial.print("Raw ADC: ");
+  USBSerial.print(potRaw);
+  USBSerial.print(" PWM: ");
+  USBSerial.println(localThrottlePWM);
 
-  if (currentState == ARMED_CRUISING) {
-    unsigned long cruisingSecs = (millis() - cruisedAtMillis) / 1000;
-
-    if (cruisingSecs >= CRUISE_GRACE && potRaw > POT_ENGAGEMENT_LEVEL) {
-      changeDeviceState(ARMED);  // deactivate cruise
-    } else {
-      localThrottlePWM = mapd(cruisedPotVal, 0, POT_MAX_VALUE, ESC_MIN_PWM, maxPWM);
-    }
-  } else {
-    // no need to save & smooth throttle etc when in cruise mode (& pot == 0)
-    potBuffer.push(potRaw);
-
-    int potLvl = averagePotBuffer();
-
-  // runs ~40x sec
-  // 1000 diff in pwm from 0
-  // 1000/6/40
-    if (deviceData.performance_mode == 0) {  // chill mode
-      potLvl = limitedThrottle(potLvl, prevPotLvl, 50);
-      maxPWM = 1850;  // 85% interpolated from 1030 to 1990
-    } else {
-      potLvl = limitedThrottle(potLvl, prevPotLvl, 120);
-      maxPWM = ESC_MAX_PWM;
-    }
-    // mapping val to min and max pwm
-    localThrottlePWM = mapd(potLvl, 0, 4095, ESC_MIN_PWM, maxPWM);
-  }
-
-  setESCThrottle(localThrottlePWM);  // using val as the signal to esc
+  setESCThrottle(localThrottlePWM);
 }
 
 int averagePotBuffer() {
@@ -773,3 +744,4 @@ void trackPower() {
   Insights.metrics.setInt("flight_duration", (millis() - armedAtMillis) / 1000);
   Insights.metrics.setFloat("watt_hours_used", wattHoursUsed);
 }
+

@@ -26,7 +26,7 @@ bool initBMSCAN() {
 void updateBMSData() {
   if (!_isBMSPresent) return;  // Exit if BMS is not present
 
-  USBSerial.println("Updating BMS Data");
+  //USBSerial.println("Updating BMS Data");
   bms_can.update();
 
   // Basic measurements
