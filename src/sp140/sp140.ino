@@ -212,7 +212,7 @@ void telemetryEscTask(void *pvParameters) {
       unifiedBatteryData.amps = escTelemetryData.amps;
       unifiedBatteryData.soc = getBatteryPercent(escTelemetryData.volts);
     }
-    delay(100);  // wait for 100ms
+    delay(50);  // wait for 100ms
   }
   vTaskDelete(NULL);  // should never reach this
 }
@@ -223,7 +223,7 @@ void trackPowerTask(void *pvParameters) {
 
   for (;;) {  // infinite loop
     trackPower();
-    delay(250);  // wait for 250ms
+    delay(500);  // wait for 250ms
   }
   vTaskDelete(NULL);  // should never reach this
 }
@@ -255,7 +255,7 @@ void spiCommTask(void *pvParameters) {
 
       // Update display
       refreshDisplay();
-      delay(200);
+      delay(1000);
   }
 }
 
@@ -511,7 +511,7 @@ void loop() {
 
   // more stable in main loop
   checkButtons();
-  delay(5);
+  delay(10);
   //USBSerial.println("loop");
 }
 
@@ -660,21 +660,58 @@ void initButtons() {
   //buttonConfig->setDebounceDelay(100);
 }
 
-// read throttle and send to hub
-// read throttle
+//#define THROTTLE_DEBUG
+
+#ifdef THROTTLE_DEBUG
+// Debug mode globals
+static int debugValue = 0;
+static bool increasing = true;
+static unsigned long lastStepTime = 0;
+static const int STEPS_PER_SECOND = 4;  // 4 steps per second
+static const unsigned long STEP_INTERVAL = 1000 / STEPS_PER_SECOND; // 250ms per step
+static const int STEP_SIZE = ceil(4096.0 / (STEPS_PER_SECOND * 30)); // Complete up or down in ~30 seconds
+#endif
+
 void handleThrottle() {
   static int maxPWM = ESC_MAX_PWM;
-  pot->update();
-  int potRaw = pot->getRawValue();
-  int localThrottlePWM = map(potRaw, 0, 4095, ESC_MIN_PWM, maxPWM);
 
-  // Debug output
-  USBSerial.print("Raw ADC: ");
-  USBSerial.print(potRaw);
-  USBSerial.print(" PWM: ");
-  USBSerial.println(localThrottlePWM);
+  #ifdef THROTTLE_DEBUG
+    unsigned long currentTime = millis();
+    if (currentTime - lastStepTime >= STEP_INTERVAL) {
+      lastStepTime = currentTime;
 
-  setESCThrottle(localThrottlePWM);
+      if (increasing) {
+        debugValue += STEP_SIZE;
+        if (debugValue >= 2095) {
+          debugValue = 2095;
+          increasing = false;
+        }
+      } else {
+        debugValue -= STEP_SIZE;
+        if (debugValue <= 0) {
+          debugValue = 0;
+          increasing = true;
+        }
+      }
+
+      int localThrottlePWM = map(debugValue, 0, 4095, ESC_MIN_PWM, maxPWM);
+
+      // Debug output with timestamp
+      // USBSerial.print(currentTime);
+      // USBSerial.print(",");
+      // USBSerial.print(debugValue);
+      // USBSerial.print(",");
+      // USBSerial.println(localThrottlePWM);
+
+      setESCThrottle(localThrottlePWM);
+    }
+  #else
+    // Normal throttle behavior
+    pot->update();
+    int potRaw = pot->getRawValue();
+    int localThrottlePWM = map(potRaw, 0, 4095, ESC_MIN_PWM, maxPWM);
+    setESCThrottle(localThrottlePWM);
+  #endif
 }
 
 int averagePotBuffer() {
@@ -744,4 +781,3 @@ void trackPower() {
   Insights.metrics.setInt("flight_duration", (millis() - armedAtMillis) / 1000);
   Insights.metrics.setFloat("watt_hours_used", wattHoursUsed);
 }
-
