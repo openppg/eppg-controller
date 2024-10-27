@@ -197,7 +197,7 @@ void throttleTask(void *pvParameters) {
 
   for (;;) {  // infinite loop
     handleThrottle();  //
-    delay(20);  // wait for 20ms
+    delay(2);  // wait for 20ms
   }
   vTaskDelete(NULL); // should never reach this
 }
@@ -256,7 +256,7 @@ void spiCommTask(void *pvParameters) {
 
       // Update display
       refreshDisplay();
-      delay(1000);
+      delay(100);
   }
 }
 
@@ -469,7 +469,7 @@ void setupTasks() {
  #ifdef CAN_PIO
   //xTaskCreate(telemetryEscTask, "telemetryEscTask", 4096, NULL, 2, &telemetryEscTaskHandle);
   xTaskCreate(blinkLEDTask, "blinkLed", 1536, NULL, 1, &blinkLEDTaskHandle);
-  xTaskCreate(throttleTask, "throttle", 4096, NULL, 3, &throttleTaskHandle);
+  xTaskCreatePinnedToCore(throttleTask, "throttle", 4096, NULL, 3, &throttleTaskHandle, 0);
   xTaskCreatePinnedToCore(spiCommTask, "SPIComm", 10096, NULL, 5, &spiCommTaskHandle, 1);
   // TODO: add watchdog task (based on esc writing to CAN)
   //xTaskCreatePinnedToCore(watchdogTask, "watchdog", 1000, NULL, 5, &watchdogTaskHandle, 0);  // Run on core 0
@@ -708,11 +708,15 @@ void handleThrottle() {
     }
   #else
     // Normal throttle behavior
+    #define ESC_MIN_SPIN_PWM 1105
     pot->update();
     int potRaw = pot->getRawValue();
-    int localThrottlePWM = map(potRaw, 0, 4095, ESC_MIN_PWM, maxPWM);
+    //int localThrottlePWM = map(potRaw, 0, 4095, ESC_MIN_PWM, maxPWM);
+    int localThrottlePWM = map(potRaw, 0, 4095, ESC_MIN_SPIN_PWM, maxPWM);
     setESCThrottle(localThrottlePWM);
-    USBSerial.print(localThrottlePWM);
+    USBSerial.print(millis());
+    USBSerial.print(",");
+    USBSerial.print(localThrottlePWM *10);
     readESCTelemetry();
 
   #endif
