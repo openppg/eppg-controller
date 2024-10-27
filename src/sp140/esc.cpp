@@ -102,8 +102,8 @@ void readESCTelemetry() {
     escTelemetryData.lastUpdateMs = millis();
 
     // debug the esc recpwm
-    USBSerial.print(", ");
-    USBSerial.println(res->comm_pwm);
+    //USBSerial.print(", ");
+    //USBSerial.println(res->comm_pwm);
   }
 
   adapter.processTxRxOnce();  // Process CAN messages

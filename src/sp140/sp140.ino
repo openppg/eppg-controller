@@ -256,7 +256,7 @@ void spiCommTask(void *pvParameters) {
 
       // Update display
       refreshDisplay();
-      delay(100);
+      delay(1000);
   }
 }
 
@@ -512,8 +512,8 @@ void loop() {
 
   // more stable in main loop
   checkButtons();
-  delay(10);
-  //USBSerial.println("loop");
+  delay(5);
+  //USBSerial.print(".");
 }
 
 void checkButtons() {
@@ -633,15 +633,13 @@ void handleButtonEvent(AceButton* btn, uint8_t eventType, uint8_t /* st */) {
     }
     break;
   case AceButton::kEventDoubleClicked:
+    //toggleArm();
+    USBSerial.println("Double Click arm");
     break;
   case AceButton::kEventLongPressed:
-    if (!wasClicked && (millis() - releaseTime <= longClickThreshold)) {
       toggleArm();
-      USBSerial.println("Long Press after Click and Release");
-    } else {
-      //toggleCruise();
+      //toggleCruise
       USBSerial.println("Long Press - cruise");
-    }
     break;
   }
 }
@@ -676,50 +674,23 @@ static const int STEP_SIZE = ceil(4096.0 / (STEPS_PER_SECOND * 30)); // Complete
 void handleThrottle() {
   static int maxPWM = ESC_MAX_PWM;
 
-  #ifdef THROTTLE_DEBUG
-    unsigned long currentTime = millis();
-    if (currentTime - lastStepTime >= STEP_INTERVAL) {
-      lastStepTime = currentTime;
+  // Normal throttle behavior
+  #define ESC_MIN_SPIN_PWM 1105
 
-      if (increasing) {
-        debugValue += STEP_SIZE;
-        if (debugValue >= 2095) {
-          debugValue = 2095;
-          increasing = false;
-        }
-      } else {
-        debugValue -= STEP_SIZE;
-        if (debugValue <= 0) {
-          debugValue = 0;
-          increasing = true;
-        }
-      }
+  if (currentState != ARMED) {
+    setESCThrottle(ESC_DISARMED_PWM);
+  } else {
+  pot->update();
+  int potRaw = pot->getRawValue();
+  //int localThrottlePWM = map(potRaw, 0, 4095, ESC_MIN_PWM, maxPWM);
+  int localThrottlePWM = map(potRaw, 0, 4095, ESC_MIN_SPIN_PWM, maxPWM);
+  setESCThrottle(localThrottlePWM);
+  // USBSerial.print(millis());
+  // USBSerial.print(",");
+  // USBSerial.print(localThrottlePWM *10);
+  }
+  readESCTelemetry();
 
-      int localThrottlePWM = map(debugValue, 0, 4095, ESC_MIN_PWM, maxPWM);
-
-      // Debug output with timestamp
-      // USBSerial.print(currentTime);
-      // USBSerial.print(",");
-      // USBSerial.print(debugValue);
-      // USBSerial.print(",");
-      // USBSerial.println(localThrottlePWM);
-
-      setESCThrottle(localThrottlePWM);
-    }
-  #else
-    // Normal throttle behavior
-    #define ESC_MIN_SPIN_PWM 1105
-    pot->update();
-    int potRaw = pot->getRawValue();
-    //int localThrottlePWM = map(potRaw, 0, 4095, ESC_MIN_PWM, maxPWM);
-    int localThrottlePWM = map(potRaw, 0, 4095, ESC_MIN_SPIN_PWM, maxPWM);
-    setESCThrottle(localThrottlePWM);
-    USBSerial.print(millis());
-    USBSerial.print(",");
-    USBSerial.print(localThrottlePWM *10);
-    readESCTelemetry();
-
-  #endif
 }
 
 int averagePotBuffer() {
