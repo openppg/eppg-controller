@@ -102,27 +102,11 @@ void readESCTelemetry() {
     escTelemetryData.lastUpdateMs = millis();
 
     // debug the esc recpwm
+    USBSerial.print(", ");
     USBSerial.println(res->comm_pwm);
   }
 
   adapter.processTxRxOnce();  // Process CAN messages
-}
-
-// new V2 ESC checking
-int checkFletcher16(byte byteBuffer[]) {
-  int fCCRC16;
-  int i;
-  int c0 = 0;
-  int c1 = 0;
-
-  // Calculate checksum intermediate bytesUInt16
-  for (i = 0; i < 18; i++) {  // Check only first 18 bytes, skip crc bytes
-    c0 = (int)(c0 + ((int)byteBuffer[i])) % 255;
-    c1 = (int)(c1 + c0) % 255;
-  }
-  // Assemble the 16-bit checksum value
-  fCCRC16 = (c1 << 8) | c0;
-  return (int)fCCRC16;
 }
 
 // CAN specific setup

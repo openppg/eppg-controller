@@ -202,6 +202,7 @@ void throttleTask(void *pvParameters) {
   vTaskDelete(NULL); // should never reach this
 }
 
+// TODO: remove this task because its called from handleThrottle()
 void telemetryEscTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
@@ -466,7 +467,7 @@ void setup() {
 // set up all the main threads/tasks with core 0 affinity
 void setupTasks() {
  #ifdef CAN_PIO
-  xTaskCreate(telemetryEscTask, "telemetryEscTask", 4096, NULL, 2, &telemetryEscTaskHandle);
+  //xTaskCreate(telemetryEscTask, "telemetryEscTask", 4096, NULL, 2, &telemetryEscTaskHandle);
   xTaskCreate(blinkLEDTask, "blinkLed", 1536, NULL, 1, &blinkLEDTaskHandle);
   xTaskCreate(throttleTask, "throttle", 4096, NULL, 3, &throttleTaskHandle);
   xTaskCreatePinnedToCore(spiCommTask, "SPIComm", 10096, NULL, 5, &spiCommTaskHandle, 1);
@@ -711,6 +712,9 @@ void handleThrottle() {
     int potRaw = pot->getRawValue();
     int localThrottlePWM = map(potRaw, 0, 4095, ESC_MIN_PWM, maxPWM);
     setESCThrottle(localThrottlePWM);
+    USBSerial.print(localThrottlePWM);
+    readESCTelemetry();
+
   #endif
 }
 
