@@ -92,9 +92,12 @@ void setupDisplay(const STR_DEVICE_DATA_140_V1& deviceData, const HardwareConfig
   watchdogEnableCausedReboot = watchdog_enable_caused_reboot();
 #endif
 
-  const int mosi = 4;
-  const int sclk = 2;
-  display = new Adafruit_ST7735(board_config.tft_cs, board_config.tft_dc, mosi, sclk, board_config.tft_rst);
+  display = new Adafruit_ST7735(
+    board_config.tft_cs,
+    board_config.tft_dc,
+    board_config.tft_mosi,
+    board_config.tft_sclk,
+    board_config.tft_rst);
 
   display->initR(INITR_BLACKTAB);  // Init ST7735S chip, black tab
   resetRotation(deviceData.screen_rotation);

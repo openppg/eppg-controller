@@ -15,6 +15,8 @@ struct HardwareConfig {
   int tft_cs;
   int tft_dc;
   int tft_lite;
+  int tft_mosi;
+  int tft_sclk;
   int vibe_pwm;
   int sda_pin;
   int scl_pin;
@@ -22,7 +24,5 @@ struct HardwareConfig {
   bool enable_neopixel;
 };
 
-extern HardwareConfig v1_config;
-extern HardwareConfig v2_config;  // not used
-extern HardwareConfig v3_config;
+extern HardwareConfig s3_config;
 #endif  // INC_SP140_ESP32S3_CONFIG_H_

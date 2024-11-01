@@ -261,15 +261,8 @@ void spiCommTask(void *pvParameters) {
 }
 
 void loadHardwareConfig() {
-  if (deviceData.revision == 1) {
-    board_config = v1_config;
-  } else if (deviceData.revision == 2) {
-    board_config = v2_config;
-  } else if (deviceData.revision == 3) {
-    board_config = v3_config;
-  } else {
-    // Handle other cases or throw an error
-  }
+  board_config = s3_config; // ESP32S3 is only supported board
+
   pot = new ResponsiveAnalogRead(board_config.throttle_pin, false);
   button_top = new AceButton(board_config.button_top);
   buttonConfig = button_top->getButtonConfig();
