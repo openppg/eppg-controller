@@ -453,6 +453,7 @@ void setup() {
   if (button_top->isPressedRaw()) {
     modeSwitch(false);
   }
+  setupBLE();
   // TODO: refactor to use queue etc
   setLEDColor(LED_GREEN);
 }

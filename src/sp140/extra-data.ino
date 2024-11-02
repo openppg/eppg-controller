@@ -12,6 +12,55 @@ const int DEFAULT_PERFORMANCE_MODE = 0;
 const int DEFAULT_THEME = 0;  // 0=light, 1=dark
 const int DEFAULT_BATT_SIZE = 4000;  // 4kw
 
+#include <BLEDevice.h>
+#include <BLEUtils.h>
+#include <BLEServer.h>
+
+#define CONFIG_SERVICE_UUID "1779A55B-DEB8-4482-A5D1-A12E62146138"
+#define METRIC_ALT_UUID "DF63F19E-7295-4A44-A0DC-184D1AFEDDF7"
+
+
+class MyCallbacks: public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic *pCharacteristic) {
+      std::string value = pCharacteristic->getValue();
+
+      if (value.length() > 0) {
+        USBSerial.print("New : ");
+        for (int i = 0; i < value.length(); i++)
+          USBSerial.print(value[i], HEX);
+
+        USBSerial.println();
+      }
+    }
+};
+
+
+void setupBLE() {
+  // Initialize BLE
+  BLEDevice::init("OpenPPG Controller");
+  BLEServer *pServer = BLEDevice::createServer();
+
+  BLEService *pService = pServer->createService(CONFIG_SERVICE_UUID);
+
+  BLECharacteristic *pCharacteristic = pService->createCharacteristic(
+                                         METRIC_ALT_UUID,
+                                         BLECharacteristic::PROPERTY_READ |
+                                         BLECharacteristic::PROPERTY_WRITE
+                                       );
+
+  pCharacteristic->setCallbacks(new MyCallbacks());
+
+  int metricAlt = deviceData.metric_alt ? 1 : 0;
+  pCharacteristic->setValue(metricAlt);
+  pService->start();
+
+  BLEAdvertising *pAdvertising = pServer->getAdvertising();
+  pAdvertising->start();
+
+  USBSerial.println("BLE device ready");
+  USBSerial.println("Waiting for a client connection...");
+}
+
 // read saved data from EEPROM
 void refreshDeviceData() {
   uint16_t crc;
