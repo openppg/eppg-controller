@@ -195,5 +195,5 @@ const GFXglyph Open_Sans_SemiBold_20Glyphs[] PROGMEM = {
     {  1522,   2,  20,  12,    5,  -15 }, // '|'
     {  1527,   8,  17,   8,    0,  -14 } // '}'
 };
-const GFXfont Open_Sans_Reg_16 PROGMEM = {
+const GFXfont Open_Sans_Reg_20 PROGMEM = {
 (uint8_t  *)Open_Sans_SemiBold_20Bitmaps,(GFXglyph *)Open_Sans_SemiBold_20Glyphs,0x20, 0x7E, 28};

@@ -7,6 +7,7 @@
 #include "../../inc/fonts/sans_reg12.h"
 #include "../../inc/fonts/sans_reg14.h"
 #include "../../inc/fonts/sans_reg16.h"
+#include "../../inc/fonts/sans_reg18.h"
 #include "../../inc/version.h"
 #include "sp140/structs.h"
 
@@ -70,7 +71,7 @@ void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
     delay(100);  // Adjust delay for animation speed
   }
 
-  display->setFont(&Open_Sans_Reg_16);
+  display->setFont(&Open_Sans_Reg_20);
   display->setTextSize(1);
   display->setCursor(60, 60);
   display->printf("v%d.%d", VERSION_MAJOR, VERSION_MINOR);
@@ -81,7 +82,11 @@ void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
   const int hours = deviceData.armed_time / 60;
   const int minutes = deviceData.armed_time % 60;
   display->printf("%02d:%02d", hours, minutes);
-  delay(duration);
+  #ifdef SCREEN_DEBUG
+    delay(200);
+  #else
+    delay(duration);
+  #endif
 }
 
 // inital screen setup and config with devicedata and boardconfig passed in
