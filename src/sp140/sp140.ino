@@ -256,7 +256,7 @@ void spiCommTask(void *pvParameters) {
 
       // Update display
       refreshDisplay();
-      delay(1000);
+      delay(250);
   }
 }
 

@@ -24,12 +24,17 @@ class MyCallbacks: public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic *pCharacteristic) {
       std::string value = pCharacteristic->getValue();
 
-      if (value.length() > 0) {
-        USBSerial.print("New : ");
-        for (int i = 0; i < value.length(); i++)
-          USBSerial.print(value[i], HEX);
+      if (value.length() == 1) {  // Ensure we only get a single byte
+        USBSerial.print("New: ");
+        USBSerial.println(value[0], HEX);
 
-        USBSerial.println();
+        // Convert the received byte to a boolean
+        deviceData.metric_alt = (value[0] != 0);
+
+        writeDeviceData();
+        USBSerial.println("Metric alt setting saved to EEPROM");
+      } else {
+        USBSerial.println("Invalid value length - expected 1 byte");
       }
     }
 };
