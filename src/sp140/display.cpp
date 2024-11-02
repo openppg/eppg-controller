@@ -121,7 +121,7 @@ void updateDisplay(
   ) {
   canvas.fillScreen(currentTheme->default_bg);
   canvas.setTextWrap(false);
-  canvas.setFont(&Open_Sans_Reg_16);
+  canvas.setFont(&Open_Sans_Reg_20);
   canvas.setTextSize(1);
 
   const unsigned int nowMillis = millis();
@@ -243,7 +243,7 @@ void updateDisplay(
 
   // Display armed time for the current session
   canvas.setTextColor(currentTheme->default_text);
-  canvas.setFont(&Open_Sans_Reg_16);
+  canvas.setFont(&Open_Sans_Reg_20);
   canvas.setCursor(8, 108 + FONT_HEIGHT_OFFSET);
   static unsigned int _lastArmedMillis = 0;
   if (armed) _lastArmedMillis = nowMillis;
