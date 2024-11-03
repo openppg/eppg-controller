@@ -29,7 +29,10 @@ const int DEFAULT_BATT_SIZE = 4000;  // 4kw
 #define THEME_UUID               "AD0E4309-1EB2-461A-B36C-697B2E1604D2"
 #define HW_REVISION_UUID         "2A27"  // Using standard BLE UUID for revision
 
-class MyCallbacks: public BLECharacteristicCallbacks {
+#define DEVICE_INFO_SERVICE_UUID   "180A"  // Standard BLE Device Information Service
+#define MANUFACTURER_NAME_UUID     "2A29"  // Standard BLE Manufacturer Name characteristic
+
+class MetricAltCallbacks: public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic *pCharacteristic) {
       std::string value = pCharacteristic->getValue();
 
@@ -48,6 +51,44 @@ class MyCallbacks: public BLECharacteristicCallbacks {
     }
 };
 
+class PerformanceModeCallbacks: public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic *pCharacteristic) {
+      std::string value = pCharacteristic->getValue();
+
+      if (value.length() == 1) {
+        uint8_t mode = value[0];
+        if (mode <= 1) {  // Ensure value is 0 or 1
+          deviceData.performance_mode = mode;
+          writeDeviceData();
+          USBSerial.println("Performance mode saved to EEPROM");
+        } else {
+          USBSerial.println("Invalid performance mode value");
+        }
+      } else {
+        USBSerial.println("Invalid value length - expected 1 byte");
+      }
+    }
+};
+
+class ScreenRotationCallbacks: public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic *pCharacteristic) {
+      std::string value = pCharacteristic->getValue();
+
+      if (value.length() == 1) {
+        uint8_t rotation = value[0];
+        if (rotation == 1 || rotation == 3) {  // Only allow valid rotation values
+          deviceData.screen_rotation = rotation;
+          writeDeviceData();
+          resetRotation(rotation);  // Update screen immediately
+          USBSerial.println("Screen rotation saved to EEPROM");
+        } else {
+          USBSerial.println("Invalid rotation value");
+        }
+      } else {
+        USBSerial.println("Invalid value length - expected 1 byte");
+      }
+    }
+};
 
 void setupBLE() {
   // Initialize BLE
@@ -56,16 +97,74 @@ void setupBLE() {
 
   BLEService *pService = pServer->createService(CONFIG_SERVICE_UUID);
 
-  BLECharacteristic *pCharacteristic = pService->createCharacteristic(
-                                         METRIC_ALT_UUID,
+  BLECharacteristic *pMetricAlt = pService->createCharacteristic(
+                                   METRIC_ALT_UUID,
+                                   BLECharacteristic::PROPERTY_READ |
+                                   BLECharacteristic::PROPERTY_WRITE
+                                 );
+
+  pMetricAlt->setCallbacks(new MetricAltCallbacks());
+
+  int metricAlt = deviceData.metric_alt ? 1 : 0;
+  pMetricAlt->setValue(metricAlt);
+
+  BLECharacteristic *pPerformanceMode = pService->createCharacteristic(
+                                         PERFORMANCE_MODE_UUID,
                                          BLECharacteristic::PROPERTY_READ |
                                          BLECharacteristic::PROPERTY_WRITE
                                        );
 
-  pCharacteristic->setCallbacks(new MyCallbacks());
+  pPerformanceMode->setCallbacks(new PerformanceModeCallbacks());
+  int performanceMode = deviceData.performance_mode ? 1 : 0;
 
-  int metricAlt = deviceData.metric_alt ? 1 : 0;
-  pCharacteristic->setValue(metricAlt);
+  pPerformanceMode->setValue(performanceMode);
+
+  BLECharacteristic *pScreenRotation = pService->createCharacteristic(
+                                        SCREEN_ROTATION_UUID,
+                                        BLECharacteristic::PROPERTY_READ |
+                                        BLECharacteristic::PROPERTY_WRITE
+                                      );
+
+  pScreenRotation->setCallbacks(new ScreenRotationCallbacks());
+
+  // screen rotation is 1 or 3
+  int screenRotation = deviceData.screen_rotation == 1 ? 1 : 3;
+  pScreenRotation->setValue(screenRotation);
+
+  // Add read-only characteristics for device info
+  BLECharacteristic *pFirmwareVersion = pService->createCharacteristic(
+                                         FW_VERSION_UUID,
+                                         BLECharacteristic::PROPERTY_READ
+                                       );
+  pFirmwareVersion->setValue(VERSION_STRING);
+
+  BLECharacteristic *pHardwareRevision = pService->createCharacteristic(
+                                          HW_REVISION_UUID,
+                                          BLECharacteristic::PROPERTY_READ
+                                        );
+  // Convert revision to string
+  char revision[4];
+  snprintf(revision, sizeof(revision), "%d", deviceData.revision);
+  pHardwareRevision->setValue(revision);
+
+  BLECharacteristic *pArmedTime = pService->createCharacteristic(
+                                   ARMED_TIME_UUID,
+                                   BLECharacteristic::PROPERTY_READ
+                                 );
+  pArmedTime->setValue((uint8_t*)&deviceData.armed_time, sizeof(deviceData.armed_time));
+
+  // Create the Device Information Service
+  BLEService *pDeviceInfoService = pServer->createService(DEVICE_INFO_SERVICE_UUID);
+
+  // Add Manufacturer Name characteristic
+  BLECharacteristic *pManufacturer = pDeviceInfoService->createCharacteristic(
+                                      MANUFACTURER_NAME_UUID,
+                                      BLECharacteristic::PROPERTY_READ
+                                    );
+  pManufacturer->setValue("OpenPPG");
+
+  pDeviceInfoService->start();
+
   pService->start();
 
   BLEAdvertising *pAdvertising = pServer->getAdvertising();
