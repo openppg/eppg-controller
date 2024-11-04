@@ -15,6 +15,7 @@ const int DEFAULT_BATT_SIZE = 4000;  // 4kw
 #include <BLEDevice.h>
 #include <BLEUtils.h>
 #include <BLEServer.h>
+#include <BLE2902.h>
 
 #define CONFIG_SERVICE_UUID      "1779A55B-DEB8-4482-A5D1-A12E62146138"
 
@@ -29,8 +30,29 @@ const int DEFAULT_BATT_SIZE = 4000;  // 4kw
 #define THEME_UUID               "AD0E4309-1EB2-461A-B36C-697B2E1604D2"
 #define HW_REVISION_UUID         "2A27"  // Using standard BLE UUID for revision
 
+#define THROTTLE_VALUE_UUID      "50AB3859-9FBF-4D30-BF97-2516EE632FAD"
+
 #define DEVICE_INFO_SERVICE_UUID   "180A"  // Standard BLE Device Information Service
 #define MANUFACTURER_NAME_UUID     "2A29"  // Standard BLE Manufacturer Name characteristic
+
+// Add at the top with other globals
+static BLECharacteristic* pThrottleCharacteristic = nullptr;
+bool deviceConnected = false;
+static BLEServer* pServer = nullptr;
+
+void updateThrottleBLE(int value) {
+    if (deviceConnected && pThrottleCharacteristic != nullptr) {
+        try {
+          USBSerial.print("Sending throttle value: ");
+          USBSerial.println(value);
+          pThrottleCharacteristic->setValue((uint8_t*)&value, sizeof(value));
+          pThrottleCharacteristic->notify();
+          delay(5); // prevent bluetooth stack congestion
+        } catch (...) {
+          USBSerial.println("Error sending BLE notification");
+        }
+    }
+}
 
 class MetricAltCallbacks: public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic *pCharacteristic) {
@@ -90,10 +112,37 @@ class ScreenRotationCallbacks: public BLECharacteristicCallbacks {
     }
 };
 
+class ThrottleValueCallbacks: public BLECharacteristicCallbacks {
+    void onRead(BLECharacteristic *pCharacteristic) {
+        // Return the current pot value when read
+        pot->update();
+        uint16_t potVal = pot->getValue();
+        pCharacteristic->setValue((uint8_t*)&potVal, sizeof(potVal));
+    }
+};
+
+class MyServerCallbacks: public BLEServerCallbacks {
+    void onConnect(BLEServer* pServer) {
+        deviceConnected = true;
+        USBSerial.println("Device connected");
+    }
+
+    void onDisconnect(BLEServer* pServer) {
+        deviceConnected = false;
+        USBSerial.println("Device disconnected");
+        // Restart advertising
+        BLEAdvertising *pAdvertising = pServer->getAdvertising();
+        pAdvertising->start();
+        USBSerial.println("Started advertising");
+    }
+};
+
+
 void setupBLE() {
   // Initialize BLE
   BLEDevice::init("OpenPPG Controller");
-  BLEServer *pServer = BLEDevice::createServer();
+  pServer = BLEDevice::createServer();
+  pServer->setCallbacks(new MyServerCallbacks());
 
   BLEService *pService = pServer->createService(CONFIG_SERVICE_UUID);
 
@@ -156,11 +205,25 @@ void setupBLE() {
                                       BLECharacteristic::PROPERTY_READ);
   pManufacturer->setValue("OpenPPG");
 
+  // Create throttle characteristic with notify capability
+  pThrottleCharacteristic = pService->createCharacteristic(
+                               THROTTLE_VALUE_UUID,
+                               BLECharacteristic::PROPERTY_READ |
+                               BLECharacteristic::PROPERTY_NOTIFY |
+                               BLECharacteristic::PROPERTY_INDICATE);
+  // Add the descriptor for notifications
+  pThrottleCharacteristic->addDescriptor(new BLE2902());
+  //pThrottleCharacteristic->setCallbacks(new ThrottleValueCallbacks());
+
   //pDeviceInfoService->start();
 
   pService->start();
 
+  // Start advertising
   BLEAdvertising *pAdvertising = pServer->getAdvertising();
+  pAdvertising->addServiceUUID(CONFIG_SERVICE_UUID);
+  pAdvertising->setScanResponse(false);
+  pAdvertising->setMinPreferred(0x0);
   pAdvertising->start();
 
   USBSerial.println("BLE device ready");
@@ -413,4 +476,3 @@ void send_usb_serial() {
 #endif // M0_PIO/RP_PIO
 #endif // USE_TINYUSB
 }
-
