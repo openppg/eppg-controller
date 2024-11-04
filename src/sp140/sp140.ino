@@ -197,7 +197,7 @@ void throttleTask(void *pvParameters) {
 
   for (;;) {  // infinite loop
     handleThrottle();  //
-    delay(2);  // wait for 20ms
+    delay(20);  // wait for 20ms
   }
   vTaskDelete(NULL); // should never reach this
 }

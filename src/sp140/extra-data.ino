@@ -100,8 +100,7 @@ void setupBLE() {
   BLECharacteristic *pMetricAlt = pService->createCharacteristic(
                                    METRIC_ALT_UUID,
                                    BLECharacteristic::PROPERTY_READ |
-                                   BLECharacteristic::PROPERTY_WRITE
-                                 );
+                                   BLECharacteristic::PROPERTY_WRITE);
 
   pMetricAlt->setCallbacks(new MetricAltCallbacks());
 
@@ -111,8 +110,7 @@ void setupBLE() {
   BLECharacteristic *pPerformanceMode = pService->createCharacteristic(
                                          PERFORMANCE_MODE_UUID,
                                          BLECharacteristic::PROPERTY_READ |
-                                         BLECharacteristic::PROPERTY_WRITE
-                                       );
+                                         BLECharacteristic::PROPERTY_WRITE);
 
   pPerformanceMode->setCallbacks(new PerformanceModeCallbacks());
   int performanceMode = deviceData.performance_mode ? 1 : 0;
@@ -122,8 +120,7 @@ void setupBLE() {
   BLECharacteristic *pScreenRotation = pService->createCharacteristic(
                                         SCREEN_ROTATION_UUID,
                                         BLECharacteristic::PROPERTY_READ |
-                                        BLECharacteristic::PROPERTY_WRITE
-                                      );
+                                        BLECharacteristic::PROPERTY_WRITE);
 
   pScreenRotation->setCallbacks(new ScreenRotationCallbacks());
 
@@ -134,14 +131,12 @@ void setupBLE() {
   // Add read-only characteristics for device info
   BLECharacteristic *pFirmwareVersion = pService->createCharacteristic(
                                          FW_VERSION_UUID,
-                                         BLECharacteristic::PROPERTY_READ
-                                       );
+                                         BLECharacteristic::PROPERTY_READ);
   pFirmwareVersion->setValue(VERSION_STRING);
 
   BLECharacteristic *pHardwareRevision = pService->createCharacteristic(
                                           HW_REVISION_UUID,
-                                          BLECharacteristic::PROPERTY_READ
-                                        );
+                                          BLECharacteristic::PROPERTY_READ);
   // Convert revision to string
   char revision[4];
   snprintf(revision, sizeof(revision), "%d", deviceData.revision);
@@ -149,8 +144,7 @@ void setupBLE() {
 
   BLECharacteristic *pArmedTime = pService->createCharacteristic(
                                    ARMED_TIME_UUID,
-                                   BLECharacteristic::PROPERTY_READ
-                                 );
+                                   BLECharacteristic::PROPERTY_READ);
   pArmedTime->setValue((uint8_t*)&deviceData.armed_time, sizeof(deviceData.armed_time));
 
   // Create the Device Information Service
@@ -159,11 +153,10 @@ void setupBLE() {
   // Add Manufacturer Name characteristic
   BLECharacteristic *pManufacturer = pDeviceInfoService->createCharacteristic(
                                       MANUFACTURER_NAME_UUID,
-                                      BLECharacteristic::PROPERTY_READ
-                                    );
+                                      BLECharacteristic::PROPERTY_READ);
   pManufacturer->setValue("OpenPPG");
 
-  pDeviceInfoService->start();
+  //pDeviceInfoService->start();
 
   pService->start();
 
