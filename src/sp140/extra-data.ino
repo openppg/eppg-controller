@@ -20,7 +20,6 @@ const int DEFAULT_BATT_SIZE = 4000;  // 4kw
 #define CONFIG_SERVICE_UUID      "1779A55B-DEB8-4482-A5D1-A12E62146138"
 
 #define METRIC_ALT_UUID          "DF63F19E-7295-4A44-A0DC-184D1AFEDDF7"
-#define FW_VERSION_UUID          "2A26"  // Using standard BLE UUID for version
 #define ARMED_TIME_UUID          "58B29259-43EF-4593-B700-250EC839A2B2"
 #define SCREEN_ROTATION_UUID     "9CBAB736-3705-4ECF-8086-FB7C5FB86282"
 #define SEA_PRESSURE_UUID        "DB47E20E-D8C1-405A-971A-DA0A2DF7E0F6"
@@ -29,6 +28,7 @@ const int DEFAULT_BATT_SIZE = 4000;  // 4kw
 #define BATT_SIZE_UUID           "4D076617-DC8C-46A5-902B-3F44FA28887E"
 #define THEME_UUID               "AD0E4309-1EB2-461A-B36C-697B2E1604D2"
 #define HW_REVISION_UUID         "2A27"  // Using standard BLE UUID for revision
+#define FW_VERSION_UUID          "2A26"  // Using standard BLE UUID for version
 
 #define THROTTLE_VALUE_UUID      "50AB3859-9FBF-4D30-BF97-2516EE632FAD"
 
@@ -40,16 +40,33 @@ static BLECharacteristic* pThrottleCharacteristic = nullptr;
 bool deviceConnected = false;
 static BLEServer* pServer = nullptr;
 
+// Add these global variables at the top with other globals
+bool oldDeviceConnected = false;
+
 void updateThrottleBLE(int value) {
+    // Handle disconnecting
+    if (!deviceConnected && oldDeviceConnected) {
+        delay(500); // give the bluetooth stack the chance to get things ready
+        pServer->startAdvertising(); // restart advertising
+        USBSerial.println("Start advertising");
+        oldDeviceConnected = deviceConnected;
+    }
+
+    // Handle connecting
+    if (deviceConnected && !oldDeviceConnected) {
+        oldDeviceConnected = deviceConnected;
+    }
+
+    // Send notification if connected
     if (deviceConnected && pThrottleCharacteristic != nullptr) {
         try {
-          USBSerial.print("Sending throttle value: ");
-          USBSerial.println(value);
-          pThrottleCharacteristic->setValue((uint8_t*)&value, sizeof(value));
-          pThrottleCharacteristic->notify();
-          delay(5); // prevent bluetooth stack congestion
+            USBSerial.print("Sending throttle value: ");
+            USBSerial.println(value);
+            pThrottleCharacteristic->setValue((uint8_t*)&value, sizeof(value));
+            pThrottleCharacteristic->notify();
+            delay(5); // prevent bluetooth stack congestion - can be as low as 3ms
         } catch (...) {
-          USBSerial.println("Error sending BLE notification");
+            USBSerial.println("Error sending BLE notification");
         }
     }
 }
@@ -186,10 +203,8 @@ void setupBLE() {
   BLECharacteristic *pHardwareRevision = pService->createCharacteristic(
                                           HW_REVISION_UUID,
                                           BLECharacteristic::PROPERTY_READ);
-  // Convert revision to string
-  char revision[4];
-  snprintf(revision, sizeof(revision), "%d", deviceData.revision);
-  pHardwareRevision->setValue(revision);
+  // Send revision directly as a byte
+  pHardwareRevision->setValue(&deviceData.revision, sizeof(deviceData.revision));
 
   BLECharacteristic *pArmedTime = pService->createCharacteristic(
                                    ARMED_TIME_UUID,
@@ -211,7 +226,7 @@ void setupBLE() {
                                BLECharacteristic::PROPERTY_READ |
                                BLECharacteristic::PROPERTY_NOTIFY |
                                BLECharacteristic::PROPERTY_INDICATE);
-  // Add the descriptor for notifications
+  // Add the descriptor for notifications (important!)
   pThrottleCharacteristic->addDescriptor(new BLE2902());
   //pThrottleCharacteristic->setCallbacks(new ThrottleValueCallbacks());
 

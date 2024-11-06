@@ -665,26 +665,27 @@ static const unsigned long STEP_INTERVAL = 1000 / STEPS_PER_SECOND; // 250ms per
 static const int STEP_SIZE = ceil(4096.0 / (STEPS_PER_SECOND * 30)); // Complete up or down in ~30 seconds
 #endif
 
+ // Normal throttle behavior
+#define ESC_MIN_SPIN_PWM 1105
+
 void handleThrottle() {
   static int maxPWM = ESC_MAX_PWM;
 
-  // Normal throttle behavior
-  #define ESC_MIN_SPIN_PWM 1105
+  pot->update();
+  int potVal = pot->getValue();
+  USBSerial.print("potVal: ");
+  USBSerial.println(potVal);
+
+  // Update BLE clients with new value
+  updateThrottleBLE(potVal);
 
   if (currentState != ARMED) {
     setESCThrottle(ESC_DISARMED_PWM);
   } else {
-  pot->update();
-  int potRaw = pot->getRawValue();
-  //int localThrottlePWM = map(potRaw, 0, 4095, ESC_MIN_PWM, maxPWM);
-  int localThrottlePWM = map(potRaw, 0, 4095, ESC_MIN_SPIN_PWM, maxPWM);
-  setESCThrottle(localThrottlePWM);
-  // USBSerial.print(millis());
-  // USBSerial.print(",");
-  // USBSerial.print(localThrottlePWM *10);
+    int localThrottlePWM = map(potVal, 0, 4095, ESC_MIN_SPIN_PWM, maxPWM);
+    setESCThrottle(localThrottlePWM);
   }
   readESCTelemetry();
-
 }
 
 int averagePotBuffer() {
