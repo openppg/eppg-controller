@@ -420,6 +420,11 @@ void setup() {
   #ifdef USE_TINYUSB
     setupUSBWeb();
   #endif
+  // Pull CSB (pin 42) high to activate I2C mode
+  // temporary fix TODO remove
+  digitalWrite(42, HIGH);
+  pinMode(42, OUTPUT);
+
   setupEEPROM();
   refreshDeviceData();
   printBootMessage();
