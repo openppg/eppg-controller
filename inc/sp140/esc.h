@@ -4,9 +4,7 @@
 #include <Arduino.h>
 #include "sp140/structs.h"
 
-#ifdef M0_PIO
-  #include "../../inc/sp140/m0-config.h"
-#elif RP_PIO
+#ifdef RP_PIO
   #include "../../inc/sp140/rp2040-config.h"
 #elif CAN_PIO
   #include "../../inc/sp140/esp32s3-config.h"

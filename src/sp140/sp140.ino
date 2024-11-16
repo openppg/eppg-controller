@@ -3,10 +3,7 @@
 #include "Arduino.h"
 
 #include "../../lib/crc.c"       // packet error checking
-#ifdef M0_PIO
-  #include "../../inc/sp140/m0-config.h"          // device config
-  // TODO: find best SAMD21 FreeRTOS port
-#elif RP_PIO
+#ifdef RP_PIO
   #include "../../inc/sp140/rp2040-config.h"         // device config
   #include <FreeRTOS.h>
   #include <task.h>
@@ -29,11 +26,7 @@
   #include "Adafruit_TinyUSB.h"
 #endif
 
-#ifdef M0_PIO
-  // SAMD21 specific libraries here
-  #include <Adafruit_SleepyDog.h>  // watchdog
-  #include <extEEPROM.h>  // https://github.com/PaoloP74/extEEPROM
-#elif RP_PIO
+#ifdef RP_PIO
   // rp2040 specific libraries here
   #include <EEPROM.h>
   #include "hardware/watchdog.h"
@@ -84,10 +77,6 @@ AceButton* button_top;
 ButtonConfig* buttonConfig;
 
 UnifiedBatteryData unifiedBatteryData = {0.0f, 0.0f, 0.0f};
-
-#ifdef M0_PIO
-  extEEPROM eep(kbits_64, 1, 64);
-#endif
 
 CircularBuffer<float, 50> voltageBuffer;
 CircularBuffer<int, 8> potBuffer;
@@ -293,9 +282,7 @@ void setupBarometer() {
 }
 
 void setupEEPROM() {  // TODO: move to extra-data.ino or own file
-#ifdef M0_PIO
-  uint8_t eepStatus = eep.begin(eep.twiClock100kHz);
-#elif RP_PIO
+#ifdef RP_PIO
   EEPROM.begin(255);
 #elif CAN_PIO
   // Initialize EEPROM
@@ -323,9 +310,7 @@ void setupAnalogRead() {
 
 void setupWatchdog() {
 #ifndef OPENPPG_DEBUG
-  #ifdef M0_PIO
-    Watchdog.enable(5000);
-  #elif RP_PIO
+  #ifdef RP_PIO
     watchdog_enable(4000, 1);
   #elif CAN_PIO
     // Initialize Task Watchdog
@@ -437,9 +422,7 @@ void setup() {
   initButtons();
   setupWatchdog();
   setup140();
-#ifdef M0_PIO
-  Watchdog.reset();
-#endif
+
 #ifdef WIFI_DEBUG
   setupWiFi();
 #endif
@@ -500,10 +483,6 @@ void setup140() {
 
 // main loop - everything runs in threads
 void loop() {
-// #ifdef M0_PIO
-//   Watchdog.reset(); // reset the watchdog timer (done in task for RP2040)
-// #endif
-
 //   // from WebUSB to both Serial & webUSB
 // #ifdef USE_TINYUSB
 //   if (currentState == DISARMED && usb_web.available()) parse_usb_serial();

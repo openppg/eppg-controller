@@ -248,11 +248,7 @@ void setupBLE() {
 // read saved data from EEPROM
 void refreshDeviceData() {
   uint16_t crc;
-  #ifdef M0_PIO
-    if (0 != eep.read(EEPROM_OFFSET, deviceData, sizeof(deviceData))) {
-      // Serial.println(F("error reading EEPROM"));
-    }
-  #elif RP_PIO
+  #ifdef RP_PIO
     EEPROM.get(EEPROM_OFFSET, deviceData);
   #elif CAN_PIO
     if (!EEPROM.begin(sizeof(deviceData))) {
@@ -309,9 +305,7 @@ void resetDeviceData() {
   deviceData = STR_DEVICE_DATA_140_V1();
 
   // Set the revision based on the arch and board revision
-  #ifdef M0_PIO
-    deviceData.revision = 0;
-  #elif RP_PIO
+  #ifdef RP_PIO
     deviceData.revision = 2;  // Default to new 2040 board revision
   #elif CAN_PIO
     deviceData.revision = 3;  // Set appropriate revision for ESP32-S3
@@ -449,25 +443,7 @@ void debugHardwareConfig(const HardwareConfig& config) {
 
 void send_usb_serial() {
 #ifdef USE_TINYUSB
-#ifdef M0_PIO
-  const size_t capacity = JSON_OBJECT_SIZE(11) + 90;
-  DynamicJsonDocument doc(capacity);
-
-  doc["major_v"] = VERSION_MAJOR;
-  doc["minor_v"] = VERSION_MINOR;
-  doc["arch"] = "SAMD21";
-  doc["screen_rot"] = deviceData.screen_rotation;
-  doc["armed_time"] = deviceData.armed_time;
-  doc["metric_temp"] = deviceData.metric_temp;
-  doc["metric_alt"] = deviceData.metric_alt;
-  doc["performance_mode"] = deviceData.performance_mode;
-  doc["sea_pressure"] = deviceData.sea_pressure;
-  doc["device_id"] = chipId();
-
-  char output[256];
-  serializeJson(doc, output);
-  usb_web.println(output);
-#elif RP_PIO
+#ifdef RP_PIO
   StaticJsonDocument<256> doc; // <- a little more than 256 bytes in the stack
 
   doc["mj_v"].set(VERSION_MAJOR);
@@ -488,6 +464,6 @@ void send_usb_serial() {
   usb_web.println(output);
   usb_web.flush();
   //Serial.println(chipId());
-#endif // M0_PIO/RP_PIO
+#endif //RP_PIO
 #endif // USE_TINYUSB
 }
