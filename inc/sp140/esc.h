@@ -22,12 +22,8 @@
 #endif
 
 bool initESC(int escPin);
-void setupESCSerial();
 void setESCThrottle(int throttlePWM);
 void readESCTelemetry();
-void handleESCSerialData(byte buffer[]);
-void prepareESCSerialRead();
-int checkFletcher16(byte byteBuffer[]);
 bool setupTWAI();
 float getBatteryPercent(float voltage);
 
