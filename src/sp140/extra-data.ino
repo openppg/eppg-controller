@@ -35,6 +35,21 @@ const int DEFAULT_BATT_SIZE = 4000;  // 4kw
 #define DEVICE_INFO_SERVICE_UUID   "180A"  // Standard BLE Device Information Service
 #define MANUFACTURER_NAME_UUID     "2A29"  // Standard BLE Manufacturer Name characteristic
 
+#define BMS_TELEMETRY_SERVICE_UUID "9E0F2FA3-3F2B-49C0-A6A3-3D8923062133"
+#define ESC_TELEMETRY_SERVICE_UUID "C154DAE9-1984-40EA-B20F-5B23F9CBA0A9"
+
+// BMS Characteristic UUIDs
+#define BMS_SOC_UUID                "ACDEB138-3BD0-4BB3-B159-19F6F70871ED"
+#define BMS_VOLTAGE_UUID            "AC0768DF-2F49-43D4-B23D-1DC82C90A9E9"
+#define BMS_CURRENT_UUID            "6FEEC926-BA3C-4E65-BC71-5DB481811186"
+#define BMS_POWER_UUID              "9DEA1343-434F-4555-A0A1-BB43FCBC68A6"
+#define BMS_HIGH_CELL_UUID          "49267B41-560F-4CFF-ADC8-90EF85D2BE20"
+#define BMS_LOW_CELL_UUID           "B9D01E5C-3751-4092-8B06-6D1FFF479E77"
+#define BMS_HIGH_TEMP_UUID          "0EA08B6D-C905-4D9D-93F8-51E35DA096FC"
+#define BMS_LOW_TEMP_UUID           "26CD6E8A-175D-4C8E-B487-DEFF0B034F2A"
+#define BMS_FAILURE_LEVEL_UUID      "396C768B-F348-44CC-9D46-92388F25A557"
+#define BMS_VOLTAGE_DIFF_UUID       "1C45825B-7C81-430B-8D5F-B644FFFC71BB"
+
 // Add at the top with other globals
 static BLECharacteristic* pThrottleCharacteristic = nullptr;
 bool deviceConnected = false;
@@ -44,114 +59,114 @@ static BLEServer* pServer = nullptr;
 bool oldDeviceConnected = false;
 
 void updateThrottleBLE(int value) {
-    // Handle disconnecting
-    if (!deviceConnected && oldDeviceConnected) {
-        delay(500); // give the bluetooth stack the chance to get things ready
-        pServer->startAdvertising(); // restart advertising
-        USBSerial.println("Start advertising");
-        oldDeviceConnected = deviceConnected;
-    }
+  // Handle disconnecting
+  if (!deviceConnected && oldDeviceConnected) {
+    delay(500); // give the bluetooth stack the chance to get things ready
+    pServer->startAdvertising(); // restart advertising
+    USBSerial.println("Start advertising");
+    oldDeviceConnected = deviceConnected;
+  }
 
-    // Handle connecting
-    if (deviceConnected && !oldDeviceConnected) {
-        oldDeviceConnected = deviceConnected;
-    }
+  // Handle connecting
+  if (deviceConnected && !oldDeviceConnected) {
+    oldDeviceConnected = deviceConnected;
+  }
 
-    // Send notification if connected
-    if (deviceConnected && pThrottleCharacteristic != nullptr) {
-        try {
-            USBSerial.print("Sending throttle value: ");
-            USBSerial.println(value);
-            pThrottleCharacteristic->setValue((uint8_t*)&value, sizeof(value));
-            pThrottleCharacteristic->notify();
-            delay(5); // prevent bluetooth stack congestion - can be as low as 3ms
-        } catch (...) {
-            USBSerial.println("Error sending BLE notification");
-        }
+  // Send notification if connected
+  if (deviceConnected && pThrottleCharacteristic != nullptr) {
+    try {
+      USBSerial.print("Sending throttle value: ");
+      USBSerial.println(value);
+      pThrottleCharacteristic->setValue((uint8_t*)&value, sizeof(value));
+      pThrottleCharacteristic->notify();
+      delay(5); // prevent bluetooth stack congestion - can be as low as 3ms
+    } catch (...) {
+      USBSerial.println("Error sending BLE notification");
     }
+  }
 }
 
 class MetricAltCallbacks: public BLECharacteristicCallbacks {
-    void onWrite(BLECharacteristic *pCharacteristic) {
-      std::string value = pCharacteristic->getValue();
+  void onWrite(BLECharacteristic *pCharacteristic) {
+    std::string value = pCharacteristic->getValue();
 
-      if (value.length() == 1) {  // Ensure we only get a single byte
-        USBSerial.print("New: ");
-        USBSerial.println(value[0], HEX);
+    if (value.length() == 1) {  // Ensure we only get a single byte
+      USBSerial.print("New: ");
+      USBSerial.println(value[0], HEX);
 
-        // Convert the received byte to a boolean
-        deviceData.metric_alt = (value[0] != 0);
+      // Convert the received byte to a boolean
+      deviceData.metric_alt = (value[0] != 0);
 
-        writeDeviceData();
-        USBSerial.println("Metric alt setting saved to EEPROM");
-      } else {
-        USBSerial.println("Invalid value length - expected 1 byte");
-      }
+      writeDeviceData();
+      USBSerial.println("Metric alt setting saved to EEPROM");
+    } else {
+      USBSerial.println("Invalid value length - expected 1 byte");
     }
+  }
 };
 
 class PerformanceModeCallbacks: public BLECharacteristicCallbacks {
-    void onWrite(BLECharacteristic *pCharacteristic) {
-      std::string value = pCharacteristic->getValue();
+  void onWrite(BLECharacteristic *pCharacteristic) {
+    std::string value = pCharacteristic->getValue();
 
-      if (value.length() == 1) {
-        uint8_t mode = value[0];
-        if (mode <= 1) {  // Ensure value is 0 or 1
-          deviceData.performance_mode = mode;
-          writeDeviceData();
-          USBSerial.println("Performance mode saved to EEPROM");
-        } else {
-          USBSerial.println("Invalid performance mode value");
-        }
+    if (value.length() == 1) {
+      uint8_t mode = value[0];
+      if (mode <= 1) {  // Ensure value is 0 or 1
+        deviceData.performance_mode = mode;
+        writeDeviceData();
+        USBSerial.println("Performance mode saved to EEPROM");
       } else {
-        USBSerial.println("Invalid value length - expected 1 byte");
+        USBSerial.println("Invalid performance mode value");
       }
+    } else {
+      USBSerial.println("Invalid value length - expected 1 byte");
     }
+  }
 };
 
 class ScreenRotationCallbacks: public BLECharacteristicCallbacks {
-    void onWrite(BLECharacteristic *pCharacteristic) {
-      std::string value = pCharacteristic->getValue();
+  void onWrite(BLECharacteristic *pCharacteristic) {
+    std::string value = pCharacteristic->getValue();
 
-      if (value.length() == 1) {
-        uint8_t rotation = value[0];
-        if (rotation == 1 || rotation == 3) {  // Only allow valid rotation values
-          deviceData.screen_rotation = rotation;
-          writeDeviceData();
-          resetRotation(rotation);  // Update screen immediately
-          USBSerial.println("Screen rotation saved to EEPROM");
-        } else {
-          USBSerial.println("Invalid rotation value");
-        }
+    if (value.length() == 1) {
+      uint8_t rotation = value[0];
+      if (rotation == 1 || rotation == 3) {  // Only allow valid rotation values
+        deviceData.screen_rotation = rotation;
+        writeDeviceData();
+        resetRotation(rotation);  // Update screen immediately
+        USBSerial.println("Screen rotation saved to EEPROM");
       } else {
-        USBSerial.println("Invalid value length - expected 1 byte");
+        USBSerial.println("Invalid rotation value");
       }
+    } else {
+      USBSerial.println("Invalid value length - expected 1 byte");
     }
+  }
 };
 
 class ThrottleValueCallbacks: public BLECharacteristicCallbacks {
-    void onRead(BLECharacteristic *pCharacteristic) {
-        // Return the current pot value when read
-        pot->update();
-        uint16_t potVal = pot->getValue();
-        pCharacteristic->setValue((uint8_t*)&potVal, sizeof(potVal));
-    }
+  void onRead(BLECharacteristic *pCharacteristic) {
+    // Return the current pot value when read
+    pot->update();
+    uint16_t potVal = pot->getValue();
+    pCharacteristic->setValue((uint8_t*)&potVal, sizeof(potVal));
+  }
 };
 
 class MyServerCallbacks: public BLEServerCallbacks {
-    void onConnect(BLEServer* pServer) {
-        deviceConnected = true;
-        USBSerial.println("Device connected");
-    }
+  void onConnect(BLEServer* pServer) {
+    deviceConnected = true;
+    USBSerial.println("Device connected");
+  }
 
-    void onDisconnect(BLEServer* pServer) {
-        deviceConnected = false;
-        USBSerial.println("Device disconnected");
-        // Restart advertising
-        BLEAdvertising *pAdvertising = pServer->getAdvertising();
-        pAdvertising->start();
-        USBSerial.println("Started advertising");
-    }
+  void onDisconnect(BLEServer* pServer) {
+    deviceConnected = false;
+    USBSerial.println("Device disconnected");
+    // Restart advertising
+    BLEAdvertising *pAdvertising = pServer->getAdvertising();
+    pAdvertising->start();
+    USBSerial.println("Started advertising");
+  }
 };
 
 
