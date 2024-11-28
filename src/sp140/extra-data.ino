@@ -55,6 +55,17 @@ static BLECharacteristic* pThrottleCharacteristic = nullptr;
 bool deviceConnected = false;
 static BLEServer* pServer = nullptr;
 
+static BLECharacteristic* pBMSSOC = nullptr;
+static BLECharacteristic* pBMSVoltage = nullptr;
+static BLECharacteristic* pBMSCurrent = nullptr;
+static BLECharacteristic* pBMSPower = nullptr;
+static BLECharacteristic* pBMSHighCell = nullptr;
+static BLECharacteristic* pBMSLowCell = nullptr;
+static BLECharacteristic* pBMSHighTemp = nullptr;
+static BLECharacteristic* pBMSLowTemp = nullptr;
+static BLECharacteristic* pBMSFailureLevel = nullptr;
+static BLECharacteristic* pBMSVoltageDiff = nullptr;
+
 // Add these global variables at the top with other globals
 bool oldDeviceConnected = false;
 
@@ -84,6 +95,33 @@ void updateThrottleBLE(int value) {
       USBSerial.println("Error sending BLE notification");
     }
   }
+}
+
+void updateBMSTelemetry(const STR_BMS_TELEMETRY_140& telemetry) {
+  if (!deviceConnected) return;
+
+  // Create temporary variables for the float values
+  float soc = telemetry.soc;
+  float voltage = telemetry.battery_voltage;
+  float current = telemetry.battery_current;
+  float power = telemetry.power;
+  float highCell = telemetry.highest_cell_voltage;
+  float lowCell = telemetry.lowest_cell_voltage;
+  float highTemp = telemetry.highest_temperature;
+  float lowTemp = telemetry.lowest_temperature;
+  float voltageDiff = telemetry.voltage_differential;
+
+  // Update each characteristic using the temporary variables
+  pBMSSOC->setValue(soc);
+  pBMSVoltage->setValue(voltage);
+  pBMSCurrent->setValue(current);
+  pBMSPower->setValue(power);
+  pBMSHighCell->setValue(highCell);
+  pBMSLowCell->setValue(lowCell);
+  pBMSHighTemp->setValue(highTemp);
+  pBMSLowTemp->setValue(lowTemp);
+  pBMSFailureLevel->setValue((uint8_t*)&telemetry.battery_failure_level, sizeof(uint8_t));
+  pBMSVoltageDiff->setValue(voltageDiff);
 }
 
 class MetricAltCallbacks: public BLECharacteristicCallbacks {
@@ -258,6 +296,63 @@ void setupBLE() {
 
   USBSerial.println("BLE device ready");
   USBSerial.println("Waiting for a client connection...");
+
+  // Create BMS Telemetry Service
+  BLEService *pBMSService = pServer->createService(BMS_TELEMETRY_SERVICE_UUID);
+
+  // Create read-only characteristics for BMS data
+  pBMSSOC = pBMSService->createCharacteristic(
+      BMS_SOC_UUID,
+      BLECharacteristic::PROPERTY_READ
+  );
+
+  pBMSVoltage = pBMSService->createCharacteristic(
+      BMS_VOLTAGE_UUID,
+      BLECharacteristic::PROPERTY_READ
+  );
+
+  pBMSCurrent = pBMSService->createCharacteristic(
+      BMS_CURRENT_UUID,
+      BLECharacteristic::PROPERTY_READ
+  );
+
+  pBMSPower = pBMSService->createCharacteristic(
+      BMS_POWER_UUID,
+      BLECharacteristic::PROPERTY_READ
+  );
+
+  pBMSHighCell = pBMSService->createCharacteristic(
+      BMS_HIGH_CELL_UUID,
+      BLECharacteristic::PROPERTY_READ
+  );
+
+  pBMSLowCell = pBMSService->createCharacteristic(
+      BMS_LOW_CELL_UUID,
+      BLECharacteristic::PROPERTY_READ
+  );
+
+  pBMSHighTemp = pBMSService->createCharacteristic(
+      BMS_HIGH_TEMP_UUID,
+      BLECharacteristic::PROPERTY_READ
+  );
+
+  pBMSLowTemp = pBMSService->createCharacteristic(
+      BMS_LOW_TEMP_UUID,
+      BLECharacteristic::PROPERTY_READ
+  );
+
+  pBMSFailureLevel = pBMSService->createCharacteristic(
+      BMS_FAILURE_LEVEL_UUID,
+      BLECharacteristic::PROPERTY_READ
+  );
+
+  pBMSVoltageDiff = pBMSService->createCharacteristic(
+      BMS_VOLTAGE_DIFF_UUID,
+      BLECharacteristic::PROPERTY_READ
+  );
+
+  // Start the BMS service
+  pBMSService->start();
 }
 
 // read saved data from EEPROM

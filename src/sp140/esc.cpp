@@ -23,7 +23,6 @@
 extern CircularBuffer<float, 50> voltageBuffer;
 
 STR_ESC_TELEMETRY_140 escTelemetryData;
-static telem_esc_t raw_esc_telemdata;
 
 bool initESC(int escPin) {
   setupTWAI();
@@ -32,6 +31,7 @@ bool initESC(int escPin) {
   esc.begin(0x20);  // Default ID for the ESC
 
   // Find ESC
+  // TODO better handling of this
   int attempts = 0;
   const int maxAttempts = 10;
   while (!esc.getModel().hasGetHardwareInfoResponse && attempts < maxAttempts) {
@@ -238,19 +238,19 @@ float getBatteryPercent(float voltage) {
 
   // Handle edge cases where the voltage is outside the defined range
   if (voltage >= batteryLevels[0].voltage) {
-      return batteryLevels[0].percent;
+    return batteryLevels[0].percent;
   } else if (voltage <= batteryLevels[numLevels - 1].voltage) {
-      return batteryLevels[numLevels - 1].percent;
+    return batteryLevels[numLevels - 1].percent;
   }
 
   // Iterate through the voltage-percentage mappings
   for (int i = 0; i < numLevels - 1; i++) {
-      // Check if the input voltage is between the current and next mapping
-      if (voltage <= batteryLevels[i].voltage && voltage > batteryLevels[i + 1].voltage) {
-          // Interpolate the percentage between the current and next mapping
-          return mapDouble(voltage, batteryLevels[i + 1].voltage, batteryLevels[i].voltage,
-                      batteryLevels[i + 1].percent, batteryLevels[i].percent);
-      }
+    // Check if the input voltage is between the current and next mapping
+    if (voltage <= batteryLevels[i].voltage && voltage > batteryLevels[i + 1].voltage) {
+      // Interpolate the percentage between the current and next mapping
+      return mapDouble(voltage, batteryLevels[i + 1].voltage, batteryLevels[i].voltage,
+                        batteryLevels[i + 1].percent, batteryLevels[i].percent);
+    }
   }
 
   return 0;  // Fallback, should never reach here

@@ -148,6 +148,8 @@ TaskHandle_t trackPowerTaskHandle = NULL;
 TaskHandle_t watchdogTaskHandle = NULL;
 TaskHandle_t spiCommTaskHandle = NULL;
 
+QueueHandle_t bmsTelemetryQueue;
+
 #ifdef CAN_PIO
 #define POTENTIOMETER_PIN 8
 
@@ -205,6 +207,18 @@ void telemetryEscTask(void *pvParameters) {
     delay(50);  // wait for 100ms
   }
   vTaskDelete(NULL);  // should never reach this
+}
+
+void updateBLETask(void *pvParameters) {
+  STR_BMS_TELEMETRY_140 newBmsTelemetry;
+
+  while (true) {
+    // Wait for new data to arrive in the queue
+    if (xQueueReceive(bmsTelemetryQueue, &newBmsTelemetry, portMAX_DELAY) == pdTRUE) {
+      // Update BLE characteristics with the received data
+      updateBMSTelemetry(newBmsTelemetry);
+    }
+  }
 }
 
 
@@ -453,6 +467,8 @@ void setupTasks() {
   xTaskCreate(blinkLEDTask, "blinkLed", 1536, NULL, 1, &blinkLEDTaskHandle);
   xTaskCreatePinnedToCore(throttleTask, "throttle", 4096, NULL, 3, &throttleTaskHandle, 0);
   xTaskCreatePinnedToCore(spiCommTask, "SPIComm", 10096, NULL, 5, &spiCommTaskHandle, 1);
+  xTaskCreate(updateBLETask, "BLE Update Task", 2048, NULL, 1, NULL);
+
   // TODO: add watchdog task (based on esc writing to CAN)
   //xTaskCreatePinnedToCore(watchdogTask, "watchdog", 1000, NULL, 5, &watchdogTaskHandle, 0);  // Run on core 0
 #endif
