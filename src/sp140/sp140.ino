@@ -148,7 +148,7 @@ TaskHandle_t trackPowerTaskHandle = NULL;
 TaskHandle_t watchdogTaskHandle = NULL;
 TaskHandle_t spiCommTaskHandle = NULL;
 
-QueueHandle_t bmsTelemetryQueue;
+QueueHandle_t bmsTelemetryQueue = NULL;
 
 #ifdef CAN_PIO
 #define POTENTIOMETER_PIN 8
@@ -213,11 +213,21 @@ void updateBLETask(void *pvParameters) {
   STR_BMS_TELEMETRY_140 newBmsTelemetry;
 
   while (true) {
-    // Wait for new data to arrive in the queue
-    if (xQueueReceive(bmsTelemetryQueue, &newBmsTelemetry, portMAX_DELAY) == pdTRUE) {
-      // Update BLE characteristics with the received data
+    // Add error checking for queue
+    if (bmsTelemetryQueue == NULL) {
+      USBSerial.println("BMS Queue not initialized!");
+      vTaskDelay(pdMS_TO_TICKS(1000));  // Wait a second before retrying
+      continue;
+    }
+
+    // Wait for new data with timeout
+    if (xQueueReceive(bmsTelemetryQueue, &newBmsTelemetry, pdMS_TO_TICKS(100)) == pdTRUE) {
+        // Update BLE characteristics with the received data
       updateBMSTelemetry(newBmsTelemetry);
     }
+
+    // Add a small delay to prevent task starvation
+    vTaskDelay(pdMS_TO_TICKS(10));
   }
 }
 
@@ -255,6 +265,8 @@ void spiCommTask(void *pvParameters) {
         unifiedBatteryData.volts = bmsTelemetryData.battery_voltage;
         unifiedBatteryData.amps = bmsTelemetryData.battery_current;
         unifiedBatteryData.soc = bmsTelemetryData.soc;
+
+        xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);  // Always latest data
       }
 
       // Update display
@@ -449,7 +461,14 @@ void setup() {
   stateMutex = xSemaphoreCreateMutex();
   setESCThrottle(ESC_DISARMED_PWM);
   initVibeMotor();
-  setupTasks();
+
+  // Create BMS telemetry queue before setting up tasks
+  bmsTelemetryQueue = xQueueCreate(1, sizeof(STR_BMS_TELEMETRY_140));
+  if (bmsTelemetryQueue == NULL) {
+    USBSerial.println("Error creating BMS telemetry queue");
+  }
+
+  setupTasks();  // Move this after queue creation
 
   pulseVibeMotor();
   if (button_top->isPressedRaw()) {
@@ -467,7 +486,7 @@ void setupTasks() {
   xTaskCreate(blinkLEDTask, "blinkLed", 1536, NULL, 1, &blinkLEDTaskHandle);
   xTaskCreatePinnedToCore(throttleTask, "throttle", 4096, NULL, 3, &throttleTaskHandle, 0);
   xTaskCreatePinnedToCore(spiCommTask, "SPIComm", 10096, NULL, 5, &spiCommTaskHandle, 1);
-  xTaskCreate(updateBLETask, "BLE Update Task", 2048, NULL, 1, NULL);
+  xTaskCreate(updateBLETask, "BLE Update Task", 4096, NULL, 1, NULL);
 
   // TODO: add watchdog task (based on esc writing to CAN)
   //xTaskCreatePinnedToCore(watchdogTask, "watchdog", 1000, NULL, 5, &watchdogTaskHandle, 0);  // Run on core 0
@@ -673,10 +692,9 @@ void handleThrottle() {
 
   pot->update();
   int potVal = pot->getValue();
-  USBSerial.print("potVal: ");
-  USBSerial.println(potVal);
 
   // Update BLE clients with new value
+  // TODO move this to queue
   updateThrottleBLE(potVal);
 
   if (currentState != ARMED) {

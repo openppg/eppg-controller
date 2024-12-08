@@ -86,8 +86,6 @@ void updateThrottleBLE(int value) {
   // Send notification if connected
   if (deviceConnected && pThrottleCharacteristic != nullptr) {
     try {
-      USBSerial.print("Sending throttle value: ");
-      USBSerial.println(value);
       pThrottleCharacteristic->setValue((uint8_t*)&value, sizeof(value));
       pThrottleCharacteristic->notify();
       delay(5); // prevent bluetooth stack congestion - can be as low as 3ms
