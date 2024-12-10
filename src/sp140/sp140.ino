@@ -106,35 +106,33 @@ void changeDeviceState(DeviceState newState) {
   if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
     DeviceState oldState = currentState;
     currentState = newState;
-    USBSerial.print("changeDeviceState: ");
-    USBSerial.println(newState);
+
+    // Update BLE characteristic
+    if (pDeviceStateCharacteristic && deviceConnected) {
+      uint8_t state = (uint8_t)newState;
+      pDeviceStateCharacteristic->setValue(&state, sizeof(state));
+      pDeviceStateCharacteristic->notify();
+    }
+
     switch (newState) {
       case DISARMED:
         disarmSystem();
         break;
       case ARMED:
         if (oldState == DISARMED) {
-          // Perform full arm sequence when transitioning from DISARMED to ARMED
           armSystem();
         } else if (oldState == ARMED_CRUISING) {
-          // When transitioning from ARMED_CRUISING to ARMED, only remove cruise
-          // This avoids re-arming the system unnecessarily
           afterCruiseEnd();
         }
         break;
       case ARMED_CRUISING:
         if (oldState == ARMED) {
           afterCruiseStart();
-        } else {
-          // Should never happen
-          // Do nothing if not already in ARMED state
-          currentState = oldState;  // Revert to the previous state
         }
         break;
     }
     xSemaphoreGive(stateMutex);
   }
-  //Insights.metrics.setInt("device_state", static_cast<int>(newState));
 }
 
 uint32_t armedAtMillis = 0;
@@ -149,11 +147,8 @@ TaskHandle_t watchdogTaskHandle = NULL;
 TaskHandle_t spiCommTaskHandle = NULL;
 
 QueueHandle_t bmsTelemetryQueue = NULL;
+QueueHandle_t throttleUpdateQueue = NULL;
 
-#ifdef CAN_PIO
-#define POTENTIOMETER_PIN 8
-
-#endif
 
 unsigned long lastDisarmTime = 0;
 const unsigned long DISARM_COOLDOWN = 500;  // 500ms cooldown
@@ -468,6 +463,12 @@ void setup() {
     USBSerial.println("Error creating BMS telemetry queue");
   }
 
+  // Add throttle update queue
+  throttleUpdateQueue = xQueueCreate(1, sizeof(uint16_t));
+  if (throttleUpdateQueue == NULL) {
+    USBSerial.println("Error creating throttle update queue");
+  }
+
   setupTasks();  // Move this after queue creation
 
   pulseVibeMotor();
@@ -689,16 +690,26 @@ static const int STEP_SIZE = ceil(4096.0 / (STEPS_PER_SECOND * 30)); // Complete
 
 void handleThrottle() {
   static int maxPWM = ESC_MAX_PWM;
+  static uint16_t currentCruiseThrottlePWM = ESC_MIN_SPIN_PWM;
+  uint16_t newPWM;
+
+  // Check for throttle updates
+  if (xQueueReceive(throttleUpdateQueue, &newPWM, 0) == pdTRUE) {
+    if (currentState == ARMED_CRUISING) {
+      currentCruiseThrottlePWM = newPWM;
+    }
+  }
 
   pot->update();
   int potVal = pot->getValue();
 
   // Update BLE clients with new value
-  // TODO move this to queue
   updateThrottleBLE(potVal);
 
-  if (currentState != ARMED) {
+  if (currentState == DISARMED) {
     setESCThrottle(ESC_DISARMED_PWM);
+  } else if (currentState == ARMED_CRUISING) {
+    setESCThrottle(currentCruiseThrottlePWM);
   } else {
     int localThrottlePWM = map(potVal, 0, 4095, ESC_MIN_SPIN_PWM, maxPWM);
     setESCThrottle(localThrottlePWM);
@@ -743,6 +754,21 @@ bool throttleEngaged() {
 void afterCruiseStart() {
   cruisedPotVal = pot->getValue();
   cruisedAtMillis = millis();
+
+  // Calculate initial cruise PWM
+  uint16_t initialPWM = map(cruisedPotVal, 0, 4095, ESC_MIN_SPIN_PWM, ESC_MAX_PWM);
+
+  // Send to queue
+  if (xQueueSend(throttleUpdateQueue, &initialPWM, pdMS_TO_TICKS(100)) != pdTRUE) {
+    USBSerial.println("Failed to queue initial cruise throttle");
+  }
+
+  // Update BLE characteristic with raw throttle value
+  if (pThrottleCharacteristic && deviceConnected) {
+    pThrottleCharacteristic->setValue((uint8_t*)&cruisedPotVal, sizeof(cruisedPotVal));
+    pThrottleCharacteristic->notify();
+  }
+
   playCruiseSound();
   pulseVibeMotor();
 }

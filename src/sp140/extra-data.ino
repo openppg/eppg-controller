@@ -38,6 +38,8 @@ const int DEFAULT_BATT_SIZE = 4000;  // 4kw
 #define BMS_TELEMETRY_SERVICE_UUID "9E0F2FA3-3F2B-49C0-A6A3-3D8923062133"
 #define ESC_TELEMETRY_SERVICE_UUID "C154DAE9-1984-40EA-B20F-5B23F9CBA0A9"
 
+#define DEVICE_STATE_UUID          "8F80BCF5-B58F-4908-B079-E8AD6F5EE257"
+
 // BMS Characteristic UUIDs
 #define BMS_SOC_UUID                "ACDEB138-3BD0-4BB3-B159-19F6F70871ED"
 #define BMS_VOLTAGE_UUID            "AC0768DF-2F49-43D4-B23D-1DC82C90A9E9"
@@ -50,10 +52,6 @@ const int DEFAULT_BATT_SIZE = 4000;  // 4kw
 #define BMS_FAILURE_LEVEL_UUID      "396C768B-F348-44CC-9D46-92388F25A557"
 #define BMS_VOLTAGE_DIFF_UUID       "1C45825B-7C81-430B-8D5F-B644FFFC71BB"
 
-// Add at the top with other globals
-static BLECharacteristic* pThrottleCharacteristic = nullptr;
-bool deviceConnected = false;
-static BLEServer* pServer = nullptr;
 
 static BLECharacteristic* pBMSSOC = nullptr;
 static BLECharacteristic* pBMSVoltage = nullptr;
@@ -65,9 +63,6 @@ static BLECharacteristic* pBMSHighTemp = nullptr;
 static BLECharacteristic* pBMSLowTemp = nullptr;
 static BLECharacteristic* pBMSFailureLevel = nullptr;
 static BLECharacteristic* pBMSVoltageDiff = nullptr;
-
-// Add these global variables at the top with other globals
-bool oldDeviceConnected = false;
 
 void updateThrottleBLE(int value) {
   // Handle disconnecting
@@ -187,6 +182,24 @@ class ThrottleValueCallbacks: public BLECharacteristicCallbacks {
     uint16_t potVal = pot->getValue();
     pCharacteristic->setValue((uint8_t*)&potVal, sizeof(potVal));
   }
+
+  void onWrite(BLECharacteristic *pCharacteristic) {
+    if (currentState != ARMED_CRUISING) {
+      return;  // Only allow updates while in cruise mode
+    }
+
+    std::string value = pCharacteristic->getValue();
+    if (value.length() == 2) {  // Expecting 2 bytes for PWM value
+      uint16_t newPWM = (value[0] << 8) | value[1];
+
+      // Validate PWM range
+      if (newPWM >= ESC_MIN_SPIN_PWM && newPWM <= ESC_MAX_PWM) {
+        if (xQueueSend(throttleUpdateQueue, &newPWM, pdMS_TO_TICKS(100)) != pdTRUE) {
+          USBSerial.println("Failed to queue throttle update");
+        }
+      }
+    }
+  }
 };
 
 class MyServerCallbacks: public BLEServerCallbacks {
@@ -213,6 +226,16 @@ void setupBLE() {
   pServer->setCallbacks(new MyServerCallbacks());
 
   BLEService *pService = pServer->createService(CONFIG_SERVICE_UUID);
+
+  // Add device state characteristic
+  pDeviceStateCharacteristic = pService->createCharacteristic(
+    DEVICE_STATE_UUID,
+    BLECharacteristic::PROPERTY_READ |
+    BLECharacteristic::PROPERTY_NOTIFY
+  );
+  uint8_t initialState = DISARMED;  // Create a variable to reference
+  pDeviceStateCharacteristic->setValue(&initialState, sizeof(initialState));
+  pDeviceStateCharacteristic->addDescriptor(new BLE2902());
 
   BLECharacteristic *pMetricAlt = pService->createCharacteristic(
                                    METRIC_ALT_UUID,
@@ -273,27 +296,16 @@ void setupBLE() {
 
   // Create throttle characteristic with notify capability
   pThrottleCharacteristic = pService->createCharacteristic(
-                               THROTTLE_VALUE_UUID,
-                               BLECharacteristic::PROPERTY_READ |
-                               BLECharacteristic::PROPERTY_NOTIFY |
-                               BLECharacteristic::PROPERTY_INDICATE);
-  // Add the descriptor for notifications (important!)
+    THROTTLE_VALUE_UUID,
+    BLECharacteristic::PROPERTY_READ |
+    BLECharacteristic::PROPERTY_WRITE |  // Add write permission
+    BLECharacteristic::PROPERTY_NOTIFY |
+    BLECharacteristic::PROPERTY_INDICATE
+  );
+  pThrottleCharacteristic->setCallbacks(new ThrottleValueCallbacks());
   pThrottleCharacteristic->addDescriptor(new BLE2902());
-  //pThrottleCharacteristic->setCallbacks(new ThrottleValueCallbacks());
 
   //pDeviceInfoService->start();
-
-  pService->start();
-
-  // Start advertising
-  BLEAdvertising *pAdvertising = pServer->getAdvertising();
-  pAdvertising->addServiceUUID(CONFIG_SERVICE_UUID);
-  pAdvertising->setScanResponse(false);
-  pAdvertising->setMinPreferred(0x0);
-  pAdvertising->start();
-
-  USBSerial.println("BLE device ready");
-  USBSerial.println("Waiting for a client connection...");
 
   // Create BMS Telemetry Service
   BLEService *pBMSService = pServer->createService(BMS_TELEMETRY_SERVICE_UUID);
@@ -349,8 +361,19 @@ void setupBLE() {
       BLECharacteristic::PROPERTY_READ
   );
 
-  // Start the BMS service
+  // Start all services
+  pService->start();
   pBMSService->start();
+
+  // Start advertising
+  BLEAdvertising *pAdvertising = pServer->getAdvertising();
+  pAdvertising->addServiceUUID(CONFIG_SERVICE_UUID);
+  pAdvertising->setScanResponse(false);
+  pAdvertising->setMinPreferred(0x0);
+  pAdvertising->start();
+
+  USBSerial.println("BLE device ready");
+  USBSerial.println("Waiting for a client connection...");
 }
 
 // read saved data from EEPROM
