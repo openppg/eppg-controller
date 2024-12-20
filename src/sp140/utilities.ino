@@ -61,24 +61,29 @@ void blinkLED() {
  * @return Returns true if the melody was played successfully, false otherwise.
  */
 bool playMelody(uint16_t melody[], int siz) {
-  USBSerial.println("playMelody");
+  if (!ENABLE_BUZ) return false;
 
-  if (!ENABLE_BUZ) { return false; }
-  for (int thisNote = 0; thisNote < siz; thisNote++) {
-    // quarter note = 1000 / 4, eighth note = 1000/8, etc.
-    int noteDuration = 125;
-    playNote(melody[thisNote], noteDuration);
+  // Create a static buffer for the melody
+  static uint16_t melodyBuffer[32];  // Adjust size as needed
+
+  // Copy melody to static buffer to ensure it persists
+  for(int i = 0; i < min(siz, 32); i++) {
+    melodyBuffer[i] = melody[i];
   }
-  return true;
-}
 
-// blocking tone function that delays for notes
-void playNote(uint16_t note, uint16_t duration) {
-  USBSerial.println("playNote");
-  // quarter note = 1000 / 4, eighth note = 1000/8, etc.
-  tone(8, note);
-  delay(duration);  // to distinguish the notes, delay between them
-  noTone(8);
+  MelodyRequest request = {
+    .notes = melodyBuffer,
+    .size = (uint8_t)min(siz, 32),
+    .duration = 125  // Default duration
+  };
+
+  // Send to queue with timeout
+  if(xQueueSend(melodyQueue, &request, pdMS_TO_TICKS(100)) != pdTRUE) {
+    USBSerial.println("Failed to queue melody");
+    return false;
+  }
+
+  return true;
 }
 
 /**

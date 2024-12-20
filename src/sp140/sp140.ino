@@ -146,6 +146,10 @@ TaskHandle_t trackPowerTaskHandle = NULL;
 TaskHandle_t watchdogTaskHandle = NULL;
 TaskHandle_t spiCommTaskHandle = NULL;
 
+// Add these near the top with other global declarations
+QueueHandle_t melodyQueue = NULL;
+TaskHandle_t audioTaskHandle = NULL;
+
 QueueHandle_t bmsTelemetryQueue = NULL;
 QueueHandle_t throttleUpdateQueue = NULL;
 
@@ -489,6 +493,13 @@ void setupTasks() {
   xTaskCreatePinnedToCore(spiCommTask, "SPIComm", 10096, NULL, 5, &spiCommTaskHandle, 1);
   xTaskCreate(updateBLETask, "BLE Update Task", 4096, NULL, 1, NULL);
 
+  // Create melody queue
+  melodyQueue = xQueueCreate(5, sizeof(MelodyRequest));
+
+
+  // Create audio task - pin to core 1 to avoid interference with throttle
+  xTaskCreatePinnedToCore(audioTask, "Audio", 2048, NULL, 2, &audioTaskHandle, 1);
+
   // TODO: add watchdog task (based on esc writing to CAN)
   //xTaskCreatePinnedToCore(watchdogTask, "watchdog", 1000, NULL, 5, &watchdogTaskHandle, 0);  // Run on core 0
 #endif
@@ -798,4 +809,29 @@ void trackPower() {
   }
   Insights.metrics.setInt("flight_duration", (millis() - armedAtMillis) / 1000);
   Insights.metrics.setFloat("watt_hours_used", wattHoursUsed);
+}
+
+
+
+// Add this new task function
+void audioTask(void* parameter) {
+  MelodyRequest request;
+
+  for(;;) {
+    if(xQueueReceive(melodyQueue, &request, portMAX_DELAY) == pdTRUE) {
+      if (!ENABLE_BUZ) continue;
+
+      for(int i = 0; i < request.size; i++) {
+        // Use precise RTOS timing
+        TickType_t xLastWakeTime = xTaskGetTickCount();
+
+        tone(8, request.notes[i]);
+        vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(request.duration));
+        noTone(8);
+
+        // Small gap between notes
+        vTaskDelay(pdMS_TO_TICKS(10));
+      }
+    }
+  }
 }

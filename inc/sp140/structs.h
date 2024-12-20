@@ -77,4 +77,11 @@ static BatteryVoltagePoint batteryLevels[] = {
   {85.2, 40}, {82.32, 30}, {80.16, 20}, {78, 10}, {60.96, 0}
 };
 
+// Add this struct definition near other structs
+struct MelodyRequest {
+  uint16_t* notes;
+  uint8_t size;
+  uint16_t duration;
+};
+
 #endif  // INC_SP140_STRUCTS_H_
