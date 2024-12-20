@@ -825,13 +825,13 @@ void audioTask(void* parameter) {
         // Use precise RTOS timing
         TickType_t xLastWakeTime = xTaskGetTickCount();
 
-        tone(8, request.notes[i]);
+        tone(board_config.buzzer_pin, request.notes[i]);
         vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(request.duration));
-        noTone(8);
 
         // Small gap between notes
         vTaskDelay(pdMS_TO_TICKS(10));
       }
+      noTone(board_config.buzzer_pin);
     }
   }
 }
