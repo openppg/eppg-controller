@@ -643,21 +643,21 @@ void send_usb_serial() {
 #endif // USE_TINYUSB
 }
 
-void updateESCTelemetryBLE() {
+void updateESCTelemetryBLE(const STR_ESC_TELEMETRY_140& telemetry) {
   if (!deviceConnected) return;
 
   // Update voltage characteristic
-  float voltage = escTelemetryData.volts;
+  float voltage = telemetry.volts;
   pESCVoltage->setValue((uint8_t*)&voltage, sizeof(voltage));
   pESCVoltage->notify();
 
   // Update current characteristic
-  float current = escTelemetryData.amps;
+  float current = telemetry.amps;
   pESCCurrent->setValue((uint8_t*)&current, sizeof(current));
   pESCCurrent->notify();
 
   // Update RPM characteristic
-  int32_t rpm = escTelemetryData.eRPM;
+  int32_t rpm = telemetry.eRPM;
   pESCRPM->setValue((uint8_t*)&rpm, sizeof(rpm));
   pESCRPM->notify();
 
@@ -667,9 +667,9 @@ void updateESCTelemetryBLE() {
     float cap_temp;
     float mcu_temp;
   } temps = {
-    escTelemetryData.mos_temp,
-    escTelemetryData.cap_temp,
-    escTelemetryData.mcu_temp
+    telemetry.mos_temp,
+    telemetry.cap_temp,
+    telemetry.mcu_temp
   };
   pESCTemps->setValue((uint8_t*)&temps, sizeof(temps));
   pESCTemps->notify();

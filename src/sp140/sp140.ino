@@ -171,7 +171,7 @@ TaskHandle_t audioTaskHandle = NULL;
 
 QueueHandle_t bmsTelemetryQueue = NULL;
 QueueHandle_t throttleUpdateQueue = NULL;
-
+QueueHandle_t escTelemetryQueue = NULL;
 
 unsigned long lastDisarmTime = 0;
 const unsigned long DISARM_COOLDOWN = 500;  // 500ms cooldown
@@ -490,6 +490,12 @@ void setup() {
     USBSerial.println("Error creating throttle update queue");
   }
 
+  // Create ESC telemetry queue before setting up tasks
+  escTelemetryQueue = xQueueCreate(1, sizeof(STR_ESC_TELEMETRY_140));
+  if (escTelemetryQueue == NULL) {
+    USBSerial.println("Error creating ESC telemetry queue");
+  }
+
   setupTasks();  // Move this after queue creation
 
   pulseVibeMotor();
@@ -518,6 +524,8 @@ void setupTasks() {
 
   // TODO: add watchdog task (based on esc writing to CAN)
   //xTaskCreatePinnedToCore(watchdogTask, "watchdog", 1000, NULL, 5, &watchdogTaskHandle, 0);  // Run on core 0
+
+  xTaskCreate(updateESCBLETask, "ESC BLE Update Task", 4096, NULL, 1, NULL);
 #endif
 }
 
@@ -939,5 +947,27 @@ void audioTask(void* parameter) {
       }
       noTone(board_config.buzzer_pin);
     }
+  }
+}
+
+void updateESCBLETask(void *pvParameters) {
+  STR_ESC_TELEMETRY_140 newEscTelemetry;
+
+  while (true) {
+    // Add error checking for queue
+    if (escTelemetryQueue == NULL) {
+      USBSerial.println("ESC Queue not initialized!");
+      vTaskDelay(pdMS_TO_TICKS(1000));  // Wait a second before retrying
+      continue;
+    }
+
+    // Wait for new data with timeout
+    if (xQueueReceive(escTelemetryQueue, &newEscTelemetry, pdMS_TO_TICKS(100)) == pdTRUE) {
+      // Update BLE characteristics with the received data
+      updateESCTelemetryBLE(newEscTelemetry);
+    }
+
+    // Add a small delay to prevent task starvation
+    vTaskDelay(pdMS_TO_TICKS(10));
   }
 }
