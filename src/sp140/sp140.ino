@@ -61,6 +61,8 @@
 #define FIRST_CLICK_MAX_HOLD_MS 500    // Maximum time for first click to be considered a click
 #define SECOND_HOLD_TIME_MS 2000       // How long to hold on second press to arm
 #define CRUISE_HOLD_TIME_MS 2000
+#define BUTTON_SEQUENCE_TIMEOUT_MS 1500 // Time window for arm/disarm sequence
+#define PERFORMANCE_MODE_HOLD_MS 3000   // Longer hold time for performance mode
 
 // Button state tracking
 volatile bool buttonPressed = false;
@@ -571,74 +573,96 @@ void buttonHandlerTask(void* parameter) {
 
   while (true) {
     buttonState = digitalRead(board_config.button_top);
+    uint32_t currentTime = millis();
 
     // Debounce
-    if ((millis() - lastDebounceTime) > BUTTON_DEBOUNCE_TIME_MS) {
+    if ((currentTime - lastDebounceTime) > BUTTON_DEBOUNCE_TIME_MS) {
       if (buttonState != lastButtonState) {
-        lastDebounceTime = millis();
+        lastDebounceTime = currentTime;
 
         if (buttonState == LOW) { // Button pressed
           buttonPressed = true;
-          buttonPressStartTime = millis();
+          buttonPressStartTime = currentTime;
           USBSerial.println("Button pressed");
+          USBSerial.print("Arm sequence state: ");
+          USBSerial.println(armSequenceStarted ? "ACTIVE" : "INACTIVE");
         } else { // Button released
           buttonPressed = false;
-          buttonReleaseStartTime = millis();
+          buttonReleaseStartTime = currentTime;
 
-          // Check if this was a quick click for the first part of arm sequence
           uint32_t holdDuration = buttonReleaseStartTime - buttonPressStartTime;
-          if (!armSequenceStarted && holdDuration < FIRST_CLICK_MAX_HOLD_MS) {
-            armSequenceStarted = true;
-            USBSerial.println("Quick click detected - waiting for hold");
-          } else if (armSequenceStarted) {
-            // If we release during arm sequence, reset it
-            armSequenceStarted = false;
-            USBSerial.println("Arm sequence reset");
-          }
-
           USBSerial.print("Button released after ");
           USBSerial.print(holdDuration);
           USBSerial.println("ms");
+
+          // Only start arm sequence if it was a quick click
+          if (!armSequenceStarted && holdDuration < FIRST_CLICK_MAX_HOLD_MS) {
+            armSequenceStarted = true;
+            USBSerial.println("Quick click detected - arm sequence started");
+          }
         }
 
         lastButtonState = buttonState;
       }
 
-      // Handle arming sequence
-      if (armSequenceStarted && buttonPressed) {
-        uint32_t currentHoldTime = millis() - buttonPressStartTime;
-
-        // Check if we've held long enough for the second press
-        if (currentHoldTime >= SECOND_HOLD_TIME_MS) {
-          USBSerial.println("Second hold complete - toggling arm state");
-          toggleArm();
+      // Handle arm sequence first
+      if (armSequenceStarted) {
+        // Only check for timeout if we're waiting for the second press
+        // (button is not currently pressed)
+        if (!buttonPressed &&
+            (currentTime - buttonReleaseStartTime) > BUTTON_SEQUENCE_TIMEOUT_MS) {
           armSequenceStarted = false;
-          buttonPressStartTime = millis(); // Reset to prevent immediate cruise activation
+          USBSerial.println("Arm sequence timed out - waiting too long between click and hold");
+        }
+
+        // If button is pressed, check for arm completion
+        if (buttonPressed) {
+          uint32_t currentHoldTime = currentTime - buttonPressStartTime;
+
+          // Complete arm sequence if held long enough
+          if (currentHoldTime >= SECOND_HOLD_TIME_MS) {
+            USBSerial.println("Arm sequence complete - toggling arm state");
+            toggleArm();
+            armSequenceStarted = false;
+            buttonPressed = false;
+            buttonPressStartTime = currentTime; // Reset to prevent immediate cruise activation
+          }
         }
       }
+      // Only handle other button actions if we're not in an arm sequence
+      else if (buttonPressed) {
+        uint32_t currentHoldTime = currentTime - buttonPressStartTime;
 
-      // Handle cruise control (only when armed and not in arm sequence)
-      if (!armSequenceStarted &&
-          currentState == ARMED &&
-          buttonPressed &&
-          (millis() - buttonPressStartTime) >= CRUISE_HOLD_TIME_MS) {
-        USBSerial.println("Cruise control activated");
-        toggleCruise();
-        buttonPressStartTime = millis(); // Reset to prevent multiple triggers
+        // Handle performance mode (only when disarmed and held long enough)
+        if (currentState == DISARMED && currentHoldTime >= PERFORMANCE_MODE_HOLD_MS) {
+          USBSerial.println("Toggling performance mode");
+          modeSwitch(false);
+          buttonPressed = false;
+          buttonPressStartTime = currentTime;
+        }
+        // Handle cruise control (only when armed and held long enough)
+        else if (currentState == ARMED && currentHoldTime >= CRUISE_HOLD_TIME_MS) {
+          USBSerial.println("Cruise control activated");
+          toggleCruise();
+          buttonPressed = false;
+          buttonPressStartTime = currentTime;
+        }
       }
 
       // Debug current state
       if (buttonPressed) {
-        uint32_t currentHoldTime = millis() - buttonPressStartTime;
+        uint32_t currentHoldTime = currentTime - buttonPressStartTime;
         if (currentHoldTime % 500 == 0) { // Print every 500ms
           USBSerial.print("Current hold time: ");
           USBSerial.print(currentHoldTime);
           USBSerial.println("ms");
+          USBSerial.print("Arm sequence: ");
+          USBSerial.println(armSequenceStarted ? "ACTIVE" : "INACTIVE");
         }
       }
     }
 
-    vTaskDelay(pdMS_TO_TICKS(10)); // Small delay to prevent task starvation
+    vTaskDelay(pdMS_TO_TICKS(10));
   }
 }
 
