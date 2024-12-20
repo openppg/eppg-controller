@@ -90,9 +90,9 @@ uint32_t led_color = LED_RED; // current LED color
 
 // New enum for device state
 enum DeviceState {
-  DISARMED,
-  ARMED,
-  ARMED_CRUISING
+  DISARMED = 0,
+  ARMED = 1,
+  ARMED_CRUISING = 2
 };
 
 // Global variable for device state
@@ -107,11 +107,15 @@ void changeDeviceState(DeviceState newState) {
     DeviceState oldState = currentState;
     currentState = newState;
 
-    // Update BLE characteristic
+    // Update BLE characteristic with new state
     if (pDeviceStateCharacteristic && deviceConnected) {
       uint8_t state = (uint8_t)newState;
       pDeviceStateCharacteristic->setValue(&state, sizeof(state));
       pDeviceStateCharacteristic->notify();
+
+      // Add debug logging
+      USBSerial.print("BLE State Changed to: ");
+      USBSerial.println(state);
     }
 
     switch (newState) {
