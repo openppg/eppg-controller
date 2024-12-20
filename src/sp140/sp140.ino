@@ -787,6 +787,7 @@ bool throttleSafe(int threshold = POT_ENGAGEMENT_LEVEL) {
 void handleThrottle() {
   static int maxPWM = ESC_MAX_PWM;
   static uint16_t currentCruiseThrottlePWM = ESC_MIN_SPIN_PWM;
+  static int prevPotLvl = 0;  // Add this line to track previous throttle level
   uint16_t newPWM;
 
   // Check for throttle updates
@@ -798,6 +799,7 @@ void handleThrottle() {
 
   pot->update();
   int potVal = pot->getValue();
+  int potLvl = potVal; // Create separate variable for limited throttle
 
   // Update BLE clients with new value
   updateThrottleBLE(potVal);
@@ -818,9 +820,20 @@ void handleThrottle() {
   } else if (currentState == ARMED_CRUISING) {
     setESCThrottle(currentCruiseThrottlePWM);
   } else {
-    int localThrottlePWM = map(potVal, 0, 4095, ESC_MIN_SPIN_PWM, maxPWM);
+    // Apply performance mode limitations
+    if (deviceData.performance_mode == 0) {  // chill mode
+      potLvl = limitedThrottle(potLvl, prevPotLvl, 50);
+      maxPWM = 1850;  // 85% interpolated from 1030 to 1990
+    } else {
+      potLvl = limitedThrottle(potLvl, prevPotLvl, 120);
+      maxPWM = ESC_MAX_PWM;
+    }
+
+    int localThrottlePWM = map(potLvl, 0, 4095, ESC_MIN_SPIN_PWM, maxPWM);
     setESCThrottle(localThrottlePWM);
+    prevPotLvl = potLvl; // Store current level for next iteration
   }
+
   readESCTelemetry();
 }
 
