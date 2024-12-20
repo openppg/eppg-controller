@@ -211,22 +211,6 @@ void throttleTask(void *pvParameters) {
   vTaskDelete(NULL); // should never reach this
 }
 
-// TODO: remove this task because its called from handleThrottle()
-void telemetryEscTask(void *pvParameters) {
-  (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
-
-  for (;;) {  // infinite loop
-    readESCTelemetry();
-    if (!isBMSPresent) {
-      unifiedBatteryData.volts = escTelemetryData.volts;
-      unifiedBatteryData.amps = escTelemetryData.amps;
-      unifiedBatteryData.soc = getBatteryPercent(escTelemetryData.volts);
-    }
-    delay(50);  // wait for 100ms
-  }
-  vTaskDelete(NULL);  // should never reach this
-}
-
 void updateBLETask(void *pvParameters) {
   STR_BMS_TELEMETRY_140 newBmsTelemetry;
 
@@ -848,6 +832,19 @@ void handleThrottle() {
   }
 
   readESCTelemetry();
+  syncESCTelemetry();
+}
+
+void syncESCTelemetry() {
+  if (!isBMSPresent) {
+    unifiedBatteryData.volts = escTelemetryData.volts;
+    unifiedBatteryData.amps = escTelemetryData.amps;
+    unifiedBatteryData.soc = getBatteryPercent(escTelemetryData.volts);
+  }
+      // Send to queue for BLE updates
+  if (escTelemetryQueue != NULL) {
+    xQueueOverwrite(escTelemetryQueue, &escTelemetryData);  // Always use latest data
+  }
 }
 
 bool throttleEngaged() {

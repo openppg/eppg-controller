@@ -104,10 +104,7 @@ void readESCTelemetry() {
     // debug the esc recpwm
     //USBSerial.print(", ");
     //USBSerial.println(res->comm_pwm);
-    // Send to queue for BLE updates
-    if (escTelemetryQueue != NULL) {
-      xQueueOverwrite(escTelemetryQueue, &escTelemetryData);  // Always use latest data
-    }
+
   }
 
   adapter.processTxRxOnce();  // Process CAN messages

@@ -52,17 +52,17 @@ const int DEFAULT_BATT_SIZE = 4000;  // 4kw
 #define BMS_FAILURE_LEVEL_UUID      "396C768B-F348-44CC-9D46-92388F25A557"
 #define BMS_VOLTAGE_DIFF_UUID       "1C45825B-7C81-430B-8D5F-B644FFFC71BB"
 
+// ESC Characteristic UUIDs
+#define ESC_VOLTAGE_UUID           "0528ecd8-9337-4249-95e4-9aba69f6c1f4"
+#define ESC_CURRENT_UUID           "3889e01e-7d2d-4478-b5cc-a06b803e2788"
+#define ESC_RPM_UUID              "24dc4a84-0be3-4eba-a8c3-ed9748daa599"
+#define ESC_TEMPS_UUID            "d087f190-5450-4fea-b9ff-17133a0b6f64"
+
 // Add near the top with other BLE characteristic declarations
 static BLECharacteristic* pESCVoltage = nullptr;
 static BLECharacteristic* pESCCurrent = nullptr;
 static BLECharacteristic* pESCRPM = nullptr;
 static BLECharacteristic* pESCTemps = nullptr;
-
-// Add with other UUID definitions
-#define ESC_VOLTAGE_UUID           "2B18"
-#define ESC_CURRENT_UUID           "2B19"
-#define ESC_RPM_UUID              "2B1A"
-#define ESC_TEMPS_UUID            "2B1B"
 
 static BLECharacteristic* pBMSSOC = nullptr;
 static BLECharacteristic* pBMSVoltage = nullptr;
@@ -378,31 +378,23 @@ void setupBLE() {
   // Create characteristics for ESC data
   pESCVoltage = pESCService->createCharacteristic(
       ESC_VOLTAGE_UUID,
-      BLECharacteristic::PROPERTY_READ |
-      BLECharacteristic::PROPERTY_NOTIFY
+      BLECharacteristic::PROPERTY_READ
   );
-  pESCVoltage->addDescriptor(new BLE2902());
 
   pESCCurrent = pESCService->createCharacteristic(
       ESC_CURRENT_UUID,
-      BLECharacteristic::PROPERTY_READ |
-      BLECharacteristic::PROPERTY_NOTIFY
+      BLECharacteristic::PROPERTY_READ
   );
-  pESCCurrent->addDescriptor(new BLE2902());
 
   pESCRPM = pESCService->createCharacteristic(
       ESC_RPM_UUID,
-      BLECharacteristic::PROPERTY_READ |
-      BLECharacteristic::PROPERTY_NOTIFY
+      BLECharacteristic::PROPERTY_READ
   );
-  pESCRPM->addDescriptor(new BLE2902());
 
   pESCTemps = pESCService->createCharacteristic(
       ESC_TEMPS_UUID,
-      BLECharacteristic::PROPERTY_READ |
-      BLECharacteristic::PROPERTY_NOTIFY
+      BLECharacteristic::PROPERTY_READ
   );
-  pESCTemps->addDescriptor(new BLE2902());
 
   // Start all services
   pService->start();
@@ -649,17 +641,14 @@ void updateESCTelemetryBLE(const STR_ESC_TELEMETRY_140& telemetry) {
   // Update voltage characteristic
   float voltage = telemetry.volts;
   pESCVoltage->setValue((uint8_t*)&voltage, sizeof(voltage));
-  pESCVoltage->notify();
 
   // Update current characteristic
   float current = telemetry.amps;
   pESCCurrent->setValue((uint8_t*)&current, sizeof(current));
-  pESCCurrent->notify();
 
   // Update RPM characteristic
   int32_t rpm = telemetry.eRPM;
   pESCRPM->setValue((uint8_t*)&rpm, sizeof(rpm));
-  pESCRPM->notify();
 
   // Create a struct for temperatures
   struct {
@@ -672,5 +661,4 @@ void updateESCTelemetryBLE(const STR_ESC_TELEMETRY_140& telemetry) {
     telemetry.mcu_temp
   };
   pESCTemps->setValue((uint8_t*)&temps, sizeof(temps));
-  pESCTemps->notify();
 }
