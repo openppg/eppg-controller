@@ -662,8 +662,7 @@ void handleButtonEvent(AceButton* btn, uint8_t eventType, uint8_t /* st */) {
     USBSerial.println("Double Click arm");
     break;
   case AceButton::kEventLongPressed:
-      toggleArm();
-      //toggleCruise
+      toggleCruise();
       USBSerial.println("Long Press - cruise");
     break;
   }
