@@ -10,8 +10,8 @@
   #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
   #include "driver/twai.h"
 
-  #define RX_PIN 10  // CAN RX pin to transceiver
-  #define TX_PIN 9  // CAN TX pin to transceiver
+  #define ESC_RX_PIN 3  // CAN RX pin to transceiver
+  #define ESC_TX_PIN 2  // CAN TX pin to transceiver
   #define LOCAL_NODE_ID 0x01  // The ID on the network of this device
 
   static CanardAdapter adapter;
@@ -112,8 +112,8 @@ void readESCTelemetry() {
 // CAN specific setup
 bool setupTWAI() {
   twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(
-                                      (gpio_num_t)TX_PIN,
-                                      (gpio_num_t)RX_PIN,
+                                      (gpio_num_t)ESC_TX_PIN,
+                                      (gpio_num_t)ESC_RX_PIN,
                                       TWAI_MODE_NORMAL);
   twai_timing_config_t t_config = TWAI_TIMING_CONFIG_1MBITS();
   twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();

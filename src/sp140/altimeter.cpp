@@ -27,7 +27,10 @@ bool setupAltimeter(bool altWire) {
   TwoWire* wire = &Wire;
 
   #ifdef CAN_PIO
-  if (!bmp.begin_I2C(0x76, &Wire)) return false;
+  // pull down pin 40 to high to set the address
+  pinMode(40, OUTPUT);
+  digitalWrite(40, HIGH);
+  if (!bmp.begin_I2C(BMP3XX_DEFAULT_ADDRESS, &Wire)) return false;
   #else
   if (!bmp.begin_I2C(BMP3XX_DEFAULT_ADDRESS, wire)) return false;
   #endif

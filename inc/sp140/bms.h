@@ -6,9 +6,9 @@
 
 // Define CS_PIN based on your ESP32-S3 setup
 #define MCP_CS    5  // Chip Select pin for MCP2515
-#define MCP_MOSI  4  // MOSI pin for MCP2515
-#define MCP_MISO  3  // MISO pin for MCP2515
-#define MCP_SCK   2  // Clock pin for MCP2515
+#define MCP_MOSI  11  // MOSI pin for MCP2515
+#define MCP_MISO  13  // MISO pin for MCP2515
+#define MCP_SCK   12  // Clock pin for MCP2515
 #define MCP_BAUDRATE  250000  // Baud rate for MCP2515
 
 bool initBMSCAN();

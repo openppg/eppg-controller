@@ -3,7 +3,7 @@
 #include "sp140/vibration_pwm.h"
 #include "Arduino.h"
 
-const int PWM_PIN = 46;  // Adjust this to your actual PWM pin
+const int PWM_PIN = 46;  // TODO: move to config
 const int PWM_FREQ = 1000;  // Adjust as needed
 const int PWM_RESOLUTION = 8;  // 8-bit resolution
 const int PWM_CHANNEL = 0;
