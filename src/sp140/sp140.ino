@@ -64,6 +64,12 @@
 #define BUTTON_SEQUENCE_TIMEOUT_MS 1500 // Time window for arm/disarm sequence
 #define PERFORMANCE_MODE_HOLD_MS 3000   // Longer hold time for performance mode
 
+// Throttle control constants
+#define CHILL_MODE_MAX_PWM 1850  // 85% max power in chill mode
+#define CHILL_MODE_RAMP_RATE 50  // How fast throttle can increase per cycle in chill mode
+#define SPORT_MODE_RAMP_RATE 120 // How fast throttle can increase per cycle in sport mode
+#define DECEL_MULTIPLIER 2.0     // How much faster deceleration is vs acceleration
+
 // Button state tracking
 volatile bool buttonPressed = false;
 volatile uint32_t buttonPressStartTime = 0;
@@ -787,10 +793,10 @@ bool throttleSafe(int threshold = POT_ENGAGEMENT_LEVEL) {
 void handleThrottle() {
   static int maxPWM = ESC_MAX_PWM;
   static uint16_t currentCruiseThrottlePWM = ESC_MIN_SPIN_PWM;
-  static int prevPotLvl = 0;  // Add this line to track previous throttle level
+  static int prevPotLvl = 0;
   uint16_t newPWM;
 
-  // Check for throttle updates
+  // Check for throttle updates from cruise control
   if (xQueueReceive(throttleUpdateQueue, &newPWM, 0) == pdTRUE) {
     if (currentState == ARMED_CRUISING) {
       currentCruiseThrottlePWM = newPWM;
@@ -799,7 +805,7 @@ void handleThrottle() {
 
   pot->update();
   int potVal = pot->getValue();
-  int potLvl = potVal; // Create separate variable for limited throttle
+  int potLvl = potVal;
 
   // Update BLE clients with new value
   updateThrottleBLE(potVal);
@@ -814,24 +820,23 @@ void handleThrottle() {
     }
   }
 
-  // Normal throttle handling
+  // Handle throttle based on current state
   if (currentState == DISARMED) {
     setESCThrottle(ESC_DISARMED_PWM);
   } else if (currentState == ARMED_CRUISING) {
     setESCThrottle(currentCruiseThrottlePWM);
   } else {
-    // Apply performance mode limitations
-    if (deviceData.performance_mode == 0) {  // chill mode
-      potLvl = limitedThrottle(potLvl, prevPotLvl, 50);
-      maxPWM = 1850;  // 85% interpolated from 1030 to 1990
-    } else {
-      potLvl = limitedThrottle(potLvl, prevPotLvl, 120);
-      maxPWM = ESC_MAX_PWM;
-    }
+    // Apply throttle limits based on performance mode
+    int rampRate = deviceData.performance_mode == 0 ? CHILL_MODE_RAMP_RATE : SPORT_MODE_RAMP_RATE;
+    maxPWM = deviceData.performance_mode == 0 ? CHILL_MODE_MAX_PWM : ESC_MAX_PWM;
 
+    // Apply throttle ramping limits
+    potLvl = limitedThrottle(potLvl, prevPotLvl, rampRate);
+
+    // Map throttle value to PWM range
     int localThrottlePWM = map(potLvl, 0, 4095, ESC_MIN_SPIN_PWM, maxPWM);
     setESCThrottle(localThrottlePWM);
-    prevPotLvl = potLvl; // Store current level for next iteration
+    prevPotLvl = potLvl;
   }
 
   readESCTelemetry();
@@ -915,9 +920,6 @@ void trackPower() {
   Insights.metrics.setFloat("watt_hours_used", wattHoursUsed);
 }
 
-
-
-// Add this new task function
 void audioTask(void* parameter) {
   MelodyRequest request;
 

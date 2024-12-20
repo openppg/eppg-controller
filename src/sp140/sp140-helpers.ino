@@ -29,8 +29,8 @@ int limitedThrottle(int current, int last, int threshold) {
     // TODO:  cleanup global var use
     prevPotLvl = limitedThrottle;  // save for next time
     return limitedThrottle;
-  } else if (last - current >= threshold * 2) {  // decelerating too fast. limit
-    int limitedThrottle = last - threshold * 2;  // double the decel vs accel
+  } else if (last - current >= threshold * DECEL_MULTIPLIER) {  // decelerating too fast. limit
+    int limitedThrottle = last - threshold * DECEL_MULTIPLIER;
     prevPotLvl = limitedThrottle;  // save for next time
     return limitedThrottle;
   }
