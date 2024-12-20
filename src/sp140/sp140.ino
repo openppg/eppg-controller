@@ -546,7 +546,7 @@ void loop() {
 // #endif
 
   // more stable in main loop
-  delay(5);
+  delay(25);
   //USBSerial.print(".");
 }
 
@@ -779,6 +779,11 @@ static const int STEP_SIZE = ceil(4096.0 / (STEPS_PER_SECOND * 30)); // Complete
  // Normal throttle behavior
 #define ESC_MIN_SPIN_PWM 1105
 
+bool throttleSafe(int threshold = POT_ENGAGEMENT_LEVEL) {
+  pot->update();
+  return pot->getRawValue() < threshold;
+}
+
 void handleThrottle() {
   static int maxPWM = ESC_MAX_PWM;
   static uint16_t currentCruiseThrottlePWM = ESC_MIN_SPIN_PWM;
@@ -797,6 +802,17 @@ void handleThrottle() {
   // Update BLE clients with new value
   updateThrottleBLE(potVal);
 
+  // Check if throttle has moved away from cruise position
+  if (currentState == ARMED_CRUISING) {
+    int safeThreshold = cruisedPotVal + 200; // Allow 5% movement
+    if (!throttleSafe(safeThreshold)) {
+      USBSerial.println("Cruise control override detected");
+      changeDeviceState(ARMED);
+      return;
+    }
+  }
+
+  // Normal throttle handling
   if (currentState == DISARMED) {
     setESCThrottle(ESC_DISARMED_PWM);
   } else if (currentState == ARMED_CRUISING) {
@@ -806,6 +822,10 @@ void handleThrottle() {
     setESCThrottle(localThrottlePWM);
   }
   readESCTelemetry();
+}
+
+bool throttleEngaged() {
+  return !throttleSafe();
 }
 
 int averagePotBuffer() {
@@ -831,15 +851,6 @@ bool armSystem() {
   playMelody(arm_melody, 3);
 
   return true;
-}
-
-// Returns true if the throttle/pot is above the engagement threshold
-bool throttleEngaged() {
-  pot->update();
-  if (pot->getRawValue() >= POT_ENGAGEMENT_LEVEL) {
-    return true;
-  }
-  return false;
 }
 
 void afterCruiseStart() {

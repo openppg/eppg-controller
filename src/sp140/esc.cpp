@@ -45,7 +45,7 @@ bool initESC(int escPin) {
   // Set idle throttle
   const uint16_t IdleThrottle_us = 10000; // 1000us (0.1us resolution)
   esc.setThrottleSettings2(IdleThrottle_us);
-  delay(1000); // Wait for ESC to process the command
+  delay(500); // Wait for ESC to process the command
   adapter.processTxRxOnce();
 
   return true;
