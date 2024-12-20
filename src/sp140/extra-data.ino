@@ -52,6 +52,17 @@ const int DEFAULT_BATT_SIZE = 4000;  // 4kw
 #define BMS_FAILURE_LEVEL_UUID      "396C768B-F348-44CC-9D46-92388F25A557"
 #define BMS_VOLTAGE_DIFF_UUID       "1C45825B-7C81-430B-8D5F-B644FFFC71BB"
 
+// Add near the top with other BLE characteristic declarations
+static BLECharacteristic* pESCVoltage = nullptr;
+static BLECharacteristic* pESCCurrent = nullptr;
+static BLECharacteristic* pESCRPM = nullptr;
+static BLECharacteristic* pESCTemps = nullptr;
+
+// Add with other UUID definitions
+#define ESC_VOLTAGE_UUID           "2B18"
+#define ESC_CURRENT_UUID           "2B19"
+#define ESC_RPM_UUID              "2B1A"
+#define ESC_TEMPS_UUID            "2B1B"
 
 static BLECharacteristic* pBMSSOC = nullptr;
 static BLECharacteristic* pBMSVoltage = nullptr;
@@ -361,9 +372,42 @@ void setupBLE() {
       BLECharacteristic::PROPERTY_READ
   );
 
+  // Create ESC Telemetry Service
+  BLEService *pESCService = pServer->createService(ESC_TELEMETRY_SERVICE_UUID);
+
+  // Create characteristics for ESC data
+  pESCVoltage = pESCService->createCharacteristic(
+      ESC_VOLTAGE_UUID,
+      BLECharacteristic::PROPERTY_READ |
+      BLECharacteristic::PROPERTY_NOTIFY
+  );
+  pESCVoltage->addDescriptor(new BLE2902());
+
+  pESCCurrent = pESCService->createCharacteristic(
+      ESC_CURRENT_UUID,
+      BLECharacteristic::PROPERTY_READ |
+      BLECharacteristic::PROPERTY_NOTIFY
+  );
+  pESCCurrent->addDescriptor(new BLE2902());
+
+  pESCRPM = pESCService->createCharacteristic(
+      ESC_RPM_UUID,
+      BLECharacteristic::PROPERTY_READ |
+      BLECharacteristic::PROPERTY_NOTIFY
+  );
+  pESCRPM->addDescriptor(new BLE2902());
+
+  pESCTemps = pESCService->createCharacteristic(
+      ESC_TEMPS_UUID,
+      BLECharacteristic::PROPERTY_READ |
+      BLECharacteristic::PROPERTY_NOTIFY
+  );
+  pESCTemps->addDescriptor(new BLE2902());
+
   // Start all services
   pService->start();
   pBMSService->start();
+  pESCService->start();
 
   // Start advertising
   BLEAdvertising *pAdvertising = pServer->getAdvertising();
@@ -597,4 +641,36 @@ void send_usb_serial() {
   //Serial.println(chipId());
 #endif //RP_PIO
 #endif // USE_TINYUSB
+}
+
+void updateESCTelemetryBLE() {
+  if (!deviceConnected) return;
+
+  // Update voltage characteristic
+  float voltage = escTelemetryData.volts;
+  pESCVoltage->setValue((uint8_t*)&voltage, sizeof(voltage));
+  pESCVoltage->notify();
+
+  // Update current characteristic
+  float current = escTelemetryData.amps;
+  pESCCurrent->setValue((uint8_t*)&current, sizeof(current));
+  pESCCurrent->notify();
+
+  // Update RPM characteristic
+  int32_t rpm = escTelemetryData.eRPM;
+  pESCRPM->setValue((uint8_t*)&rpm, sizeof(rpm));
+  pESCRPM->notify();
+
+  // Create a struct for temperatures
+  struct {
+    float mos_temp;
+    float cap_temp;
+    float mcu_temp;
+  } temps = {
+    escTelemetryData.mos_temp,
+    escTelemetryData.cap_temp,
+    escTelemetryData.mcu_temp
+  };
+  pESCTemps->setValue((uint8_t*)&temps, sizeof(temps));
+  pESCTemps->notify();
 }
