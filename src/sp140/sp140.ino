@@ -14,7 +14,6 @@
 #endif
 
 #include "../../inc/sp140/structs.h"         // data structs
-#include <AceButton.h>           // button clicks
 #include <Adafruit_NeoPixel.h>   // LEDs
 #include <ArduinoJson.h>
 #include <CircularBuffer.hpp>      // smooth out readings
@@ -58,7 +57,17 @@
   #include "../../inc/sp140/vibration_pwm.h"
 #endif
 
-using namespace ace_button;
+#define BUTTON_DEBOUNCE_TIME_MS 50
+#define FIRST_CLICK_MAX_HOLD_MS 500    // Maximum time for first click to be considered a click
+#define SECOND_HOLD_TIME_MS 2000       // How long to hold on second press to arm
+#define CRUISE_HOLD_TIME_MS 2000
+
+// Button state tracking
+volatile bool buttonPressed = false;
+volatile uint32_t buttonPressStartTime = 0;
+volatile uint32_t buttonReleaseStartTime = 0;
+volatile bool armSequenceStarted = false;
+TaskHandle_t buttonTaskHandle = NULL;
 
 UBaseType_t uxCoreAffinityMask0 = (1 << 0);  // Core 0
 UBaseType_t uxCoreAffinityMask1 = (1 << 1);  // Core 1
@@ -73,8 +82,6 @@ WEBUSB_URL_DEF(landingPage, 1 /*https*/, "config.openppg.com");
 #endif
 
 ResponsiveAnalogRead* pot;
-AceButton* button_top;
-ButtonConfig* buttonConfig;
 
 UnifiedBatteryData unifiedBatteryData = {0.0f, 0.0f, 0.0f};
 
@@ -282,8 +289,6 @@ void loadHardwareConfig() {
   board_config = s3_config; // ESP32S3 is only supported board
 
   pot = new ResponsiveAnalogRead(board_config.throttle_pin, false);
-  button_top = new AceButton(board_config.button_top);
-  buttonConfig = button_top->getButtonConfig();
 }
 
 #ifdef USE_TINYUSB
@@ -480,11 +485,10 @@ void setup() {
   setupTasks();  // Move this after queue creation
 
   pulseVibeMotor();
-  if (button_top->isPressedRaw()) {
+  if (digitalRead(board_config.button_top) == LOW) {  // LOW means pressed since it's INPUT_PULLUP
     modeSwitch(false);
   }
   setupBLE();
-  // TODO: refactor to use queue etc
   setLEDColor(LED_GREEN);
 }
 
@@ -540,14 +544,102 @@ void loop() {
 // #endif
 
   // more stable in main loop
-  checkButtons();
   delay(5);
   //USBSerial.print(".");
 }
 
-void checkButtons() {
-  //USBSerial.println("checkButtons");
-  button_top->check();
+void initButtons() {
+  pinMode(board_config.button_top, INPUT_PULLUP);
+
+  // Create button handling task
+  xTaskCreatePinnedToCore(
+    buttonHandlerTask,
+    "ButtonHandler",
+    2048,
+    NULL,
+    2,
+    &buttonTaskHandle,
+    0
+  );
+}
+
+// Add new button handler task
+void buttonHandlerTask(void* parameter) {
+  uint32_t lastDebounceTime = 0;
+  bool lastButtonState = HIGH;
+  bool buttonState;
+
+  while (true) {
+    buttonState = digitalRead(board_config.button_top);
+
+    // Debounce
+    if ((millis() - lastDebounceTime) > BUTTON_DEBOUNCE_TIME_MS) {
+      if (buttonState != lastButtonState) {
+        lastDebounceTime = millis();
+
+        if (buttonState == LOW) { // Button pressed
+          buttonPressed = true;
+          buttonPressStartTime = millis();
+          USBSerial.println("Button pressed");
+        } else { // Button released
+          buttonPressed = false;
+          buttonReleaseStartTime = millis();
+
+          // Check if this was a quick click for the first part of arm sequence
+          uint32_t holdDuration = buttonReleaseStartTime - buttonPressStartTime;
+          if (!armSequenceStarted && holdDuration < FIRST_CLICK_MAX_HOLD_MS) {
+            armSequenceStarted = true;
+            USBSerial.println("Quick click detected - waiting for hold");
+          } else if (armSequenceStarted) {
+            // If we release during arm sequence, reset it
+            armSequenceStarted = false;
+            USBSerial.println("Arm sequence reset");
+          }
+
+          USBSerial.print("Button released after ");
+          USBSerial.print(holdDuration);
+          USBSerial.println("ms");
+        }
+
+        lastButtonState = buttonState;
+      }
+
+      // Handle arming sequence
+      if (armSequenceStarted && buttonPressed) {
+        uint32_t currentHoldTime = millis() - buttonPressStartTime;
+
+        // Check if we've held long enough for the second press
+        if (currentHoldTime >= SECOND_HOLD_TIME_MS) {
+          USBSerial.println("Second hold complete - toggling arm state");
+          toggleArm();
+          armSequenceStarted = false;
+          buttonPressStartTime = millis(); // Reset to prevent immediate cruise activation
+        }
+      }
+
+      // Handle cruise control (only when armed and not in arm sequence)
+      if (!armSequenceStarted &&
+          currentState == ARMED &&
+          buttonPressed &&
+          (millis() - buttonPressStartTime) >= CRUISE_HOLD_TIME_MS) {
+        USBSerial.println("Cruise control activated");
+        toggleCruise();
+        buttonPressStartTime = millis(); // Reset to prevent multiple triggers
+      }
+
+      // Debug current state
+      if (buttonPressed) {
+        uint32_t currentHoldTime = millis() - buttonPressStartTime;
+        if (currentHoldTime % 500 == 0) { // Print every 500ms
+          USBSerial.print("Current hold time: ");
+          USBSerial.print(currentHoldTime);
+          USBSerial.println("ms");
+        }
+      }
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(10)); // Small delay to prevent task starvation
+  }
 }
 
 void printTime(const char* label) {
@@ -647,45 +739,6 @@ unsigned long releaseTime = 0;
 
 // Time threshold for LongClick after release (in milliseconds)
 const unsigned long longClickThreshold = 3500;  // adjust as necessary
-
-void handleButtonEvent(AceButton* btn, uint8_t eventType, uint8_t /* st */) {
-  switch (eventType) {
-  case AceButton::kEventClicked:
-    wasClicked = true;
-    USBSerial.println("Button Clicked");
-    break;
-  case AceButton::kEventReleased:
-    if (wasClicked) {
-      releaseTime = millis();
-      wasClicked = false;
-      USBSerial.println("Button Released after Click");
-    }
-    break;
-  case AceButton::kEventDoubleClicked:
-    //toggleArm();
-    USBSerial.println("Double Click arm");
-    break;
-  case AceButton::kEventLongPressed:
-      toggleCruise();
-      USBSerial.println("Long Press - cruise");
-    break;
-  }
-}
-
-// initial button setup and config
-void initButtons() {
-  pinMode(board_config.button_top, INPUT_PULLUP);
-
-  buttonConfig->setEventHandler(handleButtonEvent);
-  buttonConfig->setFeature(ButtonConfig::kFeatureDoubleClick);
-  buttonConfig->setFeature(ButtonConfig::kFeatureLongPress);
-  buttonConfig->setFeature(ButtonConfig::kFeatureSuppressAfterDoubleClick);
-  buttonConfig->setFeature(ButtonConfig::kFeatureSuppressAfterLongPress);
-  buttonConfig->setLongPressDelay(2000);
-  buttonConfig->setClickDelay(300);
-  //buttonConfig->setDoubleClickDelay(900);
-  //buttonConfig->setDebounceDelay(100);
-}
 
 //#define THROTTLE_DEBUG
 
