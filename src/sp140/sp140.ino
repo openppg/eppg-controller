@@ -122,17 +122,40 @@ void changeDeviceState(DeviceState newState) {
     DeviceState oldState = currentState;
     currentState = newState;
 
-    // Update BLE characteristic with new state
-    if (pDeviceStateCharacteristic && deviceConnected) {
-      uint8_t state = (uint8_t)newState;
-      pDeviceStateCharacteristic->setValue(&state, sizeof(state));
-      pDeviceStateCharacteristic->notify();
+    // Handle BLE state update in a safer way
+    if (pDeviceStateCharacteristic != nullptr) {
+      try {
+        uint8_t state = (uint8_t)newState;
 
-      // Add debug logging
-      USBSerial.print("BLE State Changed to: ");
-      USBSerial.println(state);
+        // Create a task to handle BLE updates to avoid doing it in the current context
+        xTaskCreate([](void* parameter) {
+          uint8_t* statePtr = (uint8_t*)parameter;
+          if (pDeviceStateCharacteristic && deviceConnected) {
+            pDeviceStateCharacteristic->setValue(statePtr, sizeof(uint8_t));
+            delay(10); // Give BLE stack time to process
+            pDeviceStateCharacteristic->notify();
+          }
+          vTaskDelete(NULL);
+        }, "BLEStateUpdate", 4096, &state, 1, NULL);
+
+        USBSerial.print("Device State Changed to: ");
+        switch(newState) {
+          case DISARMED:
+            USBSerial.println("DISARMED");
+            break;
+          case ARMED:
+            USBSerial.println("ARMED");
+            break;
+          case ARMED_CRUISING:
+            USBSerial.println("ARMED_CRUISING");
+            break;
+        }
+      } catch (...) {
+        USBSerial.println("Error updating BLE state");
+      }
     }
 
+    // Handle state transition actions
     switch (newState) {
       case DISARMED:
         disarmSystem();
