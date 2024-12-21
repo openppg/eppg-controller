@@ -235,7 +235,7 @@ void send_usb_serial() {
   doc["prf"].set(deviceData.performance_mode);
   doc["sea_p"].set(deviceData.sea_pressure);
   doc["thm"].set(deviceData.theme);
-  doc["rev"].set(deviceData.revision);
+  //doc["rev"].set(deviceData.revision);
   //doc["id"].set(chipId()); // webusb bug prevents anything over a certain size / this extra field from being sent
 
   char output[256];
