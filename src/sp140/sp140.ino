@@ -117,42 +117,84 @@ SemaphoreHandle_t eepromSemaphore;
 SemaphoreHandle_t tftSemaphore;
 SemaphoreHandle_t stateMutex;
 
+// Add near other queue declarations
+QueueHandle_t bleStateQueue = NULL;
+QueueHandle_t deviceStateQueue = NULL;
+
+// Add struct for BLE state updates
+struct BLEStateUpdate {
+  uint8_t state;
+  bool needsNotify;
+};
+
+// Add new task handle
+TaskHandle_t bleStateUpdateTaskHandle = NULL;
+TaskHandle_t deviceStateUpdateTaskHandle = NULL;
+
+// Add this function to handle BLE updates safely
+void bleStateUpdateTask(void* parameter) {
+  BLEStateUpdate update;
+
+  while(true) {
+    if(xQueueReceive(bleStateQueue, &update, portMAX_DELAY) == pdTRUE) {
+      if(pDeviceStateCharacteristic != nullptr) {
+        // Add delay to give BLE stack breathing room
+        vTaskDelay(pdMS_TO_TICKS(20));
+
+        // Set value first
+        pDeviceStateCharacteristic->setValue(&update.state, sizeof(update.state));
+
+        // Only notify if requested and connected
+        if(update.needsNotify && deviceConnected) {
+          vTaskDelay(pdMS_TO_TICKS(10)); // Additional delay before notify
+          pDeviceStateCharacteristic->notify();
+        }
+      }
+    }
+    // Small delay between updates
+    vTaskDelay(pdMS_TO_TICKS(5));
+  }
+}
+
+// Add new task to handle device state updates (similar to updateBLETask)
+void deviceStateUpdateTask(void* parameter) {
+  uint8_t state;
+
+  while(true) {
+    if(xQueueReceive(deviceStateQueue, &state, portMAX_DELAY) == pdTRUE) {
+      if(pDeviceStateCharacteristic != nullptr && deviceConnected) {
+        vTaskDelay(pdMS_TO_TICKS(20)); // Give BLE stack breathing room
+        pDeviceStateCharacteristic->setValue(&state, sizeof(state));
+        // Temporarily remove the notify call
+        // pDeviceStateCharacteristic->notify();
+      }
+    }
+    vTaskDelay(pdMS_TO_TICKS(5));
+  }
+}
+
 void changeDeviceState(DeviceState newState) {
   if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
     DeviceState oldState = currentState;
     currentState = newState;
 
-    // Handle BLE state update in a safer way
-    if (pDeviceStateCharacteristic != nullptr) {
-      try {
-        uint8_t state = (uint8_t)newState;
+    // Send state update to queue
+    uint8_t state = (uint8_t)newState;
+    if (deviceStateQueue != NULL) {
+      xQueueOverwrite(deviceStateQueue, &state); // Always use latest state
+    }
 
-        // Create a task to handle BLE updates to avoid doing it in the current context
-        xTaskCreate([](void* parameter) {
-          uint8_t* statePtr = (uint8_t*)parameter;
-          if (pDeviceStateCharacteristic && deviceConnected) {
-            pDeviceStateCharacteristic->setValue(statePtr, sizeof(uint8_t));
-            delay(10); // Give BLE stack time to process
-            pDeviceStateCharacteristic->notify();
-          }
-          vTaskDelete(NULL);
-        }, "BLEStateUpdate", 4096, &state, 1, NULL);
-
-        USBSerial.print("Device State Changed to: ");
-        switch(newState) {
-          case DISARMED:
-            USBSerial.println("DISARMED");
-            break;
-          case ARMED:
-            USBSerial.println("ARMED");
-            break;
-          case ARMED_CRUISING:
-            USBSerial.println("ARMED_CRUISING");
-            break;
-        }
-      } catch (...) {
-        USBSerial.println("Error updating BLE state");
-      }
+    USBSerial.print("Device State Changed to: ");
+    switch(newState) {
+      case DISARMED:
+        USBSerial.println("DISARMED");
+        break;
+      case ARMED:
+        USBSerial.println("ARMED");
+        break;
+      case ARMED_CRUISING:
+        USBSerial.println("ARMED_CRUISING");
+        break;
     }
 
     // Handle state transition actions
@@ -485,31 +527,40 @@ void setup() {
   setESCThrottle(ESC_DISARMED_PWM);
   initVibeMotor();
 
-  // Create BMS telemetry queue before setting up tasks
+  // Create all queues first
   bmsTelemetryQueue = xQueueCreate(1, sizeof(STR_BMS_TELEMETRY_140));
   if (bmsTelemetryQueue == NULL) {
     USBSerial.println("Error creating BMS telemetry queue");
   }
 
-  // Add throttle update queue
   throttleUpdateQueue = xQueueCreate(1, sizeof(uint16_t));
   if (throttleUpdateQueue == NULL) {
     USBSerial.println("Error creating throttle update queue");
   }
 
-  // Create ESC telemetry queue before setting up tasks
   escTelemetryQueue = xQueueCreate(1, sizeof(STR_ESC_TELEMETRY_140));
   if (escTelemetryQueue == NULL) {
     USBSerial.println("Error creating ESC telemetry queue");
   }
 
-  setupTasks();  // Move this after queue creation
+  bleStateQueue = xQueueCreate(5, sizeof(BLEStateUpdate));
+  if (bleStateQueue == NULL) {
+    USBSerial.println("Error creating BLE state queue");
+  }
+
+  deviceStateQueue = xQueueCreate(1, sizeof(uint8_t));
+  if (deviceStateQueue == NULL) {
+    USBSerial.println("Error creating device state queue");
+  }
+
+  setupBLE();
+  setupTasks();  // Create all tasks after queues and BLE are initialized
 
   pulseVibeMotor();
   if (digitalRead(board_config.button_top) == LOW) {  // LOW means pressed since it's INPUT_PULLUP
     modeSwitch(false);
   }
-  setupBLE();
+
   setLEDColor(LED_GREEN);
 }
 
@@ -521,6 +572,9 @@ void setupTasks() {
   xTaskCreatePinnedToCore(throttleTask, "throttle", 4096, NULL, 3, &throttleTaskHandle, 0);
   xTaskCreatePinnedToCore(spiCommTask, "SPIComm", 10096, NULL, 5, &spiCommTaskHandle, 1);
   xTaskCreate(updateBLETask, "BLE Update Task", 4096, NULL, 1, NULL);
+  xTaskCreate(deviceStateUpdateTask, "State Update Task", 4096, NULL, 1, &deviceStateUpdateTaskHandle);
+  // Create BLE update task with high priority but on core 1
+  xTaskCreatePinnedToCore(bleStateUpdateTask, "BLEStateUpdate", 4096, NULL, 4, &bleStateUpdateTaskHandle, 1);
 
   // Create melody queue
   melodyQueue = xQueueCreate(5, sizeof(MelodyRequest));
@@ -822,24 +876,20 @@ void handleThrottle() {
   int potVal = pot->getValue();
   int potLvl = potVal;
 
-  // Update BLE clients with new value
-  updateThrottleBLE(potVal);
-
-  // Check if throttle has moved away from cruise position
-  if (currentState == ARMED_CRUISING) {
-    int safeThreshold = cruisedPotVal + 200; // Allow 5% movement
-    if (!throttleSafe(safeThreshold)) {
-      USBSerial.println("Cruise control override detected");
-      changeDeviceState(ARMED);
-      return;
-    }
-  }
-
-  // Handle throttle based on current state
+  // Handle throttle based on current state and update BLE accordingly
   if (currentState == DISARMED) {
     setESCThrottle(ESC_DISARMED_PWM);
+    updateThrottleBLE(0); // Send 0 throttle when disarmed
   } else if (currentState == ARMED_CRUISING) {
     setESCThrottle(currentCruiseThrottlePWM);
+    // Map PWM back to throttle value for BLE
+    int mappedThrottle = map(currentCruiseThrottlePWM, ESC_MIN_SPIN_PWM, ESC_MAX_PWM, 0, 4095);
+    USBSerial.print("Cruise Mode - Sending throttle value: ");
+    USBSerial.print(mappedThrottle);
+    USBSerial.print(" (PWM: ");
+    USBSerial.print(currentCruiseThrottlePWM);
+    USBSerial.println(")");
+    updateThrottleBLE(mappedThrottle);
   } else {
     // Apply throttle limits based on performance mode
     int rampRate = deviceData.performance_mode == 0 ? CHILL_MODE_RAMP_RATE : SPORT_MODE_RAMP_RATE;
@@ -852,6 +902,17 @@ void handleThrottle() {
     int localThrottlePWM = map(potLvl, 0, 4095, ESC_MIN_SPIN_PWM, maxPWM);
     setESCThrottle(localThrottlePWM);
     prevPotLvl = potLvl;
+    updateThrottleBLE(potLvl); // Send actual throttle value
+  }
+
+  // Check if throttle has moved away from cruise position
+  if (currentState == ARMED_CRUISING) {
+    int safeThreshold = cruisedPotVal + 200; // Allow 5% movement
+    if (!throttleSafe(safeThreshold)) {
+      USBSerial.println("Cruise control override detected");
+      changeDeviceState(ARMED);
+      return;
+    }
   }
 
   readESCTelemetry();

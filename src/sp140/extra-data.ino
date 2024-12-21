@@ -92,11 +92,19 @@ void updateThrottleBLE(int value) {
   // Send notification if connected
   if (deviceConnected && pThrottleCharacteristic != nullptr) {
     try {
+      USBSerial.print("Sending BLE throttle notification, value: ");
+      USBSerial.println(value);
       pThrottleCharacteristic->setValue((uint8_t*)&value, sizeof(value));
-      pThrottleCharacteristic->notify();
+      //pThrottleCharacteristic->notify();
       delay(5); // prevent bluetooth stack congestion - can be as low as 3ms
     } catch (...) {
       USBSerial.println("Error sending BLE notification");
+    }
+  } else {
+    if (!deviceConnected) {
+      USBSerial.println("Can't send throttle - device not connected");
+    } else if (pThrottleCharacteristic == nullptr) {
+      USBSerial.println("Can't send throttle - characteristic is null");
     }
   }
 }
@@ -203,11 +211,17 @@ class ThrottleValueCallbacks: public BLECharacteristicCallbacks {
     if (value.length() == 2) {  // Expecting 2 bytes for PWM value
       uint16_t newPWM = (value[0] << 8) | value[1];
 
+      // Add logging for PWM value
+      USBSerial.print("BLE Throttle - Received PWM value: ");
+      USBSerial.println(newPWM);
+
       // Validate PWM range
       if (newPWM >= ESC_MIN_SPIN_PWM && newPWM <= ESC_MAX_PWM) {
         if (xQueueSend(throttleUpdateQueue, &newPWM, pdMS_TO_TICKS(100)) != pdTRUE) {
           USBSerial.println("Failed to queue throttle update");
         }
+      } else {
+        USBSerial.println("PWM value out of valid range");
       }
     }
   }
@@ -218,13 +232,10 @@ class MyServerCallbacks: public BLEServerCallbacks {
     deviceConnected = true;
     USBSerial.println("BLE Device connected!");
 
-    // Sync current state to newly connected client
-    if (pDeviceStateCharacteristic) {
-      uint8_t state = (uint8_t)currentState;
-      pDeviceStateCharacteristic->setValue(&state, sizeof(state));
-      pDeviceStateCharacteristic->notify();
-      USBSerial.print("Synced device state to new client: ");
-      USBSerial.println(state);
+    // Send current state to queue for new connection
+    uint8_t state = (uint8_t)currentState;
+    if (deviceStateQueue != NULL) {
+      xQueueOverwrite(deviceStateQueue, &state);
     }
   }
 
@@ -696,11 +707,5 @@ void updateESCTelemetryBLE(const STR_ESC_TELEMETRY_140& telemetry) {
     telemetry.cap_temp,
     telemetry.mcu_temp
   };
-  USBSerial.print("Temperatures - MOS: ");
-  USBSerial.print(temps.mos_temp);
-  USBSerial.print(", CAP: ");
-  USBSerial.print(temps.cap_temp);
-  USBSerial.print(", MCU: ");
-  USBSerial.println(temps.mcu_temp);
   pESCTemps->setValue((uint8_t*)&temps, sizeof(temps));
 }
