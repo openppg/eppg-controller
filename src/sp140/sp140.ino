@@ -841,9 +841,11 @@ void syncESCTelemetry() {
     unifiedBatteryData.amps = escTelemetryData.amps;
     unifiedBatteryData.soc = getBatteryPercent(escTelemetryData.volts);
   }
-      // Send to queue for BLE updates
+  // Send to queue for BLE updates
   if (escTelemetryQueue != NULL) {
     xQueueOverwrite(escTelemetryQueue, &escTelemetryData);  // Always use latest data
+  } else {
+    USBSerial.println("ESC Queue is NULL!");
   }
 }
 
@@ -960,6 +962,7 @@ void updateESCBLETask(void *pvParameters) {
 
     // Wait for new data with timeout
     if (xQueueReceive(escTelemetryQueue, &newEscTelemetry, pdMS_TO_TICKS(100)) == pdTRUE) {
+
       // Update BLE characteristics with the received data
       updateESCTelemetryBLE(newEscTelemetry);
     }

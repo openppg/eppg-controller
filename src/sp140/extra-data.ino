@@ -216,12 +216,16 @@ class ThrottleValueCallbacks: public BLECharacteristicCallbacks {
 class MyServerCallbacks: public BLEServerCallbacks {
   void onConnect(BLEServer* pServer) {
     deviceConnected = true;
-    USBSerial.println("Device connected");
+    USBSerial.println("BLE Device connected!");
+    USBSerial.print("deviceConnected flag: ");
+    USBSerial.println(deviceConnected ? "true" : "false");
   }
 
   void onDisconnect(BLEServer* pServer) {
     deviceConnected = false;
-    USBSerial.println("Device disconnected");
+    USBSerial.println("BLE Device disconnected!");
+    USBSerial.print("deviceConnected flag: ");
+    USBSerial.println(deviceConnected ? "true" : "false");
     // Restart advertising
     BLEAdvertising *pAdvertising = pServer->getAdvertising();
     pAdvertising->start();
@@ -636,8 +640,10 @@ void send_usb_serial() {
 }
 
 void updateESCTelemetryBLE(const STR_ESC_TELEMETRY_140& telemetry) {
-  if (!deviceConnected) return;
-
+  if (!deviceConnected) {
+    //USBSerial.println("No BLE device connected, skipping update");
+    return;
+  }
   // Update voltage characteristic
   float voltage = telemetry.volts;
   pESCVoltage->setValue((uint8_t*)&voltage, sizeof(voltage));
@@ -660,5 +666,11 @@ void updateESCTelemetryBLE(const STR_ESC_TELEMETRY_140& telemetry) {
     telemetry.cap_temp,
     telemetry.mcu_temp
   };
+  USBSerial.print("Temperatures - MOS: ");
+  USBSerial.print(temps.mos_temp);
+  USBSerial.print(", CAP: ");
+  USBSerial.print(temps.cap_temp);
+  USBSerial.print(", MCU: ");
+  USBSerial.println(temps.mcu_temp);
   pESCTemps->setValue((uint8_t*)&temps, sizeof(temps));
 }
