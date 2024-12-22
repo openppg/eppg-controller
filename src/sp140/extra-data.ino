@@ -85,8 +85,6 @@ void resetDeviceData() {
 void line_state_callback(bool connected) {
   setLEDColor(connected ? LED_BLUE : LED_GREEN);
   setLEDs(connected);
-
-  if ( connected ) send_usb_serial();
 }
 
 // customized for sp140
@@ -96,11 +94,16 @@ void parse_usb_serial() {
   DynamicJsonDocument doc(capacity);
   deserializeJson(doc, usb_web);
 
-  if (doc["command"] && doc["command"] == "rbl") {
-    // display.fillScreen(DEFAULT_BG_COLOR);
-    //TODO display ("BL - UF2");
-    rebootBootloader();
-    return;  // run only the command
+  if (doc["command"]) {
+    if (doc["command"] == "rbl") {
+      // display.fillScreen(DEFAULT_BG_COLOR);
+      //TODO display ("BL - UF2");
+      rebootBootloader();
+      return;  // run only the command
+    } else if (doc["command"] == "sync") {
+      send_usb_serial();
+      return;  // run only the command
+    }
   }
 
   if (doc["major_v"] < 5) return; // ignore old versions
@@ -121,7 +124,7 @@ void parse_usb_serial() {
 
   vTaskResume(updateDisplayTaskHandle);
 
-  send_usb_serial();
+  send_usb_serial(); // Send back updated data after settings change
 #endif
 }
 
