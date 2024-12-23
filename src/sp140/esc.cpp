@@ -43,9 +43,9 @@ bool initESC(int escPin) {
   }
 
   // Set idle throttle
-  const uint16_t IdleThrottle_us = 10000; // 1000us (0.1us resolution)
+  const uint16_t IdleThrottle_us = 10000;  // 1000us (0.1us resolution)
   esc.setThrottleSettings2(IdleThrottle_us);
-  delay(500); // Wait for ESC to process the command
+  delay(500);  // Wait for ESC to process the command
   adapter.processTxRxOnce();
 
   return true;
@@ -63,7 +63,7 @@ void setESCThrottle(int throttlePWM) {
 }
 
 void readESCTelemetry() {
-  //USBSerial.println("readESCTelemetry");
+  // USBSerial.println("readESCTelemetry");
 
   // TODO: Skip if the esc is not initialized?
 
@@ -71,7 +71,7 @@ void readESCTelemetry() {
 
   if (model.hasSetThrottleSettings2Response) {
     const sine_esc_SetThrottleSettings2Response *res = &model.setThrottleSettings2Response;
-    //dumpThrottleResponse(res);
+    // dumpThrottleResponse(res);
     // Voltage
     escTelemetryData.volts = res->voltage / 10.0f;
     voltageBuffer.push(escTelemetryData.volts);
@@ -93,7 +93,7 @@ void readESCTelemetry() {
     escTelemetryData.inPWM = res->recv_pwm / 10.0f;
 
     // Status flags (combining running_error and selfcheck_error)
-    //escTelemetryData.statusFlag = (res->running_error & 0xFF) | ((res->selfcheck_error & 0xFF) << 8);
+    // escTelemetryData.statusFlag = (res->running_error & 0xFF) | ((res->selfcheck_error & 0xFF) << 8);
 
     // Calculate watts
     watts = escTelemetryData.amps * escTelemetryData.volts;
@@ -102,9 +102,8 @@ void readESCTelemetry() {
     escTelemetryData.lastUpdateMs = millis();
 
     // debug the esc recpwm
-    //USBSerial.print(", ");
-    //USBSerial.println(res->comm_pwm);
-
+    // USBSerial.print(", ");
+    // USBSerial.println(res->comm_pwm);
   }
 
   adapter.processTxRxOnce();  // Process CAN messages

@@ -26,7 +26,7 @@ bool initBMSCAN() {
 void updateBMSData() {
   if (!_isBMSPresent) return;  // Exit if BMS is not present
 
-  //USBSerial.println("Updating BMS Data");
+  // USBSerial.println("Updating BMS Data");
   bms_can.update();
 
   // Basic measurements
@@ -53,13 +53,13 @@ void updateBMSData() {
 
   bmsTelemetryData.lastUpdateMs = millis();
 
-  //printBMSData();
+  // printBMSData();
 }
 
 void printBMSData() {
   if (!_isBMSPresent) return;  // Exit if BMS is not present
 
-  //USBSerial.println("BMS Data:");
+  // USBSerial.println("BMS Data:");
   USBSerial.print("SOC: ");  // State of Charge
   USBSerial.print(bms_can.getSOC());
   USBSerial.println(" %");

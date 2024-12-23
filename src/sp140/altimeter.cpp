@@ -32,7 +32,9 @@ bool setupAltimeter(bool altWire) {
   digitalWrite(40, HIGH);
   if (!bmp.begin_I2C(BMP3XX_DEFAULT_ADDRESS, &Wire)) return false;
   #else
-  if (!bmp.begin_I2C(BMP3XX_DEFAULT_ADDRESS, wire)) return false;
+  if (!bmp.begin_I2C(BMP3XX_DEFAULT_ADDRESS, wire)) {
+    return false;
+  }
   #endif
   bmp.setOutputDataRate(BMP3_ODR_25_HZ);
   bmp.setTemperatureOversampling(BMP3_OVERSAMPLING_2X);
