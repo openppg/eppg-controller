@@ -283,7 +283,9 @@ void updateDisplay(
   float escTemp;
   escTemp = escTelemetry.temperatureC;
 
-  if (escTemp >= 100) { canvas.setTextColor(currentTheme->error_text); }  // If temperature is 100C+, display in red.
+  if (escTemp >= 100) {
+    canvas.setTextColor(currentTheme->error_text);  // If temperature is 100C+, display in red.
+  }
   if (escTemp == __FLT_MIN__ || escTemp == 0.0) {  // If temperature is not available, display a question mark.
     canvas.printf("?%c", 247);
   } else {  // Otherwise, display the temperature. (in degrees C)

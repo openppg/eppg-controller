@@ -1,6 +1,28 @@
 // Copyright 2020 <Zach Whitehead>
 // OpenPPG
 
+/**
+ * WebUSB Protocol Documentation
+ *
+ * Available Commands:
+ * - "rbl": Reboot to bootloader for firmware updates
+ * - "sync": Request current device settings and state
+ *
+ * Response Format:
+ * {
+ *   "mj_v": number,        // Major version
+ *   "mi_v": number,        // Minor version
+ *   "arch": string,        // Architecture ("SAMD21" or "RP2040")
+ *   "scr_rt": number,      // Screen rotation
+ *   "ar_tme": number,      // Armed time in minutes
+ *   "m_tmp": bool,         // Metric temperature
+ *   "m_alt": bool,         // Metric altitude
+ *   "prf": number,         // Performance mode
+ *   "sea_p": float,        // Sea pressure
+ *   "thm": number          // Theme
+ * }
+ */
+
 // ** Logic for EEPROM **
 # define EEPROM_OFFSET 0  // Address of first byte of EEPROM
 
@@ -80,27 +102,48 @@ void resetDeviceData() {
   writeDeviceData();
 }
 
-// ** Logic for WebUSB **
-// Callback for when the USB connection state changes
+/**
+ * WebUSB connection state change callback.
+ * Updates LED indicators to show connection status.
+ *
+ * @param connected True if WebUSB connection established, false if disconnected
+ */
 void line_state_callback(bool connected) {
   setLEDColor(connected ? LED_BLUE : LED_GREEN);
   setLEDs(connected);
-
-  if ( connected ) send_usb_serial();
 }
 
-// customized for sp140
+/**
+ * Parses and handles incoming WebUSB JSON messages.
+ * Messages can either be commands or settings updates.
+ *
+ * Command messages are processed immediately and return.
+ * Settings messages must have major_v >= 5 and contain valid settings values.
+ *
+ * All settings changes are validated, sanitized, and saved to EEPROM.
+ * Current device state is sent back after successful settings changes.
+ *
+ * Error Handling:
+ * - Invalid JSON: Silently ignored
+ * - Invalid version: Silently ignored
+ * - Invalid settings: Sanitized to default values
+ */
 void parse_usb_serial() {
 #ifdef USE_TINYUSB
-  const size_t capacity = JSON_OBJECT_SIZE(13) + 90;
+  const size_t capacity = JSON_OBJECT_SIZE(13) + 90;  // Size for max message
   DynamicJsonDocument doc(capacity);
   deserializeJson(doc, usb_web);
 
-  if (doc["command"] && doc["command"] == "rbl") {
-    // display.fillScreen(DEFAULT_BG_COLOR);
-    //TODO display ("BL - UF2");
-    rebootBootloader();
-    return;  // run only the command
+  if (doc["command"]) {
+    if (doc["command"] == "rbl") {
+      // display.fillScreen(DEFAULT_BG_COLOR);
+      //TODO display ("BL - UF2");
+      rebootBootloader();
+      return;  // run only the command
+    } else if (doc["command"] == "sync") {
+      send_usb_serial();
+      return;  // run only the command
+    }
   }
 
   if (doc["major_v"] < 5) return; // ignore old versions
@@ -121,10 +164,16 @@ void parse_usb_serial() {
 
   vTaskResume(updateDisplayTaskHandle);
 
-  send_usb_serial();
+  send_usb_serial(); // Send back updated data after settings change
 #endif
 }
 
+/**
+ * Validates and sanitizes device settings to ensure they are within acceptable ranges.
+ * Each setting is checked against its valid range and set to a default if invalid.
+ *
+ * @return true if any values were changed during sanitization, false if all valid
+ */
 bool sanitizeDeviceData() {
   bool changed = false;
   // Ensure screen rotation is either 1 or 3, default to 3
