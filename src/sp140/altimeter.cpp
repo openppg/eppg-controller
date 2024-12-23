@@ -26,9 +26,13 @@ void setGroundAltitude(const STR_DEVICE_DATA_140_V1& deviceData) {
 bool setupAltimeter(bool altWire) {
   TwoWire* wire = &Wire;
 
-  if (altWire) {wire = &Wire1; }
+  if (altWire) {
+    wire = &Wire1;
+  }
 
-  if (!bmp.begin_I2C(BMP3XX_DEFAULT_ADDRESS, wire)) return false;
+  if (!bmp.begin_I2C(BMP3XX_DEFAULT_ADDRESS, wire)) {
+    return false;
+  }
   bmp.setOutputDataRate(BMP3_ODR_25_HZ);
   bmp.setTemperatureOversampling(BMP3_OVERSAMPLING_2X);
   bmp.setPressureOversampling(BMP3_OVERSAMPLING_4X);
