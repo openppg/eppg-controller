@@ -366,13 +366,12 @@ void setup140() {
   Wire1.setSCL(A1);
   setupAltimeter(board_config.alt_wire);
   if (board_config.enable_vib) {
-    initVibeMotor();
+    initVibeMotor(board_config.alt_wire);
   }
 }
 
 // main loop - everything runs in threads
 void loop() {
-
 #ifdef M0_PIO
   Watchdog.reset(); // reset the watchdog timer (done in task for RP2040)
 #endif
@@ -593,7 +592,7 @@ bool armSystem() {
   setGroundAltitude(deviceData);
 
   vTaskSuspend(blinkLEDTaskHandle);
-  setLEDs(HIGH); // solid LED while armed
+  setLEDs(HIGH);  // solid LED while armed
   runVibePattern(arm_vibes, 7);
   playMelody(arm_melody, 3);
 

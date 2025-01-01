@@ -6,8 +6,14 @@ Adafruit_DRV2605 vibeMotor;
 
 bool vibeMotorInitialized = false;
 
-bool initVibeMotor() {
-  if (!vibeMotor.begin(&Wire1)) {
+bool initVibeMotor(bool altWire) {
+  TwoWire* wire = &Wire;
+
+  if (altWire) {
+    wire = &Wire1;
+  }
+
+  if (!vibeMotor.begin(wire)) {
     return false;
   }
   vibeMotor.selectLibrary(3);
