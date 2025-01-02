@@ -273,9 +273,11 @@ void updateDisplay(
   float mos_temp;
   mos_temp = escTelemetry.mos_temp;
 
-  if (mos_temp >= 100) { canvas.setTextColor(currentTheme->error_text); }  // If temperature is 100C+, display in red.
+  if (mos_temp >= 100) {
+    canvas.setTextColor(currentTheme->error_text);  // If temperature is 100C+, display in red.
+  }
   if (mos_temp == __FLT_MIN__ || mos_temp == 0.0) {  // If temperature is not available, display a question mark.
-    canvas.print("?c");
+    canvas.printf("?%c", 247);
   } else {  // Otherwise, display the temperature. (in degrees C)
     canvas.printf("%0.0f", mos_temp);
   }

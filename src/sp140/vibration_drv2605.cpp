@@ -8,7 +8,9 @@ Adafruit_DRV2605 vibeMotor;
 bool vibeMotorInitialized = false;
 
 bool initVibeMotor() {
-  if (!vibeMotor.begin(&Wire1)) { return false; }
+  if (!vibeMotor.begin(&Wire1)) {
+    return false;
+  }
   vibeMotor.selectLibrary(3);
   vibeMotor.setMode(DRV2605_MODE_INTTRIG);
   vibeMotorInitialized = true;
@@ -23,7 +25,9 @@ void pulseVibeMotor() {
 }
 
 bool runVibePattern(const unsigned int pattern[], int patternSize) {
-  if (!vibeMotorInitialized) { return false; }
+  if (!vibeMotorInitialized) {
+    return false;
+  }
 
   for (int i = 0; i < patternSize; i++) {
     vibeMotor.setWaveform(i, pattern[i]);
