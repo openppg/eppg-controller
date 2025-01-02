@@ -246,9 +246,18 @@ void updateDisplay(
   canvas.setFont(&Open_Sans_Reg_20);
   canvas.setCursor(8, 108 + FONT_HEIGHT_OFFSET);
   static unsigned int _lastArmedMillis = 0;
-  if (armed) _lastArmedMillis = nowMillis;
-  const int sessionSeconds = (_lastArmedMillis - armedStartMillis) / 1000.0;
-  canvas.printf("%02d:%02d", sessionSeconds / 60, sessionSeconds % 60);
+  if (armed) {
+    _lastArmedMillis = nowMillis;
+    const int sessionSeconds = (_lastArmedMillis - armedStartMillis) / 1000.0;
+    canvas.printf("%02d:%02d", sessionSeconds / 60, sessionSeconds % 60);
+  } else {
+    // Show current time in 24hr format when disarmed
+    time_t now;
+    struct tm timeinfo;
+    time(&now);
+    localtime_r(&now, &timeinfo);
+    canvas.printf("%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
+  }
 
   // Display altitude
   canvas.setCursor(80, 108 + FONT_HEIGHT_OFFSET);

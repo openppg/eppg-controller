@@ -51,6 +51,8 @@ const int DEFAULT_BATT_SIZE = 4000;  // 4kw
 #define THEME_UUID               "AD0E4309-1EB2-461A-B36C-697B2E1604D2"
 #define HW_REVISION_UUID         "2A27"  // Using standard BLE UUID for revision
 #define FW_VERSION_UUID          "2A26"  // Using standard BLE UUID for version
+#define UNIX_TIME_UUID          "E09FF0B7-5D02-4FD5-889E-C4251A58D9E7"  // Our custom UUID
+#define TIMEZONE_UUID           "CAE49D1A-7C21-4B0C-8520-416F3EF69DB1"
 
 #define THROTTLE_VALUE_UUID      "50AB3859-9FBF-4D30-BF97-2516EE632FAD"
 
@@ -251,6 +253,62 @@ class MyServerCallbacks: public BLEServerCallbacks {
   }
 };
 
+class TimeCallbacks: public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *pCharacteristic) {
+    std::string value = pCharacteristic->getValue();
+
+    if (value.length() == sizeof(time_t)) {  // Expecting just a unix timestamp
+      struct timeval tv;
+      time_t timestamp;
+
+      // Copy the incoming timestamp
+      memcpy(&timestamp, value.data(), sizeof(timestamp));
+
+      // Apply timezone offset
+      timestamp += deviceData.timezone_offset;
+
+      tv.tv_sec = timestamp;
+      tv.tv_usec = 0;
+
+      if (settimeofday(&tv, NULL) == 0) {
+        USBSerial.println("Time set successfully");
+      } else {
+        USBSerial.println("Failed to set time");
+      }
+    } else {
+      USBSerial.println("Invalid timestamp length");
+    }
+  }
+
+  void onRead(BLECharacteristic *pCharacteristic) {
+    time_t now;
+    time(&now);
+    now -= deviceData.timezone_offset;  // Remove timezone offset for UTC time
+    pCharacteristic->setValue((uint8_t*)&now, sizeof(now));
+  }
+};
+
+class TimezoneCallbacks: public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *pCharacteristic) {
+    std::string value = pCharacteristic->getValue();
+
+    if (value.length() == 4) {  // Expecting 4 bytes for timezone offset
+      int32_t offset;
+      memcpy(&offset, value.data(), sizeof(offset));
+
+      deviceData.timezone_offset = offset;
+      writeDeviceData();
+      USBSerial.print("Timezone offset set to: ");
+      USBSerial.println(offset);
+    } else {
+      USBSerial.println("Invalid timezone offset length");
+    }
+  }
+
+  void onRead(BLECharacteristic *pCharacteristic) {
+    pCharacteristic->setValue((uint8_t*)&deviceData.timezone_offset, sizeof(deviceData.timezone_offset));
+  }
+};
 
 void setupBLE() {
   // Initialize BLE
@@ -258,19 +316,33 @@ void setupBLE() {
   pServer = BLEDevice::createServer();
   pServer->setCallbacks(new MyServerCallbacks());
 
-  BLEService *pService = pServer->createService(CONFIG_SERVICE_UUID);
+  BLEService *pConfigService = pServer->createService(CONFIG_SERVICE_UUID);
+
+  // Add time characteristics BEFORE starting the service
+  BLECharacteristic *pUnixTime = pConfigService->createCharacteristic(
+                                    UNIX_TIME_UUID,
+                                    BLECharacteristic::PROPERTY_READ |
+                                    BLECharacteristic::PROPERTY_WRITE);
+  pUnixTime->setCallbacks(new TimeCallbacks());
+
+  BLECharacteristic *pTimezone = pConfigService->createCharacteristic(
+                                  TIMEZONE_UUID,
+                                  BLECharacteristic::PROPERTY_READ |
+                                  BLECharacteristic::PROPERTY_WRITE);
+  pTimezone->setCallbacks(new TimezoneCallbacks());
+  pTimezone->setValue((uint8_t*)&deviceData.timezone_offset, sizeof(deviceData.timezone_offset));
 
   // Add device state characteristic
-  pDeviceStateCharacteristic = pService->createCharacteristic(
+  pDeviceStateCharacteristic = pConfigService->createCharacteristic(
     DEVICE_STATE_UUID,
     BLECharacteristic::PROPERTY_READ |
-    BLECharacteristic::PROPERTY_NOTIFY
-  );
+    BLECharacteristic::PROPERTY_NOTIFY);
+
   uint8_t initialState = DISARMED;  // Create a variable to reference
   pDeviceStateCharacteristic->setValue(&initialState, sizeof(initialState));
   pDeviceStateCharacteristic->addDescriptor(new BLE2902());
 
-  BLECharacteristic *pMetricAlt = pService->createCharacteristic(
+  BLECharacteristic *pMetricAlt = pConfigService->createCharacteristic(
                                    METRIC_ALT_UUID,
                                    BLECharacteristic::PROPERTY_READ |
                                    BLECharacteristic::PROPERTY_WRITE);
@@ -280,7 +352,7 @@ void setupBLE() {
   int metricAlt = deviceData.metric_alt ? 1 : 0;
   pMetricAlt->setValue(metricAlt);
 
-  BLECharacteristic *pPerformanceMode = pService->createCharacteristic(
+  BLECharacteristic *pPerformanceMode = pConfigService->createCharacteristic(
                                          PERFORMANCE_MODE_UUID,
                                          BLECharacteristic::PROPERTY_READ |
                                          BLECharacteristic::PROPERTY_WRITE);
@@ -290,7 +362,7 @@ void setupBLE() {
 
   pPerformanceMode->setValue(performanceMode);
 
-  BLECharacteristic *pScreenRotation = pService->createCharacteristic(
+  BLECharacteristic *pScreenRotation = pConfigService->createCharacteristic(
                                         SCREEN_ROTATION_UUID,
                                         BLECharacteristic::PROPERTY_READ |
                                         BLECharacteristic::PROPERTY_WRITE);
@@ -302,20 +374,20 @@ void setupBLE() {
   pScreenRotation->setValue(screenRotation);
 
   // Add read-only characteristics for device info
-  BLECharacteristic *pFirmwareVersion = pService->createCharacteristic(
-                                         FW_VERSION_UUID,
-                                         BLECharacteristic::PROPERTY_READ);
+  BLECharacteristic *pFirmwareVersion = pConfigService->createCharacteristic(
+                                        FW_VERSION_UUID,
+                                        BLECharacteristic::PROPERTY_READ);
   pFirmwareVersion->setValue(VERSION_STRING);
 
-  BLECharacteristic *pHardwareRevision = pService->createCharacteristic(
-                                          HW_REVISION_UUID,
-                                          BLECharacteristic::PROPERTY_READ);
+  BLECharacteristic *pHardwareRevision = pConfigService->createCharacteristic(
+                                         HW_REVISION_UUID,
+                                         BLECharacteristic::PROPERTY_READ);
   // Send revision directly as a byte
   pHardwareRevision->setValue(&deviceData.revision, sizeof(deviceData.revision));
 
-  BLECharacteristic *pArmedTime = pService->createCharacteristic(
-                                   ARMED_TIME_UUID,
-                                   BLECharacteristic::PROPERTY_READ);
+  BLECharacteristic *pArmedTime = pConfigService->createCharacteristic(
+                                  ARMED_TIME_UUID,
+                                  BLECharacteristic::PROPERTY_READ);
   pArmedTime->setValue((uint8_t*)&deviceData.armed_time, sizeof(deviceData.armed_time));
 
   // Create the Device Information Service
@@ -323,12 +395,12 @@ void setupBLE() {
 
   // Add Manufacturer Name characteristic
   BLECharacteristic *pManufacturer = pDeviceInfoService->createCharacteristic(
-                                      MANUFACTURER_NAME_UUID,
-                                      BLECharacteristic::PROPERTY_READ);
+                                     MANUFACTURER_NAME_UUID,
+                                     BLECharacteristic::PROPERTY_READ);
   pManufacturer->setValue("OpenPPG");
 
   // Create throttle characteristic with notify capability
-  pThrottleCharacteristic = pService->createCharacteristic(
+  pThrottleCharacteristic = pConfigService->createCharacteristic(
     THROTTLE_VALUE_UUID,
     BLECharacteristic::PROPERTY_READ |
     BLECharacteristic::PROPERTY_WRITE |  // Add write permission
@@ -337,8 +409,6 @@ void setupBLE() {
   );
   pThrottleCharacteristic->setCallbacks(new ThrottleValueCallbacks());
   pThrottleCharacteristic->addDescriptor(new BLE2902());
-
-  //pDeviceInfoService->start();
 
   // Create BMS Telemetry Service
   BLEService *pBMSService = pServer->createService(BMS_TELEMETRY_SERVICE_UUID);
@@ -418,10 +488,11 @@ void setupBLE() {
       BLECharacteristic::PROPERTY_READ
   );
 
-  // Start all services
-  pService->start();
+  // Start all services AFTER adding all characteristics
+  pConfigService->start();
   pBMSService->start();
   pESCService->start();
+  pDeviceInfoService->start();
 
   // Start advertising
   BLEAdvertising *pAdvertising = pServer->getAdvertising();
@@ -510,6 +581,7 @@ void resetDeviceData() {
   deviceData.theme = DEFAULT_THEME;
   deviceData.batt_size = DEFAULT_BATT_SIZE;
   deviceData.armed_time = 0;
+  deviceData.timezone_offset = 0;  // Default to UTC
   writeDeviceData();
 }
 

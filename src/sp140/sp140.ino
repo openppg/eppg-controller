@@ -420,6 +420,23 @@ void setupWiFi() {
 }
 #endif
 
+// Add near other task declarations at the top
+TaskHandle_t timeDebugTaskHandle = NULL;
+
+// Add the new task function before setupTasks()
+void timeDebugTask(void *pvParameters) {
+  for (;;) {
+    timePrint();
+    vTaskDelay(pdMS_TO_TICKS(1000));  // Delay for 1 second
+  }
+}
+
+// Add near other helper functions
+void timePrint() {
+  struct tm now;
+  getLocalTime(&now, 0);
+  if (now.tm_year >= 117) USBSerial.println(&now, "%B %d %Y %H:%M:%S (%A)");
+}
 
 /**
  * Initializes the necessary components and configurations for the device setup.
@@ -498,6 +515,7 @@ void setupTasks() {
   xTaskCreatePinnedToCore(throttleTask, "throttle", 4096, NULL, 3, &throttleTaskHandle, 0);
   xTaskCreatePinnedToCore(spiCommTask, "SPIComm", 10096, NULL, 5, &spiCommTaskHandle, 1);
   xTaskCreate(updateBLETask, "BLE Update Task", 4096, NULL, 1, NULL);
+  //xTaskCreate(timeDebugTask, "Time Debug", 2048, NULL, 1, &timeDebugTaskHandle);
 
   // Create melody queue
   melodyQueue = xQueueCreate(5, sizeof(MelodyRequest));
