@@ -50,6 +50,7 @@
 #include "../../inc/sp140/display.h"
 #include "../../inc/sp140/bms.h"
 #include "../../inc/sp140/altimeter.h"
+#include "../../inc/sp140/debug.h"
 
 #ifdef USE_DRV2605
   #include "../../inc/sp140/vibration_drv2605.h"
@@ -261,18 +262,26 @@ void refreshDisplay() {
 // For tasks that use the SPI bus cant run in parallel
 void spiCommTask(void *pvParameters) {
   for (;;) {
-      // Update BMS data
-      if (isBMSPresent) {
-        updateBMSData();
-        unifiedBatteryData.volts = bmsTelemetryData.battery_voltage;
-        unifiedBatteryData.amps = bmsTelemetryData.battery_current;
-        unifiedBatteryData.soc = bmsTelemetryData.soc;
-
+      #ifdef SCREEN_DEBUG
+        float altitude = 0;
+        generateFakeTelemetry(escTelemetryData, bmsTelemetryData, unifiedBatteryData, altitude);
         xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);  // Always latest data
-      }
+        xQueueOverwrite(escTelemetryQueue, &escTelemetryData);  // Always latest data
+        refreshDisplay();
+      #else
+        // Update BMS data
+        if (isBMSPresent) {
+          updateBMSData();
+          unifiedBatteryData.volts = bmsTelemetryData.battery_voltage;
+          unifiedBatteryData.amps = bmsTelemetryData.battery_current;
+          unifiedBatteryData.soc = bmsTelemetryData.soc;
 
-      // Update display
-      refreshDisplay();
+          xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);  // Always latest data
+        }
+
+        // Update display
+        refreshDisplay();
+      #endif
       delay(250);
   }
 }
@@ -471,7 +480,11 @@ void setup() {
 #endif
   setLEDColor(LED_YELLOW);  // Booting up
   setupDisplay(deviceData, board_config);
-  isBMSPresent = initBMSCAN();
+
+  #ifndef SCREEN_DEBUG
+    isBMSPresent = initBMSCAN();
+  #endif
+
   initESC(0);
   eepromSemaphore = xSemaphoreCreateBinary();
   xSemaphoreGive(eepromSemaphore);

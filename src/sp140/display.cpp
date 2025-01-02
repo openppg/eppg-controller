@@ -171,7 +171,7 @@ void updateDisplay(
     canvas.print(" ?%");
   }
 
-  float kWatts = constrain(watts / 1000.0, 0, 50);
+  float kWatts = bmsTelemetry.power;  // Already in kW
   float volts = unifiedBatteryData.volts;
   float kWh = wattHoursUsed / 1000.0;
   float amps = unifiedBatteryData.amps;
