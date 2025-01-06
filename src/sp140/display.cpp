@@ -5,13 +5,6 @@
 
 #define FONT_HEIGHT_OFFSET 8
 
-// DEBUG WATCHDOG
-#ifdef RP_PIO
-  #include "hardware/watchdog.h"
-  bool watchdogCausedReboot = false;
-  bool watchdogEnableCausedReboot = false;
-#endif
-
 Adafruit_ST7735* display;
 GFXcanvas16 canvas(SCREEN_WIDTH, SCREEN_HEIGHT);
 
@@ -84,10 +77,6 @@ void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
 // inital screen setup and config with devicedata and boardconfig passed in
 void setupDisplay(const STR_DEVICE_DATA_140_V1& deviceData, const HardwareConfig& board_config) {
   USBSerial.println("setupDisplay");
-#ifdef RP_PIO
-  watchdogCausedReboot = watchdog_caused_reboot();
-  watchdogEnableCausedReboot = watchdog_enable_caused_reboot();
-#endif
 
   display = new Adafruit_ST7735(
     board_config.tft_cs,
