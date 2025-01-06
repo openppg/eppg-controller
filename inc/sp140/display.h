@@ -17,6 +17,15 @@
 // Library config
 #define NO_ADAFRUIT_SSD1306_COLOR_COMPATIBILITY
 
+// Include fonts
+#include <Fonts/FreeSansBold12pt7b.h>
+#include <Fonts/FreeSans9pt7b.h>
+#include "../../inc/fonts/sans_reg10.h"
+#include "../../inc/fonts/sans_reg12.h"
+#include "../../inc/fonts/sans_reg14.h"
+#include "../../inc/fonts/sans_reg16.h"
+#include "../../inc/fonts/sans_reg18.h"
+
 #define BLACK                 ST77XX_BLACK
 #define WHITE                 ST77XX_WHITE
 #define GREEN                 ST77XX_GREEN
@@ -27,6 +36,21 @@
 #define CYAN                  ST77XX_CYAN
 #define PURPLE                0x780F
 #define GRAY                  0xDEFB
+
+namespace Fonts {
+  constexpr const GFXfont* Title = &FreeSansBold12pt7b;
+  constexpr const GFXfont* Large = &Open_Sans_Reg_20;
+  constexpr const GFXfont* Medium = &Open_Sans_Reg_14;
+  constexpr const GFXfont* Small = &Open_Sans_Reg_10;
+}
+
+// Screen dimensions
+#define SCREEN_WIDTH          160
+#define SCREEN_HEIGHT         128
+
+// Battery thresholds
+#define BATTERY_LOW_THRESHOLD     15
+#define BATTERY_MEDIUM_THRESHOLD  30
 
 // Light mode (default)
 // #define DEFAULT_TEXT_COLOR    BLACK

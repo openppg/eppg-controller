@@ -1,13 +1,5 @@
 #include "sp140/display.h"
 
-#include <Fonts/FreeSansBold12pt7b.h>
-#include <Fonts/FreeSans9pt7b.h>
-
-#include "../../inc/fonts/sans_reg10.h"
-#include "../../inc/fonts/sans_reg12.h"
-#include "../../inc/fonts/sans_reg14.h"
-#include "../../inc/fonts/sans_reg16.h"
-#include "../../inc/fonts/sans_reg18.h"
 #include "../../inc/version.h"
 #include "sp140/structs.h"
 
@@ -21,7 +13,7 @@
 #endif
 
 Adafruit_ST7735* display;
-GFXcanvas16 canvas(160, 128);
+GFXcanvas16 canvas(SCREEN_WIDTH, SCREEN_HEIGHT);
 
 // Light Mode Colors
 UIColors lightModeColors = {
@@ -57,7 +49,7 @@ void resetRotation(unsigned int rotation) {
 void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
   display->fillScreen(currentTheme->default_bg);
   display->setTextSize(1);
-  display->setFont(&FreeSansBold12pt7b);
+  display->setFont(Fonts::Title);
   display->setTextColor(currentTheme->default_text);
 
   // Animate "OpenPPG" text
@@ -71,7 +63,7 @@ void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
     delay(100);  // Adjust delay for animation speed
   }
 
-  display->setFont(&Open_Sans_Reg_20);
+  display->setFont(Fonts::Large);
   display->setTextSize(1);
   display->setCursor(60, 60);
   display->printf("v%d.%d", VERSION_MAJOR, VERSION_MINOR);
@@ -121,7 +113,7 @@ void updateDisplay(
   ) {
   canvas.fillScreen(currentTheme->default_bg);
   canvas.setTextWrap(false);
-  canvas.setFont(&Open_Sans_Reg_20);
+  canvas.setFont(Fonts::Large);
   canvas.setTextSize(1);
 
   const unsigned int nowMillis = millis();
@@ -138,8 +130,8 @@ void updateDisplay(
   //   Display battery bar
   if (batteryPercent > 0) {
     unsigned int batteryColor = RED;
-    if (batteryPercent >= 30) batteryColor = GREEN;
-    else if (batteryPercent >= 15) batteryColor = YELLOW;
+    if (batteryPercent >= BATTERY_MEDIUM_THRESHOLD) batteryColor = GREEN;
+    else if (batteryPercent >= BATTERY_LOW_THRESHOLD) batteryColor = YELLOW;
     int batteryPercentWidth = map(static_cast<int>(batteryPercent), 0, 100, 0, 100);
     canvas.fillRect(0, 0, batteryPercentWidth, 32, batteryColor);
   } else {
@@ -182,7 +174,7 @@ void updateDisplay(
   // float kWh = 3.343;
   // float amps = 10.35;
 
-  canvas.setFont(&Open_Sans_Reg_14);
+  canvas.setFont(Fonts::Medium);
 
   canvas.setCursor(1, 40 + FONT_HEIGHT_OFFSET);
   canvas.printf(kWatts < 10 ? "  %4.1fkW" : "%4.1fkW", kWatts);
@@ -207,7 +199,7 @@ void updateDisplay(
 
   // Display modes
   canvas.setCursor(8, 90);
-  canvas.setFont(&Open_Sans_Reg_10);
+  canvas.setFont(Fonts::Small);
   if (deviceData.performance_mode == 0) {
     canvas.setTextColor(currentTheme->chill_text);
     canvas.print("CHILL");
@@ -243,7 +235,7 @@ void updateDisplay(
 
   // Display armed time for the current session
   canvas.setTextColor(currentTheme->default_text);
-  canvas.setFont(&Open_Sans_Reg_20);
+  canvas.setFont(Fonts::Large);
   canvas.setCursor(8, 108 + FONT_HEIGHT_OFFSET);
   static unsigned int _lastArmedMillis = 0;
   if (armed) {
@@ -277,7 +269,7 @@ void updateDisplay(
   // Display MOSFET temperature
   canvas.setCursor(120, 90);
   canvas.setTextColor(currentTheme->default_text);
-  canvas.setFont(&Open_Sans_Reg_10);
+  canvas.setFont(Fonts::Small);
   canvas.print("F:");
   float mos_temp;
   mos_temp = escTelemetry.mos_temp;
