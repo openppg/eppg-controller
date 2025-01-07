@@ -152,7 +152,38 @@ void updateDisplay(
   // Draw bottom border of top section
   canvas.drawFastHLine(0, 32, 160, currentTheme->ui_accent);
 
-  // Draw the canvas to the display->
+  // Middle section - Power and Armed Time
+  // Vertical divider
+  canvas.drawFastVLine(90, 32, 53, currentTheme->ui_accent);
+
+  // Left side - Power in kW
+  canvas.setFont(Fonts::SemiBold20);
+  canvas.setCursor(5, 70);
+  float kWatts = bmsTelemetry.power;  // Already in kW
+  canvas.printf(kWatts < 10 ? "%4.1f" : "%4.1f", kWatts);
+  canvas.setFont(Fonts::Regular14);
+  canvas.print("kW");
+
+  // Right side - Armed Time
+  canvas.setFont(Fonts::SemiBold20);
+  canvas.setCursor(95, 70);
+  const unsigned int nowMillis = millis();
+  if (armed) {
+    const int sessionSeconds = (nowMillis - armedStartMillis) / 1000;
+    canvas.printf("%02d:%02d", sessionSeconds / 60, sessionSeconds % 60);
+  } else {
+    // Show current time in 24hr format when disarmed
+    time_t now;
+    struct tm timeinfo;
+    time(&now);
+    localtime_r(&now, &timeinfo);
+    canvas.printf("%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
+  }
+
+  // Draw bottom border of middle section
+  canvas.drawFastHLine(0, 85, 160, currentTheme->ui_accent);
+
+  // Draw the canvas to the display
   display->drawRGBBitmap(0, 0, canvas.getBuffer(), canvas.width(), canvas.height());
 }
 
