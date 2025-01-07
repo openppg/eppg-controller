@@ -157,11 +157,15 @@ void updateDisplay(
   canvas.drawFastVLine(90, 32, 53, currentTheme->ui_accent);
 
   // Left side - Power in kW
-  canvas.setFont(Fonts::SemiBold20);
-  canvas.setCursor(5, 70);
+  canvas.setFont(Fonts::SemiBold22);
+  canvas.setTextColor(currentTheme->default_text);
+  canvas.setCursor(2, 65);
   float kWatts = bmsTelemetry.power;  // Already in kW
-  canvas.printf(kWatts < 10 ? "%4.1f" : "%4.1f", kWatts);
+  canvas.printf(kWatts < 10 ? "%.1f" : "%.1f", kWatts);
+
+  // kW unit label
   canvas.setFont(Fonts::Regular14);
+  canvas.setCursor(canvas.getCursorX() + 3, 65);
   canvas.print("kW");
 
   // Right side - Armed Time

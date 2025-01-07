@@ -29,7 +29,10 @@
 #include "../../inc/fonts/sans_semb16.h"
 #include "../../inc/fonts/sans_semb18.h"
 #include "../../inc/fonts/sans_semb20.h"
+#include "../../inc/fonts/sans_semb22.h"
+#include "../../inc/fonts/sans_semb24.h"
 #include "../../inc/fonts/sans_bold14.h"
+
 //#include "../../inc/fonts/SymbolMono18pt7b.h"
 
 #define BLACK                 ST77XX_BLACK
@@ -55,6 +58,8 @@ namespace Fonts {
   constexpr const GFXfont* SemiBold16 = &Open_Sans_SemiBold_16;
   constexpr const GFXfont* SemiBold18 = &Open_Sans_SemiBold_18;
   constexpr const GFXfont* SemiBold20 = &Open_Sans_SemiBold_20;
+  constexpr const GFXfont* SemiBold22 = &Open_Sans_SemiBold_22;
+  constexpr const GFXfont* SemiBold24 = &Open_Sans_SemiBold_24;
   // Bold fonts by size
   constexpr const GFXfont* Bold14 = &Open_Sans_Bold_14;
   // Special fonts
