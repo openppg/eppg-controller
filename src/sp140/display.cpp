@@ -102,6 +102,71 @@ void updateDisplay(
   ) {
   canvas.fillScreen(currentTheme->default_bg);
   canvas.setTextWrap(false);
+  canvas.setFont(Fonts::Medium);
+  canvas.setTextSize(1);
+
+  // Top status bar section
+  const float batteryPercent = unifiedBatteryData.soc;
+  const float totalVolts = unifiedBatteryData.volts;
+  const float lowestCellV = bmsTelemetry.lowest_cell_voltage;
+
+  // Draw left voltage (lowest cell)
+  canvas.setTextColor(currentTheme->default_text);
+  canvas.setCursor(2, 16 + FONT_HEIGHT_OFFSET);
+  canvas.printf("%2.2fV", lowestCellV);
+
+  // Draw battery indicator in center (30-130 px wide)
+  if (batteryPercent > 0) {
+    unsigned int batteryColor = RED;
+    if (batteryPercent >= BATTERY_MEDIUM_THRESHOLD) batteryColor = GREEN;
+    else if (batteryPercent >= BATTERY_LOW_THRESHOLD) batteryColor = YELLOW;
+
+    // Battery outline
+    canvas.drawRect(30, 0, 100, 40, currentTheme->ui_accent);
+    // Battery tip
+    canvas.fillRect(130, 12, 3, 16, currentTheme->ui_accent);
+
+    // Fill battery based on percentage
+    int batteryWidth = map(static_cast<int>(batteryPercent), 0, 100, 0, 96);
+    canvas.fillRect(32, 2, batteryWidth, 36, batteryColor);
+
+    // Draw percentage text centered in battery
+    canvas.setTextColor(currentTheme->default_text);
+    canvas.setCursor(65, 16 + FONT_HEIGHT_OFFSET);
+    canvas.printf("%d%%", static_cast<int>(batteryPercent));
+  } else {
+    canvas.setTextColor(currentTheme->error_text);
+    canvas.setCursor(50, 16 + FONT_HEIGHT_OFFSET);
+    if (totalVolts > 10) {
+      canvas.print("NO BATT");
+    } else {
+      canvas.print("NO TELEM");
+    }
+  }
+
+  // Draw right voltage (total pack voltage)
+  canvas.setTextColor(currentTheme->default_text);
+  canvas.setCursor(135, 16 + FONT_HEIGHT_OFFSET);
+  canvas.printf("%2.0fV", totalVolts);
+
+  // Draw bottom border of top section
+  canvas.drawFastHLine(0, 40, 160, currentTheme->ui_accent);
+
+  // Draw the canvas to the display->
+  display->drawRGBBitmap(0, 0, canvas.getBuffer(), canvas.width(), canvas.height());
+}
+
+// Old display update function
+void updateDisplayOld(
+  const STR_DEVICE_DATA_140_V1& deviceData,
+  const STR_ESC_TELEMETRY_140& escTelemetry,
+  const STR_BMS_TELEMETRY_140& bmsTelemetry,
+  const UnifiedBatteryData& unifiedBatteryData,
+  float altitude, bool armed, bool cruising,
+  unsigned int armedStartMillis
+  ) {
+  canvas.fillScreen(currentTheme->default_bg);
+  canvas.setTextWrap(false);
   canvas.setFont(Fonts::Large);
   canvas.setTextSize(1);
 
@@ -298,26 +363,6 @@ void updateDisplay(
     canvas.printf("%0.0f", mcu_temp);
   }
 
-//  // DEBUG TIMING
-//  canvas.setTextSize(1);
-//  canvas.setCursor(4, 118);
-//  static unsigned int lastDisplayMillis = 0;
-//  canvas.printf("%5d  %5d", nowMillis - escTelemetry.lastUpdateMillis, nowMillis - lastDisplayMillis);
-//  lastDisplayMillis = nowMillis;
-//
-//  canvas.printf("  %3d %2d %2d", escTelemetry.lastReadBytes, escTelemetry.errorStopBytes, escTelemetry.errorChecksum);
-
-//  // DEBUG WATCHDOG
-//  #ifdef RP_PIO
-//    canvas.setTextSize(1);
-//    canvas.setCursor(4, 118);
-//    canvas.printf("watchdog %d %d", watchdogCausedReboot, watchdogEnableCausedReboot);
-//  #endif
-//
-//  // DEBUG FREE MEMORY
-//  #ifdef RP_PIO
-//    canvas.printf("  mem %d", rp2040.getFreeHeap());
-//  #endif
 
 
   // Draw the canvas to the display->
