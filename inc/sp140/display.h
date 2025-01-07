@@ -29,6 +29,7 @@
 #include "../../inc/fonts/sans_semb16.h"
 #include "../../inc/fonts/sans_semb18.h"
 #include "../../inc/fonts/sans_semb20.h"
+#include "../../inc/fonts/sans_bold14.h"
 //#include "../../inc/fonts/SymbolMono18pt7b.h"
 
 #define BLACK                 ST77XX_BLACK
@@ -45,7 +46,6 @@
 namespace Fonts {
   constexpr const GFXfont* Title = &FreeSansBold12pt7b;
   // Regular fonts by size
-  constexpr const GFXfont* Small = &Open_Sans_Regular_10;
   constexpr const GFXfont* Regular12 = &Open_Sans_Regular_12;
   constexpr const GFXfont* Regular14 = &Open_Sans_Regular_14;
   constexpr const GFXfont* Regular16 = &Open_Sans_Regular_16;
@@ -55,12 +55,15 @@ namespace Fonts {
   constexpr const GFXfont* SemiBold16 = &Open_Sans_SemiBold_16;
   constexpr const GFXfont* SemiBold18 = &Open_Sans_SemiBold_18;
   constexpr const GFXfont* SemiBold20 = &Open_Sans_SemiBold_20;
+  // Bold fonts by size
+  constexpr const GFXfont* Bold14 = &Open_Sans_Bold_14;
   // Special fonts
   // constexpr const GFXfont* Symbols = &SymbolMono18pt7b;
   // Legacy names (for backward compatibility)
+  constexpr const GFXfont* Small = &Open_Sans_Regular_10;
   constexpr const GFXfont* Large = SemiBold20;
   constexpr const GFXfont* MediumLarge = Regular16;
-  constexpr const GFXfont* Medium = Regular14;
+  constexpr const GFXfont* Medium = SemiBold14;
 }
 
 // Screen dimensions
