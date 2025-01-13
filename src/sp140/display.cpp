@@ -130,12 +130,12 @@ void updateDisplay(
 
   // Middle section armed background
   if (armed) {
-    canvas.fillRect(90, 32, 70, 53, CYAN);
+    canvas.fillRect(90, 32, 70, 43, CYAN);
   }
 
   // Temperature section backgrounds
-  const int tempBoxHeight = 14;
-  const int tempStartY = 85;
+  const int tempBoxHeight = 17;
+  const int tempStartY = 75;
   const int tempBoxWidth = 40;
   const int tempBoxX = 120;
 
@@ -165,11 +165,11 @@ void updateDisplay(
   canvas.drawFastHLine(0, 32, 160, currentTheme->ui_accent);  // Bottom border
 
   // Middle section borders
-  canvas.drawFastVLine(90, 32, 53, currentTheme->ui_accent);  // Vertical divider
-  canvas.drawFastHLine(0, 85, 160, currentTheme->ui_accent);  // Bottom border
+  canvas.drawFastVLine(90, 32, 43, currentTheme->ui_accent);  // Vertical divider
+  canvas.drawFastHLine(0, 75, 160, currentTheme->ui_accent);  // Bottom border moved up
 
   // Temperature section borders
-  canvas.drawFastVLine(120, 85, 43, currentTheme->ui_accent);  // Vertical divider
+  canvas.drawFastVLine(120, 75, 53, currentTheme->ui_accent);  // Vertical divider
   canvas.drawFastHLine(tempBoxX, tempStartY + tempBoxHeight, tempBoxWidth, currentTheme->ui_accent);  // Horizontal dividers
   canvas.drawFastHLine(tempBoxX, tempStartY + (tempBoxHeight * 2), tempBoxWidth, currentTheme->ui_accent);
 
@@ -211,17 +211,17 @@ void updateDisplay(
   // Power display
   canvas.setFont(Fonts::SemiBold24);
   canvas.setTextColor(currentTheme->default_text);
-  canvas.setCursor(2, 65);
+  canvas.setCursor(2, 60);
   float kWatts = bmsTelemetry.power;
   canvas.printf(kWatts < 10 ? "%.1f" : "%.1f", kWatts);
 
   // kW label
   canvas.setFont(Fonts::Regular14);
-  canvas.setCursor(canvas.getCursorX() + 3, 65);
+  canvas.setCursor(canvas.getCursorX() + 3, 60);
   canvas.print("kW");
 
   // Power bar
-  const int powerBarY = 75;
+  const int powerBarY = 65;
   const int powerBarHeight = 8;
   const int powerBarWidth = 85;
   const float maxPower = 20.0;
@@ -233,7 +233,7 @@ void updateDisplay(
   // Armed time
   canvas.setFont(Fonts::SemiBold20);
   canvas.setTextColor(currentTheme->default_text);
-  canvas.setCursor(95, 70);
+  canvas.setCursor(95, 65);
   const unsigned int nowMillis = millis();
   if (armed) {
     const int sessionSeconds = (nowMillis - armedStartMillis) / 1000;
@@ -276,9 +276,9 @@ void updateDisplay(
     } else {
       canvas.setTextColor(currentTheme->default_text);
     }
-    canvas.setCursor(125, boxY + 11);
+    canvas.setCursor(125, boxY + 13);
     canvas.print(label);
-    canvas.setCursor(140, boxY + 11);
+    canvas.setCursor(140, boxY + 13);
     canvas.printf("%d", static_cast<int>(temp));
   };
 
