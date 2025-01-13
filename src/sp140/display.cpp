@@ -100,46 +100,97 @@ void updateDisplay(
   float altitude, bool armed, bool cruising,
   unsigned int armedStartMillis
   ) {
+  float batteryPercent = unifiedBatteryData.soc;
+  float totalVolts = unifiedBatteryData.volts;
+  float lowestCellV = bmsTelemetry.lowest_cell_voltage;
+  float batteryTemp = bmsTelemetry.highest_temperature;
+  float escTemp = escTelemetry.mos_temp;
+  float motorTemp = escTelemetry.cap_temp;
+
   canvas.fillScreen(currentTheme->default_bg);
   canvas.setTextWrap(false);
   canvas.setFont(Fonts::Medium);
   canvas.setTextSize(1);
 
-  // Top status bar section
-  const float batteryPercent = unifiedBatteryData.soc;
-  const float totalVolts = unifiedBatteryData.volts;
-  const float lowestCellV = bmsTelemetry.lowest_cell_voltage;
-
-  // Draw left voltage (lowest cell)
-  canvas.setTextColor(currentTheme->default_text);
-  // Color background based on cell voltage
+  // Draw all backgrounds first
+  // Top section backgrounds
   if (lowestCellV <= CELL_VOLTAGE_CRITICAL) {
     canvas.fillRect(0, 0, 35, 32, RED);
-    canvas.setTextColor(WHITE);
   } else if (lowestCellV <= CELL_VOLTAGE_WARNING) {
     canvas.fillRect(0, 0, 35, 32, ORANGE);
-    canvas.setTextColor(BLACK);
   }
-  canvas.setCursor(2, 12 + FONT_HEIGHT_OFFSET);
-  canvas.printf("%2.2fV", lowestCellV);
 
-  // Draw battery indicator in center (40-120 px wide)
+  // Battery background if percentage > 0
   if (batteryPercent > 0) {
     unsigned int batteryColor = RED;
     if (batteryPercent >= BATTERY_MEDIUM_THRESHOLD) batteryColor = GREEN;
     else if (batteryPercent >= BATTERY_LOW_THRESHOLD) batteryColor = YELLOW;
-
-    // Battery outline
-    canvas.drawRect(40, 0, 80, 32, currentTheme->ui_accent);
-    // Battery tip
-    canvas.fillRect(120, 8, 3, 16, currentTheme->ui_accent);
-
-    // Fill battery based on percentage
     int batteryWidth = map(static_cast<int>(batteryPercent), 0, 100, 0, 76);
     canvas.fillRect(42, 2, batteryWidth, 28, batteryColor);
+  }
 
-    // Draw percentage text centered in battery
+  // Middle section armed background
+  if (armed) {
+    canvas.fillRect(90, 32, 70, 53, CYAN);
+  }
+
+  // Temperature section backgrounds
+  const int tempBoxHeight = 14;
+  const int tempStartY = 85;
+  const int tempBoxWidth = 40;
+  const int tempBoxX = 120;
+
+  // Draw temperature backgrounds
+  if (batteryTemp >= TEMP_CRITICAL_THRESHOLD) {
+    canvas.fillRect(tempBoxX, tempStartY, tempBoxWidth, tempBoxHeight, RED);
+  } else if (batteryTemp >= TEMP_WARNING_THRESHOLD) {
+    canvas.fillRect(tempBoxX, tempStartY, tempBoxWidth, tempBoxHeight, ORANGE);
+  }
+
+  if (escTemp >= TEMP_CRITICAL_THRESHOLD) {
+    canvas.fillRect(tempBoxX, tempStartY + tempBoxHeight, tempBoxWidth, tempBoxHeight, RED);
+  } else if (escTemp >= TEMP_WARNING_THRESHOLD) {
+    canvas.fillRect(tempBoxX, tempStartY + tempBoxHeight, tempBoxWidth, tempBoxHeight, ORANGE);
+  }
+
+  if (motorTemp >= TEMP_CRITICAL_THRESHOLD) {
+    canvas.fillRect(tempBoxX, tempStartY + (tempBoxHeight * 2), tempBoxWidth, tempBoxHeight, RED);
+  } else if (motorTemp >= TEMP_WARNING_THRESHOLD) {
+    canvas.fillRect(tempBoxX, tempStartY + (tempBoxHeight * 2), tempBoxWidth, tempBoxHeight, ORANGE);
+  }
+
+  // Now draw all borders and lines
+  // Top section borders
+  canvas.drawRect(40, 0, 80, 32, currentTheme->ui_accent);  // Battery outline
+  canvas.fillRect(120, 8, 3, 16, currentTheme->ui_accent);  // Battery tip
+  canvas.drawFastHLine(0, 32, 160, currentTheme->ui_accent);  // Bottom border
+
+  // Middle section borders
+  canvas.drawFastVLine(90, 32, 53, currentTheme->ui_accent);  // Vertical divider
+  canvas.drawFastHLine(0, 85, 160, currentTheme->ui_accent);  // Bottom border
+
+  // Temperature section borders
+  canvas.drawFastVLine(120, 85, 43, currentTheme->ui_accent);  // Vertical divider
+  canvas.drawFastHLine(tempBoxX, tempStartY + tempBoxHeight, tempBoxWidth, currentTheme->ui_accent);  // Horizontal dividers
+  canvas.drawFastHLine(tempBoxX, tempStartY + (tempBoxHeight * 2), tempBoxWidth, currentTheme->ui_accent);
+
+  // Now draw all text and content
+  // Top section text
+  // Left voltage
+  if (lowestCellV <= CELL_VOLTAGE_CRITICAL) {
+    canvas.setTextColor(WHITE);
+  } else if (lowestCellV <= CELL_VOLTAGE_WARNING) {
+    canvas.setTextColor(BLACK);
+  } else {
     canvas.setTextColor(currentTheme->default_text);
+  }
+  canvas.setFont(Fonts::Medium);
+  canvas.setCursor(2, 12 + FONT_HEIGHT_OFFSET);
+  canvas.printf("%2.2fV", lowestCellV);
+
+  // Battery percentage
+  canvas.setTextColor(currentTheme->default_text);
+  if (batteryPercent > 0) {
     canvas.setCursor(65, 12 + FONT_HEIGHT_OFFSET);
     canvas.printf("%d%%", static_cast<int>(batteryPercent));
   } else {
@@ -152,57 +203,43 @@ void updateDisplay(
     }
   }
 
-  // Draw right voltage (total pack voltage)
+  // Right voltage
   canvas.setTextColor(currentTheme->default_text);
   canvas.setCursor(128, 12 + FONT_HEIGHT_OFFSET);
   canvas.printf("%2.0fV", totalVolts);
 
-  // Draw bottom border of top section
-  canvas.drawFastHLine(0, 32, 160, currentTheme->ui_accent);
-
-  // Middle section - Power and Armed Time
-  // Vertical divider
-  canvas.drawFastVLine(90, 32, 53, currentTheme->ui_accent);
-
-  // Left side - Power in kW
+  // Middle section text
+  // Power display
   canvas.setFont(Fonts::SemiBold24);
   canvas.setTextColor(currentTheme->default_text);
   canvas.setCursor(2, 65);
-  float kWatts = bmsTelemetry.power;  // Already in kW
+  float kWatts = bmsTelemetry.power;
   canvas.printf(kWatts < 10 ? "%.1f" : "%.1f", kWatts);
 
-  // kW unit label
+  // kW label
   canvas.setFont(Fonts::Regular14);
   canvas.setCursor(canvas.getCursorX() + 3, 65);
   canvas.print("kW");
 
-  // Power bar under kW display
+  // Power bar
   const int powerBarY = 75;
-  const int powerBarHeight = 8;  // Increased from 4 to 8
-  const int powerBarWidth = 85;  // Same width as the section (up to vertical divider)
-
-  // Calculate and draw the filled portion (max 30kW)
-  const float maxPower = 20.0;  // 30kW max
+  const int powerBarHeight = 8;
+  const int powerBarWidth = 85;
+  const float maxPower = 20.0;
   const int filledWidth = map(static_cast<int>(kWatts * 100), 0, static_cast<int>(maxPower * 100), 0, powerBarWidth);
   if (filledWidth > 0) {
     canvas.fillRect(2, powerBarY, filledWidth, powerBarHeight, GREEN);
   }
 
-  // Right side - Armed Time
-  // Fill background cyan when armed
-  if (armed) {
-    canvas.fillRect(90, 32, 70, 53, CYAN);
-  }
-  canvas.setTextColor(currentTheme->default_text);
-
+  // Armed time
   canvas.setFont(Fonts::SemiBold20);
+  canvas.setTextColor(currentTheme->default_text);
   canvas.setCursor(95, 70);
   const unsigned int nowMillis = millis();
   if (armed) {
     const int sessionSeconds = (nowMillis - armedStartMillis) / 1000;
     canvas.printf("%02d:%02d", sessionSeconds / 60, sessionSeconds % 60);
   } else {
-    // Show current time in 24hr format when disarmed
     time_t now;
     struct tm timeinfo;
     time(&now);
@@ -210,11 +247,8 @@ void updateDisplay(
     canvas.printf("%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
   }
 
-  // Draw bottom border of middle section
-  canvas.drawFastHLine(0, 85, 160, currentTheme->ui_accent);
-
-  // Bottom section - Altitude and Temperatures
-  // Left side - Altitude
+  // Bottom section text
+  // Altitude
   canvas.setFont(Fonts::SemiBold24);
   canvas.setTextColor(currentTheme->default_text);
   canvas.setCursor(2, 115);
@@ -233,51 +267,25 @@ void updateDisplay(
     }
   }
 
-  // Right side - Temperature displays
-  // Draw vertical separator
-  canvas.drawFastVLine(120, 85, 43, currentTheme->ui_accent);
-
-  // Create three equal sections for temperatures
-  const int tempBoxHeight = 14;
-  const int tempStartY = 85;
-  const int tempBoxWidth = 40;
-  const int tempBoxX = 120;
-
-  // Draw horizontal separators between temp sections
-  canvas.drawFastHLine(tempBoxX, tempStartY + tempBoxHeight, tempBoxWidth, currentTheme->ui_accent);
-  canvas.drawFastHLine(tempBoxX, tempStartY + (tempBoxHeight * 2), tempBoxWidth, currentTheme->ui_accent);
-
-  // Function to draw temperature with background
-  auto drawTemp = [&](const char* label, float temp, int boxY) {
-    // Draw background if temperature is high
+  // Temperature values
+  canvas.setFont(Fonts::Regular14);
+  auto drawTempText = [&](const char* label, float temp, int boxY) {
     if (temp >= TEMP_CRITICAL_THRESHOLD) {
-      canvas.fillRect(tempBoxX, boxY, tempBoxWidth, tempBoxHeight, RED);
       canvas.setTextColor(WHITE);
     } else if (temp >= TEMP_WARNING_THRESHOLD) {
-      canvas.fillRect(tempBoxX, boxY, tempBoxWidth, tempBoxHeight, ORANGE);
       canvas.setTextColor(BLACK);
     } else {
       canvas.setTextColor(currentTheme->default_text);
     }
-
-    canvas.setFont(Fonts::Regular14);
     canvas.setCursor(125, boxY + 11);
     canvas.print(label);
     canvas.setCursor(140, boxY + 11);
     canvas.printf("%d", static_cast<int>(temp));
   };
 
-  // Battery temp (placeholder values for now)
-  float batteryTemp = 40;  // Replace with actual value
-  drawTemp("B", batteryTemp, tempStartY);
-
-  // ESC temp
-  float escTemp = 99;  // Replace with actual value
-  drawTemp("E", escTemp, tempStartY + tempBoxHeight);
-
-  // Motor temp
-  float motorTemp = 70;  // Replace with actual value
-  drawTemp("M", motorTemp, tempStartY + (tempBoxHeight * 2));
+  drawTempText("B", batteryTemp, tempStartY);
+  drawTempText("E", escTemp, tempStartY + tempBoxHeight);
+  drawTempText("M", motorTemp, tempStartY + (tempBoxHeight * 2));
 
   // Draw the canvas to the display
   display->drawRGBBitmap(0, 0, canvas.getBuffer(), canvas.width(), canvas.height());
