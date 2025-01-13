@@ -112,6 +112,14 @@ void updateDisplay(
 
   // Draw left voltage (lowest cell)
   canvas.setTextColor(currentTheme->default_text);
+  // Color background based on cell voltage
+  if (lowestCellV <= CELL_VOLTAGE_CRITICAL) {
+    canvas.fillRect(0, 0, 35, 32, RED);
+    canvas.setTextColor(WHITE);
+  } else if (lowestCellV <= CELL_VOLTAGE_WARNING) {
+    canvas.fillRect(0, 0, 35, 32, ORANGE);
+    canvas.setTextColor(BLACK);
+  }
   canvas.setCursor(2, 12 + FONT_HEIGHT_OFFSET);
   canvas.printf("%2.2fV", lowestCellV);
 
@@ -157,7 +165,7 @@ void updateDisplay(
   canvas.drawFastVLine(90, 32, 53, currentTheme->ui_accent);
 
   // Left side - Power in kW
-  canvas.setFont(Fonts::SemiBold22);
+  canvas.setFont(Fonts::SemiBold24);
   canvas.setTextColor(currentTheme->default_text);
   canvas.setCursor(2, 65);
   float kWatts = bmsTelemetry.power;  // Already in kW
@@ -214,29 +222,44 @@ void updateDisplay(
   // Create three equal sections for temperatures
   const int tempBoxHeight = 14;
   const int tempStartY = 85;
+  const int tempBoxWidth = 40;
+  const int tempBoxX = 120;
 
   // Draw horizontal separators between temp sections
-  canvas.drawFastHLine(120, tempStartY + tempBoxHeight, 40, currentTheme->ui_accent);
-  canvas.drawFastHLine(120, tempStartY + (tempBoxHeight * 2), 40, currentTheme->ui_accent);
+  canvas.drawFastHLine(tempBoxX, tempStartY + tempBoxHeight, tempBoxWidth, currentTheme->ui_accent);
+  canvas.drawFastHLine(tempBoxX, tempStartY + (tempBoxHeight * 2), tempBoxWidth, currentTheme->ui_accent);
 
-  // Battery temp
-  canvas.setFont(Fonts::Regular14);
-  canvas.setCursor(125, tempStartY + 11);
-  canvas.print("B");
-  canvas.setCursor(140, tempStartY + 11);
-  canvas.print("40");  // Placeholder value
+  // Function to draw temperature with background
+  auto drawTemp = [&](const char* label, float temp, int boxY) {
+    // Draw background if temperature is high
+    if (temp >= TEMP_CRITICAL_THRESHOLD) {
+      canvas.fillRect(tempBoxX, boxY, tempBoxWidth, tempBoxHeight, RED);
+      canvas.setTextColor(WHITE);
+    } else if (temp >= TEMP_WARNING_THRESHOLD) {
+      canvas.fillRect(tempBoxX, boxY, tempBoxWidth, tempBoxHeight, ORANGE);
+      canvas.setTextColor(BLACK);
+    } else {
+      canvas.setTextColor(currentTheme->default_text);
+    }
+
+    canvas.setFont(Fonts::Regular14);
+    canvas.setCursor(125, boxY + 11);
+    canvas.print(label);
+    canvas.setCursor(140, boxY + 11);
+    canvas.printf("%d", static_cast<int>(temp));
+  };
+
+  // Battery temp (placeholder values for now)
+  float batteryTemp = 40;  // Replace with actual value
+  drawTemp("B", batteryTemp, tempStartY);
 
   // ESC temp
-  canvas.setCursor(125, tempStartY + tempBoxHeight + 11);
-  canvas.print("E");
-  canvas.setCursor(140, tempStartY + tempBoxHeight + 11);
-  canvas.print("99");  // Placeholder value
+  float escTemp = 99;  // Replace with actual value
+  drawTemp("E", escTemp, tempStartY + tempBoxHeight);
 
   // Motor temp
-  canvas.setCursor(125, tempStartY + (tempBoxHeight * 2) + 11);
-  canvas.print("M");
-  canvas.setCursor(140, tempStartY + (tempBoxHeight * 2) + 11);
-  canvas.print("70");  // Placeholder value
+  float motorTemp = 70;  // Replace with actual value
+  drawTemp("M", motorTemp, tempStartY + (tempBoxHeight * 2));
 
   // Draw the canvas to the display
   display->drawRGBBitmap(0, 0, canvas.getBuffer(), canvas.width(), canvas.height());

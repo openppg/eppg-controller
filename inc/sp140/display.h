@@ -79,6 +79,14 @@ namespace Fonts {
 #define BATTERY_LOW_THRESHOLD     15
 #define BATTERY_MEDIUM_THRESHOLD  30
 
+// Temperature thresholds (in Celsius)
+#define TEMP_WARNING_THRESHOLD    70
+#define TEMP_CRITICAL_THRESHOLD   85
+
+// Voltage thresholds (in Volts)
+#define CELL_VOLTAGE_WARNING      3.3
+#define CELL_VOLTAGE_CRITICAL     3.0
+
 // Light mode (default)
 // #define DEFAULT_TEXT_COLOR    BLACK
 // #define ERROR_TEXT_COLOR      RED
