@@ -35,7 +35,7 @@ void generateFakeTelemetry(STR_ESC_TELEMETRY_140& escTelemetry,
     #ifdef SCREEN_DEBUG_STATIC
         // Static maximum values for UI design
         escTelemetry.volts = 100.0;
-        escTelemetry.amps = 50.0;
+        escTelemetry.amps = 200.0;
         escTelemetry.mos_temp = 70.0;
     #else
         // Oscillating values
