@@ -187,6 +187,57 @@ void updateDisplay(
   // Draw bottom border of middle section
   canvas.drawFastHLine(0, 85, 160, currentTheme->ui_accent);
 
+  // Bottom section - Altitude and Temperatures
+  // Left side - Altitude
+  canvas.setFont(Fonts::SemiBold22);
+  canvas.setTextColor(currentTheme->default_text);
+  canvas.setCursor(2, 115);
+  if (altitude == __FLT_MIN__) {
+    canvas.setTextColor(currentTheme->error_text);
+    canvas.print("ERR");
+  } else {
+    if (deviceData.metric_alt) {
+      canvas.printf("%.1f", altitude);
+      canvas.setFont(Fonts::Regular14);
+      canvas.print("m");
+    } else {
+      canvas.printf("%d", static_cast<int>(round(altitude * 3.28084)));
+      canvas.setFont(Fonts::Regular14);
+      canvas.print("ft");
+    }
+  }
+
+  // Right side - Temperature displays
+  // Draw vertical separator
+  canvas.drawFastVLine(120, 85, 43, currentTheme->ui_accent);
+
+  // Create three equal sections for temperatures
+  const int tempBoxHeight = 14;
+  const int tempStartY = 85;
+
+  // Draw horizontal separators between temp sections
+  canvas.drawFastHLine(120, tempStartY + tempBoxHeight, 40, currentTheme->ui_accent);
+  canvas.drawFastHLine(120, tempStartY + (tempBoxHeight * 2), 40, currentTheme->ui_accent);
+
+  // Battery temp
+  canvas.setFont(Fonts::Regular14);
+  canvas.setCursor(125, tempStartY + 11);
+  canvas.print("B");
+  canvas.setCursor(140, tempStartY + 11);
+  canvas.print("40");  // Placeholder value
+
+  // ESC temp
+  canvas.setCursor(125, tempStartY + tempBoxHeight + 11);
+  canvas.print("E");
+  canvas.setCursor(140, tempStartY + tempBoxHeight + 11);
+  canvas.print("99");  // Placeholder value
+
+  // Motor temp
+  canvas.setCursor(125, tempStartY + (tempBoxHeight * 2) + 11);
+  canvas.print("M");
+  canvas.setCursor(140, tempStartY + (tempBoxHeight * 2) + 11);
+  canvas.print("70");  // Placeholder value
+
   // Draw the canvas to the display
   display->drawRGBBitmap(0, 0, canvas.getBuffer(), canvas.width(), canvas.height());
 }
