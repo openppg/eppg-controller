@@ -197,7 +197,7 @@ void updateDisplay(
 
   // Bottom section - Altitude and Temperatures
   // Left side - Altitude
-  canvas.setFont(Fonts::SemiBold22);
+  canvas.setFont(Fonts::SemiBold24);
   canvas.setTextColor(currentTheme->default_text);
   canvas.setCursor(2, 115);
   if (altitude == __FLT_MIN__) {
