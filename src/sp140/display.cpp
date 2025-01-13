@@ -176,7 +176,25 @@ void updateDisplay(
   canvas.setCursor(canvas.getCursorX() + 3, 65);
   canvas.print("kW");
 
+  // Power bar under kW display
+  const int powerBarY = 75;
+  const int powerBarHeight = 8;  // Increased from 4 to 8
+  const int powerBarWidth = 85;  // Same width as the section (up to vertical divider)
+
+  // Calculate and draw the filled portion (max 30kW)
+  const float maxPower = 20.0;  // 30kW max
+  const int filledWidth = map(static_cast<int>(kWatts * 100), 0, static_cast<int>(maxPower * 100), 0, powerBarWidth);
+  if (filledWidth > 0) {
+    canvas.fillRect(2, powerBarY, filledWidth, powerBarHeight, GREEN);
+  }
+
   // Right side - Armed Time
+  // Fill background cyan when armed
+  if (armed) {
+    canvas.fillRect(90, 32, 70, 53, CYAN);
+  }
+  canvas.setTextColor(currentTheme->default_text);
+
   canvas.setFont(Fonts::SemiBold20);
   canvas.setCursor(95, 70);
   const unsigned int nowMillis = millis();
