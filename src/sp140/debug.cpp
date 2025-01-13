@@ -36,12 +36,14 @@ void generateFakeTelemetry(STR_ESC_TELEMETRY_140& escTelemetry,
         // Static maximum values for UI design
         escTelemetry.volts = 100.0;
         escTelemetry.amps = 180.0;
-        escTelemetry.mos_temp = 70.0;
+        escTelemetry.mos_temp = 99.0;  // ESC temp
+        escTelemetry.motor_temp = 70.0;  // Motor temp
     #else
         // Oscillating values
         escTelemetry.volts = oscillate(fake_values[0], 65.0, 100.0, 0.1);
         escTelemetry.amps = oscillate(fake_values[1], 0.0, 50.0, 0.5);
-        escTelemetry.mos_temp = oscillate(fake_values[2], 30.0, 70.0, 0.2);
+        escTelemetry.mos_temp = oscillate(fake_values[2], 30.0, 99.0, 0.2);
+        escTelemetry.motor_temp = oscillate(fake_values[3], 30.0, 70.0, 0.2);
     #endif
 
     escTelemetry.cap_temp = escTelemetry.mos_temp - 5;

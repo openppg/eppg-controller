@@ -10,6 +10,8 @@ typedef struct {
   float mos_temp;
   float cap_temp;
   float mcu_temp;
+  float motor_temp;  // Motor temperature in °C
+  float highest_temp;  // Highest temperature from all sensors
   float amps;
   float eRPM;
   float inPWM;

@@ -85,6 +85,17 @@ void readESCTelemetry() {
     escTelemetryData.cap_temp = res->cap_temp / 10.0f;
     // mcu_temp
     escTelemetryData.mcu_temp = res->mcu_temp / 10.0f;
+    // motor_temp
+    escTelemetryData.motor_temp = res->motor_temp / 10.0f;
+
+    // Calculate highest temperature
+    escTelemetryData.highest_temp = escTelemetryData.mos_temp;
+    if (escTelemetryData.cap_temp > escTelemetryData.highest_temp) {
+      escTelemetryData.highest_temp = escTelemetryData.cap_temp;
+    }
+    if (escTelemetryData.mcu_temp > escTelemetryData.highest_temp) {
+      escTelemetryData.highest_temp = escTelemetryData.mcu_temp;
+    }
 
     // eRPM (assuming 'speed' is in eRPM)
     escTelemetryData.eRPM = res->speed;
@@ -255,4 +266,12 @@ float getBatteryPercent(float voltage) {
   }
 
   return 0;  // Fallback, should never reach here
+}
+
+// Get the highest temperature from all ESC sensors
+float getHighestTemp(const STR_ESC_TELEMETRY_140& telemetry) {
+  float highest = telemetry.mos_temp;
+  if (telemetry.cap_temp > highest) highest = telemetry.cap_temp;
+  if (telemetry.mcu_temp > highest) highest = telemetry.mcu_temp;
+  return highest;
 }

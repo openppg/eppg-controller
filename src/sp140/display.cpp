@@ -1,5 +1,4 @@
 #include "sp140/display.h"
-
 #include "../../inc/version.h"
 #include "sp140/structs.h"
 
@@ -104,8 +103,8 @@ void updateDisplay(
   float totalVolts = unifiedBatteryData.volts;
   float lowestCellV = bmsTelemetry.lowest_cell_voltage;
   float batteryTemp = bmsTelemetry.highest_temperature;
-  float escTemp = escTelemetry.mos_temp;
-  float motorTemp = escTelemetry.cap_temp;
+  float escTemp = escTelemetry.highest_temp;
+  float motorTemp = escTelemetry.motor_temp;
 
   canvas.fillScreen(currentTheme->default_bg);
   canvas.setTextWrap(false);
@@ -498,7 +497,29 @@ void updateDisplayOld(
     canvas.printf("%0.0f", mcu_temp);
   }
 
+  // Get temperatures for coloring
+  float batteryTemp = bmsTelemetry.highest_temperature;
+  float escTemp = escTelemetry.highest_temp;
+  float motorTemp = escTelemetry.motor_temp;
 
+  // Draw temperature backgrounds
+  if (batteryTemp >= TEMP_CRITICAL_THRESHOLD) {
+    canvas.fillRect(120, 85, 40, 14, RED);
+  } else if (batteryTemp >= TEMP_WARNING_THRESHOLD) {
+    canvas.fillRect(120, 85, 40, 14, ORANGE);
+  }
+
+  if (escTemp >= TEMP_CRITICAL_THRESHOLD) {
+    canvas.fillRect(120, 99, 40, 14, RED);
+  } else if (escTemp >= TEMP_WARNING_THRESHOLD) {
+    canvas.fillRect(120, 99, 40, 14, ORANGE);
+  }
+
+  if (motorTemp >= TEMP_CRITICAL_THRESHOLD) {
+    canvas.fillRect(120, 113, 40, 14, RED);
+  } else if (motorTemp >= TEMP_WARNING_THRESHOLD) {
+    canvas.fillRect(120, 113, 40, 14, ORANGE);
+  }
 
   // Draw the canvas to the display->
   display->drawRGBBitmap(0, 0, canvas.getBuffer(), canvas.width(), canvas.height());
