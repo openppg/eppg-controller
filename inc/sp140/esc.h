@@ -27,6 +27,9 @@ void readESCTelemetry();
 bool setupTWAI();
 float getBatteryPercent(float voltage);
 
+// Get the highest temperature from all ESC sensors
+float getHighestTemp(const STR_ESC_TELEMETRY_140& telemetry);
+
 // for debugging
 void dumpThrottleResponse(const sine_esc_SetThrottleSettings2Response *res);
 void dumpESCMessages();  // dumps all messages to USBSerial

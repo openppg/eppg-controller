@@ -1,6 +1,28 @@
 // Copyright 2020 <Zach Whitehead>
 // OpenPPG
 
+/**
+ * WebUSB Protocol Documentation
+ *
+ * Available Commands:
+ * - "rbl": Reboot to bootloader for firmware updates
+ * - "sync": Request current device settings and state
+ *
+ * Response Format:
+ * {
+ *   "mj_v": number,        // Major version
+ *   "mi_v": number,        // Minor version
+ *   "arch": string,        // Architecture ("SAMD21" or "RP2040")
+ *   "scr_rt": number,      // Screen rotation
+ *   "ar_tme": number,      // Armed time in minutes
+ *   "m_tmp": bool,         // Metric temperature
+ *   "m_alt": bool,         // Metric altitude
+ *   "prf": number,         // Performance mode
+ *   "sea_p": float,        // Sea pressure
+ *   "thm": number          // Theme
+ * }
+ */
+
 // ** Logic for EEPROM **
 # define EEPROM_OFFSET 0  // Address of first byte of EEPROM
 
@@ -29,6 +51,8 @@ const int DEFAULT_BATT_SIZE = 4000;  // 4kw
 #define THEME_UUID               "AD0E4309-1EB2-461A-B36C-697B2E1604D2"
 #define HW_REVISION_UUID         "2A27"  // Using standard BLE UUID for revision
 #define FW_VERSION_UUID          "2A26"  // Using standard BLE UUID for version
+#define UNIX_TIME_UUID          "E09FF0B7-5D02-4FD5-889E-C4251A58D9E7"  // Our custom UUID
+#define TIMEZONE_UUID           "CAE49D1A-7C21-4B0C-8520-416F3EF69DB1"
 
 #define THROTTLE_VALUE_UUID      "50AB3859-9FBF-4D30-BF97-2516EE632FAD"
 
@@ -92,19 +116,11 @@ void updateThrottleBLE(int value) {
   // Send notification if connected
   if (deviceConnected && pThrottleCharacteristic != nullptr) {
     try {
-      USBSerial.print("Sending BLE throttle notification, value: ");
-      USBSerial.println(value);
       pThrottleCharacteristic->setValue((uint8_t*)&value, sizeof(value));
-      //pThrottleCharacteristic->notify();
+      pThrottleCharacteristic->notify();
       delay(5); // prevent bluetooth stack congestion - can be as low as 3ms
     } catch (...) {
       USBSerial.println("Error sending BLE notification");
-    }
-  } else {
-    if (!deviceConnected) {
-      USBSerial.println("Can't send throttle - device not connected");
-    } else if (pThrottleCharacteristic == nullptr) {
-      USBSerial.println("Can't send throttle - characteristic is null");
     }
   }
 }
@@ -211,17 +227,11 @@ class ThrottleValueCallbacks: public BLECharacteristicCallbacks {
     if (value.length() == 2) {  // Expecting 2 bytes for PWM value
       uint16_t newPWM = (value[0] << 8) | value[1];
 
-      // Add logging for PWM value
-      USBSerial.print("BLE Throttle - Received PWM value: ");
-      USBSerial.println(newPWM);
-
       // Validate PWM range
       if (newPWM >= ESC_MIN_SPIN_PWM && newPWM <= ESC_MAX_PWM) {
         if (xQueueSend(throttleUpdateQueue, &newPWM, pdMS_TO_TICKS(100)) != pdTRUE) {
           USBSerial.println("Failed to queue throttle update");
         }
-      } else {
-        USBSerial.println("PWM value out of valid range");
       }
     }
   }
@@ -230,20 +240,12 @@ class ThrottleValueCallbacks: public BLECharacteristicCallbacks {
 class MyServerCallbacks: public BLEServerCallbacks {
   void onConnect(BLEServer* pServer) {
     deviceConnected = true;
-    USBSerial.println("BLE Device connected!");
-
-    // Send current state to queue for new connection
-    uint8_t state = (uint8_t)currentState;
-    if (deviceStateQueue != NULL) {
-      xQueueOverwrite(deviceStateQueue, &state);
-    }
+    USBSerial.println("Device connected");
   }
 
   void onDisconnect(BLEServer* pServer) {
     deviceConnected = false;
-    USBSerial.println("BLE Device disconnected!");
-    USBSerial.print("deviceConnected flag: ");
-    USBSerial.println(deviceConnected ? "true" : "false");
+    USBSerial.println("Device disconnected");
     // Restart advertising
     BLEAdvertising *pAdvertising = pServer->getAdvertising();
     pAdvertising->start();
@@ -251,210 +253,256 @@ class MyServerCallbacks: public BLEServerCallbacks {
   }
 };
 
+class TimeCallbacks: public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *pCharacteristic) {
+    std::string value = pCharacteristic->getValue();
+
+    if (value.length() == sizeof(time_t)) {  // Expecting just a unix timestamp
+      struct timeval tv;
+      time_t timestamp;
+
+      // Copy the incoming timestamp
+      memcpy(&timestamp, value.data(), sizeof(timestamp));
+
+      // Apply timezone offset
+      timestamp += deviceData.timezone_offset;
+
+      tv.tv_sec = timestamp;
+      tv.tv_usec = 0;
+
+      if (settimeofday(&tv, NULL) == 0) {
+        USBSerial.println("Time set successfully");
+      } else {
+        USBSerial.println("Failed to set time");
+      }
+    } else {
+      USBSerial.println("Invalid timestamp length");
+    }
+  }
+
+  void onRead(BLECharacteristic *pCharacteristic) {
+    time_t now;
+    time(&now);
+    now -= deviceData.timezone_offset;  // Remove timezone offset for UTC time
+    pCharacteristic->setValue((uint8_t*)&now, sizeof(now));
+  }
+};
+
+class TimezoneCallbacks: public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *pCharacteristic) {
+    std::string value = pCharacteristic->getValue();
+
+    if (value.length() == 4) {  // Expecting 4 bytes for timezone offset
+      int32_t offset;
+      memcpy(&offset, value.data(), sizeof(offset));
+
+      deviceData.timezone_offset = offset;
+      writeDeviceData();
+      USBSerial.print("Timezone offset set to: ");
+      USBSerial.println(offset);
+    } else {
+      USBSerial.println("Invalid timezone offset length");
+    }
+  }
+
+  void onRead(BLECharacteristic *pCharacteristic) {
+    pCharacteristic->setValue((uint8_t*)&deviceData.timezone_offset, sizeof(deviceData.timezone_offset));
+  }
+};
 
 void setupBLE() {
-  try {
-    // Initialize BLE
-    BLEDevice::init("OpenPPG Controller");
-    pServer = BLEDevice::createServer();
-    if (!pServer) {
-      USBSerial.println("Failed to create BLE server");
-      return;
-    }
+  // Initialize BLE
+  BLEDevice::init("OpenPPG Controller");
+  pServer = BLEDevice::createServer();
+  pServer->setCallbacks(new MyServerCallbacks());
 
-    pServer->setCallbacks(new MyServerCallbacks());
+  BLEService *pConfigService = pServer->createService(CONFIG_SERVICE_UUID);
 
-    BLEService *pService = pServer->createService(CONFIG_SERVICE_UUID);
-    if (!pService) {
-      USBSerial.println("Failed to create BLE service");
-      return;
-    }
+  // Add time characteristics BEFORE starting the service
+  BLECharacteristic *pUnixTime = pConfigService->createCharacteristic(
+                                    UNIX_TIME_UUID,
+                                    BLECharacteristic::PROPERTY_READ |
+                                    BLECharacteristic::PROPERTY_WRITE);
+  pUnixTime->setCallbacks(new TimeCallbacks());
 
-    // Add device state characteristic with proper permissions
-    pDeviceStateCharacteristic = pService->createCharacteristic(
-      DEVICE_STATE_UUID,
-      BLECharacteristic::PROPERTY_READ |
-      BLECharacteristic::PROPERTY_NOTIFY
-    );
+  BLECharacteristic *pTimezone = pConfigService->createCharacteristic(
+                                  TIMEZONE_UUID,
+                                  BLECharacteristic::PROPERTY_READ |
+                                  BLECharacteristic::PROPERTY_WRITE);
+  pTimezone->setCallbacks(new TimezoneCallbacks());
+  pTimezone->setValue((uint8_t*)&deviceData.timezone_offset, sizeof(deviceData.timezone_offset));
 
-    if (!pDeviceStateCharacteristic) {
-      USBSerial.println("Failed to create state characteristic");
-      return;
-    }
+  // Add device state characteristic
+  pDeviceStateCharacteristic = pConfigService->createCharacteristic(
+    DEVICE_STATE_UUID,
+    BLECharacteristic::PROPERTY_READ |
+    BLECharacteristic::PROPERTY_NOTIFY);
 
-    // Set initial state
-    uint8_t initialState = (uint8_t)currentState;
-    pDeviceStateCharacteristic->setValue(&initialState, sizeof(initialState));
-    pDeviceStateCharacteristic->addDescriptor(new BLE2902());
+  uint8_t initialState = DISARMED;  // Create a variable to reference
+  pDeviceStateCharacteristic->setValue(&initialState, sizeof(initialState));
+  pDeviceStateCharacteristic->addDescriptor(new BLE2902());
 
-    BLECharacteristic *pMetricAlt = pService->createCharacteristic(
-                                     METRIC_ALT_UUID,
-                                     BLECharacteristic::PROPERTY_READ |
-                                     BLECharacteristic::PROPERTY_WRITE);
+  BLECharacteristic *pMetricAlt = pConfigService->createCharacteristic(
+                                   METRIC_ALT_UUID,
+                                   BLECharacteristic::PROPERTY_READ |
+                                   BLECharacteristic::PROPERTY_WRITE);
 
-    pMetricAlt->setCallbacks(new MetricAltCallbacks());
+  pMetricAlt->setCallbacks(new MetricAltCallbacks());
 
-    int metricAlt = deviceData.metric_alt ? 1 : 0;
-    pMetricAlt->setValue(metricAlt);
+  int metricAlt = deviceData.metric_alt ? 1 : 0;
+  pMetricAlt->setValue(metricAlt);
 
-    BLECharacteristic *pPerformanceMode = pService->createCharacteristic(
-                                           PERFORMANCE_MODE_UUID,
-                                           BLECharacteristic::PROPERTY_READ |
-                                           BLECharacteristic::PROPERTY_WRITE);
+  BLECharacteristic *pPerformanceMode = pConfigService->createCharacteristic(
+                                         PERFORMANCE_MODE_UUID,
+                                         BLECharacteristic::PROPERTY_READ |
+                                         BLECharacteristic::PROPERTY_WRITE);
 
-    pPerformanceMode->setCallbacks(new PerformanceModeCallbacks());
-    int performanceMode = deviceData.performance_mode ? 1 : 0;
+  pPerformanceMode->setCallbacks(new PerformanceModeCallbacks());
+  int performanceMode = deviceData.performance_mode ? 1 : 0;
 
-    pPerformanceMode->setValue(performanceMode);
+  pPerformanceMode->setValue(performanceMode);
 
-    BLECharacteristic *pScreenRotation = pService->createCharacteristic(
-                                          SCREEN_ROTATION_UUID,
-                                          BLECharacteristic::PROPERTY_READ |
-                                          BLECharacteristic::PROPERTY_WRITE);
+  BLECharacteristic *pScreenRotation = pConfigService->createCharacteristic(
+                                        SCREEN_ROTATION_UUID,
+                                        BLECharacteristic::PROPERTY_READ |
+                                        BLECharacteristic::PROPERTY_WRITE);
 
-    pScreenRotation->setCallbacks(new ScreenRotationCallbacks());
+  pScreenRotation->setCallbacks(new ScreenRotationCallbacks());
 
-    // screen rotation is 1 or 3
-    int screenRotation = deviceData.screen_rotation == 1 ? 1 : 3;
-    pScreenRotation->setValue(screenRotation);
+  // screen rotation is 1 or 3
+  int screenRotation = deviceData.screen_rotation == 1 ? 1 : 3;
+  pScreenRotation->setValue(screenRotation);
 
-    // Add read-only characteristics for device info
-    BLECharacteristic *pFirmwareVersion = pService->createCharacteristic(
-                                           FW_VERSION_UUID,
-                                           BLECharacteristic::PROPERTY_READ);
-    pFirmwareVersion->setValue(VERSION_STRING);
-
-    BLECharacteristic *pHardwareRevision = pService->createCharacteristic(
-                                            HW_REVISION_UUID,
-                                            BLECharacteristic::PROPERTY_READ);
-    // Send revision directly as a byte
-    pHardwareRevision->setValue(&deviceData.revision, sizeof(deviceData.revision));
-
-    BLECharacteristic *pArmedTime = pService->createCharacteristic(
-                                     ARMED_TIME_UUID,
-                                     BLECharacteristic::PROPERTY_READ);
-    pArmedTime->setValue((uint8_t*)&deviceData.armed_time, sizeof(deviceData.armed_time));
-
-    // Create the Device Information Service
-    BLEService *pDeviceInfoService = pServer->createService(DEVICE_INFO_SERVICE_UUID);
-
-    // Add Manufacturer Name characteristic
-    BLECharacteristic *pManufacturer = pDeviceInfoService->createCharacteristic(
-                                        MANUFACTURER_NAME_UUID,
+  // Add read-only characteristics for device info
+  BLECharacteristic *pFirmwareVersion = pConfigService->createCharacteristic(
+                                        FW_VERSION_UUID,
                                         BLECharacteristic::PROPERTY_READ);
-    pManufacturer->setValue("OpenPPG");
+  pFirmwareVersion->setValue(VERSION_STRING);
 
-    // Create throttle characteristic with notify capability
-    pThrottleCharacteristic = pService->createCharacteristic(
-      THROTTLE_VALUE_UUID,
-      BLECharacteristic::PROPERTY_READ |
-      BLECharacteristic::PROPERTY_WRITE |  // Add write permission
-      BLECharacteristic::PROPERTY_NOTIFY |
-      BLECharacteristic::PROPERTY_INDICATE
-    );
-    pThrottleCharacteristic->setCallbacks(new ThrottleValueCallbacks());
-    pThrottleCharacteristic->addDescriptor(new BLE2902());
+  BLECharacteristic *pHardwareRevision = pConfigService->createCharacteristic(
+                                         HW_REVISION_UUID,
+                                         BLECharacteristic::PROPERTY_READ);
+  // Send revision directly as a byte
+  pHardwareRevision->setValue(&deviceData.revision, sizeof(deviceData.revision));
 
-    //pDeviceInfoService->start();
+  BLECharacteristic *pArmedTime = pConfigService->createCharacteristic(
+                                  ARMED_TIME_UUID,
+                                  BLECharacteristic::PROPERTY_READ);
+  pArmedTime->setValue((uint8_t*)&deviceData.armed_time, sizeof(deviceData.armed_time));
 
-    // Create BMS Telemetry Service
-    BLEService *pBMSService = pServer->createService(BMS_TELEMETRY_SERVICE_UUID);
+  // Create the Device Information Service
+  BLEService *pDeviceInfoService = pServer->createService(DEVICE_INFO_SERVICE_UUID);
 
-    // Create read-only characteristics for BMS data
-    pBMSSOC = pBMSService->createCharacteristic(
-        BMS_SOC_UUID,
-        BLECharacteristic::PROPERTY_READ
-    );
+  // Add Manufacturer Name characteristic
+  BLECharacteristic *pManufacturer = pDeviceInfoService->createCharacteristic(
+                                     MANUFACTURER_NAME_UUID,
+                                     BLECharacteristic::PROPERTY_READ);
+  pManufacturer->setValue("OpenPPG");
 
-    pBMSVoltage = pBMSService->createCharacteristic(
-        BMS_VOLTAGE_UUID,
-        BLECharacteristic::PROPERTY_READ
-    );
+  // Create throttle characteristic with notify capability
+  pThrottleCharacteristic = pConfigService->createCharacteristic(
+    THROTTLE_VALUE_UUID,
+    BLECharacteristic::PROPERTY_READ |
+    BLECharacteristic::PROPERTY_WRITE |  // Add write permission
+    BLECharacteristic::PROPERTY_NOTIFY |
+    BLECharacteristic::PROPERTY_INDICATE
+  );
+  pThrottleCharacteristic->setCallbacks(new ThrottleValueCallbacks());
+  pThrottleCharacteristic->addDescriptor(new BLE2902());
 
-    pBMSCurrent = pBMSService->createCharacteristic(
-        BMS_CURRENT_UUID,
-        BLECharacteristic::PROPERTY_READ
-    );
+  // Create BMS Telemetry Service
+  BLEService *pBMSService = pServer->createService(BMS_TELEMETRY_SERVICE_UUID);
 
-    pBMSPower = pBMSService->createCharacteristic(
-        BMS_POWER_UUID,
-        BLECharacteristic::PROPERTY_READ
-    );
+  // Create read-only characteristics for BMS data
+  pBMSSOC = pBMSService->createCharacteristic(
+      BMS_SOC_UUID,
+      BLECharacteristic::PROPERTY_READ
+  );
 
-    pBMSHighCell = pBMSService->createCharacteristic(
-        BMS_HIGH_CELL_UUID,
-        BLECharacteristic::PROPERTY_READ
-    );
+  pBMSVoltage = pBMSService->createCharacteristic(
+      BMS_VOLTAGE_UUID,
+      BLECharacteristic::PROPERTY_READ
+  );
 
-    pBMSLowCell = pBMSService->createCharacteristic(
-        BMS_LOW_CELL_UUID,
-        BLECharacteristic::PROPERTY_READ
-    );
+  pBMSCurrent = pBMSService->createCharacteristic(
+      BMS_CURRENT_UUID,
+      BLECharacteristic::PROPERTY_READ
+  );
 
-    pBMSHighTemp = pBMSService->createCharacteristic(
-        BMS_HIGH_TEMP_UUID,
-        BLECharacteristic::PROPERTY_READ
-    );
+  pBMSPower = pBMSService->createCharacteristic(
+      BMS_POWER_UUID,
+      BLECharacteristic::PROPERTY_READ
+  );
 
-    pBMSLowTemp = pBMSService->createCharacteristic(
-        BMS_LOW_TEMP_UUID,
-        BLECharacteristic::PROPERTY_READ
-    );
+  pBMSHighCell = pBMSService->createCharacteristic(
+      BMS_HIGH_CELL_UUID,
+      BLECharacteristic::PROPERTY_READ
+  );
 
-    pBMSFailureLevel = pBMSService->createCharacteristic(
-        BMS_FAILURE_LEVEL_UUID,
-        BLECharacteristic::PROPERTY_READ
-    );
+  pBMSLowCell = pBMSService->createCharacteristic(
+      BMS_LOW_CELL_UUID,
+      BLECharacteristic::PROPERTY_READ
+  );
 
-    pBMSVoltageDiff = pBMSService->createCharacteristic(
-        BMS_VOLTAGE_DIFF_UUID,
-        BLECharacteristic::PROPERTY_READ
-    );
+  pBMSHighTemp = pBMSService->createCharacteristic(
+      BMS_HIGH_TEMP_UUID,
+      BLECharacteristic::PROPERTY_READ
+  );
 
-    // Create ESC Telemetry Service
-    BLEService *pESCService = pServer->createService(ESC_TELEMETRY_SERVICE_UUID);
+  pBMSLowTemp = pBMSService->createCharacteristic(
+      BMS_LOW_TEMP_UUID,
+      BLECharacteristic::PROPERTY_READ
+  );
 
-    // Create characteristics for ESC data
-    pESCVoltage = pESCService->createCharacteristic(
-        ESC_VOLTAGE_UUID,
-        BLECharacteristic::PROPERTY_READ
-    );
+  pBMSFailureLevel = pBMSService->createCharacteristic(
+      BMS_FAILURE_LEVEL_UUID,
+      BLECharacteristic::PROPERTY_READ
+  );
 
-    pESCCurrent = pESCService->createCharacteristic(
-        ESC_CURRENT_UUID,
-        BLECharacteristic::PROPERTY_READ
-    );
+  pBMSVoltageDiff = pBMSService->createCharacteristic(
+      BMS_VOLTAGE_DIFF_UUID,
+      BLECharacteristic::PROPERTY_READ
+  );
 
-    pESCRPM = pESCService->createCharacteristic(
-        ESC_RPM_UUID,
-        BLECharacteristic::PROPERTY_READ
-    );
+  // Create ESC Telemetry Service
+  BLEService *pESCService = pServer->createService(ESC_TELEMETRY_SERVICE_UUID);
 
-    pESCTemps = pESCService->createCharacteristic(
-        ESC_TEMPS_UUID,
-        BLECharacteristic::PROPERTY_READ
-    );
+  // Create characteristics for ESC data
+  pESCVoltage = pESCService->createCharacteristic(
+      ESC_VOLTAGE_UUID,
+      BLECharacteristic::PROPERTY_READ
+  );
 
-    // Start all services
-    pService->start();
-    pBMSService->start();
-    pESCService->start();
+  pESCCurrent = pESCService->createCharacteristic(
+      ESC_CURRENT_UUID,
+      BLECharacteristic::PROPERTY_READ
+  );
 
-    // Start advertising
-    BLEAdvertising *pAdvertising = pServer->getAdvertising();
-    pAdvertising->addServiceUUID(CONFIG_SERVICE_UUID);
-    pAdvertising->setScanResponse(false);
-    pAdvertising->setMinPreferred(0x0);
-    pAdvertising->start();
+  pESCRPM = pESCService->createCharacteristic(
+      ESC_RPM_UUID,
+      BLECharacteristic::PROPERTY_READ
+  );
 
-    USBSerial.println("BLE device ready");
-    USBSerial.println("Waiting for a client connection...");
-  } catch (std::exception& e) {
-    USBSerial.print("BLE setup error: ");
-    USBSerial.println(e.what());
-  } catch (...) {
-    USBSerial.println("Unknown error in BLE setup");
-  }
+  pESCTemps = pESCService->createCharacteristic(
+      ESC_TEMPS_UUID,
+      BLECharacteristic::PROPERTY_READ
+  );
+
+  // Start all services AFTER adding all characteristics
+  pConfigService->start();
+  pBMSService->start();
+  pESCService->start();
+  pDeviceInfoService->start();
+
+  // Start advertising
+  BLEAdvertising *pAdvertising = pServer->getAdvertising();
+  pAdvertising->addServiceUUID(CONFIG_SERVICE_UUID);
+  pAdvertising->setScanResponse(false);
+  pAdvertising->setMinPreferred(0x0);
+  pAdvertising->start();
+
+  USBSerial.println("BLE device ready");
+  USBSerial.println("Waiting for a client connection...");
 }
 
 // read saved data from EEPROM
@@ -533,30 +581,38 @@ void resetDeviceData() {
   deviceData.theme = DEFAULT_THEME;
   deviceData.batt_size = DEFAULT_BATT_SIZE;
   deviceData.armed_time = 0;
+  deviceData.timezone_offset = 0;  // Default to UTC
   writeDeviceData();
 }
 
-// ** Logic for WebUSB **
-// Callback for when the USB connection state changes
+/**
+ * WebUSB connection state change callback.
+ * Updates LED indicators to show connection status.
+ *
+ * @param connected True if WebUSB connection established, false if disconnected
+ */
 void line_state_callback(bool connected) {
   setLEDColor(connected ? LED_BLUE : LED_GREEN);
   setLEDs(connected);
-
-  if ( connected ) send_usb_serial();
 }
 
 // Not implemented for ESP32-S3 yet
 void parse_usb_serial() {
 #ifdef USE_TINYUSB
-  const size_t capacity = JSON_OBJECT_SIZE(13) + 90;
+  const size_t capacity = JSON_OBJECT_SIZE(13) + 90;  // Size for max message
   DynamicJsonDocument doc(capacity);
   deserializeJson(doc, usb_web);
 
-  if (doc["command"] && doc["command"] == "rbl") {
-    // display.fillScreen(DEFAULT_BG_COLOR);
-    //TODO: display ("BL - UF2");
-    rebootBootloader();
-    return;  // run only the command
+  if (doc["command"]) {
+    if (doc["command"] == "rbl") {
+      // display.fillScreen(DEFAULT_BG_COLOR);
+      //TODO display ("BL - UF2");
+      rebootBootloader();
+      return;  // run only the command
+    } else if (doc["command"] == "sync") {
+      send_usb_serial();
+      return;  // run only the command
+    }
   }
 
   if (doc["major_v"] < 5) return; // ignore old versions
@@ -578,6 +634,12 @@ void parse_usb_serial() {
 #endif
 }
 
+/**
+ * Validates and sanitizes device settings to ensure they are within acceptable ranges.
+ * Each setting is checked against its valid range and set to a default if invalid.
+ *
+ * @return true if any values were changed during sanitization, false if all valid
+ */
 bool sanitizeDeviceData() {
   bool changed = false;
   // Ensure screen rotation is either 1 or 3, default to 3
@@ -668,7 +730,7 @@ void send_usb_serial() {
   doc["prf"].set(deviceData.performance_mode);
   doc["sea_p"].set(deviceData.sea_pressure);
   doc["thm"].set(deviceData.theme);
-  doc["rev"].set(deviceData.revision);
+  //doc["rev"].set(deviceData.revision);
   //doc["id"].set(chipId()); // webusb bug prevents anything over a certain size / this extra field from being sent
 
   char output[256];
@@ -681,10 +743,8 @@ void send_usb_serial() {
 }
 
 void updateESCTelemetryBLE(const STR_ESC_TELEMETRY_140& telemetry) {
-  if (!deviceConnected) {
-    //USBSerial.println("No BLE device connected, skipping update");
-    return;
-  }
+  if (!deviceConnected) return;
+
   // Update voltage characteristic
   float voltage = telemetry.volts;
   pESCVoltage->setValue((uint8_t*)&voltage, sizeof(voltage));

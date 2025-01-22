@@ -1,27 +1,11 @@
 #include "sp140/display.h"
-
-#include <Fonts/FreeSansBold12pt7b.h>
-#include <Fonts/FreeSans9pt7b.h>
-
-#include "../../inc/fonts/sans_reg10.h"
-#include "../../inc/fonts/sans_reg12.h"
-#include "../../inc/fonts/sans_reg14.h"
-#include "../../inc/fonts/sans_reg16.h"
-#include "../../inc/fonts/sans_reg18.h"
 #include "../../inc/version.h"
 #include "sp140/structs.h"
 
 #define FONT_HEIGHT_OFFSET 8
 
-// DEBUG WATCHDOG
-#ifdef RP_PIO
-  #include "hardware/watchdog.h"
-  bool watchdogCausedReboot = false;
-  bool watchdogEnableCausedReboot = false;
-#endif
-
 Adafruit_ST7735* display;
-GFXcanvas16 canvas(160, 128);
+GFXcanvas16 canvas(SCREEN_WIDTH, SCREEN_HEIGHT);
 
 // Light Mode Colors
 UIColors lightModeColors = {
@@ -57,7 +41,7 @@ void resetRotation(unsigned int rotation) {
 void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
   display->fillScreen(currentTheme->default_bg);
   display->setTextSize(1);
-  display->setFont(&FreeSansBold12pt7b);
+  display->setFont(Fonts::Title);
   display->setTextColor(currentTheme->default_text);
 
   // Animate "OpenPPG" text
@@ -71,7 +55,7 @@ void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
     delay(100);  // Adjust delay for animation speed
   }
 
-  display->setFont(&Open_Sans_Reg_20);
+  display->setFont(Fonts::Large);
   display->setTextSize(1);
   display->setCursor(60, 60);
   display->printf("v%d.%d", VERSION_MAJOR, VERSION_MINOR);
@@ -92,10 +76,6 @@ void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
 // inital screen setup and config with devicedata and boardconfig passed in
 void setupDisplay(const STR_DEVICE_DATA_140_V1& deviceData, const HardwareConfig& board_config) {
   USBSerial.println("setupDisplay");
-#ifdef RP_PIO
-  watchdogCausedReboot = watchdog_caused_reboot();
-  watchdogEnableCausedReboot = watchdog_enable_caused_reboot();
-#endif
 
   display = new Adafruit_ST7735(
     board_config.tft_cs,
@@ -119,9 +99,209 @@ void updateDisplay(
   float altitude, bool armed, bool cruising,
   unsigned int armedStartMillis
   ) {
+  float batteryPercent = unifiedBatteryData.soc;
+  float totalVolts = unifiedBatteryData.volts;
+  float lowestCellV = bmsTelemetry.lowest_cell_voltage;
+  float batteryTemp = bmsTelemetry.highest_temperature;
+  float escTemp = escTelemetry.highest_temp;
+  float motorTemp = escTelemetry.motor_temp;
+
   canvas.fillScreen(currentTheme->default_bg);
   canvas.setTextWrap(false);
-  canvas.setFont(&Open_Sans_Reg_20);
+  canvas.setFont(Fonts::Medium);
+  canvas.setTextSize(1);
+
+  // Draw all backgrounds first
+  // Top section backgrounds
+  if (lowestCellV <= CELL_VOLTAGE_CRITICAL) {
+    canvas.fillRect(0, 0, 35, 32, RED);
+  } else if (lowestCellV <= CELL_VOLTAGE_WARNING) {
+    canvas.fillRect(0, 0, 35, 32, ORANGE);
+  }
+
+  // Battery background if percentage > 0
+  if (batteryPercent > 0) {
+    unsigned int batteryColor = RED;
+    if (batteryPercent >= BATTERY_MEDIUM_THRESHOLD) batteryColor = GREEN;
+    else if (batteryPercent >= BATTERY_LOW_THRESHOLD) batteryColor = YELLOW;
+    int batteryWidth = map(static_cast<int>(batteryPercent), 0, 100, 0, 76);
+    canvas.fillRect(42, 2, batteryWidth, 28, batteryColor);
+  }
+
+  // Middle section armed background
+  if (armed) {
+    canvas.fillRect(90, 32, 70, 43, CYAN);
+  }
+
+  // Temperature section backgrounds
+  const int tempBoxHeight = 17;
+  const int tempStartY = 75;
+  const int tempBoxWidth = 40;
+  const int tempBoxX = 120;
+
+  // Draw temperature backgrounds
+  if (batteryTemp >= TEMP_CRITICAL_THRESHOLD) {
+    canvas.fillRect(tempBoxX, tempStartY, tempBoxWidth, tempBoxHeight, RED);
+  } else if (batteryTemp >= TEMP_WARNING_THRESHOLD) {
+    canvas.fillRect(tempBoxX, tempStartY, tempBoxWidth, tempBoxHeight, ORANGE);
+  }
+
+  if (escTemp >= TEMP_CRITICAL_THRESHOLD) {
+    canvas.fillRect(tempBoxX, tempStartY + tempBoxHeight, tempBoxWidth, tempBoxHeight, RED);
+  } else if (escTemp >= TEMP_WARNING_THRESHOLD) {
+    canvas.fillRect(tempBoxX, tempStartY + tempBoxHeight, tempBoxWidth, tempBoxHeight, ORANGE);
+  }
+
+  if (motorTemp >= TEMP_CRITICAL_THRESHOLD) {
+    canvas.fillRect(tempBoxX, tempStartY + (tempBoxHeight * 2), tempBoxWidth, tempBoxHeight, RED);
+  } else if (motorTemp >= TEMP_WARNING_THRESHOLD) {
+    canvas.fillRect(tempBoxX, tempStartY + (tempBoxHeight * 2), tempBoxWidth, tempBoxHeight, ORANGE);
+  }
+
+  // Now draw all borders and lines
+  // Top section borders
+  canvas.drawRect(40, 0, 80, 32, currentTheme->ui_accent);  // Battery outline
+  canvas.fillRect(120, 8, 3, 16, currentTheme->ui_accent);  // Battery tip
+  canvas.drawFastHLine(0, 32, 160, currentTheme->ui_accent);  // Bottom border
+
+  // Middle section borders
+  canvas.drawFastVLine(90, 32, 43, currentTheme->ui_accent);  // Vertical divider
+  canvas.drawFastHLine(0, 75, 160, currentTheme->ui_accent);  // Bottom border moved up
+
+  // Temperature section borders
+  canvas.drawFastVLine(120, 75, 53, currentTheme->ui_accent);  // Vertical divider
+  canvas.drawFastHLine(tempBoxX, tempStartY + tempBoxHeight, tempBoxWidth, currentTheme->ui_accent);  // Horizontal dividers
+  canvas.drawFastHLine(tempBoxX, tempStartY + (tempBoxHeight * 2), tempBoxWidth, currentTheme->ui_accent);
+
+  // Now draw all text and content
+  // Top section text
+  // Left voltage
+  if (lowestCellV <= CELL_VOLTAGE_CRITICAL) {
+    canvas.setTextColor(WHITE);
+  } else if (lowestCellV <= CELL_VOLTAGE_WARNING) {
+    canvas.setTextColor(BLACK);
+  } else {
+    canvas.setTextColor(currentTheme->default_text);
+  }
+  canvas.setFont(Fonts::Medium);
+  canvas.setCursor(2, 12 + FONT_HEIGHT_OFFSET);
+  canvas.printf("%2.2fV", lowestCellV);
+
+  // Battery percentage
+  canvas.setTextColor(currentTheme->default_text);
+  if (batteryPercent > 0) {
+    canvas.setCursor(65, 12 + FONT_HEIGHT_OFFSET);
+    canvas.printf("%d%%", static_cast<int>(batteryPercent));
+  } else {
+    canvas.setTextColor(currentTheme->error_text);
+    canvas.setCursor(50, 12 + FONT_HEIGHT_OFFSET);
+    if (totalVolts > 10) {
+      canvas.print("NO BATT");
+    } else {
+      canvas.print("NO TELEM");
+    }
+  }
+
+  // Right voltage
+  canvas.setTextColor(currentTheme->default_text);
+  canvas.setCursor(128, 12 + FONT_HEIGHT_OFFSET);
+  canvas.printf("%2.0fV", totalVolts);
+
+  // Middle section text
+  // Power display
+  canvas.setFont(Fonts::SemiBold24);
+  canvas.setTextColor(currentTheme->default_text);
+  canvas.setCursor(2, 60);
+  float kWatts = bmsTelemetry.power;
+  canvas.printf(kWatts < 10 ? "%.1f" : "%.1f", kWatts);
+
+  // kW label
+  canvas.setFont(Fonts::Regular14);
+  canvas.setCursor(canvas.getCursorX() + 3, 60);
+  canvas.print("kW");
+
+  // Power bar
+  const int powerBarY = 65;
+  const int powerBarHeight = 8;
+  const int powerBarWidth = 85;
+  const float maxPower = 20.0;
+  const int filledWidth = map(static_cast<int>(kWatts * 100), 0, static_cast<int>(maxPower * 100), 0, powerBarWidth);
+  if (filledWidth > 0) {
+    canvas.fillRect(2, powerBarY, filledWidth, powerBarHeight, GREEN);
+  }
+
+  // Armed time
+  canvas.setFont(Fonts::SemiBold20);
+  canvas.setTextColor(currentTheme->default_text);
+  canvas.setCursor(95, 65);
+  const unsigned int nowMillis = millis();
+  if (armed) {
+    const int sessionSeconds = (nowMillis - armedStartMillis) / 1000;
+    canvas.printf("%02d:%02d", sessionSeconds / 60, sessionSeconds % 60);
+  } else {
+    time_t now;
+    struct tm timeinfo;
+    time(&now);
+    localtime_r(&now, &timeinfo);
+    canvas.printf("%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
+  }
+
+  // Bottom section text
+  // Altitude
+  canvas.setFont(Fonts::SemiBold24);
+  canvas.setTextColor(currentTheme->default_text);
+  canvas.setCursor(2, 115);
+  if (altitude == __FLT_MIN__) {
+    canvas.setTextColor(currentTheme->error_text);
+    canvas.print("ERR");
+  } else {
+    if (deviceData.metric_alt) {
+      canvas.printf("%.1f", altitude);
+      canvas.setFont(Fonts::Regular14);
+      canvas.print("m");
+    } else {
+      canvas.printf("%d", static_cast<int>(round(altitude * 3.28084)));
+      canvas.setFont(Fonts::Regular14);
+      canvas.print("ft");
+    }
+  }
+
+  // Temperature values
+  canvas.setFont(Fonts::Regular14);
+  auto drawTempText = [&](const char* label, float temp, int boxY) {
+    if (temp >= TEMP_CRITICAL_THRESHOLD) {
+      canvas.setTextColor(WHITE);
+    } else if (temp >= TEMP_WARNING_THRESHOLD) {
+      canvas.setTextColor(BLACK);
+    } else {
+      canvas.setTextColor(currentTheme->default_text);
+    }
+    canvas.setCursor(125, boxY + 13);
+    canvas.print(label);
+    canvas.setCursor(140, boxY + 13);
+    canvas.printf("%d", static_cast<int>(temp));
+  };
+
+  drawTempText("B", batteryTemp, tempStartY);
+  drawTempText("E", escTemp, tempStartY + tempBoxHeight);
+  drawTempText("M", motorTemp, tempStartY + (tempBoxHeight * 2));
+
+  // Draw the canvas to the display
+  display->drawRGBBitmap(0, 0, canvas.getBuffer(), canvas.width(), canvas.height());
+}
+
+// Old display update function
+void updateDisplayOld(
+  const STR_DEVICE_DATA_140_V1& deviceData,
+  const STR_ESC_TELEMETRY_140& escTelemetry,
+  const STR_BMS_TELEMETRY_140& bmsTelemetry,
+  const UnifiedBatteryData& unifiedBatteryData,
+  float altitude, bool armed, bool cruising,
+  unsigned int armedStartMillis
+  ) {
+  canvas.fillScreen(currentTheme->default_bg);
+  canvas.setTextWrap(false);
+  canvas.setFont(Fonts::Large);
   canvas.setTextSize(1);
 
   const unsigned int nowMillis = millis();
@@ -138,8 +318,8 @@ void updateDisplay(
   //   Display battery bar
   if (batteryPercent > 0) {
     unsigned int batteryColor = RED;
-    if (batteryPercent >= 30) batteryColor = GREEN;
-    else if (batteryPercent >= 15) batteryColor = YELLOW;
+    if (batteryPercent >= BATTERY_MEDIUM_THRESHOLD) batteryColor = GREEN;
+    else if (batteryPercent >= BATTERY_LOW_THRESHOLD) batteryColor = YELLOW;
     int batteryPercentWidth = map(static_cast<int>(batteryPercent), 0, 100, 0, 100);
     canvas.fillRect(0, 0, batteryPercentWidth, 32, batteryColor);
   } else {
@@ -171,7 +351,7 @@ void updateDisplay(
     canvas.print(" ?%");
   }
 
-  float kWatts = constrain(watts / 1000.0, 0, 50);
+  float kWatts = bmsTelemetry.power;  // Already in kW
   float volts = unifiedBatteryData.volts;
   float kWh = wattHoursUsed / 1000.0;
   float amps = unifiedBatteryData.amps;
@@ -182,7 +362,7 @@ void updateDisplay(
   // float kWh = 3.343;
   // float amps = 10.35;
 
-  canvas.setFont(&Open_Sans_Reg_14);
+  canvas.setFont(Fonts::Medium);
 
   canvas.setCursor(1, 40 + FONT_HEIGHT_OFFSET);
   canvas.printf(kWatts < 10 ? "  %4.1fkW" : "%4.1fkW", kWatts);
@@ -207,7 +387,7 @@ void updateDisplay(
 
   // Display modes
   canvas.setCursor(8, 90);
-  canvas.setFont(&Open_Sans_Reg_10);
+  canvas.setFont(Fonts::Small);
   if (deviceData.performance_mode == 0) {
     canvas.setTextColor(currentTheme->chill_text);
     canvas.print("CHILL");
@@ -243,12 +423,21 @@ void updateDisplay(
 
   // Display armed time for the current session
   canvas.setTextColor(currentTheme->default_text);
-  canvas.setFont(&Open_Sans_Reg_20);
+  canvas.setFont(Fonts::Large);
   canvas.setCursor(8, 108 + FONT_HEIGHT_OFFSET);
   static unsigned int _lastArmedMillis = 0;
-  if (armed) _lastArmedMillis = nowMillis;
-  const int sessionSeconds = (_lastArmedMillis - armedStartMillis) / 1000.0;
-  canvas.printf("%02d:%02d", sessionSeconds / 60, sessionSeconds % 60);
+  if (armed) {
+    _lastArmedMillis = nowMillis;
+    const int sessionSeconds = (_lastArmedMillis - armedStartMillis) / 1000.0;
+    canvas.printf("%02d:%02d", sessionSeconds / 60, sessionSeconds % 60);
+  } else {
+    // Show current time in 24hr format when disarmed
+    time_t now;
+    struct tm timeinfo;
+    time(&now);
+    localtime_r(&now, &timeinfo);
+    canvas.printf("%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
+  }
 
   // Display altitude
   canvas.setCursor(80, 108 + FONT_HEIGHT_OFFSET);
@@ -268,7 +457,7 @@ void updateDisplay(
   // Display MOSFET temperature
   canvas.setCursor(120, 90);
   canvas.setTextColor(currentTheme->default_text);
-  canvas.setFont(&Open_Sans_Reg_10);
+  canvas.setFont(Fonts::Small);
   canvas.print("F:");
   float mos_temp;
   mos_temp = escTelemetry.mos_temp;
@@ -277,7 +466,7 @@ void updateDisplay(
     canvas.setTextColor(currentTheme->error_text);
   }  // If temperature is 100C+, display in red.
   if (mos_temp == __FLT_MIN__ || mos_temp == 0.0) {  // If temperature is not available, display a question mark.
-    canvas.print("?c");
+    canvas.printf("?%c", 247);
   } else {  // Otherwise, display the temperature. (in degrees C)
     canvas.printf("%0.0f", mos_temp);
   }
@@ -308,27 +497,29 @@ void updateDisplay(
     canvas.printf("%0.0f", mcu_temp);
   }
 
-//  // DEBUG TIMING
-//  canvas.setTextSize(1);
-//  canvas.setCursor(4, 118);
-//  static unsigned int lastDisplayMillis = 0;
-//  canvas.printf("%5d  %5d", nowMillis - escTelemetry.lastUpdateMillis, nowMillis - lastDisplayMillis);
-//  lastDisplayMillis = nowMillis;
-//
-//  canvas.printf("  %3d %2d %2d", escTelemetry.lastReadBytes, escTelemetry.errorStopBytes, escTelemetry.errorChecksum);
+  // Get temperatures for coloring
+  float batteryTemp = bmsTelemetry.highest_temperature;
+  float escTemp = escTelemetry.highest_temp;
+  float motorTemp = escTelemetry.motor_temp;
 
-//  // DEBUG WATCHDOG
-//  #ifdef RP_PIO
-//    canvas.setTextSize(1);
-//    canvas.setCursor(4, 118);
-//    canvas.printf("watchdog %d %d", watchdogCausedReboot, watchdogEnableCausedReboot);
-//  #endif
-//
-//  // DEBUG FREE MEMORY
-//  #ifdef RP_PIO
-//    canvas.printf("  mem %d", rp2040.getFreeHeap());
-//  #endif
+  // Draw temperature backgrounds
+  if (batteryTemp >= TEMP_CRITICAL_THRESHOLD) {
+    canvas.fillRect(120, 85, 40, 14, RED);
+  } else if (batteryTemp >= TEMP_WARNING_THRESHOLD) {
+    canvas.fillRect(120, 85, 40, 14, ORANGE);
+  }
 
+  if (escTemp >= TEMP_CRITICAL_THRESHOLD) {
+    canvas.fillRect(120, 99, 40, 14, RED);
+  } else if (escTemp >= TEMP_WARNING_THRESHOLD) {
+    canvas.fillRect(120, 99, 40, 14, ORANGE);
+  }
+
+  if (motorTemp >= TEMP_CRITICAL_THRESHOLD) {
+    canvas.fillRect(120, 113, 40, 14, RED);
+  } else if (motorTemp >= TEMP_WARNING_THRESHOLD) {
+    canvas.fillRect(120, 113, 40, 14, ORANGE);
+  }
 
   // Draw the canvas to the display->
   display->drawRGBBitmap(0, 0, canvas.getBuffer(), canvas.width(), canvas.height());

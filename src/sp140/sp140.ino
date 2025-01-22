@@ -50,6 +50,7 @@
 #include "../../inc/sp140/display.h"
 #include "../../inc/sp140/bms.h"
 #include "../../inc/sp140/altimeter.h"
+#include "../../inc/sp140/debug.h"
 
 #ifdef USE_DRV2605
   #include "../../inc/sp140/vibration_drv2605.h"
@@ -326,18 +327,26 @@ void refreshDisplay() {
 // For tasks that use the SPI bus cant run in parallel
 void spiCommTask(void *pvParameters) {
   for (;;) {
-      // Update BMS data
-      if (isBMSPresent) {
-        updateBMSData();
-        unifiedBatteryData.volts = bmsTelemetryData.battery_voltage;
-        unifiedBatteryData.amps = bmsTelemetryData.battery_current;
-        unifiedBatteryData.soc = bmsTelemetryData.soc;
-
+      #ifdef SCREEN_DEBUG
+        float altitude = 0;
+        generateFakeTelemetry(escTelemetryData, bmsTelemetryData, unifiedBatteryData, altitude);
         xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);  // Always latest data
-      }
+        xQueueOverwrite(escTelemetryQueue, &escTelemetryData);  // Always latest data
+        refreshDisplay();
+      #else
+        // Update BMS data
+        if (isBMSPresent) {
+          updateBMSData();
+          unifiedBatteryData.volts = bmsTelemetryData.battery_voltage;
+          unifiedBatteryData.amps = bmsTelemetryData.battery_current;
+          unifiedBatteryData.soc = bmsTelemetryData.soc;
 
-      // Update display
-      refreshDisplay();
+          xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);  // Always latest data
+        }
+
+        // Update display
+        refreshDisplay();
+      #endif
       delay(250);
   }
 }
@@ -485,6 +494,23 @@ void setupWiFi() {
 }
 #endif
 
+// Add near other task declarations at the top
+TaskHandle_t timeDebugTaskHandle = NULL;
+
+// Add the new task function before setupTasks()
+void timeDebugTask(void *pvParameters) {
+  for (;;) {
+    timePrint();
+    vTaskDelay(pdMS_TO_TICKS(1000));  // Delay for 1 second
+  }
+}
+
+// Add near other helper functions
+void timePrint() {
+  struct tm now;
+  getLocalTime(&now, 0);
+  if (now.tm_year >= 117) USBSerial.println(&now, "%B %d %Y %H:%M:%S (%A)");
+}
 
 /**
  * Initializes the necessary components and configurations for the device setup.
@@ -519,7 +545,11 @@ void setup() {
 #endif
   setLEDColor(LED_YELLOW);  // Booting up
   setupDisplay(deviceData, board_config);
-  isBMSPresent = initBMSCAN();
+
+  #ifndef SCREEN_DEBUG
+    isBMSPresent = initBMSCAN();
+  #endif
+
   initESC(0);
   eepromSemaphore = xSemaphoreCreateBinary();
   xSemaphoreGive(eepromSemaphore);
@@ -575,6 +605,7 @@ void setupTasks() {
   xTaskCreate(deviceStateUpdateTask, "State Update Task", 4096, NULL, 1, &deviceStateUpdateTaskHandle);
   // Create BLE update task with high priority but on core 1
   xTaskCreatePinnedToCore(bleStateUpdateTask, "BLEStateUpdate", 4096, NULL, 4, &bleStateUpdateTaskHandle, 1);
+  //xTaskCreate(timeDebugTask, "Time Debug", 2048, NULL, 1, &timeDebugTaskHandle);
 
   // Create melody queue
   melodyQueue = xQueueCreate(5, sizeof(MelodyRequest));

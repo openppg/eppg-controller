@@ -1,5 +1,5 @@
 // Created by https://oleddisplay.squix.ch/ Consider a donation
-// In case of problems make sure that you are using the font file with the correct version!
+
 const uint8_t Open_Sans_Regular_14Bitmaps[] PROGMEM = {
 
 	// Bitmap Data:
@@ -195,5 +195,5 @@ const GFXglyph Open_Sans_Regular_14Glyphs[] PROGMEM = {
 	  {   802,   2,  14,   9,    3,  -11 }, // '|'
 	  {   806,   6,  12,   6,    0,  -10 } // '}'
 };
-const GFXfont Open_Sans_Reg_14 PROGMEM = {
+const GFXfont Open_Sans_Regular_14 PROGMEM = {
 (uint8_t  *)Open_Sans_Regular_14Bitmaps,(GFXglyph *)Open_Sans_Regular_14Glyphs,0x20, 0x7E, 20};
