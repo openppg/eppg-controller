@@ -33,7 +33,7 @@ bool initESC(int escPin) {
   // Find ESC
   // TODO better handling of this
   int attempts = 0;
-  const int maxAttempts = 10;
+  const int maxAttempts = 5;
   while (!esc.getModel().hasGetHardwareInfoResponse && attempts < maxAttempts) {
     esc.getHardwareInfo();
     adapter.processTxRxOnce();
@@ -45,7 +45,7 @@ bool initESC(int escPin) {
   // Set idle throttle
   const uint16_t IdleThrottle_us = 10000;  // 1000us (0.1us resolution)
   esc.setThrottleSettings2(IdleThrottle_us);
-  delay(500);  // Wait for ESC to process the command
+  delay(250);  // Wait for ESC to process the command
   adapter.processTxRxOnce();
 
   return true;

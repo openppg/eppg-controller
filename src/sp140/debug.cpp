@@ -1,8 +1,8 @@
 #include "sp140/debug.h"
 
 static unsigned long last_update = 0;
-static float fake_values[4] = {0.0, 0.0, 0.0, 0.0}; // For smooth transitions
-static const float UPDATE_INTERVAL = 100; // Update every 100ms
+static float fake_values[4] = {65.0, 0.0, 0.0, 0.0}; // Initialize first value to 65V
+static const float UPDATE_INTERVAL = 10; // Update every 10ms
 
 // Helper function to generate smooth oscillating values
 float oscillate(float& current_value, float min, float max, float step) {
@@ -34,16 +34,16 @@ void generateFakeTelemetry(STR_ESC_TELEMETRY_140& escTelemetry,
 
     #ifdef SCREEN_DEBUG_STATIC
         // Static maximum values for UI design
-        escTelemetry.volts = 100.0;
+        escTelemetry.volts = 99.0;
         escTelemetry.amps = 180.0;
         escTelemetry.mos_temp = 99.0;  // ESC temp
         escTelemetry.motor_temp = 70.0;  // Motor temp
     #else
-        // Oscillating values
-        escTelemetry.volts = oscillate(fake_values[0], 65.0, 100.0, 0.1);
-        escTelemetry.amps = oscillate(fake_values[1], 0.0, 50.0, 0.5);
-        escTelemetry.mos_temp = oscillate(fake_values[2], 30.0, 99.0, 0.2);
-        escTelemetry.motor_temp = oscillate(fake_values[3], 30.0, 70.0, 0.2);
+        // Oscillating values with faster steps
+        escTelemetry.volts = oscillate(fake_values[0], 65.0, 100.0, 2.0);  // Increased step size
+        escTelemetry.amps = oscillate(fake_values[1], 0.0, 50.0, 1.0);  // Increased step size
+        escTelemetry.mos_temp = oscillate(fake_values[2], 30.0, 99.0, 0.5);  // Slightly increased
+        escTelemetry.motor_temp = oscillate(fake_values[3], 30.0, 70.0, 0.5);  // Slightly increased
     #endif
 
     escTelemetry.cap_temp = escTelemetry.mos_temp - 5;

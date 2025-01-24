@@ -67,7 +67,7 @@ void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
   const int minutes = deviceData.armed_time % 60;
   display->printf("%02d:%02d", hours, minutes);
   #ifdef SCREEN_DEBUG
-    delay(200);
+    delay(150);
   #else
     delay(duration);
   #endif
@@ -103,7 +103,7 @@ void updateDisplay(
   float totalVolts = unifiedBatteryData.volts;
   float lowestCellV = bmsTelemetry.lowest_cell_voltage;
   float batteryTemp = bmsTelemetry.highest_temperature;
-  float escTemp = escTelemetry.highest_temp;
+  float escTemp = escTelemetry.mos_temp;
   float motorTemp = escTelemetry.motor_temp;
 
   canvas.fillScreen(currentTheme->default_bg);
@@ -113,19 +113,15 @@ void updateDisplay(
 
   // Draw all backgrounds first
   // Top section backgrounds
-  if (lowestCellV <= CELL_VOLTAGE_CRITICAL) {
-    canvas.fillRect(0, 0, 35, 32, RED);
-  } else if (lowestCellV <= CELL_VOLTAGE_WARNING) {
-    canvas.fillRect(0, 0, 35, 32, ORANGE);
-  }
+  // Removed low cell voltage background box, will use font colors instead
 
   // Battery background if percentage > 0
   if (batteryPercent > 0) {
     unsigned int batteryColor = RED;
     if (batteryPercent >= BATTERY_MEDIUM_THRESHOLD) batteryColor = GREEN;
     else if (batteryPercent >= BATTERY_LOW_THRESHOLD) batteryColor = YELLOW;
-    int batteryWidth = map(static_cast<int>(batteryPercent), 0, 100, 0, 76);
-    canvas.fillRect(42, 2, batteryWidth, 28, batteryColor);
+    int batteryWidth = map(static_cast<int>(batteryPercent), 0, 100, 0, SCREEN_WIDTH);
+    canvas.fillRect(0, 0, batteryWidth, 32, batteryColor);
   }
 
   // Middle section armed background
@@ -160,8 +156,6 @@ void updateDisplay(
 
   // Now draw all borders and lines
   // Top section borders
-  canvas.drawRect(40, 0, 80, 32, currentTheme->ui_accent);  // Battery outline
-  canvas.fillRect(120, 8, 3, 16, currentTheme->ui_accent);  // Battery tip
   canvas.drawFastHLine(0, 32, 160, currentTheme->ui_accent);  // Bottom border
 
   // Middle section borders
@@ -177,24 +171,27 @@ void updateDisplay(
   // Top section text
   // Left voltage
   if (lowestCellV <= CELL_VOLTAGE_CRITICAL) {
-    canvas.setTextColor(WHITE);
+    canvas.setTextColor(RED);
   } else if (lowestCellV <= CELL_VOLTAGE_WARNING) {
-    canvas.setTextColor(BLACK);
+    canvas.setTextColor(ORANGE);
   } else {
     canvas.setTextColor(currentTheme->default_text);
   }
-  canvas.setFont(Fonts::Medium);
+  canvas.setFont(Fonts::Regular12);  // Changed to smaller font
   canvas.setCursor(2, 12 + FONT_HEIGHT_OFFSET);
-  canvas.printf("%2.2fV", lowestCellV);
+  canvas.printf("%2.2fv", lowestCellV);
 
   // Battery percentage
-  canvas.setTextColor(currentTheme->default_text);
   if (batteryPercent > 0) {
-    canvas.setCursor(65, 12 + FONT_HEIGHT_OFFSET);
+    canvas.setTextColor(BLACK);
+    canvas.setFont(Fonts::SemiBold22);
+    // Adjust X position based on number of digits
+    int xPos = (batteryPercent == 100) ? 50 : 60;
+    canvas.setCursor(xPos, 16 + FONT_HEIGHT_OFFSET);
     canvas.printf("%d%%", static_cast<int>(batteryPercent));
   } else {
     canvas.setTextColor(currentTheme->error_text);
-    canvas.setCursor(50, 12 + FONT_HEIGHT_OFFSET);
+    canvas.setCursor(50, 16 + FONT_HEIGHT_OFFSET);
     if (totalVolts > 10) {
       canvas.print("NO BATT");
     } else {
@@ -204,8 +201,9 @@ void updateDisplay(
 
   // Right voltage
   canvas.setTextColor(currentTheme->default_text);
+  canvas.setFont(Fonts::Regular12);  // Changed to smaller font
   canvas.setCursor(128, 12 + FONT_HEIGHT_OFFSET);
-  canvas.printf("%2.0fV", totalVolts);
+  canvas.printf("%2.0fv", totalVolts);
 
   // Middle section text
   // Power display
@@ -233,7 +231,7 @@ void updateDisplay(
   // Armed time
   canvas.setFont(Fonts::SemiBold20);
   canvas.setTextColor(currentTheme->default_text);
-  canvas.setCursor(95, 65);
+  canvas.setCursor(95, 68);
   const unsigned int nowMillis = millis();
   if (armed) {
     const int sessionSeconds = (nowMillis - armedStartMillis) / 1000;

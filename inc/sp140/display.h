@@ -50,6 +50,7 @@
 namespace Fonts {
   constexpr const GFXfont* Title = &FreeSansBold12pt7b;
   // Regular fonts by size
+  constexpr const GFXfont* Regular10 = &Open_Sans_Regular_10;
   constexpr const GFXfont* Regular12 = &Open_Sans_Regular_12;
   constexpr const GFXfont* Regular14 = &Open_Sans_Regular_14;
   constexpr const GFXfont* Regular16 = &Open_Sans_Regular_16;
