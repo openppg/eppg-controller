@@ -136,6 +136,7 @@ void setupDisplay(const STR_DEVICE_DATA_140_V1& deviceData, const HardwareConfig
 }
 
 void updateDisplay(
+  BatteryData& batteryData,
   const STR_DEVICE_DATA_140_V1& deviceData,
   const STR_ESC_TELEMETRY_140& escTelemetry,
   float altitude, bool armed, bool cruising,
@@ -193,9 +194,9 @@ void updateDisplay(
     canvas.print(" ?%");
   }
 
-  float kWatts = constrain(watts / 1000.0, 0, 50);
+  float kWatts = constrain(batteryData.watts / 1000.0, 0, 50);
   float volts = escTelemetry.volts;
-  float kWh = wattHoursUsed / 1000.0;
+  float kWh = batteryData.wattHoursUsed/ 1000.0;
   float amps = escTelemetry.amps;
 
   // for testing

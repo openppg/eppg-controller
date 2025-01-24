@@ -17,7 +17,7 @@
 #include "../../inc/sp140/structs.h"         // data structs
 #include <AceButton.h>           // button clicks
 #include <ArduinoJson.h>
-#include <CircularBuffer.hpp>      // smooth out readings
+#include <CircularBuffer.hpp>  
 #include <ResponsiveAnalogRead.h>  // smoothing for throttle
 #include <SPI.h>
 #include <TimeLib.h>  // convert time to hours mins etc
@@ -38,12 +38,27 @@
 #endif
 
 #include "../../inc/sp140/globals.h"  // device config
-#include "../../inc/sp140/esc.h"
+#include "../../inc/sp140/battery/BatteryData.h"
+#include "../../inc/sp140/esc/EscData.h"
+#include "../../inc/sp140/esc/EscBase.h"
+#include "../../inc/sp140/esc/FactoryEsc.h"
+#include "../../inc/sp140/structs.h"
 #include "../../inc/sp140/display.h"
 #include "../../inc/sp140/altimeter.h"
 #include "../../inc/sp140/vibration.h"
 
 using namespace ace_button;
+
+BatteryData batteryData;
+
+CircularBuffer<float, 50> voltageBuffer;
+CircularBuffer<int, 8> potBuffer;
+
+EscData escData;
+FactoryEsc factoryEsc(&voltageBuffer);
+EscBase* pEsc = &factoryEsc;
+
+
 
 UBaseType_t uxCoreAffinityMask0 = (1 << 0); // Core 0
 UBaseType_t uxCoreAffinityMask1 = (1 << 1); // Core 1
@@ -63,9 +78,6 @@ ButtonConfig* buttonConfig;
 #ifdef M0_PIO
   extEEPROM eep(kbits_64, 1, 64);
 #endif
-
-CircularBuffer<float, 50> voltageBuffer;
-CircularBuffer<int, 8> potBuffer;
 
 Adafruit_NeoPixel pixels(1, LED_BUILTIN, NEO_GRB + NEO_KHZ800);
 uint32_t led_color = LED_RED; // current LED color
@@ -166,7 +178,7 @@ void telemetryTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
   for (;;) {  // infinite loop
-    readESCTelemetry();
+    pEsc->readESCTelemetry(batteryData, escData);
     delay(50);  // wait for 50ms
   }
   vTaskDelete(NULL);  // should never reach this
@@ -189,7 +201,7 @@ void updateDisplayTask(void *pvParameters) {
     const float altitude = getAltitude(deviceData);
     bool isArmed = (currentState != DISARMED);
     bool isCruising = (currentState == ARMED_CRUISING);
-    updateDisplay(deviceData, escTelemetryData, altitude, isArmed, isCruising, armedAtMillis);
+    updateDisplay(batteryData, deviceData, escData.escTelemetryData, altitude, isArmed, isCruising, armedAtMillis);
     delay(250);
   }
   vTaskDelete(NULL);  // should never reach this
@@ -359,7 +371,7 @@ void psTop() {
 }
 
 void setup140() {
-  initESC(board_config.esc_pin);
+  pEsc->initESC(board_config.esc_pin);
 
   initBuzz();
   Wire1.setSDA(A0); // Have to use Wire1 because pins are assigned that in hardware
@@ -399,7 +411,7 @@ void printTime(const char* label) {
 }
 
 void disarmESC() {
-  setESCThrottle(ESC_DISARMED_PWM);
+  pEsc->setESCThrottle(ESC_DISARMED_PWM);
 }
 
 // reset smoothing
@@ -570,7 +582,7 @@ void handleThrottle() {
     localThrottlePWM = mapd(potLvl, 0, 4095, ESC_MIN_PWM, maxPWM);
   }
 
-  setESCThrottle(localThrottlePWM);  // using val as the signal to esc
+  pEsc->setESCThrottle(localThrottlePWM);  // using val as the signal to esc
 }
 
 int averagePotBuffer() {
@@ -586,7 +598,7 @@ bool armSystem() {
   uint16_t arm_melody[] = { 1760, 1976, 2093 };
   const unsigned int arm_vibes[] = { 1, 85, 1, 85, 1, 85, 1 };
 
-  setESCThrottle(ESC_DISARMED_PWM);  // initialize the signal to low
+  pEsc->setESCThrottle(ESC_DISARMED_PWM);  // initialize the signal to low
 
   //ledBlinkThread.enabled = false;
   armedAtMillis = millis();
@@ -637,6 +649,6 @@ void trackPower() {
   prevPwrMillis = currentPwrMillis;
 
   if (currentState != DISARMED) {
-    wattHoursUsed += round(watts/60/60*msec_diff)/1000.0;
+    batteryData.wattHoursUsed += round(batteryData.watts/60/60*msec_diff)/1000.0;
   }
 }

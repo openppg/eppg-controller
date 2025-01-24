@@ -3,6 +3,7 @@
 #define INC_SP140_RP2040_CONFIG_H_
 
 #include "shared-config.h"
+#include <HardwareSerial.h>
 
 #define SerialESC  Serial1  // ESC UART connection
 
