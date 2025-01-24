@@ -13,6 +13,7 @@
 
 #include <Adafruit_ST7735.h>
 #include "utilities.h"
+#include "../../inc/sp140/battery/BatteryData.h"
 
 // Library config
 #define NO_ADAFRUIT_SSD1306_COLOR_COMPATIBILITY
@@ -58,9 +59,6 @@ struct UIColors {
   uint16_t ui_accent;
 };
 
-extern float watts;
-extern float wattHoursUsed;
-
 // Set up the display and show splash screen
 void setupDisplay(const STR_DEVICE_DATA_140_V1& deviceData, const HardwareConfig& board_config);
 
@@ -70,7 +68,8 @@ void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration = 1500);
 void resetRotation(unsigned int orientation);
 
 // Show data on screen
-void updateDisplay(const STR_DEVICE_DATA_140_V1& deviceData,
+void updateDisplay(BatteryData& batteryData,
+                   const STR_DEVICE_DATA_140_V1& deviceData,
                    const STR_ESC_TELEMETRY_140& escTelemetry,
                    float altitude, bool armed, bool cruising,
                    unsigned int armedStartMillis);

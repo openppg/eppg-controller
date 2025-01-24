@@ -31,7 +31,4 @@ unsigned long cruisedAtMillis = 0;
 int prevPotLvl = 0;
 int cruisedPotVal = 0;
 
-float watts = 0;
-float wattHoursUsed = 0;
-
 STR_DEVICE_DATA_140_V1 deviceData;

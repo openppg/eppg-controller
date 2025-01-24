@@ -1,5 +1,7 @@
 // Copyright 2020 <Zach Whitehead>
 
+#include <CircularBuffer.hpp>
+
 // initialize the buzzer
 void initBuzz() {
   pinMode(board_config.buzzer_pin, OUTPUT);
@@ -39,14 +41,12 @@ int limitedThrottle(int current, int last, int threshold) {
 }
 
 // ring buffer for voltage readings
-float getBatteryVoltSmoothed() {
+float getBatteryVoltSmoothed(CircularBuffer<float, 50>* pVoltageBuffer) {
   float avg = 0.0;
+  if (pVoltageBuffer->isEmpty()) { return avg; }
 
-  if (voltageBuffer.isEmpty()) { return avg; }
-
-  using index_t = decltype(voltageBuffer)::index_t;
-  for (index_t i = 0; i < voltageBuffer.size(); i++) {
-    avg += voltageBuffer[i] / voltageBuffer.size();
+  for (int i = 0; i < pVoltageBuffer->size(); i++) {
+    avg += pVoltageBuffer->operator[](i) / pVoltageBuffer->size();
   }
   return avg;
 }
