@@ -113,8 +113,8 @@ void updateDisplay(
 
   // Draw all backgrounds first
   // Top section backgrounds
-  // Battery background if percentage > 0 and BMS is connected
-  if (batteryPercent > 0 && bmsTelemetry.state == TelemetryState::CONNECTED) {
+  // Battery background if connected and has percentage
+  if (bmsTelemetry.state == TelemetryState::CONNECTED && batteryPercent > 0) {
     unsigned int batteryColor = RED;
     if (batteryPercent >= BATTERY_MEDIUM_THRESHOLD) batteryColor = GREEN;
     else if (batteryPercent >= BATTERY_LOW_THRESHOLD) batteryColor = YELLOW;

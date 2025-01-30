@@ -22,7 +22,9 @@
 
 extern CircularBuffer<float, 50> voltageBuffer;
 
-STR_ESC_TELEMETRY_140 escTelemetryData;
+STR_ESC_TELEMETRY_140 escTelemetryData = {
+  .state = TelemetryState::NOT_CONNECTED
+};
 
 bool initESC(int escPin) {
   setupTWAI();
