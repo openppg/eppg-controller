@@ -113,10 +113,8 @@ void updateDisplay(
 
   // Draw all backgrounds first
   // Top section backgrounds
-  // Removed low cell voltage background box, will use font colors instead
-
-  // Battery background if percentage > 0
-  if (batteryPercent > 0) {
+  // Battery background if percentage > 0 and BMS is connected
+  if (batteryPercent > 0 && bmsTelemetry.state == TelemetryState::CONNECTED) {
     unsigned int batteryColor = RED;
     if (batteryPercent >= BATTERY_MEDIUM_THRESHOLD) batteryColor = GREEN;
     else if (batteryPercent >= BATTERY_LOW_THRESHOLD) batteryColor = YELLOW;
@@ -135,23 +133,27 @@ void updateDisplay(
   const int tempBoxWidth = 40;
   const int tempBoxX = 120;
 
-  // Draw temperature backgrounds
-  if (batteryTemp >= TEMP_CRITICAL_THRESHOLD) {
-    canvas.fillRect(tempBoxX, tempStartY, tempBoxWidth, tempBoxHeight, RED);
-  } else if (batteryTemp >= TEMP_WARNING_THRESHOLD) {
-    canvas.fillRect(tempBoxX, tempStartY, tempBoxWidth, tempBoxHeight, ORANGE);
+  // Draw temperature backgrounds only if devices are connected
+  if (bmsTelemetry.state == TelemetryState::CONNECTED) {
+    if (batteryTemp >= TEMP_CRITICAL_THRESHOLD) {
+      canvas.fillRect(tempBoxX, tempStartY, tempBoxWidth, tempBoxHeight, RED);
+    } else if (batteryTemp >= TEMP_WARNING_THRESHOLD) {
+      canvas.fillRect(tempBoxX, tempStartY, tempBoxWidth, tempBoxHeight, ORANGE);
+    }
   }
 
-  if (escTemp >= TEMP_CRITICAL_THRESHOLD) {
-    canvas.fillRect(tempBoxX, tempStartY + tempBoxHeight, tempBoxWidth, tempBoxHeight, RED);
-  } else if (escTemp >= TEMP_WARNING_THRESHOLD) {
-    canvas.fillRect(tempBoxX, tempStartY + tempBoxHeight, tempBoxWidth, tempBoxHeight, ORANGE);
-  }
+  if (escTelemetry.state == TelemetryState::CONNECTED) {
+    if (escTemp >= TEMP_CRITICAL_THRESHOLD) {
+      canvas.fillRect(tempBoxX, tempStartY + tempBoxHeight, tempBoxWidth, tempBoxHeight, RED);
+    } else if (escTemp >= TEMP_WARNING_THRESHOLD) {
+      canvas.fillRect(tempBoxX, tempStartY + tempBoxHeight, tempBoxWidth, tempBoxHeight, ORANGE);
+    }
 
-  if (motorTemp >= TEMP_CRITICAL_THRESHOLD) {
-    canvas.fillRect(tempBoxX, tempStartY + (tempBoxHeight * 2), tempBoxWidth, tempBoxHeight, RED);
-  } else if (motorTemp >= TEMP_WARNING_THRESHOLD) {
-    canvas.fillRect(tempBoxX, tempStartY + (tempBoxHeight * 2), tempBoxWidth, tempBoxHeight, ORANGE);
+    if (motorTemp >= TEMP_CRITICAL_THRESHOLD) {
+      canvas.fillRect(tempBoxX, tempStartY + (tempBoxHeight * 2), tempBoxWidth, tempBoxHeight, RED);
+    } else if (motorTemp >= TEMP_WARNING_THRESHOLD) {
+      canvas.fillRect(tempBoxX, tempStartY + (tempBoxHeight * 2), tempBoxWidth, tempBoxHeight, ORANGE);
+    }
   }
 
   // Now draw all borders and lines
@@ -169,63 +171,67 @@ void updateDisplay(
 
   // Now draw all text and content
   // Top section text
-  // Left voltage
-  if (lowestCellV <= CELL_VOLTAGE_CRITICAL) {
-    canvas.setTextColor(RED);
-  } else if (lowestCellV <= CELL_VOLTAGE_WARNING) {
-    canvas.setTextColor(ORANGE);
-  } else {
-    canvas.setTextColor(currentTheme->default_text);
+  // Left voltage - only if BMS connected
+  if (bmsTelemetry.state == TelemetryState::CONNECTED) {
+    if (lowestCellV <= CELL_VOLTAGE_CRITICAL) {
+      canvas.setTextColor(RED);
+    } else if (lowestCellV <= CELL_VOLTAGE_WARNING) {
+      canvas.setTextColor(ORANGE);
+    } else {
+      canvas.setTextColor(currentTheme->default_text);
+    }
+    canvas.setFont(Fonts::Regular12);
+    canvas.setCursor(2, 12 + FONT_HEIGHT_OFFSET);
+    canvas.printf("%2.2fv", lowestCellV);
   }
-  canvas.setFont(Fonts::Regular12);  // Changed to smaller font
-  canvas.setCursor(2, 12 + FONT_HEIGHT_OFFSET);
-  canvas.printf("%2.2fv", lowestCellV);
 
-  // Battery percentage
-  if (batteryPercent > 0) {
+  // Battery percentage and status
+  if (bmsTelemetry.state == TelemetryState::CONNECTED && batteryPercent > 0) {
     canvas.setTextColor(BLACK);
     canvas.setFont(Fonts::SemiBold22);
-    // Adjust X position based on number of digits
     int xPos = (batteryPercent == 100) ? 50 : 60;
     canvas.setCursor(xPos, 16 + FONT_HEIGHT_OFFSET);
     canvas.printf("%d%%", static_cast<int>(batteryPercent));
   } else {
     canvas.setTextColor(currentTheme->error_text);
     canvas.setCursor(50, 16 + FONT_HEIGHT_OFFSET);
-    if (totalVolts > 10) {
-      canvas.print("NO BATT");
-    } else {
-      canvas.print("NO TELEM");
+    if (bmsTelemetry.state == TelemetryState::NOT_CONNECTED) {
+      canvas.print("DISCONNECTED");
+    } else if (bmsTelemetry.state == TelemetryState::STALE) {
+      canvas.print("STALE");
     }
   }
 
-  // Right voltage
-  canvas.setTextColor(currentTheme->default_text);
-  canvas.setFont(Fonts::Regular12);  // Changed to smaller font
-  canvas.setCursor(128, 12 + FONT_HEIGHT_OFFSET);
-  canvas.printf("%2.0fv", totalVolts);
+  // Right voltage - only if BMS connected
+  if (bmsTelemetry.state == TelemetryState::CONNECTED) {
+    canvas.setTextColor(currentTheme->default_text);
+    canvas.setFont(Fonts::Regular12);
+    canvas.setCursor(128, 12 + FONT_HEIGHT_OFFSET);
+    canvas.printf("%2.0fv", totalVolts);
+  }
 
   // Middle section text
-  // Power display
-  canvas.setFont(Fonts::SemiBold24);
-  canvas.setTextColor(currentTheme->default_text);
-  canvas.setCursor(2, 60);
-  float kWatts = bmsTelemetry.power;
-  canvas.printf(kWatts < 10 ? "%.1f" : "%.1f", kWatts);
+  // Power display - only if BMS connected
+  if (bmsTelemetry.state == TelemetryState::CONNECTED) {
+    canvas.setFont(Fonts::SemiBold24);
+    canvas.setTextColor(currentTheme->default_text);
+    canvas.setCursor(2, 60);
+    float kWatts = bmsTelemetry.power;
+    canvas.printf(kWatts < 10 ? "%.1f" : "%.1f", kWatts);
 
-  // kW label
-  canvas.setFont(Fonts::Regular14);
-  canvas.setCursor(canvas.getCursorX() + 3, 60);
-  canvas.print("kW");
+    canvas.setFont(Fonts::Regular14);
+    canvas.setCursor(canvas.getCursorX() + 3, 60);
+    canvas.print("kW");
 
-  // Power bar
-  const int powerBarY = 65;
-  const int powerBarHeight = 8;
-  const int powerBarWidth = 85;
-  const float maxPower = 20.0;
-  const int filledWidth = map(static_cast<int>(kWatts * 100), 0, static_cast<int>(maxPower * 100), 0, powerBarWidth);
-  if (filledWidth > 0) {
-    canvas.fillRect(2, powerBarY, filledWidth, powerBarHeight, GREEN);
+    // Power bar
+    const int powerBarY = 65;
+    const int powerBarHeight = 8;
+    const int powerBarWidth = 85;
+    const float maxPower = 20.0;
+    const int filledWidth = map(static_cast<int>(kWatts * 100), 0, static_cast<int>(maxPower * 100), 0, powerBarWidth);
+    if (filledWidth > 0) {
+      canvas.fillRect(2, powerBarY, filledWidth, powerBarHeight, GREEN);
+    }
   }
 
   // Armed time
@@ -266,23 +272,36 @@ void updateDisplay(
 
   // Temperature values
   canvas.setFont(Fonts::Regular14);
-  auto drawTempText = [&](const char* label, float temp, int boxY) {
-    if (temp >= TEMP_CRITICAL_THRESHOLD) {
-      canvas.setTextColor(WHITE);
-    } else if (temp >= TEMP_WARNING_THRESHOLD) {
-      canvas.setTextColor(BLACK);
-    } else {
-      canvas.setTextColor(currentTheme->default_text);
-    }
+  auto drawTempText = [&](const char* label, float temp, int boxY, TelemetryState state) {
     canvas.setCursor(125, boxY + 13);
     canvas.print(label);
     canvas.setCursor(140, boxY + 13);
-    canvas.printf("%d", static_cast<int>(temp));
+
+    switch (state) {
+      case TelemetryState::NOT_CONNECTED:
+        canvas.setTextColor(currentTheme->default_text);
+        canvas.print("-");
+        break;
+      case TelemetryState::STALE:
+        canvas.setTextColor(currentTheme->error_text);
+        canvas.print("!");
+        break;
+      case TelemetryState::CONNECTED:
+        if (temp >= TEMP_CRITICAL_THRESHOLD) {
+          canvas.setTextColor(WHITE);
+        } else if (temp >= TEMP_WARNING_THRESHOLD) {
+          canvas.setTextColor(BLACK);
+        } else {
+          canvas.setTextColor(currentTheme->default_text);
+        }
+        canvas.printf("%d", static_cast<int>(temp));
+        break;
+    }
   };
 
-  drawTempText("B", batteryTemp, tempStartY);
-  drawTempText("E", escTemp, tempStartY + tempBoxHeight);
-  drawTempText("M", motorTemp, tempStartY + (tempBoxHeight * 2));
+  drawTempText("B", batteryTemp, tempStartY, bmsTelemetry.state);
+  drawTempText("E", escTemp, tempStartY + tempBoxHeight, escTelemetry.state);
+  drawTempText("M", motorTemp, tempStartY + (tempBoxHeight * 2), escTelemetry.state);
 
   // Draw the canvas to the display
   display->drawRGBBitmap(0, 0, canvas.getBuffer(), canvas.width(), canvas.height());

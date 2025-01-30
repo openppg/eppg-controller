@@ -4,6 +4,13 @@
 
 #pragma pack(push, 1)
 
+// Telemetry connection state
+enum class TelemetryState : uint8_t {
+    NOT_CONNECTED,  // Never received data since boot
+    CONNECTED,      // Receiving data normally
+    STALE          // Was connected but hasn't received data recently
+};
+
 // v1 ESC telemetry
 typedef struct {
   float volts;
@@ -19,6 +26,7 @@ typedef struct {
   uint8_t statusFlag;
   word checksum;
   unsigned long lastUpdateMs;  // Timestamp of last telemetry update
+  TelemetryState state;       // Current connection state
 }STR_ESC_TELEMETRY_140;
 
 // Internal device data
@@ -70,6 +78,7 @@ typedef struct {
   uint8_t battery_failure_level;  // Battery failure status
   float voltage_differential;   // Highest cell minus lowest cell voltage (V)
   unsigned long lastUpdateMs;   // Timestamp of last telemetry update
+  TelemetryState state;        // Current connection state
 } STR_BMS_TELEMETRY_140;
 #pragma pack(pop)
 

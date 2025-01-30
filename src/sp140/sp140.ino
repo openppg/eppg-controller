@@ -324,7 +324,9 @@ void refreshDisplay() {
     armedAtMillis);
 }
 
-// For tasks that use the SPI bus cant run in parallel
+#define TELEMETRY_TIMEOUT_MS 1000  // Add near other defines
+
+
 void spiCommTask(void *pvParameters) {
   for (;;) {
       #ifdef SCREEN_DEBUG
@@ -334,14 +336,27 @@ void spiCommTask(void *pvParameters) {
         xQueueOverwrite(escTelemetryQueue, &escTelemetryData);  // Always latest data
         refreshDisplay();
       #else
-        // Update BMS data
+        unsigned long currentTime = millis();
+
+        // Update BMS data and state
         if (isBMSPresent) {
           updateBMSData();
           unifiedBatteryData.volts = bmsTelemetryData.battery_voltage;
           unifiedBatteryData.amps = bmsTelemetryData.battery_current;
           unifiedBatteryData.soc = bmsTelemetryData.soc;
 
+          // Update BMS state based on last update time
+          if (bmsTelemetryData.lastUpdateMs == 0) {
+            bmsTelemetryData.state = TelemetryState::NOT_CONNECTED;
+          } else if (currentTime - bmsTelemetryData.lastUpdateMs > TELEMETRY_TIMEOUT_MS) {
+            bmsTelemetryData.state = TelemetryState::STALE;
+          } else {
+            bmsTelemetryData.state = TelemetryState::CONNECTED;
+          }
+
           xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);  // Always latest data
+        } else {
+          bmsTelemetryData.state = TelemetryState::NOT_CONNECTED;
         }
 
         // Update display
@@ -950,12 +965,25 @@ void handleThrottle() {
   syncESCTelemetry();
 }
 
+// push telemetry data to the queue for BLE updates etc
 void syncESCTelemetry() {
+  unsigned long currentTime = millis();
+
   if (!isBMSPresent) {
     unifiedBatteryData.volts = escTelemetryData.volts;
     unifiedBatteryData.amps = escTelemetryData.amps;
     unifiedBatteryData.soc = getBatteryPercent(escTelemetryData.volts);
   }
+
+  // Update ESC state based on last update time
+  if (escTelemetryData.lastUpdateMs == 0) {
+    escTelemetryData.state = TelemetryState::NOT_CONNECTED;
+  } else if (currentTime - escTelemetryData.lastUpdateMs > TELEMETRY_TIMEOUT_MS) {
+    escTelemetryData.state = TelemetryState::STALE;
+  } else {
+    escTelemetryData.state = TelemetryState::CONNECTED;
+  }
+
   // Send to queue for BLE updates
   if (escTelemetryQueue != NULL) {
     xQueueOverwrite(escTelemetryQueue, &escTelemetryData);  // Always use latest data
