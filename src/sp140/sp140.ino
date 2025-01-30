@@ -345,14 +345,8 @@ void spiCommTask(void *pvParameters) {
           unifiedBatteryData.amps = bmsTelemetryData.battery_current;
           unifiedBatteryData.soc = bmsTelemetryData.soc;
 
-          // Update BMS state based on last update time
-          if (bmsTelemetryData.lastUpdateMs == 0) {
-            bmsTelemetryData.state = TelemetryState::NOT_CONNECTED;
-          } else if (currentTime - bmsTelemetryData.lastUpdateMs > TELEMETRY_TIMEOUT_MS) {
-            bmsTelemetryData.state = TelemetryState::STALE;
-          } else {
-            bmsTelemetryData.state = TelemetryState::CONNECTED;
-          }
+          // Update BMS state based on connection status
+          bmsTelemetryData.state = bms_can.isConnected() ? TelemetryState::CONNECTED : TelemetryState::NOT_CONNECTED;
 
           xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);  // Always latest data
         } else {

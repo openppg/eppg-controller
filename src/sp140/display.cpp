@@ -186,7 +186,7 @@ void updateDisplay(
   }
 
   // Battery percentage and status
-  if (bmsTelemetry.state == TelemetryState::CONNECTED && batteryPercent > 0) {
+  if (bmsTelemetry.state == TelemetryState::CONNECTED) {
     canvas.setTextColor(BLACK);
     canvas.setFont(Fonts::SemiBold22);
     int xPos = (batteryPercent == 100) ? 50 : 60;
@@ -195,11 +195,7 @@ void updateDisplay(
   } else {
     canvas.setTextColor(currentTheme->error_text);
     canvas.setCursor(50, 16 + FONT_HEIGHT_OFFSET);
-    if (bmsTelemetry.state == TelemetryState::NOT_CONNECTED) {
-      canvas.print("DISCONNECTED");
-    } else if (bmsTelemetry.state == TelemetryState::STALE) {
-      canvas.print("STALE");
-    }
+    canvas.print("NO TELEM");
   }
 
   // Right voltage - only if BMS connected
@@ -277,25 +273,18 @@ void updateDisplay(
     canvas.print(label);
     canvas.setCursor(140, boxY + 13);
 
-    switch (state) {
-      case TelemetryState::NOT_CONNECTED:
+    if (state == TelemetryState::CONNECTED) {
+      if (temp >= TEMP_CRITICAL_THRESHOLD) {
+        canvas.setTextColor(WHITE);
+      } else if (temp >= TEMP_WARNING_THRESHOLD) {
+        canvas.setTextColor(BLACK);
+      } else {
         canvas.setTextColor(currentTheme->default_text);
-        canvas.print("-");
-        break;
-      case TelemetryState::STALE:
-        canvas.setTextColor(currentTheme->error_text);
-        canvas.print("!");
-        break;
-      case TelemetryState::CONNECTED:
-        if (temp >= TEMP_CRITICAL_THRESHOLD) {
-          canvas.setTextColor(WHITE);
-        } else if (temp >= TEMP_WARNING_THRESHOLD) {
-          canvas.setTextColor(BLACK);
-        } else {
-          canvas.setTextColor(currentTheme->default_text);
-        }
-        canvas.printf("%d", static_cast<int>(temp));
-        break;
+      }
+      canvas.printf("%d", static_cast<int>(temp));
+    } else {
+      canvas.setTextColor(currentTheme->default_text);
+      canvas.print("-");
     }
   };
 
