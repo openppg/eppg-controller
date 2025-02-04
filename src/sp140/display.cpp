@@ -32,6 +32,18 @@ UIColors darkModeColors = {
 // Pointer to the current color set
 UIColors *currentTheme;
 
+// Add this helper function near the top with other functions
+void drawBluetoothSymbol(GFXcanvas16& canvas, int16_t x, int16_t y, uint16_t color) {
+  // Draw the outer diamond shape
+  canvas.drawLine(x + 3, y, x + 3, y + 10, color);  // Vertical line
+  canvas.drawLine(x + 3, y, x + 6, y + 3, color);   // Upper right
+  canvas.drawLine(x + 6, y + 3, x + 3, y + 6, color); // Middle right upper
+  canvas.drawLine(x + 3, y + 6, x + 6, y + 9, color); // Middle right lower
+  canvas.drawLine(x + 6, y + 9, x + 3, y + 12, color); // Lower right
+  canvas.drawLine(x, y + 3, x + 3, y + 6, color);    // Middle left upper
+  canvas.drawLine(x, y + 9, x + 3, y + 6, color);    // Middle left lower
+}
+
 // Clears screen and resets properties
 void resetRotation(unsigned int rotation) {
   display->setRotation(rotation);  // 1=right hand, 3=left hand
@@ -235,6 +247,9 @@ void updateDisplay(
   canvas.setTextColor(currentTheme->default_text);
   canvas.setCursor(95, 46);
   canvas.print(deviceData.performance_mode == 0 ? "CHILL" : "SPORT");
+
+  // Draw Bluetooth symbol
+  drawBluetoothSymbol(canvas, 140, 38, currentTheme->default_text);
 
   // Armed time
   canvas.setFont(Fonts::SemiBold20);
