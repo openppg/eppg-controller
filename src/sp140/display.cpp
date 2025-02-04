@@ -230,6 +230,12 @@ void updateDisplay(
     }
   }
 
+  // Performance mode
+  canvas.setFont(Fonts::Regular12);
+  canvas.setTextColor(currentTheme->default_text);
+  canvas.setCursor(95, 46);
+  canvas.print(deviceData.performance_mode == 0 ? "CHILL" : "SPORT");
+
   // Armed time
   canvas.setFont(Fonts::SemiBold20);
   canvas.setTextColor(currentTheme->default_text);
