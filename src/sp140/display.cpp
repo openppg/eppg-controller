@@ -34,14 +34,14 @@ UIColors *currentTheme;
 
 // Add this helper function near the top with other functions
 void drawBluetoothSymbol(GFXcanvas16& canvas, int16_t x, int16_t y, uint16_t color) {
-  // Draw the outer diamond shape
-  canvas.drawLine(x + 3, y, x + 3, y + 10, color);  // Vertical line
-  canvas.drawLine(x + 3, y, x + 6, y + 3, color);   // Upper right
-  canvas.drawLine(x + 6, y + 3, x + 3, y + 6, color); // Middle right upper
-  canvas.drawLine(x + 3, y + 6, x + 6, y + 9, color); // Middle right lower
-  canvas.drawLine(x + 6, y + 9, x + 3, y + 12, color); // Lower right
-  canvas.drawLine(x, y + 3, x + 3, y + 6, color);    // Middle left upper
-  canvas.drawLine(x, y + 9, x + 3, y + 6, color);    // Middle left lower
+  // Draw a smaller bluetooth symbol (6x8 pixels)
+  canvas.drawLine(x + 2, y, x + 2, y + 7, color);     // Vertical line
+  canvas.drawLine(x + 2, y, x + 4, y + 2, color);     // Upper right
+  canvas.drawLine(x + 4, y + 2, x + 2, y + 4, color); // Middle right upper
+  canvas.drawLine(x + 2, y + 4, x + 4, y + 6, color); // Middle right lower
+  canvas.drawLine(x + 4, y + 6, x + 2, y + 8, color); // Lower right
+  canvas.drawLine(x, y + 2, x + 2, y + 4, color);     // Middle left upper
+  canvas.drawLine(x, y + 6, x + 2, y + 4, color);     // Middle left lower
 }
 
 // Clears screen and resets properties
@@ -249,7 +249,10 @@ void updateDisplay(
   canvas.print(deviceData.performance_mode == 0 ? "CHILL" : "SPORT");
 
   // Draw Bluetooth symbol
-  drawBluetoothSymbol(canvas, 140, 38, currentTheme->default_text);
+  bool bluetoothConnected = true;  // TODO: make this dynamic
+  if (bluetoothConnected) {
+    drawBluetoothSymbol(canvas, 145, 38, currentTheme->default_text);
+  }
 
   // Armed time
   canvas.setFont(Fonts::SemiBold20);
