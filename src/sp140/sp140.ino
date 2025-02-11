@@ -619,7 +619,6 @@ void setupTasks() {
   // Create melody queue
   melodyQueue = xQueueCreate(5, sizeof(MelodyRequest));
 
-
   // Create audio task - pin to core 1 to avoid interference with throttle
   xTaskCreatePinnedToCore(audioTask, "Audio", 2048, NULL, 2, &audioTaskHandle, 1);
 
@@ -1071,15 +1070,12 @@ void audioTask(void* parameter) {
     if(xQueueReceive(melodyQueue, &request, portMAX_DELAY) == pdTRUE) {
       if (!ENABLE_BUZ) continue;
 
+      TickType_t nextWakeTime = xTaskGetTickCount();
       for(int i = 0; i < request.size; i++) {
-        // Use precise RTOS timing
-        TickType_t xLastWakeTime = xTaskGetTickCount();
-
         tone(board_config.buzzer_pin, request.notes[i]);
-        vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(request.duration));
-
-        // Small gap between notes
-        vTaskDelay(pdMS_TO_TICKS(10));
+        TickType_t delayTicks = pdMS_TO_TICKS(request.duration);
+        if(delayTicks == 0) { delayTicks = 1; } // Ensure non-zero delay
+        vTaskDelayUntil(&nextWakeTime, delayTicks);
       }
       noTone(board_config.buzzer_pin);
     }
