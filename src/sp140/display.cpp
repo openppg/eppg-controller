@@ -206,8 +206,8 @@ void updateDisplay(
     canvas.printf("%d%%", static_cast<int>(batteryPercent));
   } else {
     canvas.setTextColor(currentTheme->error_text);
-    canvas.setCursor(50, 16 + FONT_HEIGHT_OFFSET);
-    canvas.print("NO TELEM");
+    canvas.setCursor(50, 14 + FONT_HEIGHT_OFFSET);
+    canvas.print("NO DATA");
   }
 
   // Right voltage - only if BMS connected
