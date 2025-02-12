@@ -3,6 +3,7 @@
 // initialize the buzzer
 void initBuzz() {
   pinMode(board_config.buzzer_pin, OUTPUT);
+  initBuzzerTask();
 }
 
 // on boot check for button to switch mode
