@@ -58,6 +58,8 @@
   #include "../../inc/sp140/vibration_pwm.h"
 #endif
 
+#include "sp140/buzzer.h"
+
 #define BUTTON_DEBOUNCE_TIME_MS 50
 #define FIRST_CLICK_MAX_HOLD_MS 500    // Maximum time for first click to be considered a click
 #define SECOND_HOLD_TIME_MS 2000       // How long to hold on second press to arm

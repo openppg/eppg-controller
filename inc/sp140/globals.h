@@ -5,6 +5,8 @@
 #include "sp140/shared-config.h"
 #include "sp140/structs.h"
 #include "sp140/ble.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
 
 extern unsigned long cruisedAtMillis;
 extern int prevPotLvl;
@@ -20,5 +22,8 @@ extern STR_ESC_TELEMETRY_140 escTelemetryData;
 extern UnifiedBatteryData unifiedBatteryData;  // Instance to hold battery data
 
 extern STR_BMS_TELEMETRY_140 bmsTelemetryData;
+
+// Add extern declaration for the melody queue
+extern QueueHandle_t melodyQueue;
 
 #endif  // INC_SP140_GLOBALS_H_
