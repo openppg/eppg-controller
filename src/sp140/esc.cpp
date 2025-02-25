@@ -115,6 +115,19 @@ void readESCTelemetry() {
     // debug the esc recpwm
     // USBSerial.print(", ");
     // USBSerial.println(res->comm_pwm);
+
+    // Temperature states
+    escTelemetryData.mos_state = checkTempState(escTelemetryData.mos_temp, COMP_ESC_MOS);
+    escTelemetryData.mcu_state = checkTempState(escTelemetryData.mcu_temp, COMP_ESC_MCU);
+    escTelemetryData.cap_state = checkTempState(escTelemetryData.cap_temp, COMP_ESC_CAP);
+    escTelemetryData.motor_state = checkTempState(escTelemetryData.motor_temp, COMP_MOTOR);
+
+    // Check for any invalid sensors
+    escTelemetryData.temp_sensor_error =
+      (escTelemetryData.mos_state == TEMP_INVALID) ||
+      (escTelemetryData.mcu_state == TEMP_INVALID) ||
+      (escTelemetryData.cap_state == TEMP_INVALID) ||
+      (escTelemetryData.motor_state == TEMP_INVALID);
   }
 
   adapter.processTxRxOnce();  // Process CAN messages
@@ -273,4 +286,32 @@ float getHighestTemp(const STR_ESC_TELEMETRY_140& telemetry) {
   if (telemetry.cap_temp > highest) highest = telemetry.cap_temp;
   if (telemetry.mcu_temp > highest) highest = telemetry.mcu_temp;
   return highest;
+}
+
+TempState checkTempState(float temp, TempComponent component) {
+  // Check for invalid temperature readings
+  if (temp < -50 || temp > 200) {
+      return TEMP_INVALID;
+  }
+
+  switch(component) {
+    case COMP_ESC_MOS:
+      return temp >= ESC_MOS_CRIT ? TEMP_CRITICAL :
+              temp >= ESC_MOS_WARN ? TEMP_WARNING : TEMP_NORMAL;
+
+    case COMP_ESC_MCU:
+      return temp >= ESC_MCU_CRIT ? TEMP_CRITICAL :
+              temp >= ESC_MCU_WARN ? TEMP_WARNING : TEMP_NORMAL;
+
+    case COMP_ESC_CAP:
+      return temp >= ESC_CAP_CRIT ? TEMP_CRITICAL :
+              temp >= ESC_CAP_WARN ? TEMP_WARNING : TEMP_NORMAL;
+
+    case COMP_MOTOR:
+      return temp >= MOTOR_CRIT ? TEMP_CRITICAL :
+              temp >= MOTOR_WARN ? TEMP_WARNING : TEMP_NORMAL;
+
+    default:
+      return TEMP_INVALID;
+  }
 }

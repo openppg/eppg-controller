@@ -1,0 +1,8 @@
+{
+  "coding_style": {
+    "indentation": {
+      "type": "spaces",
+      "size": 2
+    }
+  }
+}

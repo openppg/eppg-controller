@@ -4,7 +4,21 @@
 
 #pragma pack(push, 1)
 
-// v1 ESC telemetry
+// Temperature component enum
+enum TempComponent {
+  COMP_ESC_MOS = 0,
+  COMP_ESC_MCU = 1,
+  COMP_ESC_CAP = 2,
+  COMP_MOTOR = 3
+};
+
+enum TempState {
+  TEMP_INVALID = -1,  // Sensor reading is invalid
+  TEMP_NORMAL = 0,
+  TEMP_WARNING = 1,
+  TEMP_CRITICAL = 2
+};
+
 typedef struct {
   float volts;
   float mos_temp;
@@ -19,6 +33,11 @@ typedef struct {
   uint8_t statusFlag;
   word checksum;
   unsigned long lastUpdateMs;  // Timestamp of last telemetry update
+  TempState mos_state;         // MOS temperature state
+  TempState mcu_state;        // MCU temperature state
+  TempState cap_state;        // CAP temperature state
+  TempState motor_state;      // Motor temperature state
+  bool temp_sensor_error;     // True if any sensor is invalid
 }STR_ESC_TELEMETRY_140;
 
 // Internal device data
