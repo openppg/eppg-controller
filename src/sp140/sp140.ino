@@ -324,7 +324,9 @@ void refreshDisplay() {
     armedAtMillis);
 }
 
-// For tasks that use the SPI bus cant run in parallel
+#define TELEMETRY_TIMEOUT_MS 1000  // Add near other defines
+
+
 void spiCommTask(void *pvParameters) {
   for (;;) {
       #ifdef SCREEN_DEBUG
@@ -334,14 +336,21 @@ void spiCommTask(void *pvParameters) {
         xQueueOverwrite(escTelemetryQueue, &escTelemetryData);  // Always latest data
         refreshDisplay();
       #else
-        // Update BMS data
+        unsigned long currentTime = millis();
+
+        // Update BMS data and state
         if (isBMSPresent) {
           updateBMSData();
           unifiedBatteryData.volts = bmsTelemetryData.battery_voltage;
           unifiedBatteryData.amps = bmsTelemetryData.battery_current;
           unifiedBatteryData.soc = bmsTelemetryData.soc;
 
+          // Update BMS state based on connection status
+          bmsTelemetryData.state = bms_can.isConnected() ? TelemetryState::CONNECTED : TelemetryState::NOT_CONNECTED;
+
           xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);  // Always latest data
+        } else {
+          bmsTelemetryData.state = TelemetryState::NOT_CONNECTED;
         }
 
         // Update display
@@ -609,7 +618,6 @@ void setupTasks() {
 
   // Create melody queue
   melodyQueue = xQueueCreate(5, sizeof(MelodyRequest));
-
 
   // Create audio task - pin to core 1 to avoid interference with throttle
   xTaskCreatePinnedToCore(audioTask, "Audio", 2048, NULL, 2, &audioTaskHandle, 1);
@@ -950,12 +958,25 @@ void handleThrottle() {
   syncESCTelemetry();
 }
 
+// push telemetry data to the queue for BLE updates etc
 void syncESCTelemetry() {
+  unsigned long currentTime = millis();
+
   if (!isBMSPresent) {
     unifiedBatteryData.volts = escTelemetryData.volts;
     unifiedBatteryData.amps = escTelemetryData.amps;
     unifiedBatteryData.soc = getBatteryPercent(escTelemetryData.volts);
   }
+
+  // Update ESC state based on last update time
+  if (escTelemetryData.lastUpdateMs == 0) {
+    escTelemetryData.state = TelemetryState::NOT_CONNECTED;
+  } else if (currentTime - escTelemetryData.lastUpdateMs > TELEMETRY_TIMEOUT_MS) {
+    escTelemetryData.state = TelemetryState::STALE;
+  } else {
+    escTelemetryData.state = TelemetryState::CONNECTED;
+  }
+
   // Send to queue for BLE updates
   if (escTelemetryQueue != NULL) {
     xQueueOverwrite(escTelemetryQueue, &escTelemetryData);  // Always use latest data
@@ -1049,15 +1070,12 @@ void audioTask(void* parameter) {
     if(xQueueReceive(melodyQueue, &request, portMAX_DELAY) == pdTRUE) {
       if (!ENABLE_BUZ) continue;
 
+      TickType_t nextWakeTime = xTaskGetTickCount();
       for(int i = 0; i < request.size; i++) {
-        // Use precise RTOS timing
-        TickType_t xLastWakeTime = xTaskGetTickCount();
-
         tone(board_config.buzzer_pin, request.notes[i]);
-        vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(request.duration));
-
-        // Small gap between notes
-        vTaskDelay(pdMS_TO_TICKS(10));
+        TickType_t delayTicks = pdMS_TO_TICKS(request.duration);
+        if(delayTicks == 0) { delayTicks = 1; } // Ensure non-zero delay
+        vTaskDelayUntil(&nextWakeTime, delayTicks);
       }
       noTone(board_config.buzzer_pin);
     }

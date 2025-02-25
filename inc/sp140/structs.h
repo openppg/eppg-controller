@@ -19,6 +19,14 @@ enum TempState {
   TEMP_CRITICAL = 2
 };
 
+// Telemetry connection state
+enum class TelemetryState : uint8_t {
+    NOT_CONNECTED,  // Never received data since boot
+    CONNECTED,      // Receiving data normally
+    STALE          // Was connected but hasn't received data recently
+};
+
+// v1 ESC telemetry
 typedef struct {
   float volts;
   float mos_temp;
@@ -38,6 +46,7 @@ typedef struct {
   TempState cap_state;        // CAP temperature state
   TempState motor_state;      // Motor temperature state
   bool temp_sensor_error;     // True if any sensor is invalid
+  TelemetryState state;       // Current connection state
 }STR_ESC_TELEMETRY_140;
 
 // Internal device data
@@ -89,6 +98,7 @@ typedef struct {
   uint8_t battery_failure_level;  // Battery failure status
   float voltage_differential;   // Highest cell minus lowest cell voltage (V)
   unsigned long lastUpdateMs;   // Timestamp of last telemetry update
+  TelemetryState state;        // Current connection state
 } STR_BMS_TELEMETRY_140;
 #pragma pack(pop)
 

@@ -2,7 +2,9 @@
 
 #include "sp140/structs.h"
 
-STR_BMS_TELEMETRY_140 bmsTelemetryData;
+STR_BMS_TELEMETRY_140 bmsTelemetryData = {
+  .state = TelemetryState::NOT_CONNECTED
+};
 
 // Initialize the BMS_CAN object
 BMS_CAN bms_can(MCP_CS, MCP_BAUDRATE, MCP_MOSI, MCP_MISO, MCP_SCK);
