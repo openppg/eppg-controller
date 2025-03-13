@@ -28,7 +28,6 @@
 #include "sp140/globals.h"
 
 unsigned long cruisedAtMillis = 0;
-int prevPotLvl = 0;
 int cruisedPotVal = 0;
 
 float watts = 0;

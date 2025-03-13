@@ -25,16 +25,13 @@ void modeSwitch(bool update_display) {
 // throttle easing function based on threshold/performance mode
 int limitedThrottle(int current, int last, int threshold) {
   if (current - last >= threshold) {  // accelerating too fast. limit
-    int limitedThrottle = last + threshold;
-    // TODO:  cleanup global var use
-    prevPotLvl = limitedThrottle;  // save for next time
-    return limitedThrottle;
+    // Calculate limited throttle without modifying global
+    return last + threshold;
   } else if (last - current >= threshold * DECEL_MULTIPLIER) {  // decelerating too fast. limit
-    int limitedThrottle = last - threshold * DECEL_MULTIPLIER;
-    prevPotLvl = limitedThrottle;  // save for next time
-    return limitedThrottle;
+    // Calculate limited throttle without modifying global
+    return last - threshold * DECEL_MULTIPLIER;
   }
-  prevPotLvl = current;
+  // Return current value without modification
   return current;
 }
 

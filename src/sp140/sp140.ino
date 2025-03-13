@@ -792,7 +792,7 @@ void disarmESC() {
 // reset smoothing
 void resetSmoothing() {
   potBuffer.clear();
-  prevPotLvl = 0;
+  // Note: prevPotLvl is now handled locally in handleThrottle function
 }
 
 void resumeLEDTask() {
@@ -901,7 +901,7 @@ bool throttleSafe(int threshold = POT_ENGAGEMENT_LEVEL) {
 void handleThrottle() {
   static int maxPWM = ESC_MAX_PWM;
   static uint16_t currentCruiseThrottlePWM = ESC_MIN_SPIN_PWM;
-  static int prevPotLvl = 0;
+  static int prevPotLvl = 0;  // Local static variable for throttle smoothing
   uint16_t newPWM;
 
   // Check for throttle updates from cruise control
@@ -919,6 +919,7 @@ void handleThrottle() {
   if (currentState == DISARMED) {
     setESCThrottle(ESC_DISARMED_PWM);
     updateThrottleBLE(0); // Send 0 throttle when disarmed
+    prevPotLvl = 0;  // Reset throttle memory when disarmed
   } else if (currentState == ARMED_CRUISING) {
     setESCThrottle(currentCruiseThrottlePWM);
     // Map PWM back to throttle value for BLE
@@ -929,6 +930,7 @@ void handleThrottle() {
     USBSerial.print(currentCruiseThrottlePWM);
     USBSerial.println(")");
     updateThrottleBLE(mappedThrottle);
+    // Don't update prevPotLvl in cruise mode
   } else {
     // Apply throttle limits based on performance mode
     int rampRate = deviceData.performance_mode == 0 ? CHILL_MODE_RAMP_RATE : SPORT_MODE_RAMP_RATE;
@@ -940,7 +942,7 @@ void handleThrottle() {
     // Map throttle value to PWM range
     int localThrottlePWM = map(potLvl, 0, 4095, ESC_MIN_SPIN_PWM, maxPWM);
     setESCThrottle(localThrottlePWM);
-    prevPotLvl = potLvl;
+    prevPotLvl = potLvl;  // Store locally for next iteration
     updateThrottleBLE(potLvl); // Send actual throttle value
   }
 

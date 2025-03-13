@@ -7,7 +7,6 @@
 #include "sp140/ble.h"
 
 extern unsigned long cruisedAtMillis;
-extern int prevPotLvl;
 extern int cruisedPotVal;
 
 extern float watts;
