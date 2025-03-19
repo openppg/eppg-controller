@@ -53,47 +53,6 @@ void blinkLED() {
   setLEDs(ledState);
 }
 
-/**
- * Plays a melody using a piezo buzzer.
- *
- * @param melody An array of uint16_t values representing the notes of the melody.
- * @param siz The size of the melody array.
- * @return Returns true if the melody was played successfully, false otherwise.
- */
-bool playMelody(uint16_t melody[], int siz) {
-  if (!ENABLE_BUZ) return false;
-
-  // Create a static buffer for the melody
-  static uint16_t melodyBuffer[32];  // Adjust size as needed
-
-  // Copy melody to static buffer to ensure it persists
-  for(int i = 0; i < min(siz, 32); i++) {
-    melodyBuffer[i] = melody[i];
-  }
-
-  MelodyRequest request = {
-    .notes = melodyBuffer,
-    .size = (uint8_t)min(siz, 32),
-    .duration = 125  // Default duration
-  };
-
-  // Send to queue with timeout
-  if(xQueueSend(melodyQueue, &request, pdMS_TO_TICKS(100)) != pdTRUE) {
-    USBSerial.println("Failed to queue melody");
-    return false;
-  }
-
-  return true;
-}
-
-/**
- * Plays a melody to indicate arm failure.
- */
-void handleArmFail() {
-  uint16_t arm_fail_melody[] = { 820, 640 };
-  playMelody(arm_fail_melody, 2);
-}
-
 // for debugging
 void printDeviceData() {
   Serial.print(F("version major "));

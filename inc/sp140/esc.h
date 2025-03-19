@@ -35,7 +35,6 @@ bool initESC(int escPin);
 void setESCThrottle(int throttlePWM);
 void readESCTelemetry();
 bool setupTWAI();
-float getBatteryPercent(float voltage);
 
 // Get the highest temperature from all ESC sensors
 float getHighestTemp(const STR_ESC_TELEMETRY_140& telemetry);

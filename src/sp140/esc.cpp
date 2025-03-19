@@ -247,47 +247,8 @@ double mapDouble(double x, double in_min, double in_max, double out_min, double 
   return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
-/**
- * This function takes a voltage level as input and returns the corresponding
- * battery percentage. It uses a lookup table (`batteryLevels`) to map voltage
- * levels to percentages. Thats based  on a simple set of data points from load testing.
- * If the input voltage is greater than a threshold
- * voltage, linear interpolation is used to calculate the percentage between
- * two consecutive voltage-percentage mappings.
- *
- * @param voltage The input voltage level.
- * @return The calculated battery percentage (0-100).
- */
-float getBatteryPercent(float voltage) {
-  // Calculate the number of voltage-percentage mappings
-  int numLevels = sizeof(batteryLevels) / sizeof(BatteryVoltagePoint);
-
-  // Handle edge cases where the voltage is outside the defined range
-  if (voltage >= batteryLevels[0].voltage) {
-    return batteryLevels[0].percent;
-  } else if (voltage <= batteryLevels[numLevels - 1].voltage) {
-    return batteryLevels[numLevels - 1].percent;
-  }
-
-  // Iterate through the voltage-percentage mappings
-  for (int i = 0; i < numLevels - 1; i++) {
-    // Check if the input voltage is between the current and next mapping
-    if (voltage <= batteryLevels[i].voltage && voltage > batteryLevels[i + 1].voltage) {
-      // Interpolate the percentage between the current and next mapping
-      return mapDouble(voltage, batteryLevels[i + 1].voltage, batteryLevels[i].voltage,
-                        batteryLevels[i + 1].percent, batteryLevels[i].percent);
-    }
-  }
-
-  return 0;  // Fallback, should never reach here
-}
-
-// Get the highest temperature from all ESC sensors
 float getHighestTemp(const STR_ESC_TELEMETRY_140& telemetry) {
-  float highest = telemetry.mos_temp;
-  if (telemetry.cap_temp > highest) highest = telemetry.cap_temp;
-  if (telemetry.mcu_temp > highest) highest = telemetry.mcu_temp;
-  return highest;
+  return max(telemetry.motor_temp, max(telemetry.mos_temp, telemetry.cap_temp));
 }
 
 TempState checkTempState(float temp, TempComponent component) {

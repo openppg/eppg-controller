@@ -52,6 +52,12 @@
 #include "../../inc/sp140/altimeter.h"
 #include "../../inc/sp140/debug.h"
 
+// New modular includes
+#include "../../inc/sp140/buzzer.h"
+#include "../../inc/sp140/device_state.h"
+#include "../../inc/sp140/mode.h"
+#include "../../inc/sp140/throttle.h"
+
 #ifdef USE_DRV2605
   #include "../../inc/sp140/vibration_drv2605.h"
 #else
@@ -103,13 +109,6 @@ CircularBuffer<int, 8> potBuffer;
   Adafruit_NeoPixel pixels(1, 21, NEO_GRB + NEO_KHZ800);
 #endif
 uint32_t led_color = LED_RED; // current LED color
-
-// New enum for device state
-enum DeviceState {
-  DISARMED = 0,
-  ARMED = 1,
-  ARMED_CRUISING = 2
-};
 
 // Global variable for device state
 volatile DeviceState currentState = DISARMED;
@@ -351,6 +350,9 @@ void spiCommTask(void *pvParameters) {
           xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);  // Always latest data
         } else {
           bmsTelemetryData.state = TelemetryState::NOT_CONNECTED;
+          unifiedBatteryData.volts = escTelemetryData.volts;
+          unifiedBatteryData.amps = escTelemetryData.amps;
+          unifiedBatteryData.soc = 0.0; // We don't estimate SOC from voltage anymore
         }
 
         // Update display
@@ -967,7 +969,7 @@ void syncESCTelemetry() {
   if (!isBMSPresent) {
     unifiedBatteryData.volts = escTelemetryData.volts;
     unifiedBatteryData.amps = escTelemetryData.amps;
-    unifiedBatteryData.soc = getBatteryPercent(escTelemetryData.volts);
+    unifiedBatteryData.soc = 0.0; // We don't estimate SOC from voltage anymore
   }
 
   // Update ESC state based on last update time
