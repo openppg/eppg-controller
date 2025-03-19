@@ -508,15 +508,11 @@ void setupBLE() {
 // read saved data from EEPROM
 void refreshDeviceData() {
   uint16_t crc;
-  #ifdef RP_PIO
-    EEPROM.get(EEPROM_OFFSET, deviceData);
-  #elif CAN_PIO
-    if (!EEPROM.begin(sizeof(deviceData))) {
-      Serial.println(F("Failed to initialise EEPROM"));
-      return;
-    }
-    EEPROM.get(EEPROM_OFFSET, deviceData);
-  #endif
+  if (!EEPROM.begin(sizeof(deviceData))) {
+    Serial.println(F("Failed to initialise EEPROM"));
+    return;
+  }
+  EEPROM.get(EEPROM_OFFSET, deviceData);
   crc = crc16((uint8_t*)&deviceData, sizeof(deviceData) - 2);
 
   // If the CRC does not match, reset the device data
@@ -524,52 +520,25 @@ void refreshDeviceData() {
     Serial.println(F("EEPROM CRC mismatch - resetting device data"));
     resetDeviceData();
   }
-
-  // Update the revision if required
-  //updateRevisionIfRequired();
-}
-
-// Update the revision if required
-void updateRevisionIfRequired() {
-  #ifdef RP_PIO
-    if (deviceData.revision == 0) {
-      deviceData.revision = 1;
-      writeDeviceData();  // Save the updated revision to EEPROM
-    }
-  #endif
 }
 
 // Write to EEPROM
 void writeDeviceData() {
   deviceData.crc = crc16((uint8_t*)&deviceData, sizeof(deviceData) - 2);
-  #ifdef RP_PIO
-  printDeviceData();
   EEPROM.put(EEPROM_OFFSET, deviceData);
   if (EEPROM.commit()) {
     Serial.println("EEPROM commit successful");
   } else {
     Serial.println("EEPROM commit failed");
   }
-  #elif CAN_PIO
-  EEPROM.put(EEPROM_OFFSET, deviceData);
-  if (EEPROM.commit()) {
-    Serial.println("EEPROM commit successful");
-  } else {
-    Serial.println("EEPROM commit failed");
-  }
-  #endif
 }
 
 // Reset EEPROM and deviceData to factory defaults
 void resetDeviceData() {
   deviceData = STR_DEVICE_DATA_140_V1();
 
-  // Set the revision based on the arch and board revision
-  #ifdef RP_PIO
-    deviceData.revision = 2;  // Default to new 2040 board revision
-  #elif CAN_PIO
-    deviceData.revision = 3;  // Set appropriate revision for ESP32-S3
-  #endif
+  // Set the revision to ESP32-S3
+  deviceData.revision = 3;  // Set appropriate revision for ESP32-S3
 
   deviceData.version_major = VERSION_MAJOR;
   deviceData.version_minor = VERSION_MINOR;
@@ -717,12 +686,11 @@ void debugHardwareConfig(const HardwareConfig& config) {
 
 void send_usb_serial() {
 #ifdef USE_TINYUSB
-#ifdef RP_PIO
   StaticJsonDocument<256> doc; // <- a little more than 256 bytes in the stack
 
   doc["mj_v"].set(VERSION_MAJOR);
   doc["mi_v"].set(VERSION_MINOR);
-  doc["arch"].set("RP2040");
+  doc["arch"].set("ESP32S3");
   doc["scr_rt"].set(deviceData.screen_rotation);
   doc["ar_tme"].set(deviceData.armed_time);
   doc["m_tmp"].set(deviceData.metric_temp);
@@ -731,15 +699,7 @@ void send_usb_serial() {
   doc["sea_p"].set(deviceData.sea_pressure);
   doc["thm"].set(deviceData.theme);
   //doc["rev"].set(deviceData.revision);
-  //doc["id"].set(chipId()); // webusb bug prevents anything over a certain size / this extra field from being sent
-
-  char output[256];
-  serializeJson(doc, output, sizeof(output));
-  usb_web.println(output);
-  usb_web.flush();
-  //Serial.println(chipId());
-#endif //RP_PIO
-#endif // USE_TINYUSB
+#endif
 }
 
 void updateESCTelemetryBLE(const STR_ESC_TELEMETRY_140& telemetry) {

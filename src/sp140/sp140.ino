@@ -3,15 +3,7 @@
 #include "Arduino.h"
 
 #include "../../lib/crc.c"       // packet error checking
-#ifdef RP_PIO
-  #include "../../inc/sp140/rp2040-config.h"         // device config
-  #include <FreeRTOS.h>
-  #include <task.h>
-  #include <semphr.h>
-  #include <map>
-#elif CAN_PIO
-  #include "../../inc/sp140/esp32s3-config.h"
-#endif
+#include "../../inc/sp140/esp32s3-config.h"
 
 #include "../../inc/sp140/structs.h"         // data structs
 #include <Adafruit_NeoPixel.h>   // LEDs
@@ -25,24 +17,15 @@
   #include "Adafruit_TinyUSB.h"
 #endif
 
-#ifdef RP_PIO
-  // rp2040 specific libraries here
-  #include <EEPROM.h>
-  #include "hardware/watchdog.h"
-  #include "pico/unique_id.h"
-#elif CAN_PIO
-  // ESP32S3 (CAN) specific libraries here
-  #include "esp_task_wdt.h"
-  #include "EEPROM.h"
-#endif
+// ESP32S3 (CAN) specific libraries here
+#include "esp_task_wdt.h"
+#include "EEPROM.h"
 
 #ifdef WIFI_DEBUG
   #include "Insights.h"
   #include "WiFi.h"
   #include "inttypes.h"
   #include "esp_err.h"
-
-
 #endif
 
 #include "../../inc/sp140/globals.h"  // device config
@@ -103,11 +86,7 @@ UnifiedBatteryData unifiedBatteryData = {0.0f, 0.0f, 0.0f};
 CircularBuffer<float, 50> voltageBuffer;
 CircularBuffer<int, 8> potBuffer;
 
-#ifndef CAN_PIO
-  Adafruit_NeoPixel pixels(1, LED_BUILTIN, NEO_GRB + NEO_KHZ800);
-#else
-  Adafruit_NeoPixel pixels(1, 21, NEO_GRB + NEO_KHZ800);
-#endif
+Adafruit_NeoPixel pixels(1, 21, NEO_GRB + NEO_KHZ800);
 uint32_t led_color = LED_RED; // current LED color
 
 // Global variable for device state
@@ -246,11 +225,7 @@ const unsigned long DISARM_COOLDOWN = 500;  // 500ms cooldown
 void watchdogTask(void* parameter) {
   for (;;) {
     #ifndef OPENPPG_DEBUG
-      #ifdef RP_PIO
-        watchdog_update();
-      #elif CAN_PIO
-       ESP_ERROR_CHECK(esp_task_wdt_reset());
-      #endif
+      ESP_ERROR_CHECK(esp_task_wdt_reset());
     #endif
     vTaskDelay(pdMS_TO_TICKS(100));  // Delay for 100ms
   }
@@ -377,13 +352,8 @@ void setupUSBWeb() {
 #endif
 
 void printBootMessage() {
-  #ifdef CAN_PIO
   USBSerial.print(F("Booting up V"));
   USBSerial.print(VERSION_STRING);
-  #else
-  Serial.print(F("Booting up (USB) V"));
-  Serial.print(VERSION_STRING);
-  #endif
 }
 
 void setupBarometer() {
@@ -393,9 +363,6 @@ void setupBarometer() {
 }
 
 void setupEEPROM() {  // TODO: move to extra-data.ino or own file
-#ifdef RP_PIO
-  EEPROM.begin(255);
-#elif CAN_PIO
   // Initialize EEPROM
   if (!EEPROM.begin(sizeof(deviceData))) {
     USBSerial.println("Failed to initialise EEPROM");
@@ -403,7 +370,6 @@ void setupEEPROM() {  // TODO: move to extra-data.ino or own file
   } else {
     USBSerial.println("EEPROM initialized successfully");
   }
-#endif
 }
 
 void setupLED() {
@@ -421,89 +387,18 @@ void setupAnalogRead() {
 
 void setupWatchdog() {
 #ifndef OPENPPG_DEBUG
-  #ifdef RP_PIO
-    watchdog_enable(4000, 1);
-  #elif CAN_PIO
-    // Initialize Task Watchdog
-    //ESP_ERROR_CHECK(esp_task_wdt_init(3000, true));  // 3 second timeout, panic on timeout
-  #endif
+  // Initialize Task Watchdog
+  //ESP_ERROR_CHECK(esp_task_wdt_init(3000, true));  // 3 second timeout, panic on timeout
 #endif // OPENPPG_DEBUG
 }
 
 
 void upgradeDeviceRevisionInEEPROM() {
-#ifdef RP_PIO
-  if (deviceData.revision == M0) {  // onetime conversion because default is 1
-    deviceData.revision = V1;
-    writeDeviceData();
-  }
-#elif CAN_PIO
   deviceData.revision = ESPCAN;
   writeDeviceData();
-#endif
 }
 
 #define TAG "OpenPPG"
-
-void testTask(void *pvParameters) {
-  TickType_t xLastWakeTime;
-  const TickType_t xFrequency = pdMS_TO_TICKS(500); // 500ms
-  xLastWakeTime = xTaskGetTickCount();
-  int count = 0;
-
-  for (;;) {
-    vTaskDelayUntil(&xLastWakeTime, xFrequency);
-    count++;
-
-    TickType_t period = xTaskGetTickCount() - xLastWakeTime;
-    xLastWakeTime = xTaskGetTickCount();
-
-    USBSerial.println(".");
-    //setESCThrottle(ESC_DISARMED_PWM);
-    //dumpESCMessages();
-
-    // Log the heartbeat event
-    Insights.event(TAG, "[heartbeat][%d] [period_ms][%u]", count, period * portTICK_PERIOD_MS);
-
-    // Every 20 iterations (roughly every 10 seconds), dump the heap info
-    if (count % 20 == 0) {
-      Insights.metrics.dumpHeap();
-    }
-
-    // Every 120 iterations (roughly every minute), log some system info
-    if (count % 120 == 0) {
-      Insights.event(TAG, "[uptime_min][%d] [free_heap][%u] [min_free_heap][%u]",
-                     count / 120,
-                     esp_get_free_heap_size(),
-                     esp_get_minimum_free_heap_size());
-    }
-
-    // Log throttle level and device state every 10 iterations (roughly every 5 seconds)
-    if (count % 10 == 0) {
-      Insights.metrics.dumpHeap();
-    }
-  }
-}
-
-TaskHandle_t testTaskHandle = NULL;
-
-#ifdef WIFI_DEBUG
-
-void setupWiFi() {
-//   WiFi.mode(WIFI_STA);
-//   WiFi.begin(WIFI_SSID, WIFI_PASSPHRASE);
-//   while (WiFi.status() != WL_CONNECTED) {
-//     delay(500);
-//     USBSerial.println("Wifi connecting...");
-//   }
-//   USBSerial.println("");
-//   USBSerial.println("WiFi connected");
-
-//   if(!Insights.begin(insights_auth_key)){
-//     USBSerial.println("Failed to initialize Insights");
-//   }
-}
-#endif
 
 // Add near other task declarations at the top
 TaskHandle_t timeDebugTaskHandle = NULL;
@@ -607,7 +502,6 @@ void setup() {
 
 // set up all the main threads/tasks with core 0 affinity
 void setupTasks() {
- #ifdef CAN_PIO
   //xTaskCreate(telemetryEscTask, "telemetryEscTask", 4096, NULL, 2, &telemetryEscTaskHandle);
   xTaskCreate(blinkLEDTask, "blinkLed", 1536, NULL, 1, &blinkLEDTaskHandle);
   xTaskCreatePinnedToCore(throttleTask, "throttle", 4096, NULL, 3, &throttleTaskHandle, 0);
@@ -628,26 +522,16 @@ void setupTasks() {
   //xTaskCreatePinnedToCore(watchdogTask, "watchdog", 1000, NULL, 5, &watchdogTaskHandle, 0);  // Run on core 0
 
   xTaskCreate(updateESCBLETask, "ESC BLE Update Task", 4096, NULL, 1, NULL);
-#endif
 }
 
 
 void setup140() {
-  #ifdef CAN_PIO
   // TODO: write to CAN bus
-  #else
-    initESC(board_config.esc_pin);
-  #endif
 
   initBuzz();
-  #ifdef RP_PIO
-  Wire1.setSDA(A0); // Have to use Wire1 because pins are assigned that in hardware
-  Wire1.setSCL(A1);
-  #elif CAN_PIO
   const int SDA_PIN = 44;
   const int SCL_PIN = 41;
   Wire.setPins(SDA_PIN, SCL_PIN);
-  #endif
   setupAltimeter(board_config.alt_wire);
   if (board_config.enable_vib) {
     initVibeMotor();
@@ -1063,8 +947,6 @@ void trackPower() {
   if (currentState != DISARMED) {
     wattHoursUsed += round(watts/60/60*msec_diff)/1000.0;
   }
-  Insights.metrics.setInt("flight_duration", (millis() - armedAtMillis) / 1000);
-  Insights.metrics.setFloat("watt_hours_used", wattHoursUsed);
 }
 
 void audioTask(void* parameter) {

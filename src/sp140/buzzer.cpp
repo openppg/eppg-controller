@@ -3,20 +3,10 @@
 #include <Arduino.h>
 
 // Platform-specific hardware config and FreeRTOS
-#ifdef RP_PIO
-  #include "sp140/rp2040-config.h"
-  #include <FreeRTOS.h>
-  #include <semphr.h>
-  #define DEBUG_SERIAL Serial
-#elif CAN_PIO
-  #include "sp140/esp32s3-config.h"
-  #include <FreeRTOS.h>
-  #include <semphr.h>
-  #define DEBUG_SERIAL USBSerial
-#else
-  #include "sp140/m0-config.h"
-  #define DEBUG_SERIAL Serial
-#endif
+#include "sp140/esp32s3-config.h"
+#include <FreeRTOS.h>
+#include <semphr.h>
+#define DEBUG_SERIAL USBSerial
 
 // External global variables needed
 extern HardwareConfig board_config;

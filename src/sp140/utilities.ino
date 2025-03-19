@@ -81,7 +81,6 @@ void printDeviceData() {
   Serial.println(deviceData.crc);
 }
 
-#ifdef CAN_PIO
 String chipId() {
   uint32_t chipId = 0;
   for (int i = 0; i < 17; i = i + 8) {
@@ -89,4 +88,3 @@ String chipId() {
   }
   return String(chipId);
 }
-#endif

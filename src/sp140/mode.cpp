@@ -4,13 +4,7 @@
 #include "sp140/device_state.h"
 
 // Platform-specific hardware config
-#ifdef RP_PIO
-  #include "sp140/rp2040-config.h"
-#elif CAN_PIO
-  #include "sp140/esp32s3-config.h"
-#else
-  #include "sp140/m0-config.h"
-#endif
+#include "sp140/esp32s3-config.h"
 
 // External globals
 extern STR_DEVICE_DATA_140_V1 deviceData;

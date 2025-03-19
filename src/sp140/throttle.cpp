@@ -2,13 +2,7 @@
 #include "sp140/shared-config.h"
 
 // Platform-specific hardware config
-#ifdef RP_PIO
-  #include "sp140/rp2040-config.h"
-#elif CAN_PIO
-  #include "sp140/esp32s3-config.h"
-#else
-  #include "sp140/m0-config.h"
-#endif
+#include "sp140/esp32s3-config.h"
 
 /**
  * Throttle easing function based on threshold/performance mode

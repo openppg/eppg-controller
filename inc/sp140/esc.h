@@ -3,23 +3,9 @@
 
 #include <Arduino.h>
 #include "sp140/structs.h"
-
-#ifdef RP_PIO
-  #include "../../inc/sp140/rp2040-config.h"
-#elif CAN_PIO
-  #include "../../inc/sp140/esp32s3-config.h"
-  #include <SineEsc.h>
-  #include <CanardAdapter.h>
-#endif
-
-#ifndef CAN_PIO
-  #define ESC_BAUD_RATE         115200
-  #define ESC_DATA_V2_SIZE      22
-  #define ESC_TIMEOUT           15
-
-  SerialESC.begin(ESC_BAUD_RATE);
-  SerialESC.setTimeout(ESC_TIMEOUT);
-#endif
+#include "../../inc/sp140/esp32s3-config.h"
+#include <SineEsc.h>
+#include <CanardAdapter.h>
 
 // Temperature thresholds
 #define ESC_MOS_WARN 90

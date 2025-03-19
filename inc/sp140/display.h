@@ -5,11 +5,7 @@
 
 #include "sp140/structs.h"
 
-#ifdef RP_PIO
-  #include "../../inc/sp140/rp2040-config.h"
-#elif CAN_PIO
-  #include "../../inc/sp140/esp32s3-config.h"
-#endif
+#include "../../inc/sp140/esp32s3-config.h"
 
 #include <Adafruit_ST7735.h>
 #include "utilities.h"

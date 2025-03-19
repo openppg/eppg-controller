@@ -2,23 +2,17 @@
 #include "sp140/globals.h"
 #include <CircularBuffer.hpp>
 
-#ifndef CAN_PIO
-  #include <Servo.h>  // For generating PWM for ESC
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#include "driver/twai.h"
 
-  Servo esc;  // Creating a servo class with name of esc
-#else
-  #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
-  #include "driver/twai.h"
+#define ESC_RX_PIN 3  // CAN RX pin to transceiver
+#define ESC_TX_PIN 2  // CAN TX pin to transceiver
+#define LOCAL_NODE_ID 0x01  // The ID on the network of this device
 
-  #define ESC_RX_PIN 3  // CAN RX pin to transceiver
-  #define ESC_TX_PIN 2  // CAN TX pin to transceiver
-  #define LOCAL_NODE_ID 0x01  // The ID on the network of this device
-
-  static CanardAdapter adapter;
-  static uint8_t memory_pool[1024] __attribute__((aligned(8)));
-  static SineEsc esc(adapter);
-  static bool twaiDriverInstalled = false;
-#endif
+static CanardAdapter adapter;
+static uint8_t memory_pool[1024] __attribute__((aligned(8)));
+static SineEsc esc(adapter);
+static bool twaiDriverInstalled = false;
 
 extern CircularBuffer<float, 50> voltageBuffer;
 

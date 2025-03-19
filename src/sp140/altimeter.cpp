@@ -63,16 +63,11 @@ void setGroundAltitude(const STR_DEVICE_DATA_140_V1& deviceData) {
 bool setupAltimeter(bool altWire) {
   TwoWire* wire = &Wire;
 
-  #ifdef CAN_PIO
   // pull down pin 40 to high to set the address
   pinMode(40, OUTPUT);
   digitalWrite(40, HIGH);
   if (!bmp.begin_I2C(BMP3XX_DEFAULT_ADDRESS, &Wire)) return false;
-  #else
-  if (!bmp.begin_I2C(BMP3XX_DEFAULT_ADDRESS, wire)) {
-    return false;
-  }
-  #endif
+
   bmp.setOutputDataRate(BMP3_ODR_25_HZ);
   bmp.setTemperatureOversampling(BMP3_OVERSAMPLING_2X);
   bmp.setPressureOversampling(BMP3_OVERSAMPLING_4X);

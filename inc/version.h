@@ -1,14 +1,8 @@
 // Copyright <Zach Whitehead>
 #pragma once
 
-#ifdef CAN_PIO
-    #define VERSION_MAJOR 7
-    #define VERSION_MINOR 0
-#else
-    #define VERSION_MAJOR 6
-    #define VERSION_MINOR 5
-#endif
-
+#define VERSION_MAJOR 7
+#define VERSION_MINOR 0
 
 // Define a version string
 #define VERSION_STRING STRINGIFY(VERSION_MAJOR) "." STRINGIFY(VERSION_MINOR)
