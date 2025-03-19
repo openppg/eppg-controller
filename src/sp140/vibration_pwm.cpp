@@ -1,5 +1,3 @@
-#ifndef USE_DRV2605
-
 #include "sp140/vibration_pwm.h"
 #include "Arduino.h"
 
@@ -104,5 +102,3 @@ void customVibePattern(const uint8_t intensities[], const uint16_t durations[], 
   }
   ledcWrite(PWM_CHANNEL, 0);
 }
-
-#endif  // !USE_DRV2605

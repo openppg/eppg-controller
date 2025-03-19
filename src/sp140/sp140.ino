@@ -39,12 +39,7 @@
 #include "../../inc/sp140/device_state.h"
 #include "../../inc/sp140/mode.h"
 #include "../../inc/sp140/throttle.h"
-
-#ifdef USE_DRV2605
-  #include "../../inc/sp140/vibration_drv2605.h"
-#else
-  #include "../../inc/sp140/vibration_pwm.h"
-#endif
+#include "../../inc/sp140/vibration_pwm.h"
 
 #define BUTTON_DEBOUNCE_TIME_MS 50
 #define FIRST_CLICK_MAX_HOLD_MS 500    // Maximum time for first click to be considered a click
