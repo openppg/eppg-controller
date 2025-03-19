@@ -137,4 +137,10 @@ void updateDisplay(const STR_DEVICE_DATA_140_V1& deviceData,
 
 void setTheme(int theme);  // 0,1
 
+// Shared hardware SPI instance
+extern SPIClass* hardwareSPI;
+
+extern Adafruit_ST7735* display;
+extern GFXcanvas16 canvas;
+
 #endif  // INC_SP140_DISPLAY_H_

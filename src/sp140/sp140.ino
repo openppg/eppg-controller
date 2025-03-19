@@ -315,7 +315,7 @@ void spiCommTask(void *pvParameters) {
           unifiedBatteryData.soc = bmsTelemetryData.soc;
 
           // Update BMS state based on connection status
-          bmsTelemetryData.state = bms_can.isConnected() ? TelemetryState::CONNECTED : TelemetryState::NOT_CONNECTED;
+          bmsTelemetryData.state = bms_can->isConnected() ? TelemetryState::CONNECTED : TelemetryState::NOT_CONNECTED;
 
           xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);  // Always latest data
         } else {
@@ -437,7 +437,9 @@ void setup() {
   setupDisplay(deviceData, board_config);
 
   #ifndef SCREEN_DEBUG
-    isBMSPresent = initBMSCAN();
+    // Pass the hardware SPI instance to the BMS_CAN initialization
+    // bms_can = BMS_CAN(MCP_CS, MCP_BAUDRATE, hardwareSPI);
+    isBMSPresent = initBMSCAN(hardwareSPI);
   #endif
 
   initESC(0);

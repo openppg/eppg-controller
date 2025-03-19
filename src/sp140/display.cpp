@@ -4,6 +4,7 @@
 
 #define FONT_HEIGHT_OFFSET 8
 
+SPIClass* hardwareSPI = nullptr; // Global hardware SPI instance
 Adafruit_ST7735* display;
 GFXcanvas16 canvas(SCREEN_WIDTH, SCREEN_HEIGHT);
 
@@ -89,18 +90,22 @@ void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
 void setupDisplay(const STR_DEVICE_DATA_140_V1& deviceData, const HardwareConfig& board_config) {
   USBSerial.println("setupDisplay");
 
+  // Initialize hardware SPI for use by both display and BMS
+  hardwareSPI = new SPIClass(HSPI);
+  hardwareSPI->begin(board_config.tft_sclk, -1, board_config.tft_mosi, -1);
+
+  // Create the display with the hardware SPI
   display = new Adafruit_ST7735(
+    hardwareSPI,
     board_config.tft_cs,
     board_config.tft_dc,
-    board_config.tft_mosi,
-    board_config.tft_sclk,
     board_config.tft_rst);
 
   display->initR(INITR_BLACKTAB);  // Init ST7735S chip, black tab
   resetRotation(deviceData.screen_rotation);
   setTheme(deviceData.theme);  // 0=light, 1=dark
   display->fillScreen(ST77XX_BLACK);
-  displayMeta(deviceData);
+  displayMeta(deviceData, 1500);
 }
 
 void updateDisplay(
