@@ -71,14 +71,10 @@ void printDeviceData() {
   Serial.println(deviceData.performance_mode);
   Serial.print(F("theme "));
   Serial.println(deviceData.theme);
-  Serial.print(F("batt size "));
-  Serial.println(deviceData.batt_size);
   Serial.print(F("armed time "));
   Serial.println(deviceData.armed_time);
   Serial.print(F("revision "));
   Serial.println(deviceData.revision);
-  Serial.print(F("crc "));
-  Serial.println(deviceData.crc);
 }
 
 String chipId() {

@@ -34,9 +34,6 @@
 #define VARIO_BUFFER_SIZE 10  // Number of samples to average for vertical speed
 
 enum DeviceRevision {
-  M0 = 0,
-  V1 = 1,
-  MODULE = 2,
   ESPCAN = 3
 };
 

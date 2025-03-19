@@ -19,7 +19,6 @@
 
 // ESP32S3 (CAN) specific libraries here
 #include "esp_task_wdt.h"
-#include "EEPROM.h"
 
 #ifdef WIFI_DEBUG
   #include "Insights.h"
@@ -362,16 +361,6 @@ void setupBarometer() {
   digitalWrite(bmp_enabler, HIGH); // barometer fix for V2 board
 }
 
-void setupEEPROM() {  // TODO: move to extra-data.ino or own file
-  // Initialize EEPROM
-  if (!EEPROM.begin(sizeof(deviceData))) {
-    USBSerial.println("Failed to initialise EEPROM");
-    // You might want to add some error handling here
-  } else {
-    USBSerial.println("EEPROM initialized successfully");
-  }
-}
-
 void setupLED() {
   pinMode(board_config.led_sw, OUTPUT);   // set up the internal LED2 pin
   if(board_config.enable_neopixel){
@@ -393,7 +382,7 @@ void setupWatchdog() {
 }
 
 
-void upgradeDeviceRevisionInEEPROM() {
+void upgradeDeviceRevision() {  // Renamed to reflect the change from EEPROM to Preferences
   deviceData.revision = ESPCAN;
   writeDeviceData();
 }
@@ -433,12 +422,11 @@ void setup() {
   digitalWrite(42, HIGH);
   pinMode(42, OUTPUT);
 
-  setupEEPROM();
   refreshDeviceData();
   printBootMessage();
   setupBarometer();
 
-  upgradeDeviceRevisionInEEPROM();
+  upgradeDeviceRevision();
   loadHardwareConfig();
   setupLED();  // Defaults to RED
   setupAnalogRead();

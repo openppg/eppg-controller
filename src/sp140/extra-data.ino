@@ -1,6 +1,8 @@
 // Copyright 2020 <Zach Whitehead>
 // OpenPPG
 
+#include <Preferences.h>  // Add ESP32 Preferences library
+
 /**
  * WebUSB Protocol Documentation
  *
@@ -23,16 +25,31 @@
  * }
  */
 
-// ** Logic for EEPROM **
-# define EEPROM_OFFSET 0  // Address of first byte of EEPROM
-
 // Constants for device data
 const unsigned int DEFAULT_SCREEN_ROTATION = 3;
 const bool DEFAULT_METRIC_TEMP = true;
 const bool DEFAULT_METRIC_ALT = true;
 const int DEFAULT_PERFORMANCE_MODE = 0;
 const int DEFAULT_THEME = 0;  // 0=light, 1=dark
-const int DEFAULT_BATT_SIZE = 4000;  // 4kw
+
+// Preferences namespace
+const char* PREFS_NAMESPACE = "openppg";
+
+// Preferences keys
+const char* KEY_VERSION_MAJOR = "ver_major";
+const char* KEY_VERSION_MINOR = "ver_minor";
+const char* KEY_SCREEN_ROTATION = "scr_rot";
+const char* KEY_SEA_PRESSURE = "sea_pres";
+const char* KEY_METRIC_TEMP = "metric_tmp";
+const char* KEY_METRIC_ALT = "metric_alt";
+const char* KEY_PERFORMANCE_MODE = "perf_mode";
+const char* KEY_THEME = "theme";
+const char* KEY_ARMED_TIME = "armed_time";
+const char* KEY_REVISION = "revision";
+const char* KEY_TIMEZONE_OFFSET = "tz_offset";
+
+// Create a Preferences instance
+Preferences preferences;
 
 #include <BLEDevice.h>
 #include <BLEUtils.h>
@@ -47,7 +64,6 @@ const int DEFAULT_BATT_SIZE = 4000;  // 4kw
 #define SEA_PRESSURE_UUID        "DB47E20E-D8C1-405A-971A-DA0A2DF7E0F6"
 #define METRIC_TEMP_UUID         "D4962473-A3FB-4754-AD6A-90B079C3FB38"
 #define PERFORMANCE_MODE_UUID    "D76C2E92-3547-4F5F-AFB4-515C5C08B06B"
-#define BATT_SIZE_UUID           "4D076617-DC8C-46A5-902B-3F44FA28887E"
 #define THEME_UUID               "AD0E4309-1EB2-461A-B36C-697B2E1604D2"
 #define HW_REVISION_UUID         "2A27"  // Using standard BLE UUID for revision
 #define FW_VERSION_UUID          "2A26"  // Using standard BLE UUID for version
@@ -164,7 +180,7 @@ class MetricAltCallbacks: public BLECharacteristicCallbacks {
       deviceData.metric_alt = (value[0] != 0);
 
       writeDeviceData();
-      USBSerial.println("Metric alt setting saved to EEPROM");
+      USBSerial.println("Metric alt setting saved to Preferences");
     } else {
       USBSerial.println("Invalid value length - expected 1 byte");
     }
@@ -180,7 +196,7 @@ class PerformanceModeCallbacks: public BLECharacteristicCallbacks {
       if (mode <= 1) {  // Ensure value is 0 or 1
         deviceData.performance_mode = mode;
         writeDeviceData();
-        USBSerial.println("Performance mode saved to EEPROM");
+        USBSerial.println("Performance mode saved to Preferences");
       } else {
         USBSerial.println("Invalid performance mode value");
       }
@@ -200,7 +216,7 @@ class ScreenRotationCallbacks: public BLECharacteristicCallbacks {
         deviceData.screen_rotation = rotation;
         writeDeviceData();
         resetRotation(rotation);  // Update screen immediately
-        USBSerial.println("Screen rotation saved to EEPROM");
+        USBSerial.println("Screen rotation saved to Preferences");
       } else {
         USBSerial.println("Invalid rotation value");
       }
@@ -505,35 +521,70 @@ void setupBLE() {
   USBSerial.println("Waiting for a client connection...");
 }
 
-// read saved data from EEPROM
+// Read saved data from Preferences
 void refreshDeviceData() {
-  uint16_t crc;
-  if (!EEPROM.begin(sizeof(deviceData))) {
-    Serial.println(F("Failed to initialise EEPROM"));
+  if (!preferences.begin(PREFS_NAMESPACE, false)) {
+    Serial.println(F("Failed to initialize Preferences"));
+    resetDeviceData();
     return;
   }
-  EEPROM.get(EEPROM_OFFSET, deviceData);
-  crc = crc16((uint8_t*)&deviceData, sizeof(deviceData) - 2);
 
-  // If the CRC does not match, reset the device data
-  if (crc != deviceData.crc || deviceData.sea_pressure < 0) {
-    Serial.println(F("EEPROM CRC mismatch - resetting device data"));
+  // Check if we have saved preferences before
+  if (!preferences.isKey(KEY_VERSION_MAJOR)) {
+    Serial.println(F("No saved preferences found - initializing with defaults"));
+    preferences.end();
     resetDeviceData();
+    return;
   }
+
+  // Load all values from preferences
+  deviceData.version_major = preferences.getUChar(KEY_VERSION_MAJOR, VERSION_MAJOR);
+  deviceData.version_minor = preferences.getUChar(KEY_VERSION_MINOR, VERSION_MINOR);
+  deviceData.screen_rotation = preferences.getUChar(KEY_SCREEN_ROTATION, DEFAULT_SCREEN_ROTATION);
+  deviceData.sea_pressure = preferences.getFloat(KEY_SEA_PRESSURE, DEFAULT_SEA_PRESSURE);
+  deviceData.metric_temp = preferences.getBool(KEY_METRIC_TEMP, DEFAULT_METRIC_TEMP);
+  deviceData.metric_alt = preferences.getBool(KEY_METRIC_ALT, DEFAULT_METRIC_ALT);
+  deviceData.performance_mode = preferences.getUChar(KEY_PERFORMANCE_MODE, DEFAULT_PERFORMANCE_MODE);
+  deviceData.theme = preferences.getUChar(KEY_THEME, DEFAULT_THEME);
+  deviceData.armed_time = preferences.getUShort(KEY_ARMED_TIME, 0);
+  deviceData.revision = preferences.getUChar(KEY_REVISION, 3); // Default to ESP32-S3
+  deviceData.timezone_offset = preferences.getInt(KEY_TIMEZONE_OFFSET, 0);
+
+  preferences.end();
+
+  // Ensure values are within valid ranges
+  if (sanitizeDeviceData()) {
+    writeDeviceData(); // Save sanitized values
+  }
+
+  Serial.println(F("Device data loaded from Preferences"));
 }
 
-// Write to EEPROM
+// Write to Preferences
 void writeDeviceData() {
-  deviceData.crc = crc16((uint8_t*)&deviceData, sizeof(deviceData) - 2);
-  EEPROM.put(EEPROM_OFFSET, deviceData);
-  if (EEPROM.commit()) {
-    Serial.println("EEPROM commit successful");
-  } else {
-    Serial.println("EEPROM commit failed");
+  if (!preferences.begin(PREFS_NAMESPACE, false)) {
+    Serial.println(F("Failed to initialize Preferences for writing"));
+    return;
   }
+
+  // Save all values to preferences
+  preferences.putUChar(KEY_VERSION_MAJOR, deviceData.version_major);
+  preferences.putUChar(KEY_VERSION_MINOR, deviceData.version_minor);
+  preferences.putUChar(KEY_SCREEN_ROTATION, deviceData.screen_rotation);
+  preferences.putFloat(KEY_SEA_PRESSURE, deviceData.sea_pressure);
+  preferences.putBool(KEY_METRIC_TEMP, deviceData.metric_temp);
+  preferences.putBool(KEY_METRIC_ALT, deviceData.metric_alt);
+  preferences.putUChar(KEY_PERFORMANCE_MODE, deviceData.performance_mode);
+  preferences.putUChar(KEY_THEME, deviceData.theme);
+  preferences.putUShort(KEY_ARMED_TIME, deviceData.armed_time);
+  preferences.putUChar(KEY_REVISION, deviceData.revision);
+  preferences.putInt(KEY_TIMEZONE_OFFSET, deviceData.timezone_offset);
+
+  preferences.end();
+  Serial.println(F("Device data saved to Preferences"));
 }
 
-// Reset EEPROM and deviceData to factory defaults
+// Reset Preferences and deviceData to factory defaults
 void resetDeviceData() {
   deviceData = STR_DEVICE_DATA_140_V1();
 
@@ -548,10 +599,16 @@ void resetDeviceData() {
   deviceData.metric_alt = DEFAULT_METRIC_ALT;
   deviceData.performance_mode = DEFAULT_PERFORMANCE_MODE;
   deviceData.theme = DEFAULT_THEME;
-  deviceData.batt_size = DEFAULT_BATT_SIZE;
   deviceData.armed_time = 0;
   deviceData.timezone_offset = 0;  // Default to UTC
+
+  // Clear all preferences and save defaults
+  preferences.begin(PREFS_NAMESPACE, false);
+  preferences.clear();
+  preferences.end();
+
   writeDeviceData();
+  Serial.println(F("Device data reset to defaults and saved to Preferences"));
 }
 
 /**
@@ -592,7 +649,6 @@ void parse_usb_serial() {
   deviceData.metric_temp = doc["metric_temp"];  // true/false
   deviceData.metric_alt = doc["metric_alt"];  // true/false
   deviceData.performance_mode = doc["performance_mode"];  // 0,1
-  deviceData.batt_size = doc["batt_size"];  // 4000
   deviceData.theme = doc["theme"];  // 0,1
   sanitizeDeviceData();
   writeDeviceData();
@@ -638,11 +694,6 @@ bool sanitizeDeviceData() {
   // Ensure performance_mode is either 0 or 1, default to 0
   if (deviceData.performance_mode > 1) {
     deviceData.performance_mode = 0;
-    changed = true;
-  }
-  // Ensure battery size is within acceptable limits, default to 4000
-  if (deviceData.batt_size < 1 || deviceData.batt_size > 10000) {
-    deviceData.batt_size = 4000;
     changed = true;
   }
   // Ensure theme is either 0 or 1, default to 0
