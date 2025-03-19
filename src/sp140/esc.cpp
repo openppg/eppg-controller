@@ -251,7 +251,7 @@ TempState checkTempState(float temp, TempComponent component) {
       return TEMP_INVALID;
   }
 
-  switch(component) {
+  switch (component) {
     case COMP_ESC_MOS:
       return temp >= ESC_MOS_CRIT ? TEMP_CRITICAL :
               temp >= ESC_MOS_WARN ? TEMP_WARNING : TEMP_NORMAL;

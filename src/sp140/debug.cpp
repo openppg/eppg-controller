@@ -1,11 +1,11 @@
 #include "sp140/debug.h"
 
 static unsigned long last_update = 0;
-static float fake_values[4] = {65.0, 0.0, 0.0, 0.0}; // Initialize first value to 65V
-static const float UPDATE_INTERVAL = 10; // Update every 10ms
+static float fake_values[4] = {65.0, 0.0, 0.0, 0.0};  // Initialize first value to 65V
+static const float UPDATE_INTERVAL = 10;  // Update every 10ms
 
 // Helper function to generate smooth oscillating values
-float oscillate(float& current_value, float min, float max, float step) {
+float oscillate(float& current_value, const float min, const float max, const float step) {
     static bool increasing = true;
 
     if (increasing) {
@@ -58,7 +58,7 @@ void generateFakeTelemetry(STR_ESC_TELEMETRY_140& escTelemetry,
     bmsTelemetry.soc = map(escTelemetry.volts * 100, 8000, 10000, 0, 100);
     bmsTelemetry.battery_voltage = escTelemetry.volts;
     bmsTelemetry.battery_current = escTelemetry.amps;
-    bmsTelemetry.power = bmsTelemetry.battery_voltage * bmsTelemetry.battery_current / 1000.0; // kW
+    bmsTelemetry.power = bmsTelemetry.battery_voltage * bmsTelemetry.battery_current / 1000.0;  // kW
     bmsTelemetry.highest_cell_voltage = escTelemetry.volts / 24.0 + 0.1;
     bmsTelemetry.lowest_cell_voltage = escTelemetry.volts / 24.0 - 0.1;
     bmsTelemetry.highest_temperature = escTelemetry.mos_temp;

@@ -4,6 +4,9 @@
 #include <Arduino.h>
 #include "sp140/structs.h"
 
+// Helper function to generate smooth oscillating values
+float oscillate(float& current_value, const float min, const float max, const float step);
+
 // Function to generate fake telemetry data
 void generateFakeTelemetry(STR_ESC_TELEMETRY_140& escTelemetry,  // NOLINT(runtime/references)
                           STR_BMS_TELEMETRY_140& bmsTelemetry,    // NOLINT(runtime/references)

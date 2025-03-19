@@ -1,11 +1,14 @@
 #include "sp140/buzzer.h"
-#include "sp140/shared-config.h"
+
 #include <Arduino.h>
 
-// Platform-specific hardware config and FreeRTOS
+#include <algorithm>
+
+#include "sp140/shared-config.h"
 #include "sp140/esp32s3-config.h"
 #include <FreeRTOS.h>
 #include <semphr.h>
+
 #define DEBUG_SERIAL USBSerial
 
 // External global variables needed
@@ -33,18 +36,18 @@ bool playMelody(uint16_t melody[], int siz) {
   static uint16_t melodyBuffer[32];  // Adjust size as needed
 
   // Copy melody to static buffer to ensure it persists
-  for(int i = 0; i < min(siz, 32); i++) {
+  for (int i = 0; i < std::min(siz, 32); i++) {
     melodyBuffer[i] = melody[i];
   }
 
   MelodyRequest request = {
     .notes = melodyBuffer,
-    .size = (uint8_t)min(siz, 32),
+    .size = (uint8_t)std::min(siz, 32),
     .duration = 125  // Default duration
   };
 
   // Send to queue with timeout
-  if(xQueueSend(melodyQueue, &request, pdMS_TO_TICKS(100)) != pdTRUE) {
+  if (xQueueSend(melodyQueue, &request, pdMS_TO_TICKS(100)) != pdTRUE) {
     DEBUG_SERIAL.println("Failed to queue melody");
     return false;
   }
