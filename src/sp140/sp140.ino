@@ -40,6 +40,7 @@
 #include "../../inc/sp140/mode.h"
 #include "../../inc/sp140/throttle.h"
 #include "../../inc/sp140/vibration_pwm.h"
+#include "../../inc/sp140/led.h"
 
 #define BUTTON_DEBOUNCE_TIME_MS 50
 #define FIRST_CLICK_MAX_HOLD_MS 500    // Maximum time for first click to be considered a click

@@ -10,4 +10,7 @@ void generateFakeTelemetry(STR_ESC_TELEMETRY_140& escTelemetry,  // NOLINT(runti
                           UnifiedBatteryData& unifiedBatteryData,  // NOLINT(runtime/references)
                           float& altitude);                        // NOLINT(runtime/references)
 
+// Function to print device data for debugging
+void printDeviceData(const STR_DEVICE_DATA_140_V1& deviceData);
+
 #endif  // INC_SP140_DEBUG_H_

@@ -1,7 +1,15 @@
 #ifndef INC_SP140_UTILITIES_H_
 #define INC_SP140_UTILITIES_H_
 
+#include <Arduino.h>
+
 double mapd(double x, double in_min, double in_max, double out_min, double out_max);
+
+// Function for digital time display - adds leading zeros
+String convertToDigits(byte digits);
+
+// Function to get unique chip ID
+String chipId();
 
 // Definitions for main rainbow colors in WRGB format for NeoPixel.
 // The 32-bit color value is WRGB. W (White) is ignored for RGB pixels.

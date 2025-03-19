@@ -77,3 +77,27 @@ void generateFakeTelemetry(STR_ESC_TELEMETRY_140& escTelemetry,
     // Altitude
     altitude = oscillate(fake_values[3], 0.0, 100.0, 0.5);
 }
+
+// for debugging
+void printDeviceData(const STR_DEVICE_DATA_140_V1& deviceData) {
+  Serial.print(F("version major "));
+  Serial.println(deviceData.version_major);
+  Serial.print(F("version minor "));
+  Serial.println(deviceData.version_minor);
+  Serial.print(F("screen rotation "));
+  Serial.println(deviceData.screen_rotation);
+  Serial.print(F("sea pressure "));
+  Serial.println(deviceData.sea_pressure);
+  Serial.print(F("metric temp "));
+  Serial.println(deviceData.metric_temp);
+  Serial.print(F("metric alt "));
+  Serial.println(deviceData.metric_alt);
+  Serial.print(F("performance mode "));
+  Serial.println(deviceData.performance_mode);
+  Serial.print(F("theme "));
+  Serial.println(deviceData.theme);
+  Serial.print(F("armed time "));
+  Serial.println(deviceData.armed_time);
+  Serial.print(F("revision "));
+  Serial.println(deviceData.revision);
+}
