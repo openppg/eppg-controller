@@ -2,12 +2,6 @@
 // OpenPPG
 #include "Arduino.h"
 
-// Define shared SPI pins for ESP32-S3
-// (These will be updated from board_config in setup)
-#define SPI_SCK  12  // Clock pin
-#define SPI_MOSI 11  // MOSI pin
-#define SPI_MISO 13  // MISO pin (only used for BMS)
-
 #include "../../lib/crc.c"       // packet error checking
 #include "../../inc/sp140/esp32s3-config.h"
 
@@ -1015,7 +1009,7 @@ void setupDisplay(const STR_DEVICE_DATA_140_V1& deviceData, const HardwareConfig
   // Initialize hardware SPI for use by both display and BMS
   hardwareSPI = new SPIClass(HSPI);
   // Use the board_config pins instead of the defines
-  hardwareSPI->begin(board_config.tft_sclk, SPI_MISO, board_config.tft_mosi, -1);
+  hardwareSPI->begin(board_config.spi_sclk, board_config.spi_miso, board_config.spi_mosi, -1);
 
   // Create the display with the hardware SPI
   display = new Adafruit_ST7735(

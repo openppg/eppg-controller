@@ -14,9 +14,9 @@ struct HardwareConfig {
   int tft_rst;
   int tft_cs;
   int tft_dc;
-  int tft_lite;
-  int tft_mosi;
-  int tft_sclk;
+  int spi_mosi;
+  int spi_miso;
+  int spi_sclk;
   int vibe_pwm;
   int sda_pin;
   int scl_pin;

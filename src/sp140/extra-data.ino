@@ -727,8 +727,12 @@ void debugHardwareConfig(const HardwareConfig& config) {
   Serial.println(config.tft_cs);
   Serial.print("tft_dc: ");
   Serial.println(config.tft_dc);
-  Serial.print("tft_lite: ");
-  Serial.println(config.tft_lite);
+  Serial.print("spi_mosi: ");
+  Serial.println(config.spi_mosi);
+  Serial.print("spi_miso: ");
+  Serial.println(config.spi_miso);
+  Serial.print("spi_sclk: ");
+  Serial.println(config.spi_sclk);
   Serial.print("enable_vib: ");
   Serial.println(config.enable_vib ? "true" : "false");
   Serial.print("enable_neopixel: ");
