@@ -1,10 +1,15 @@
 #include "sp140/display.h"
 #include "../../inc/version.h"
 #include "sp140/structs.h"
+#include "sp140/bms.h"  // Include for MCP_CS
 
 #define FONT_HEIGHT_OFFSET 8
 
-SPIClass* hardwareSPI = nullptr; // Global hardware SPI instance
+// This is now defined in sp140.ino as a global
+extern SPIClass* hardwareSPI;
+extern int8_t displayCS;
+extern int8_t bmsCS;
+
 Adafruit_ST7735* display;
 GFXcanvas16 canvas(SCREEN_WIDTH, SCREEN_HEIGHT);
 
@@ -52,6 +57,9 @@ void resetRotation(unsigned int rotation) {
 
 // Show splash screen with animated text
 void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
+  // Make sure display CS is selected
+  digitalWrite(displayCS, LOW);
+
   display->fillScreen(currentTheme->default_bg);
   display->setTextSize(1);
   display->setFont(Fonts::Title);
@@ -84,28 +92,9 @@ void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
   #else
     delay(duration);
   #endif
-}
 
-// inital screen setup and config with devicedata and boardconfig passed in
-void setupDisplay(const STR_DEVICE_DATA_140_V1& deviceData, const HardwareConfig& board_config) {
-  USBSerial.println("setupDisplay");
-
-  // Initialize hardware SPI for use by both display and BMS
-  hardwareSPI = new SPIClass(HSPI);
-  hardwareSPI->begin(board_config.tft_sclk, -1, board_config.tft_mosi, -1);
-
-  // Create the display with the hardware SPI
-  display = new Adafruit_ST7735(
-    hardwareSPI,
-    board_config.tft_cs,
-    board_config.tft_dc,
-    board_config.tft_rst);
-
-  display->initR(INITR_BLACKTAB);  // Init ST7735S chip, black tab
-  resetRotation(deviceData.screen_rotation);
-  setTheme(deviceData.theme);  // 0=light, 1=dark
-  display->fillScreen(ST77XX_BLACK);
-  displayMeta(deviceData, 1500);
+  // Deselect display CS when done
+  digitalWrite(displayCS, HIGH);
 }
 
 void updateDisplay(
@@ -116,6 +105,10 @@ void updateDisplay(
   float altitude, bool armed, bool cruising,
   unsigned int armedStartMillis
   ) {
+  // Ensure BMS is deselected and display is selected
+  digitalWrite(bmsCS, HIGH);
+  digitalWrite(displayCS, LOW);
+
   float batteryPercent = unifiedBatteryData.soc;
   float totalVolts = unifiedBatteryData.volts;
   float lowestCellV = bmsTelemetry.lowest_cell_voltage;
@@ -317,6 +310,9 @@ void updateDisplay(
 
   // Draw the canvas to the display
   display->drawRGBBitmap(0, 0, canvas.getBuffer(), canvas.width(), canvas.height());
+
+  // Deselect display CS when done
+  digitalWrite(displayCS, HIGH);
 }
 
 // Set the theme

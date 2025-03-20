@@ -1,5 +1,5 @@
 #include "sp140/bms.h"
-
+#include "sp140/display.h"
 #include "sp140/structs.h"
 
 STR_BMS_TELEMETRY_140 bmsTelemetryData = {
@@ -9,28 +9,21 @@ STR_BMS_TELEMETRY_140 bmsTelemetryData = {
 // Initialize bms_can as nullptr, to be set in initBMSCAN
 BMS_CAN* bms_can = nullptr;
 
-// Define the global flag and battery data
-bool _isBMSPresent = false;
+// These are defined in sp140.ino
+extern Adafruit_ST7735* display;
+extern int8_t displayCS;
+extern int8_t bmsCS;
+extern bool isBMSPresent;
 
-bool initBMSCAN(SPIClass* spi) {
-  USBSerial.println("Initializing BMS CAN...");
-
-  // Create the BMS_CAN instance with the provided SPI
-  bms_can = new BMS_CAN(MCP_CS, MCP_BAUDRATE, spi);
-
-  if (!bms_can->begin()) {
-    USBSerial.println("Error initializing BMS_CAN");
-    _isBMSPresent = false;  // BMS initialization failed
-    return false;
-  }
-  USBSerial.println("BMS CAN initialized successfully");
-  _isBMSPresent = true;  // BMS successfully initialized
-  return true;
-}
+// BMS initialization is now handled in sp140.ino
 
 // Update BMS data and populate unified battery data
 void updateBMSData() {
-  if (!_isBMSPresent || bms_can == nullptr) return;  // Exit if BMS is not present or not initialized
+  if (!isBMSPresent || bms_can == nullptr) return;  // Exit if BMS is not present or not initialized
+
+  // Ensure display CS is deselected and BMS CS is selected
+  digitalWrite(displayCS, HIGH);
+  digitalWrite(bmsCS, LOW);
 
   // USBSerial.println("Updating BMS Data");
   bms_can->update();
@@ -59,11 +52,18 @@ void updateBMSData() {
 
   bmsTelemetryData.lastUpdateMs = millis();
 
+  // Deselect BMS CS when done
+  digitalWrite(bmsCS, HIGH);
+
   // printBMSData();
 }
 
 void printBMSData() {
-  if (!_isBMSPresent || bms_can == nullptr) return;  // Exit if BMS is not present or not initialized
+  if (!isBMSPresent || bms_can == nullptr) return;  // Exit if BMS is not present or not initialized
+
+  // Make sure BMS CS is selected before reading values
+  digitalWrite(displayCS, HIGH);
+  digitalWrite(bmsCS, LOW);
 
   // USBSerial.println("BMS Data:");
   USBSerial.print("SOC: ");  // State of Charge
@@ -85,5 +85,8 @@ void printBMSData() {
   USBSerial.print("Highest Cell Voltage: ");
   USBSerial.print(bms_can->getHighestCellVoltage());
   USBSerial.println(" V");
+
+  // Deselect BMS CS when done
+  digitalWrite(bmsCS, HIGH);
 }
 

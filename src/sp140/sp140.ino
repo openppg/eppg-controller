@@ -2,6 +2,12 @@
 // OpenPPG
 #include "Arduino.h"
 
+// Define shared SPI pins for ESP32-S3
+// (These will be updated from board_config in setup)
+#define SPI_SCK  12  // Clock pin
+#define SPI_MOSI 11  // MOSI pin
+#define SPI_MISO 13  // MISO pin (only used for BMS)
+
 #include "../../lib/crc.c"       // packet error checking
 #include "../../inc/sp140/esp32s3-config.h"
 
@@ -41,6 +47,17 @@
 #include "../../inc/sp140/throttle.h"
 #include "../../inc/sp140/vibration_pwm.h"
 #include "../../inc/sp140/led.h"
+
+// Global variable for shared SPI
+SPIClass* hardwareSPI = nullptr;
+
+// Store CS pins as globals to avoid accessing protected members
+int8_t displayCS = -1;
+int8_t bmsCS = MCP_CS;
+
+// Function prototypes for functions previously in display.cpp and bms.cpp
+void setupDisplay(const STR_DEVICE_DATA_140_V1& deviceData, const HardwareConfig& board_config);
+bool initBMSCAN(SPIClass* spi);
 
 #define BUTTON_DEBOUNCE_TIME_MS 50
 #define FIRST_CLICK_MAX_HOLD_MS 500    // Maximum time for first click to be considered a click
@@ -309,13 +326,18 @@ void spiCommTask(void *pvParameters) {
 
         // Update BMS data and state
         if (isBMSPresent) {
+          // CS pin management is now handled inside updateBMSData
           updateBMSData();
           unifiedBatteryData.volts = bmsTelemetryData.battery_voltage;
           unifiedBatteryData.amps = bmsTelemetryData.battery_current;
           unifiedBatteryData.soc = bmsTelemetryData.soc;
 
           // Update BMS state based on connection status
+          // Properly manage CS pins
+          digitalWrite(displayCS, HIGH);  // Deselect display
+          digitalWrite(bmsCS, LOW);       // Select BMS
           bmsTelemetryData.state = bms_can->isConnected() ? TelemetryState::CONNECTED : TelemetryState::NOT_CONNECTED;
+          digitalWrite(bmsCS, HIGH);      // Deselect BMS when done
 
           xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);  // Always latest data
         } else {
@@ -325,7 +347,7 @@ void spiCommTask(void *pvParameters) {
           unifiedBatteryData.soc = 0.0; // We don't estimate SOC from voltage anymore
         }
 
-        // Update display
+        // Update display - CS pin management is now handled inside refreshDisplay
         refreshDisplay();
       #endif
       delay(250);
@@ -438,7 +460,6 @@ void setup() {
 
   #ifndef SCREEN_DEBUG
     // Pass the hardware SPI instance to the BMS_CAN initialization
-    // bms_can = BMS_CAN(MCP_CS, MCP_BAUDRATE, hardwareSPI);
     isBMSPresent = initBMSCAN(hardwareSPI);
   #endif
 
@@ -975,4 +996,58 @@ void updateESCBLETask(void *pvParameters) {
     // Add a small delay to prevent task starvation
     vTaskDelay(pdMS_TO_TICKS(10));
   }
+}
+
+void setupDisplay(const STR_DEVICE_DATA_140_V1& deviceData, const HardwareConfig& board_config) {
+  USBSerial.println("setupDisplay");
+
+  // Store CS pins
+  displayCS = board_config.tft_cs;
+  bmsCS = MCP_CS;
+
+  // Configure both CS pins as outputs and set HIGH (deselected)
+  pinMode(displayCS, OUTPUT);
+  digitalWrite(displayCS, HIGH);
+
+  pinMode(bmsCS, OUTPUT);
+  digitalWrite(bmsCS, HIGH);
+
+  // Initialize hardware SPI for use by both display and BMS
+  hardwareSPI = new SPIClass(HSPI);
+  // Use the board_config pins instead of the defines
+  hardwareSPI->begin(board_config.tft_sclk, SPI_MISO, board_config.tft_mosi, -1);
+
+  // Create the display with the hardware SPI
+  display = new Adafruit_ST7735(
+    hardwareSPI,
+    displayCS,
+    board_config.tft_dc,
+    board_config.tft_rst);
+
+  display->initR(INITR_BLACKTAB);  // Init ST7735S chip, black tab
+  resetRotation(deviceData.screen_rotation);
+  setTheme(deviceData.theme);  // 0=light, 1=dark
+  display->fillScreen(ST77XX_BLACK);
+  displayMeta(deviceData, 1500);
+}
+
+bool initBMSCAN(SPIClass* spi) {
+  USBSerial.println("Initializing BMS CAN...");
+
+  // Ensure Display CS is HIGH (deselected) before working with BMS
+  digitalWrite(displayCS, HIGH);
+
+  // CS pin should already be configured in setupDisplay
+
+  // Create the BMS_CAN instance with the provided SPI
+  bms_can = new BMS_CAN(bmsCS, MCP_BAUDRATE, spi);
+
+  if (!bms_can->begin()) {
+    USBSerial.println("Error initializing BMS_CAN");
+    isBMSPresent = false;  // BMS initialization failed
+    return false;
+  }
+  USBSerial.println("BMS CAN initialized successfully");
+  isBMSPresent = true;  // BMS successfully initialized
+  return true;
 }

@@ -1,13 +1,16 @@
-#ifndef INC_SP140_DISPLAY_H_
-#define INC_SP140_DISPLAY_H_
+#pragma once
 
 #include <Arduino.h>
+#include <SPI.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_ST7735.h>
 
+#include "Arduino.h"
+#include "../../inc/version.h"
 #include "sp140/structs.h"
 
 #include "../../inc/sp140/esp32s3-config.h"
 
-#include <Adafruit_ST7735.h>
 #include "utilities.h"
 
 // Library config
@@ -74,17 +77,17 @@ namespace Fonts {
 #define SCREEN_WIDTH          160
 #define SCREEN_HEIGHT         128
 
-// Battery thresholds
-#define BATTERY_LOW_THRESHOLD     15
-#define BATTERY_MEDIUM_THRESHOLD  30
+// Temperature thresholds
+#define TEMP_WARNING_THRESHOLD 55.0f
+#define TEMP_CRITICAL_THRESHOLD 70.0f
 
-// Temperature thresholds (in Celsius)
-#define TEMP_WARNING_THRESHOLD    70
-#define TEMP_CRITICAL_THRESHOLD   85
+// Battery capacity thresholds
+#define BATTERY_LOW_THRESHOLD 30.0f
+#define BATTERY_MEDIUM_THRESHOLD 60.0f
 
-// Voltage thresholds (in Volts)
-#define CELL_VOLTAGE_WARNING      3.3
-#define CELL_VOLTAGE_CRITICAL     3.0
+// Cell voltage thresholds
+#define CELL_VOLTAGE_WARNING 3.6f
+#define CELL_VOLTAGE_CRITICAL 3.5f
 
 // Light mode (default)
 // #define DEFAULT_TEXT_COLOR    BLACK
@@ -119,28 +122,20 @@ struct UIColors {
 extern float watts;
 extern float wattHoursUsed;
 
-// Set up the display and show splash screen
-void setupDisplay(const STR_DEVICE_DATA_140_V1& deviceData, const HardwareConfig& board_config);
-
+// Function declarations
+void resetRotation(unsigned int rotation);
 void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration = 1500);
+void updateDisplay(
+    const STR_DEVICE_DATA_140_V1& deviceData,
+    const STR_ESC_TELEMETRY_140& escTelemetry,
+    const STR_BMS_TELEMETRY_140& bmsTelemetry,
+    const UnifiedBatteryData& unifiedBatteryData,
+    float altitude, bool armed, bool cruising,
+    unsigned int armedStartMillis);
+void setTheme(int theme);
 
-// Clear screen and reset properties
-void resetRotation(unsigned int orientation);
-
-// Show data on screen
-void updateDisplay(const STR_DEVICE_DATA_140_V1& deviceData,
-                   const STR_ESC_TELEMETRY_140& escTelemetry,
-                   const STR_BMS_TELEMETRY_140& bmsTelemetry,
-                   const UnifiedBatteryData& unifiedBatteryData,
-                   float altitude, bool armed, bool cruising,
-                   unsigned int armedStartMillis);
-
-void setTheme(int theme);  // 0,1
-
-// Shared hardware SPI instance
-extern SPIClass* hardwareSPI;
-
+// External variables
 extern Adafruit_ST7735* display;
-extern GFXcanvas16 canvas;
-
-#endif  // INC_SP140_DISPLAY_H_
+extern SPIClass* hardwareSPI;
+extern int8_t displayCS;
+extern int8_t bmsCS;
