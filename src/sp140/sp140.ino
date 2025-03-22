@@ -344,7 +344,7 @@ void spiCommTask(void *pvParameters) {
         // Update display - CS pin management is now handled inside refreshDisplay
         refreshDisplay();
       #endif
-      delay(250);
+      delay(50);  // ~20fps
   }
 }
 
