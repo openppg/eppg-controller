@@ -4,24 +4,41 @@
 #include <Preferences.h>  // Add ESP32 Preferences library
 
 /**
- * WebUSB Protocol Documentation
+ * WebSerial Protocol Documentation
+ *
+ * Commands should be sent as JSON objects with the following format:
+ *
+ * For simple commands:
+ * { "command": "command_name" }
+ *
+ * For settings updates:
+ * {
+ *   "settings": {
+ *     "screen_rot": 3,
+ *     "sea_pressure": 1013.25,
+ *     "metric_temp": true,
+ *     "metric_alt": true,
+ *     "performance_mode": 0,
+ *     "theme": 0
+ *   }
+ * }
  *
  * Available Commands:
  * - "rbl": Reboot to bootloader for firmware updates
  * - "sync": Request current device settings and state
  *
- * Response Format:
+ * Response Format for sync command:
  * {
  *   "mj_v": number,        // Major version
  *   "mi_v": number,        // Minor version
- *   "arch": string,        // Architecture ("SAMD21" or "RP2040")
- *   "scr_rt": number,      // Screen rotation
+ *   "arch": string,        // Architecture ("ESP32S3")
+ *   "scr_rt": number,      // Screen rotation (1 or 3)
  *   "ar_tme": number,      // Armed time in minutes
  *   "m_tmp": bool,         // Metric temperature
  *   "m_alt": bool,         // Metric altitude
- *   "prf": number,         // Performance mode
- *   "sea_p": float,        // Sea pressure
- *   "thm": number          // Theme
+ *   "prf": number,         // Performance mode (0=chill, 1=sport)
+ *   "sea_p": float,        // Sea pressure (hPa/mbar)
+ *   "thm": number          // Theme (0=light, 1=dark)
  * }
  */
 
@@ -524,14 +541,14 @@ void setupBLE() {
 // Read saved data from Preferences
 void refreshDeviceData() {
   if (!preferences.begin(PREFS_NAMESPACE, false)) {
-    Serial.println(F("Failed to initialize Preferences"));
+    USBSerial.println(F("Failed to initialize Preferences"));
     resetDeviceData();
     return;
   }
 
   // Check if we have saved preferences before
   if (!preferences.isKey(KEY_VERSION_MAJOR)) {
-    Serial.println(F("No saved preferences found - initializing with defaults"));
+    USBSerial.println(F("No saved preferences found - initializing with defaults"));
     preferences.end();
     resetDeviceData();
     return;
@@ -557,13 +574,13 @@ void refreshDeviceData() {
     writeDeviceData(); // Save sanitized values
   }
 
-  Serial.println(F("Device data loaded from Preferences"));
+  USBSerial.println(F("Device data loaded from Preferences"));
 }
 
 // Write to Preferences
 void writeDeviceData() {
   if (!preferences.begin(PREFS_NAMESPACE, false)) {
-    Serial.println(F("Failed to initialize Preferences for writing"));
+    USBSerial.println(F("Failed to initialize Preferences for writing"));
     return;
   }
 
@@ -581,7 +598,7 @@ void writeDeviceData() {
   preferences.putInt(KEY_TIMEZONE_OFFSET, deviceData.timezone_offset);
 
   preferences.end();
-  Serial.println(F("Device data saved to Preferences"));
+  USBSerial.println(F("Device data saved to Preferences"));
 }
 
 // Reset Preferences and deviceData to factory defaults
@@ -608,55 +625,98 @@ void resetDeviceData() {
   preferences.end();
 
   writeDeviceData();
-  Serial.println(F("Device data reset to defaults and saved to Preferences"));
+  USBSerial.println(F("Device data reset to defaults and saved to Preferences"));
 }
 
 /**
- * WebUSB connection state change callback.
- * Updates LED indicators to show connection status.
- *
- * @param connected True if WebUSB connection established, false if disconnected
+ * Parse commands from Serial connection
+ * Handles commands like reboot to bootloader and sync device settings
  */
-void line_state_callback(bool connected) {
-  setLEDColor(connected ? LED_BLUE : LED_GREEN);
-  setLEDs(connected);
-}
+void parse_serial_commands() {
+  if (USBSerial.available()) {
+    const size_t capacity = JSON_OBJECT_SIZE(13) + 90;  // Size for max message
+    DynamicJsonDocument doc(capacity);
 
-// Not implemented for ESP32-S3 yet
-void parse_usb_serial() {
-#ifdef USE_TINYUSB
-  const size_t capacity = JSON_OBJECT_SIZE(13) + 90;  // Size for max message
-  DynamicJsonDocument doc(capacity);
-  deserializeJson(doc, usb_web);
+    DeserializationError error = deserializeJson(doc, USBSerial);
 
-  if (doc["command"]) {
-    if (doc["command"] == "rbl") {
-      // display.fillScreen(DEFAULT_BG_COLOR);
-      //TODO display ("BL - UF2");
-      rebootBootloader();
-      return;  // run only the command
-    } else if (doc["command"] == "sync") {
-      send_usb_serial();
-      return;  // run only the command
+    if (error) {
+      USBSerial.print("JSON parse error: ");
+      USBSerial.println(error.c_str());
+      return;
+    }
+
+    if (doc.containsKey("command")) {
+      String command = doc["command"].as<String>();
+
+      if (command == "reboot") {
+        USBSerial.println("Rebooting");
+        ESP.restart();
+        return;
+      } else if (command == "sync") {
+        send_device_data();
+        return;
+      }
+    }
+
+    // Handle device settings updates
+    if (doc.containsKey("settings")) {
+      JsonObject settings = doc["settings"];
+
+      if (settings.containsKey("screen_rot")) {
+        deviceData.screen_rotation = settings["screen_rot"].as<unsigned int>();
+      }
+
+      if (settings.containsKey("sea_pressure")) {
+        deviceData.sea_pressure = settings["sea_pressure"].as<float>();
+      }
+
+      if (settings.containsKey("metric_temp")) {
+        deviceData.metric_temp = settings["metric_temp"].as<bool>();
+      }
+
+      if (settings.containsKey("metric_alt")) {
+        deviceData.metric_alt = settings["metric_alt"].as<bool>();
+      }
+
+      if (settings.containsKey("performance_mode")) {
+        deviceData.performance_mode = settings["performance_mode"].as<int>();
+      }
+
+      if (settings.containsKey("theme")) {
+        deviceData.theme = settings["theme"].as<int>();
+      }
+
+      sanitizeDeviceData();
+      writeDeviceData();
+      resetRotation(deviceData.screen_rotation);
+      setTheme(deviceData.theme);
+
+      send_device_data();
     }
   }
+}
 
-  if (doc["major_v"] < 5) return; // ignore old versions
+/**
+ * Send device data as JSON over Serial
+ * Contains current device settings and state
+ */
+void send_device_data() {
+  StaticJsonDocument<256> doc;
 
+  doc["mj_v"] = VERSION_MAJOR;
+  doc["mi_v"] = VERSION_MINOR;
+  doc["arch"] = "ESP32S3";
+  doc["scr_rt"] = deviceData.screen_rotation;
+  doc["ar_tme"] = deviceData.armed_time;
+  doc["m_tmp"] = deviceData.metric_temp;
+  doc["m_alt"] = deviceData.metric_alt;
+  doc["prf"] = deviceData.performance_mode;
+  doc["sea_p"] = deviceData.sea_pressure;
+  doc["thm"] = deviceData.theme;
 
-  deviceData.screen_rotation = doc["screen_rot"].as<unsigned int>();  // "3/1"
-  deviceData.sea_pressure = doc["sea_pressure"];  // 1013.25 mbar
-  deviceData.metric_temp = doc["metric_temp"];  // true/false
-  deviceData.metric_alt = doc["metric_alt"];  // true/false
-  deviceData.performance_mode = doc["performance_mode"];  // 0,1
-  deviceData.theme = doc["theme"];  // 0,1
-  sanitizeDeviceData();
-  writeDeviceData();
-  resetRotation(deviceData.screen_rotation);  // Screen orientation may have changed
-  setTheme(deviceData.theme);  // may have changed
-
-  send_usb_serial();
-#endif
+  // Send the JSON document over the USBSerial connection
+  serializeJson(doc, USBSerial);
+  USBSerial.println(); // Add newline for better readability
 }
 
 /**
@@ -710,51 +770,33 @@ bool sanitizeDeviceData() {
  * @param config The HardwareConfig object containing the hardware configuration.
  */
 void debugHardwareConfig(const HardwareConfig& config) {
-  Serial.println("Hardware Configuration:");
-  Serial.print("button_top: ");
-  Serial.println(config.button_top);
-  Serial.print("buzzer_pin: ");
-  Serial.println(config.buzzer_pin);
-  Serial.print("led_sw: ");
-  Serial.println(config.led_sw);
-  Serial.print("throttle_pin: ");
-  Serial.println(config.throttle_pin);
-  Serial.print("bmp_pin: ");
-  Serial.println(config.bmp_pin);
-  Serial.print("tft_rst: ");
-  Serial.println(config.tft_rst);
-  Serial.print("tft_cs: ");
-  Serial.println(config.tft_cs);
-  Serial.print("tft_dc: ");
-  Serial.println(config.tft_dc);
-  Serial.print("spi_mosi: ");
-  Serial.println(config.spi_mosi);
-  Serial.print("spi_miso: ");
-  Serial.println(config.spi_miso);
-  Serial.print("spi_sclk: ");
-  Serial.println(config.spi_sclk);
-  Serial.print("enable_vib: ");
-  Serial.println(config.enable_vib ? "true" : "false");
-  Serial.print("enable_neopixel: ");
-  Serial.println(config.enable_neopixel ? "true" : "false");
-}
-
-void send_usb_serial() {
-#ifdef USE_TINYUSB
-  StaticJsonDocument<256> doc; // <- a little more than 256 bytes in the stack
-
-  doc["mj_v"].set(VERSION_MAJOR);
-  doc["mi_v"].set(VERSION_MINOR);
-  doc["arch"].set("ESP32S3");
-  doc["scr_rt"].set(deviceData.screen_rotation);
-  doc["ar_tme"].set(deviceData.armed_time);
-  doc["m_tmp"].set(deviceData.metric_temp);
-  doc["m_alt"].set(deviceData.metric_alt);
-  doc["prf"].set(deviceData.performance_mode);
-  doc["sea_p"].set(deviceData.sea_pressure);
-  doc["thm"].set(deviceData.theme);
-  //doc["rev"].set(deviceData.revision);
-#endif
+  USBSerial.println("Hardware Configuration:");
+  USBSerial.print("button_top: ");
+  USBSerial.println(config.button_top);
+  USBSerial.print("buzzer_pin: ");
+  USBSerial.println(config.buzzer_pin);
+  USBSerial.print("led_sw: ");
+  USBSerial.println(config.led_sw);
+  USBSerial.print("throttle_pin: ");
+  USBSerial.println(config.throttle_pin);
+  USBSerial.print("bmp_pin: ");
+  USBSerial.println(config.bmp_pin);
+  USBSerial.print("tft_rst: ");
+  USBSerial.println(config.tft_rst);
+  USBSerial.print("tft_cs: ");
+  USBSerial.println(config.tft_cs);
+  USBSerial.print("tft_dc: ");
+  USBSerial.println(config.tft_dc);
+  USBSerial.print("spi_mosi: ");
+  USBSerial.println(config.spi_mosi);
+  USBSerial.print("spi_miso: ");
+  USBSerial.println(config.spi_miso);
+  USBSerial.print("spi_sclk: ");
+  USBSerial.println(config.spi_sclk);
+  USBSerial.print("enable_vib: ");
+  USBSerial.println(config.enable_vib ? "true" : "false");
+  USBSerial.print("enable_neopixel: ");
+  USBSerial.println(config.enable_neopixel ? "true" : "false");
 }
 
 void updateESCTelemetryBLE(const STR_ESC_TELEMETRY_140& telemetry) {

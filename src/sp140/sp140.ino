@@ -13,9 +13,6 @@
 #include <SPI.h>
 #include <TimeLib.h>  // convert time to hours mins etc
 #include <Wire.h>
-#ifdef USE_TINYUSB
-  #include "Adafruit_TinyUSB.h"
-#endif
 
 // ESP32S3 (CAN) specific libraries here
 #include "esp_task_wdt.h"
@@ -79,12 +76,6 @@ UBaseType_t uxCoreAffinityMask1 = (1 << 1);  // Core 1
 HardwareConfig board_config;
 bool isBMSPresent = false;
 
-// USB WebUSB object
-#ifdef USE_TINYUSB
-Adafruit_USBD_WebUSB usb_web;
-WEBUSB_URL_DEF(landingPage, 1 /*https*/, "config.openppg.com");
-#endif
-
 ResponsiveAnalogRead* pot;
 
 UnifiedBatteryData unifiedBatteryData = {0.0f, 0.0f, 0.0f};
@@ -115,6 +106,9 @@ struct BLEStateUpdate {
 // Add new task handle
 TaskHandle_t bleStateUpdateTaskHandle = NULL;
 TaskHandle_t deviceStateUpdateTaskHandle = NULL;
+
+// Add near other task handles
+TaskHandle_t webSerialTaskHandle = NULL;
 
 // Add this function to handle BLE updates safely
 void bleStateUpdateTask(void* parameter) {
@@ -361,14 +355,6 @@ void loadHardwareConfig() {
   pot = new ResponsiveAnalogRead(board_config.throttle_pin, false);
 }
 
-#ifdef USE_TINYUSB
-void setupUSBWeb() {
-  usb_web.begin();
-  usb_web.setLandingPage(&landingPage);
-  usb_web.setLineStateCallback(line_state_callback);
-}
-#endif
-
 void printBootMessage() {
   USBSerial.print(F("Booting up V"));
   USBSerial.print(VERSION_STRING);
@@ -432,10 +418,8 @@ void timePrint() {
  */
 
 void setup() {
-  USBSerial.begin(115200);
-  #ifdef USE_TINYUSB
-    setupUSBWeb();
-  #endif
+  USBSerial.begin(115200); // This is for debug output and WebSerial
+
   // Pull CSB (pin 42) high to activate I2C mode
   // temporary fix TODO remove
   digitalWrite(42, HIGH);
@@ -506,6 +490,9 @@ void setup() {
   }
 
   setLEDColor(LED_GREEN);
+
+  // Send initial device data after setup
+  send_device_data();
 }
 
 // set up all the main threads/tasks with core 0 affinity
@@ -530,6 +517,16 @@ void setupTasks() {
   //xTaskCreatePinnedToCore(watchdogTask, "watchdog", 1000, NULL, 5, &watchdogTaskHandle, 0);  // Run on core 0
 
   xTaskCreate(updateESCBLETask, "ESC BLE Update Task", 4096, NULL, 1, NULL);
+
+  // Create WebSerial task
+  xTaskCreate(
+    webSerialTask,
+    "WebSerial",
+    4096,
+    NULL,
+    1,
+    &webSerialTaskHandle
+  );
 }
 
 
@@ -546,16 +543,10 @@ void setup140() {
   }
 }
 
-// main loop - everything runs in threads
+// main loop - check for serial commands
 void loop() {
-//   // from WebUSB to both Serial & webUSB
-// #ifdef USE_TINYUSB
-//   if (currentState == DISARMED && usb_web.available()) parse_usb_serial();
-// #endif
-
-  // more stable in main loop
+  // Just delay, all work is done in tasks
   delay(25);
-  //USBSerial.print(".");
 }
 
 void initButtons() {
@@ -675,8 +666,8 @@ void buttonHandlerTask(void* parameter) {
 }
 
 void printTime(const char* label) {
-  Serial.print(label);
-  Serial.println(millis());
+  USBSerial.print(label);
+  USBSerial.println(millis());
 }
 
 void disarmESC() {
@@ -1051,4 +1042,22 @@ bool initBMSCAN(SPIClass* spi) {
   USBSerial.println("BMS CAN initialized successfully");
   isBMSPresent = true;  // BMS successfully initialized
   return true;
+}
+
+// WebSerial command handling task
+void webSerialTask(void *pvParameters) {
+  while (true) {
+    if (USBSerial.available()) {
+      // Check if we're allowed to process commands
+      if (currentState == DISARMED) {
+        parse_serial_commands();
+
+        // Clear any remaining data
+        while (USBSerial.available()) {
+          USBSerial.read();
+        }
+      }
+    }
+    vTaskDelay(pdMS_TO_TICKS(100)); // Check every 100ms
+  }
 }
