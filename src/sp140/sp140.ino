@@ -337,13 +337,8 @@ void spiCommTask(void *pvParameters) {
 
         // Update display - CS pin management is now handled inside refreshDisplay
 
-        // Measure refreshDisplay time
-        unsigned long startMicros = micros();
         refreshDisplay();
-        unsigned long diffMicros = micros() - startMicros;
-        USBSerial.print("refreshDisplay time: ");
-        USBSerial.print(diffMicros);
-        USBSerial.println("us");
+
       #endif
       delay(100);  // ~10fps
   }

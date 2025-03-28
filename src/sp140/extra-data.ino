@@ -634,8 +634,8 @@ void resetDeviceData() {
  */
 void parse_serial_commands() {
   if (USBSerial.available()) {
-    const size_t capacity = JSON_OBJECT_SIZE(13) + 90;  // Size for max message
-    DynamicJsonDocument doc(capacity);
+    // With ArduinoJson 7, we no longer need to specify capacity
+    JsonDocument doc;
 
     DeserializationError error = deserializeJson(doc, USBSerial);
 
@@ -701,7 +701,8 @@ void parse_serial_commands() {
  * Contains current device settings and state
  */
 void send_device_data() {
-  StaticJsonDocument<256> doc;
+  // With ArduinoJson 7, we no longer need to specify capacity
+  JsonDocument doc;
 
   doc["mj_v"] = VERSION_MAJOR;
   doc["mi_v"] = VERSION_MINOR;
