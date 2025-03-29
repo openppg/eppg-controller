@@ -2,7 +2,6 @@
 // OpenPPG
 #include "Arduino.h"
 
-#include "../../lib/crc.c"       // packet error checking
 #include "../../inc/sp140/esp32s3-config.h"
 
 #include "../../inc/sp140/structs.h"         // data structs
