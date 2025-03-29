@@ -55,6 +55,23 @@ void resetRotation(unsigned int rotation) {
   display->setRotation(rotation);  // 1=right hand, 3=left hand
 }
 
+void setupDisplay(const STR_DEVICE_DATA_140_V1& deviceData, const HardwareConfig& board_config, SPIClass* spi) {
+  USBSerial.println("setupDisplay");
+
+  // Create the display with the passed SPI instance
+  display = new Adafruit_ST7735(
+    spi,
+    displayCS,
+    board_config.tft_dc,
+    board_config.tft_rst);
+
+  display->initR(INITR_BLACKTAB);  // Init ST7735S chip, black tab
+  resetRotation(deviceData.screen_rotation);
+  setTheme(deviceData.theme);  // 0=light, 1=dark
+  display->fillScreen(ST77XX_BLACK);
+  displayMeta(deviceData, 1500);
+}
+
 // Show splash screen with animated text
 void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
   // Make sure display CS is selected

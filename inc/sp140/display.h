@@ -125,6 +125,7 @@ extern float wattHoursUsed;
 // Function declarations
 void resetRotation(unsigned int rotation);
 void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration = 1500);
+void setupDisplay(const STR_DEVICE_DATA_140_V1& deviceData, const HardwareConfig& board_config, SPIClass* spi);
 void updateDisplay(
     const STR_DEVICE_DATA_140_V1& deviceData,
     const STR_ESC_TELEMETRY_140& escTelemetry,

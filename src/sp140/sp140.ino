@@ -45,10 +45,6 @@ SPIClass* hardwareSPI = nullptr;
 int8_t displayCS = -1;
 int8_t bmsCS = MCP_CS;
 
-// Function prototypes for functions previously in display.cpp and bms.cpp
-void setupDisplay(const STR_DEVICE_DATA_140_V1& deviceData, const HardwareConfig& board_config);
-bool initBMSCAN(SPIClass* spi);
-
 #define BUTTON_DEBOUNCE_TIME_MS 50
 #define FIRST_CLICK_MAX_HOLD_MS 500    // Maximum time for first click to be considered a click
 #define SECOND_HOLD_TIME_MS 2000       // How long to hold on second press to arm
@@ -220,6 +216,27 @@ unsigned long lastDisarmTime = 0;
 const unsigned long DISARM_COOLDOWN = 500;  // 500ms cooldown
 
 #pragma message "Warning: OpenPPG software is in beta"
+
+// Initialize shared SPI and chip select pins
+void setupSPI(const HardwareConfig& board_config) {
+  USBSerial.println("Setting up SPI bus");
+
+  // Store CS pins
+  displayCS = board_config.tft_cs;
+  bmsCS = MCP_CS;
+
+  // Configure both CS pins as outputs and set HIGH (deselected)
+  pinMode(displayCS, OUTPUT);
+  digitalWrite(displayCS, HIGH);
+
+  pinMode(bmsCS, OUTPUT);
+  digitalWrite(bmsCS, HIGH);
+
+  // Initialize hardware SPI for use by both display and BMS
+  hardwareSPI = new SPIClass(HSPI);
+  // Use the board_config pins instead of the defines
+  hardwareSPI->begin(board_config.spi_sclk, board_config.spi_miso, board_config.spi_mosi, -1);
+}
 
 void watchdogTask(void* parameter) {
   for (;;) {
@@ -435,7 +452,12 @@ void setup() {
   setupWiFi();
 #endif
   setLEDColor(LED_YELLOW);  // Booting up
-  setupDisplay(deviceData, board_config);
+
+  // First initialize the shared SPI bus
+  setupSPI(board_config);
+
+  // Then setup the display
+  setupDisplay(deviceData, board_config, hardwareSPI);
 
   #ifndef SCREEN_DEBUG
     // Pass the hardware SPI instance to the BMS_CAN initialization
@@ -984,46 +1006,11 @@ void updateESCBLETask(void *pvParameters) {
   }
 }
 
-void setupDisplay(const STR_DEVICE_DATA_140_V1& deviceData, const HardwareConfig& board_config) {
-  USBSerial.println("setupDisplay");
-
-  // Store CS pins
-  displayCS = board_config.tft_cs;
-  bmsCS = MCP_CS;
-
-  // Configure both CS pins as outputs and set HIGH (deselected)
-  pinMode(displayCS, OUTPUT);
-  digitalWrite(displayCS, HIGH);
-
-  pinMode(bmsCS, OUTPUT);
-  digitalWrite(bmsCS, HIGH);
-
-  // Initialize hardware SPI for use by both display and BMS
-  hardwareSPI = new SPIClass(HSPI);
-  // Use the board_config pins instead of the defines
-  hardwareSPI->begin(board_config.spi_sclk, board_config.spi_miso, board_config.spi_mosi, -1);
-
-  // Create the display with the hardware SPI
-  display = new Adafruit_ST7735(
-    hardwareSPI,
-    displayCS,
-    board_config.tft_dc,
-    board_config.tft_rst);
-
-  display->initR(INITR_BLACKTAB);  // Init ST7735S chip, black tab
-  resetRotation(deviceData.screen_rotation);
-  setTheme(deviceData.theme);  // 0=light, 1=dark
-  display->fillScreen(ST77XX_BLACK);
-  displayMeta(deviceData, 1500);
-}
-
 bool initBMSCAN(SPIClass* spi) {
   USBSerial.println("Initializing BMS CAN...");
 
   // Ensure Display CS is HIGH (deselected) before working with BMS
   digitalWrite(displayCS, HIGH);
-
-  // CS pin should already be configured in setupDisplay
 
   // Create the BMS_CAN instance with the provided SPI
   bms_can = new BMS_CAN(bmsCS, MCP_BAUDRATE, spi);
