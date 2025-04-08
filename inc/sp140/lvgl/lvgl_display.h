@@ -25,6 +25,16 @@ void lv_tick_handler();
 // Update LVGL - calls lv_task_handler and updates internal ticks
 void updateLvgl();
 
+// Main screen update function
+void updateLvglMainScreen(
+  const STR_DEVICE_DATA_140_V1& deviceData,
+  const STR_ESC_TELEMETRY_140& escTelemetry,
+  const STR_BMS_TELEMETRY_140& bmsTelemetry,
+  const UnifiedBatteryData& unifiedBatteryData,
+  float altitude, bool armed, bool cruising,
+  unsigned int armedStartMillis
+);
+
 // External declarations
 extern SPIClass* hardwareSPI;
 extern int8_t displayCS;

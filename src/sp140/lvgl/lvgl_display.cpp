@@ -1,5 +1,7 @@
 #include "../../../inc/sp140/lvgl/lvgl_display.h"
 #include "../../../inc/version.h"
+#include "../../../inc/sp140/structs.h"
+#include "../../../inc/sp140/bms.h"
 #include <Adafruit_ST7735.h>
 
 // Display dimensions
@@ -12,6 +14,14 @@
 // LVGL refresh time in ms
 #define LVGL_REFRESH_TIME 20
 
+// Constants from the original display.h
+#define TEMP_WARNING_THRESHOLD 55.0f
+#define TEMP_CRITICAL_THRESHOLD 70.0f
+#define BATTERY_LOW_THRESHOLD 30.0f
+#define BATTERY_MEDIUM_THRESHOLD 60.0f
+#define CELL_VOLTAGE_WARNING 3.6f
+#define CELL_VOLTAGE_CRITICAL 3.5f
+
 // Global variables
 static lv_disp_drv_t disp_drv;
 static lv_disp_draw_buf_t draw_buf;
@@ -20,6 +30,41 @@ static Adafruit_ST7735* tft_driver = nullptr;
 
 // The last time LVGL was updated
 static uint32_t lvgl_last_update = 0;
+
+// Main screen objects
+static lv_obj_t* main_screen = NULL;
+static lv_obj_t* battery_bar = NULL;
+static lv_obj_t* battery_label = NULL;
+static lv_obj_t* voltage_left_label = NULL;
+static lv_obj_t* voltage_right_label = NULL;
+static lv_obj_t* power_label = NULL;
+static lv_obj_t* power_bar = NULL;
+static lv_obj_t* perf_mode_label = NULL;
+static lv_obj_t* armed_time_label = NULL;
+static lv_obj_t* altitude_label = NULL;
+static lv_obj_t* batt_temp_label = NULL;
+static lv_obj_t* esc_temp_label = NULL;
+static lv_obj_t* motor_temp_label = NULL;
+static lv_obj_t* bluetooth_icon = NULL;
+static lv_obj_t* arm_indicator = NULL;
+
+// Create a static array of temperature labels for easy access
+static lv_obj_t* temp_labels[3];
+
+// Colors for LVGL - matching ST7735 colors as much as possible
+#define LVGL_BLACK lv_color_black()
+#define LVGL_WHITE lv_color_white()
+#define LVGL_GREEN lv_color_make(0, 255, 0)
+#define LVGL_YELLOW lv_color_make(255, 255, 0)
+#define LVGL_RED lv_color_make(255, 0, 0)
+#define LVGL_BLUE lv_color_make(0, 0, 255)
+#define LVGL_ORANGE lv_color_make(255, 165, 0)
+#define LVGL_CYAN lv_color_make(0, 255, 255)
+#define LVGL_PURPLE lv_color_make(128, 0, 128)
+#define LVGL_GRAY lv_color_make(128, 128, 128)
+
+// Function forward declarations
+void setupMainScreen(bool darkMode);
 
 void setupLvglBuffer() {
   // Initialize LVGL library
@@ -186,6 +231,356 @@ void displayLvglSplash(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
   while (millis() - start_time < duration) {
     updateLvgl();
     delay(LVGL_REFRESH_TIME);
+  }
+
+  // Deselect display CS when done
+  digitalWrite(displayCS, HIGH);
+
+  // Initialize the main screen
+  USBSerial.println("Switching from splash to main screen");
+  setupMainScreen(deviceData.theme == 1);
+}
+
+// Setup the main screen layout once
+void setupMainScreen(bool darkMode) {
+  if (main_screen != NULL) {
+    lv_obj_del(main_screen);
+  }
+
+  // Create main screen
+  main_screen = lv_obj_create(NULL);
+
+  // Set theme based on dark/light mode
+  lv_obj_set_style_bg_color(main_screen,
+                          darkMode ? LVGL_BLACK : LVGL_WHITE,
+                          LV_PART_MAIN);
+
+  // Top section - battery status
+  battery_bar = lv_bar_create(main_screen);
+  lv_obj_set_size(battery_bar, SCREEN_WIDTH, 32);
+  lv_obj_set_pos(battery_bar, 0, 0);
+  lv_bar_set_range(battery_bar, 0, 100);
+  lv_obj_set_style_bg_color(battery_bar,
+                          darkMode ? LVGL_BLACK : LVGL_WHITE,
+                          LV_PART_MAIN);
+
+  // Battery percentage label
+  battery_label = lv_label_create(main_screen);
+  lv_obj_align(battery_label, LV_ALIGN_TOP_MID, 0, 8);
+  lv_obj_set_style_text_color(battery_label, LVGL_BLACK, 0);
+
+  // Left voltage label
+  voltage_left_label = lv_label_create(main_screen);
+  lv_obj_align(voltage_left_label, LV_ALIGN_TOP_LEFT, 2, 8);
+  lv_obj_set_style_text_color(voltage_left_label,
+                            darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+
+  // Right voltage label
+  voltage_right_label = lv_label_create(main_screen);
+  lv_obj_align(voltage_right_label, LV_ALIGN_TOP_RIGHT, -2, 8);
+  lv_obj_set_style_text_color(voltage_right_label,
+                             darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+
+  // Middle section - power display
+  power_label = lv_label_create(main_screen);
+  lv_obj_align(power_label, LV_ALIGN_LEFT_MID, 2, -7);
+  lv_obj_set_style_text_color(power_label,
+                             darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+
+  // Power bar
+  power_bar = lv_bar_create(main_screen);
+  lv_obj_set_size(power_bar, 85, 8);
+  lv_obj_align(power_bar, LV_ALIGN_LEFT_MID, 2, 8);
+  lv_bar_set_range(power_bar, 0, 20);  // 0-20kW
+  lv_obj_set_style_bg_color(power_bar,
+                           darkMode ? LVGL_BLACK : LVGL_WHITE,
+                           LV_PART_MAIN);
+  lv_obj_set_style_bg_color(power_bar, LVGL_GREEN, LV_PART_INDICATOR);
+
+  // Performance mode label
+  perf_mode_label = lv_label_create(main_screen);
+  lv_obj_align(perf_mode_label, LV_ALIGN_RIGHT_MID, -15, -7);
+  lv_obj_set_style_text_color(perf_mode_label,
+                             darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+
+  // Bluetooth icon
+  bluetooth_icon = lv_label_create(main_screen);
+  lv_label_set_text(bluetooth_icon, LV_SYMBOL_BLUETOOTH);
+  lv_obj_align(bluetooth_icon, LV_ALIGN_TOP_RIGHT, -5, 35);
+  lv_obj_set_style_text_color(bluetooth_icon,
+                             darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+
+  // Armed time label
+  armed_time_label = lv_label_create(main_screen);
+  lv_obj_align(armed_time_label, LV_ALIGN_RIGHT_MID, -15, 8);
+  lv_obj_set_style_text_color(armed_time_label,
+                             darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+
+  // Bottom section - altitude and temperatures
+  altitude_label = lv_label_create(main_screen);
+  lv_obj_align(altitude_label, LV_ALIGN_BOTTOM_LEFT, 2, -15);
+  lv_obj_set_style_text_color(altitude_label,
+                             darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+
+  // Create temperature labels
+  batt_temp_label = lv_label_create(main_screen);
+  lv_obj_align(batt_temp_label, LV_ALIGN_BOTTOM_RIGHT, -2, -42);
+  lv_obj_set_style_text_color(batt_temp_label,
+                             darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+  lv_obj_set_style_bg_opa(batt_temp_label, LV_OPA_0, 0); // Initially transparent
+  temp_labels[0] = batt_temp_label;
+
+  esc_temp_label = lv_label_create(main_screen);
+  lv_obj_align(esc_temp_label, LV_ALIGN_BOTTOM_RIGHT, -2, -25);
+  lv_obj_set_style_text_color(esc_temp_label,
+                             darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+  lv_obj_set_style_bg_opa(esc_temp_label, LV_OPA_0, 0); // Initially transparent
+  temp_labels[1] = esc_temp_label;
+
+  motor_temp_label = lv_label_create(main_screen);
+  lv_obj_align(motor_temp_label, LV_ALIGN_BOTTOM_RIGHT, -2, -8);
+  lv_obj_set_style_text_color(motor_temp_label,
+                             darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+  lv_obj_set_style_bg_opa(motor_temp_label, LV_OPA_0, 0); // Initially transparent
+  temp_labels[2] = motor_temp_label;
+
+  // Draw divider lines
+  // Create horizontal line between top and middle sections
+  lv_obj_t* h_line1 = lv_line_create(main_screen);
+  static lv_point_t h_line1_points[] = {{0, 32}, {SCREEN_WIDTH, 32}};
+  lv_line_set_points(h_line1, h_line1_points, 2);
+  lv_obj_set_style_line_color(h_line1,
+                             darkMode ? LVGL_GRAY : LVGL_BLACK,
+                             LV_PART_MAIN);
+  lv_obj_set_style_line_width(h_line1, 1, LV_PART_MAIN);
+
+  // Create horizontal line between middle and bottom sections
+  lv_obj_t* h_line2 = lv_line_create(main_screen);
+  static lv_point_t h_line2_points[] = {{0, 75}, {SCREEN_WIDTH, 75}};
+  lv_line_set_points(h_line2, h_line2_points, 2);
+  lv_obj_set_style_line_color(h_line2,
+                             darkMode ? LVGL_GRAY : LVGL_BLACK,
+                             LV_PART_MAIN);
+  lv_obj_set_style_line_width(h_line2, 1, LV_PART_MAIN);
+
+  // Create vertical line in middle section
+  lv_obj_t* v_line1 = lv_line_create(main_screen);
+  static lv_point_t v_line1_points[] = {{90, 32}, {90, 75}};
+  lv_line_set_points(v_line1, v_line1_points, 2);
+  lv_obj_set_style_line_color(v_line1,
+                             darkMode ? LVGL_GRAY : LVGL_BLACK,
+                             LV_PART_MAIN);
+  lv_obj_set_style_line_width(v_line1, 1, LV_PART_MAIN);
+
+  // Create vertical line in bottom section
+  lv_obj_t* v_line2 = lv_line_create(main_screen);
+  static lv_point_t v_line2_points[] = {{120, 75}, {120, 128}};
+  lv_line_set_points(v_line2, v_line2_points, 2);
+  lv_obj_set_style_line_color(v_line2,
+                             darkMode ? LVGL_GRAY : LVGL_BLACK,
+                             LV_PART_MAIN);
+  lv_obj_set_style_line_width(v_line2, 1, LV_PART_MAIN);
+
+  // Create horizontal dividers for temperature section
+  lv_obj_t* h_line3 = lv_line_create(main_screen);
+  static lv_point_t h_line3_points[] = {{120, 92}, {SCREEN_WIDTH, 92}};
+  lv_line_set_points(h_line3, h_line3_points, 2);
+  lv_obj_set_style_line_color(h_line3,
+                             darkMode ? LVGL_GRAY : LVGL_BLACK,
+                             LV_PART_MAIN);
+  lv_obj_set_style_line_width(h_line3, 1, LV_PART_MAIN);
+
+  lv_obj_t* h_line4 = lv_line_create(main_screen);
+  static lv_point_t h_line4_points[] = {{120, 109}, {SCREEN_WIDTH, 109}};
+  lv_line_set_points(h_line4, h_line4_points, 2);
+  lv_obj_set_style_line_color(h_line4,
+                             darkMode ? LVGL_GRAY : LVGL_BLACK,
+                             LV_PART_MAIN);
+  lv_obj_set_style_line_width(h_line4, 1, LV_PART_MAIN);
+
+  // Create arm indicator (initially hidden)
+  arm_indicator = lv_obj_create(main_screen);
+  lv_obj_set_size(arm_indicator, 70, 43);
+  lv_obj_set_pos(arm_indicator, 90, 32);
+  lv_obj_set_style_border_width(arm_indicator, 0, LV_PART_MAIN);
+  lv_obj_clear_flag(arm_indicator, LV_OBJ_FLAG_CLICKABLE); // Not clickable
+  // Move to background and hide initially
+  lv_obj_move_background(arm_indicator);
+  lv_obj_add_flag(arm_indicator, LV_OBJ_FLAG_HIDDEN);
+
+  // Load the screen
+  lv_scr_load(main_screen);
+}
+
+void updateLvglMainScreen(
+  const STR_DEVICE_DATA_140_V1& deviceData,
+  const STR_ESC_TELEMETRY_140& escTelemetry,
+  const STR_BMS_TELEMETRY_140& bmsTelemetry,
+  const UnifiedBatteryData& unifiedBatteryData,
+  float altitude, bool armed, bool cruising,
+  unsigned int armedStartMillis
+) {
+  // Make sure display CS is selected
+  digitalWrite(displayCS, LOW);
+
+  bool darkMode = (deviceData.theme == 1);
+  float batteryPercent = unifiedBatteryData.soc;
+  float totalVolts = unifiedBatteryData.volts;
+  float lowestCellV = bmsTelemetry.lowest_cell_voltage;
+  float batteryTemp = bmsTelemetry.highest_temperature;
+  float escTemp = escTelemetry.mos_temp;
+  float motorTemp = escTelemetry.motor_temp;
+  TelemetryState bmsState = bmsTelemetry.state;
+
+  // Check if the theme has changed or if the main screen needs to be created
+  static int last_theme = -1;
+  if (main_screen == NULL || last_theme != deviceData.theme) {
+    setupMainScreen(darkMode);
+    last_theme = deviceData.theme;
+  }
+
+  // Update battery bar and percentage
+  if (bmsState == TelemetryState::CONNECTED && batteryPercent > 0) {
+    lv_bar_set_value(battery_bar, (int)batteryPercent, LV_ANIM_OFF);
+
+    // Set color based on percentage
+    lv_color_t batteryColor = LVGL_RED;
+    if (batteryPercent >= BATTERY_MEDIUM_THRESHOLD) {
+      batteryColor = LVGL_GREEN;
+    } else if (batteryPercent >= BATTERY_LOW_THRESHOLD) {
+      batteryColor = LVGL_YELLOW;
+    }
+
+    lv_obj_set_style_bg_color(battery_bar, batteryColor, LV_PART_INDICATOR);
+
+    // Update battery percentage text
+    char buffer[10];
+    snprintf(buffer, sizeof(buffer), "%d%%", (int)batteryPercent);
+    lv_label_set_text(battery_label, buffer);
+    lv_obj_set_style_text_color(battery_label, LVGL_BLACK, 0);
+  } else {
+    lv_bar_set_value(battery_bar, 0, LV_ANIM_OFF);
+    lv_label_set_text(battery_label, "NO DATA");
+    lv_obj_set_style_text_color(battery_label, LVGL_RED, 0);
+  }
+
+  // Update left voltage (cell voltage)
+  if (bmsState == TelemetryState::CONNECTED) {
+    char buffer[10];
+    snprintf(buffer, sizeof(buffer), "%2.2fv", lowestCellV);
+    lv_label_set_text(voltage_left_label, buffer);
+
+    // Set color based on voltage
+    if (lowestCellV <= CELL_VOLTAGE_CRITICAL) {
+      lv_obj_set_style_text_color(voltage_left_label, LVGL_RED, 0);
+    } else if (lowestCellV <= CELL_VOLTAGE_WARNING) {
+      lv_obj_set_style_text_color(voltage_left_label, LVGL_ORANGE, 0);
+    } else {
+      lv_obj_set_style_text_color(voltage_left_label,
+                                darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+    }
+  } else {
+    lv_label_set_text(voltage_left_label, "");
+  }
+
+  // Update right voltage (total voltage)
+  if (bmsState == TelemetryState::CONNECTED) {
+    char buffer[10];
+    snprintf(buffer, sizeof(buffer), "%2.0fv", totalVolts);
+    lv_label_set_text(voltage_right_label, buffer);
+  } else {
+    lv_label_set_text(voltage_right_label, "");
+  }
+
+  // Update power display
+  if (bmsState == TelemetryState::CONNECTED) {
+    char buffer[10];
+    float kWatts = bmsTelemetry.power;
+    snprintf(buffer, sizeof(buffer), kWatts < 10 ? "%.1f kW" : "%.1f kW", kWatts);
+    lv_label_set_text(power_label, buffer);
+
+    // Update power bar
+    lv_bar_set_value(power_bar, (int)(kWatts * 100), LV_ANIM_OFF);
+  } else {
+    lv_label_set_text(power_label, "");
+    lv_bar_set_value(power_bar, 0, LV_ANIM_OFF);
+  }
+
+  // Update performance mode
+  lv_label_set_text(perf_mode_label, deviceData.performance_mode == 0 ? "CHILL" : "SPORT");
+
+  // Update armed time
+  const unsigned int nowMillis = millis();
+  static unsigned int _lastArmedMillis = 0;
+  if (armed) _lastArmedMillis = nowMillis;
+  const int sessionSeconds = (_lastArmedMillis - armedStartMillis) / 1000.0;
+  char timeBuffer[10];
+  snprintf(timeBuffer, sizeof(timeBuffer), "%02d:%02d", sessionSeconds / 60, sessionSeconds % 60);
+  lv_label_set_text(armed_time_label, timeBuffer);
+
+  // Update altitude
+  char altBuffer[15];
+  if (altitude == __FLT_MIN__) {
+    lv_label_set_text(altitude_label, "ERR");
+    lv_obj_set_style_text_color(altitude_label, LVGL_RED, 0);
+  } else {
+    if (deviceData.metric_alt) {
+      snprintf(altBuffer, sizeof(altBuffer), "%.1f m", altitude);
+    } else {
+      snprintf(altBuffer, sizeof(altBuffer), "%d ft", static_cast<int>(round(altitude * 3.28084)));
+    }
+    lv_label_set_text(altitude_label, altBuffer);
+    lv_obj_set_style_text_color(altitude_label,
+                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+  }
+
+  // Update temperature labels
+  struct {
+    float temp;
+    TelemetryState state;
+    const char* label;
+  } temps[] = {
+    {batteryTemp, bmsState, "B"},
+    {escTemp, escTelemetry.state, "E"},
+    {motorTemp, escTelemetry.state, "M"}
+  };
+
+  for (int i = 0; i < 3; i++) {
+    char tempBuffer[10];
+
+    if (temps[i].state == TelemetryState::CONNECTED) {
+      snprintf(tempBuffer, sizeof(tempBuffer), "%s %d", temps[i].label, static_cast<int>(temps[i].temp));
+      lv_label_set_text(temp_labels[i], tempBuffer);
+
+      if (temps[i].temp >= TEMP_CRITICAL_THRESHOLD) {
+        lv_obj_set_style_bg_color(temp_labels[i], LVGL_RED, LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(temp_labels[i], LV_OPA_100, 0); // Full opacity
+        lv_obj_set_style_text_color(temp_labels[i], LVGL_WHITE, 0);
+      } else if (temps[i].temp >= TEMP_WARNING_THRESHOLD) {
+        lv_obj_set_style_bg_color(temp_labels[i], LVGL_ORANGE, LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(temp_labels[i], LV_OPA_100, 0); // Full opacity
+        lv_obj_set_style_text_color(temp_labels[i], LVGL_BLACK, 0);
+      } else {
+        lv_obj_set_style_bg_opa(temp_labels[i], LV_OPA_0, 0); // Transparent
+        lv_obj_set_style_text_color(temp_labels[i],
+                                  darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+      }
+    } else {
+      snprintf(tempBuffer, sizeof(tempBuffer), "%s -", temps[i].label);
+      lv_label_set_text(temp_labels[i], tempBuffer);
+      lv_obj_set_style_bg_opa(temp_labels[i], LV_OPA_0, 0); // Transparent
+      lv_obj_set_style_text_color(temp_labels[i],
+                                darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+    }
+  }
+
+  // Update armed indicator
+  if (armed) {
+    lv_color_t bgColor = cruising ? LVGL_YELLOW : LVGL_CYAN;
+    lv_obj_set_style_bg_color(arm_indicator, bgColor, LV_PART_MAIN);
+    lv_obj_clear_flag(arm_indicator, LV_OBJ_FLAG_HIDDEN);
+  } else {
+    lv_obj_add_flag(arm_indicator, LV_OBJ_FLAG_HIDDEN);
   }
 
   // Deselect display CS when done

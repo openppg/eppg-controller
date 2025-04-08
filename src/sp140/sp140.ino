@@ -321,7 +321,24 @@ void refreshDisplay() {
     armedAtMillis);
   */
 
-  // For now, just update LVGL (main display implementation will come later)
+  // Now use the LVGL main screen
+  const float altitude = getAltitude(deviceData);
+  bool isArmed = (currentState != DISARMED);
+  bool isCruising = (currentState == ARMED_CRUISING);
+
+  // Update the LVGL main screen with current data
+  updateLvglMainScreen(
+    deviceData,
+    escTelemetryData,
+    bmsTelemetryData,
+    unifiedBatteryData,
+    altitude,
+    isArmed,
+    isCruising,
+    armedAtMillis
+  );
+
+  // General LVGL update
   updateLvgl();
 }
 
@@ -521,6 +538,21 @@ void setup() {
 
   // Show LVGL splash screen
   displayLvglSplash(deviceData, 2000);
+
+  // Update main screen with initial data
+  USBSerial.println("Initializing main screen after splash");
+  const float altitude = getAltitude(deviceData);
+  updateLvglMainScreen(
+    deviceData,
+    escTelemetryData,
+    bmsTelemetryData,
+    unifiedBatteryData,
+    altitude,
+    false, // not armed
+    false, // not cruising
+    0      // armedAtMillis
+  );
+  USBSerial.println("Main screen initialized");
 
   // Send initial device data after setup
   send_device_data();
