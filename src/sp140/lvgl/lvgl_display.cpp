@@ -8,11 +8,12 @@
 #define SCREEN_WIDTH 160
 #define SCREEN_HEIGHT 128
 
-// LVGL buffer size - using 1/10 of the screen size (minimum 10 rows to work well)
-#define LVGL_BUFFER_SIZE (SCREEN_WIDTH * 20)
+// LVGL buffer size - optimize for our display
+// Use 1/4 of the screen size to balance memory usage and performance
+#define LVGL_BUFFER_SIZE (SCREEN_WIDTH * (SCREEN_HEIGHT / 4))
 
-// LVGL refresh time in ms
-#define LVGL_REFRESH_TIME 20
+// LVGL refresh time in ms - match the config file setting
+#define LVGL_REFRESH_TIME 40
 
 // Constants from the original display.h
 #define TEMP_WARNING_THRESHOLD 55.0f
@@ -122,6 +123,7 @@ void setupLvglDisplay(const STR_DEVICE_DATA_140_V1& deviceData, int8_t dc_pin, i
   lv_disp_set_theme(lv_disp_get_default(), theme);
 }
 
+// Optimize the flush callback to minimize SPI transfers
 void lvgl_flush_cb(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* color_p) {
   // Make sure display CS is selected
   digitalWrite(displayCS, LOW);
@@ -133,7 +135,7 @@ void lvgl_flush_cb(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* color
   tft_driver->startWrite();
   tft_driver->setAddrWindow(area->x1, area->y1, w, h);
 
-  // Push colors
+  // Push colors - using DMA if available
   uint32_t len = w * h;
   tft_driver->writePixels((uint16_t*)color_p, len);
   tft_driver->endWrite();

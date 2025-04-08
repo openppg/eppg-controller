@@ -66,6 +66,14 @@
 /*Input device read period in milliseconds*/
 #define LV_INDEV_DEF_READ_PERIOD 30     /*[ms]*/
 
+/*Disable input devices to save resources*/
+#define LV_USE_INDEV_TOUCHSCREEN 0    /*Disable touchscreen support*/
+#define LV_USE_INDEV_TOUCHPAD    0    /*Disable touchpad support*/
+#define LV_USE_INDEV_MOUSE       0    /*Disable mouse support*/
+#define LV_USE_INDEV_KEYPAD      0    /*Disable keypad support*/
+#define LV_USE_INDEV_ENCODER     0    /*Disable encoder support*/
+#define LV_USE_INDEV_BUTTON      0    /*Disable button input device emulation*/
+
 /*Use a custom tick source that tells the elapsed time in milliseconds.
  *It removes the need to manually update the tick with `lv_tick_inc()`)*/
 #define LV_TICK_CUSTOM 0
