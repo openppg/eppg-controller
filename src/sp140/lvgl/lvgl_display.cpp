@@ -190,7 +190,8 @@ void displayLvglSplash(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
   // OpenPPG title
   lv_obj_t* title_label = lv_label_create(splash_screen);
   lv_label_set_text(title_label, "OpenPPG");
-  // Use default font - LVGL 8.x has limited built-in fonts
+  // Use a larger font for the title
+  lv_obj_set_style_text_font(title_label, &lv_font_montserrat_20, 0);
   lv_obj_set_style_text_color(title_label,
                              deviceData.theme == 1 ? lv_color_white() : lv_color_black(),
                              0);
@@ -212,6 +213,7 @@ void displayLvglSplash(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
   char version_str[10];
   snprintf(version_str, sizeof(version_str), "v%d.%d", VERSION_MAJOR, VERSION_MINOR);
   lv_label_set_text(version_label, version_str);
+  lv_obj_set_style_text_font(version_label, &lv_font_montserrat_16, 0);
   lv_obj_set_style_text_color(version_label,
                              deviceData.theme == 1 ? lv_color_white() : lv_color_black(),
                              0);
@@ -224,6 +226,7 @@ void displayLvglSplash(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
   const int minutes = deviceData.armed_time % 60;
   snprintf(time_str, sizeof(time_str), "%02d:%02d", hours, minutes);
   lv_label_set_text(time_label, time_str);
+  lv_obj_set_style_text_font(time_label, &lv_font_montserrat_16, 0);
   lv_obj_set_style_text_color(time_label,
                              deviceData.theme == 1 ? lv_color_white() : lv_color_black(),
                              0);
@@ -273,30 +276,34 @@ void setupMainScreen(bool darkMode) {
   // Battery percentage label
   battery_label = lv_label_create(main_screen);
   lv_obj_align(battery_label, LV_ALIGN_TOP_MID, 0, 8);
+  lv_obj_set_style_text_font(battery_label, &lv_font_montserrat_16, 0);
   lv_obj_set_style_text_color(battery_label, LVGL_BLACK, 0);
 
   // Left voltage label
   voltage_left_label = lv_label_create(main_screen);
-  lv_obj_align(voltage_left_label, LV_ALIGN_TOP_LEFT, 2, 8);
+  lv_obj_align(voltage_left_label, LV_ALIGN_TOP_LEFT, 3, 10);
+  lv_obj_set_style_text_font(voltage_left_label, &lv_font_montserrat_10, 0);
   lv_obj_set_style_text_color(voltage_left_label,
                             darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
 
   // Right voltage label
   voltage_right_label = lv_label_create(main_screen);
-  lv_obj_align(voltage_right_label, LV_ALIGN_TOP_RIGHT, -2, 8);
+  lv_obj_align(voltage_right_label, LV_ALIGN_TOP_RIGHT, -3, 10);
+  lv_obj_set_style_text_font(voltage_right_label, &lv_font_montserrat_10, 0);
   lv_obj_set_style_text_color(voltage_right_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
 
   // Middle section - power display
   power_label = lv_label_create(main_screen);
-  lv_obj_align(power_label, LV_ALIGN_LEFT_MID, 2, -7);
+  lv_obj_align(power_label, LV_ALIGN_LEFT_MID, 5, -10);
+  lv_obj_set_style_text_font(power_label, &lv_font_montserrat_16, 0);
   lv_obj_set_style_text_color(power_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
 
   // Power bar
   power_bar = lv_bar_create(main_screen);
   lv_obj_set_size(power_bar, 85, 8);
-  lv_obj_align(power_bar, LV_ALIGN_LEFT_MID, 2, 8);
+  lv_obj_align(power_bar, LV_ALIGN_LEFT_MID, 5, 8);
   lv_bar_set_range(power_bar, 0, 20);  // 0-20kW
   lv_obj_set_style_bg_color(power_bar,
                            darkMode ? LVGL_BLACK : LVGL_WHITE,
@@ -305,7 +312,8 @@ void setupMainScreen(bool darkMode) {
 
   // Performance mode label
   perf_mode_label = lv_label_create(main_screen);
-  lv_obj_align(perf_mode_label, LV_ALIGN_RIGHT_MID, -15, -7);
+  lv_obj_align(perf_mode_label, LV_ALIGN_RIGHT_MID, -15, -12);
+  lv_obj_set_style_text_font(perf_mode_label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(perf_mode_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
 
@@ -318,7 +326,8 @@ void setupMainScreen(bool darkMode) {
 
   // Armed time label
   armed_time_label = lv_label_create(main_screen);
-  lv_obj_align(armed_time_label, LV_ALIGN_RIGHT_MID, -15, 8);
+  lv_obj_align(armed_time_label, LV_ALIGN_RIGHT_MID, -15, 12);
+  lv_obj_set_style_text_font(armed_time_label, &lv_font_montserrat_14, 0);
   lv_obj_set_style_text_color(armed_time_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
 
@@ -333,23 +342,38 @@ void setupMainScreen(bool darkMode) {
   // Create temperature labels
   batt_temp_label = lv_label_create(main_screen);
   lv_obj_align(batt_temp_label, LV_ALIGN_BOTTOM_RIGHT, -2, -42);
+  lv_obj_set_style_text_font(batt_temp_label, &lv_font_montserrat_10, 0);
   lv_obj_set_style_text_color(batt_temp_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   lv_obj_set_style_bg_opa(batt_temp_label, LV_OPA_0, 0); // Initially transparent
+  lv_obj_set_style_pad_left(batt_temp_label, 3, 0); // Add padding for when background is visible
+  lv_obj_set_style_pad_right(batt_temp_label, 3, 0);
+  lv_obj_set_style_pad_top(batt_temp_label, 2, 0);
+  lv_obj_set_style_pad_bottom(batt_temp_label, 2, 0);
   temp_labels[0] = batt_temp_label;
 
   esc_temp_label = lv_label_create(main_screen);
   lv_obj_align(esc_temp_label, LV_ALIGN_BOTTOM_RIGHT, -2, -25);
+  lv_obj_set_style_text_font(esc_temp_label, &lv_font_montserrat_10, 0);
   lv_obj_set_style_text_color(esc_temp_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   lv_obj_set_style_bg_opa(esc_temp_label, LV_OPA_0, 0); // Initially transparent
+  lv_obj_set_style_pad_left(esc_temp_label, 3, 0); // Add padding for when background is visible
+  lv_obj_set_style_pad_right(esc_temp_label, 3, 0);
+  lv_obj_set_style_pad_top(esc_temp_label, 2, 0);
+  lv_obj_set_style_pad_bottom(esc_temp_label, 2, 0);
   temp_labels[1] = esc_temp_label;
 
   motor_temp_label = lv_label_create(main_screen);
   lv_obj_align(motor_temp_label, LV_ALIGN_BOTTOM_RIGHT, -2, -8);
+  lv_obj_set_style_text_font(motor_temp_label, &lv_font_montserrat_10, 0);
   lv_obj_set_style_text_color(motor_temp_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   lv_obj_set_style_bg_opa(motor_temp_label, LV_OPA_0, 0); // Initially transparent
+  lv_obj_set_style_pad_left(motor_temp_label, 3, 0); // Add padding for when background is visible
+  lv_obj_set_style_pad_right(motor_temp_label, 3, 0);
+  lv_obj_set_style_pad_top(motor_temp_label, 2, 0);
+  lv_obj_set_style_pad_bottom(motor_temp_label, 2, 0);
   temp_labels[2] = motor_temp_label;
 
   // Draw divider lines
