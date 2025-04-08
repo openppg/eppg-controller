@@ -35,6 +35,10 @@ void updateLvglMainScreen(
   unsigned int armedStartMillis
 );
 
+// Functions to control the loading overlay
+void showLoadingOverlay();
+void hideLoadingOverlay();
+
 // External declarations
 extern SPIClass* hardwareSPI;
 extern int8_t displayCS;

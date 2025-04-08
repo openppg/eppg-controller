@@ -48,6 +48,7 @@ static lv_obj_t* esc_temp_label = NULL;
 static lv_obj_t* motor_temp_label = NULL;
 static lv_obj_t* arm_indicator = NULL;
 static lv_obj_t* spinner = NULL;       // For the spinning animation
+static lv_obj_t* spinner_overlay = NULL; // Overlay for the spinner
 
 // Create a static array of temperature labels for easy access
 static lv_obj_t* temp_labels[3];
@@ -441,8 +442,17 @@ void setupMainScreen(bool darkMode) {
   lv_obj_move_background(arm_indicator);
   lv_obj_add_flag(arm_indicator, LV_OBJ_FLAG_HIDDEN);
 
-  // Create spinning animation at the top center
-  spinner = lv_spinner_create(main_screen, 1000, 60);  // 1000ms period, 60 arcade width
+  // Create semi-transparent overlay for the spinner
+  spinner_overlay = lv_obj_create(main_screen);
+  lv_obj_set_size(spinner_overlay, SCREEN_WIDTH, SCREEN_HEIGHT);
+  lv_obj_set_pos(spinner_overlay, 0, 0);
+  lv_obj_set_style_bg_color(spinner_overlay, darkMode ? LVGL_BLACK : LVGL_WHITE, LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(spinner_overlay, LV_OPA_70, LV_PART_MAIN); // 70% opacity
+  lv_obj_set_style_border_width(spinner_overlay, 0, LV_PART_MAIN);
+  lv_obj_clear_flag(spinner_overlay, LV_OBJ_FLAG_CLICKABLE);
+
+  // Create spinning animation at the top center - now place on top of overlay
+  spinner = lv_spinner_create(spinner_overlay, 1000, 60);  // 1000ms period, 60 arcade width
   lv_obj_set_size(spinner, 80, 80);  // Even larger spinner for visibility
   lv_obj_align(spinner, LV_ALIGN_CENTER, 0, 0);  // Position at center of screen
 
@@ -458,8 +468,27 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_style_arc_color(spinner, darkMode ? lv_color_make(100, 100, 100) : lv_color_make(230, 230, 230), LV_PART_MAIN);
   lv_obj_set_style_arc_color(spinner, lv_palette_main(LV_PALETTE_BLUE), LV_PART_INDICATOR);
 
+  // Hide the overlay by default
+  lv_obj_add_flag(spinner_overlay, LV_OBJ_FLAG_HIDDEN);
+
   // Load the screen
   lv_scr_load(main_screen);
+}
+
+// Function to show the loading overlay
+void showLoadingOverlay() {
+  if (spinner_overlay != NULL) {
+    lv_obj_clear_flag(spinner_overlay, LV_OBJ_FLAG_HIDDEN);
+    updateLvgl(); // Force immediate update
+  }
+}
+
+// Function to hide the loading overlay
+void hideLoadingOverlay() {
+  if (spinner_overlay != NULL) {
+    lv_obj_add_flag(spinner_overlay, LV_OBJ_FLAG_HIDDEN);
+    updateLvgl(); // Force immediate update
+  }
 }
 
 void updateLvglMainScreen(
