@@ -45,7 +45,6 @@ static lv_obj_t* altitude_label = NULL;
 static lv_obj_t* batt_temp_label = NULL;
 static lv_obj_t* esc_temp_label = NULL;
 static lv_obj_t* motor_temp_label = NULL;
-static lv_obj_t* bluetooth_icon = NULL;
 static lv_obj_t* arm_indicator = NULL;
 
 // Create a static array of temperature labels for easy access
@@ -272,6 +271,9 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_style_bg_color(battery_bar,
                           darkMode ? LVGL_BLACK : LVGL_WHITE,
                           LV_PART_MAIN);
+  // Remove rounded corners from battery bar
+  lv_obj_set_style_radius(battery_bar, 0, LV_PART_MAIN);  // Background part
+  lv_obj_set_style_radius(battery_bar, 0, LV_PART_INDICATOR);  // Indicator part
 
   // Battery percentage label
   battery_label = lv_label_create(main_screen);
@@ -282,14 +284,14 @@ void setupMainScreen(bool darkMode) {
   // Left voltage label
   voltage_left_label = lv_label_create(main_screen);
   lv_obj_align(voltage_left_label, LV_ALIGN_TOP_LEFT, 3, 10);
-  lv_obj_set_style_text_font(voltage_left_label, &lv_font_montserrat_10, 0);
+  lv_obj_set_style_text_font(voltage_left_label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(voltage_left_label,
                             darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
 
   // Right voltage label
   voltage_right_label = lv_label_create(main_screen);
   lv_obj_align(voltage_right_label, LV_ALIGN_TOP_RIGHT, -3, 10);
-  lv_obj_set_style_text_font(voltage_right_label, &lv_font_montserrat_10, 0);
+  lv_obj_set_style_text_font(voltage_right_label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(voltage_right_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
 
@@ -309,6 +311,9 @@ void setupMainScreen(bool darkMode) {
                            darkMode ? LVGL_BLACK : LVGL_WHITE,
                            LV_PART_MAIN);
   lv_obj_set_style_bg_color(power_bar, LVGL_GREEN, LV_PART_INDICATOR);
+  // Remove rounded corners from power bar
+  lv_obj_set_style_radius(power_bar, 0, LV_PART_MAIN);  // Background part
+  lv_obj_set_style_radius(power_bar, 0, LV_PART_INDICATOR);  // Indicator part
 
   // Performance mode label
   perf_mode_label = lv_label_create(main_screen);
@@ -317,16 +322,9 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_style_text_color(perf_mode_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
 
-  // Bluetooth icon
-  bluetooth_icon = lv_label_create(main_screen);
-  lv_label_set_text(bluetooth_icon, LV_SYMBOL_BLUETOOTH);
-  lv_obj_align(bluetooth_icon, LV_ALIGN_TOP_RIGHT, -5, 35);
-  lv_obj_set_style_text_color(bluetooth_icon,
-                             darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
-
-  // Armed time label
+  // Armed time label - adjust position now that there's no bluetooth icon
   armed_time_label = lv_label_create(main_screen);
-  lv_obj_align(armed_time_label, LV_ALIGN_RIGHT_MID, -15, 12);
+  lv_obj_align(armed_time_label, LV_ALIGN_RIGHT_MID, -15, 5);
   lv_obj_set_style_text_font(armed_time_label, &lv_font_montserrat_14, 0);
   lv_obj_set_style_text_color(armed_time_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
@@ -339,10 +337,10 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_style_text_color(altitude_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
 
-  // Create temperature labels
+  // Create temperature labels - adjust positions to align with divider lines
   batt_temp_label = lv_label_create(main_screen);
-  lv_obj_align(batt_temp_label, LV_ALIGN_BOTTOM_RIGHT, -2, -42);
-  lv_obj_set_style_text_font(batt_temp_label, &lv_font_montserrat_10, 0);
+  lv_obj_align(batt_temp_label, LV_ALIGN_BOTTOM_RIGHT, -5, -35);  // Between top and middle line
+  lv_obj_set_style_text_font(batt_temp_label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(batt_temp_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   lv_obj_set_style_bg_opa(batt_temp_label, LV_OPA_0, 0); // Initially transparent
@@ -353,8 +351,8 @@ void setupMainScreen(bool darkMode) {
   temp_labels[0] = batt_temp_label;
 
   esc_temp_label = lv_label_create(main_screen);
-  lv_obj_align(esc_temp_label, LV_ALIGN_BOTTOM_RIGHT, -2, -25);
-  lv_obj_set_style_text_font(esc_temp_label, &lv_font_montserrat_10, 0);
+  lv_obj_align(esc_temp_label, LV_ALIGN_BOTTOM_RIGHT, -5, -18);  // Between middle and bottom line
+  lv_obj_set_style_text_font(esc_temp_label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(esc_temp_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   lv_obj_set_style_bg_opa(esc_temp_label, LV_OPA_0, 0); // Initially transparent
@@ -365,8 +363,8 @@ void setupMainScreen(bool darkMode) {
   temp_labels[1] = esc_temp_label;
 
   motor_temp_label = lv_label_create(main_screen);
-  lv_obj_align(motor_temp_label, LV_ALIGN_BOTTOM_RIGHT, -2, -8);
-  lv_obj_set_style_text_font(motor_temp_label, &lv_font_montserrat_10, 0);
+  lv_obj_align(motor_temp_label, LV_ALIGN_BOTTOM_RIGHT, -5, -2);  // Below bottom line
+  lv_obj_set_style_text_font(motor_temp_label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(motor_temp_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   lv_obj_set_style_bg_opa(motor_temp_label, LV_OPA_0, 0); // Initially transparent
@@ -415,7 +413,7 @@ void setupMainScreen(bool darkMode) {
 
   // Create horizontal dividers for temperature section
   lv_obj_t* h_line3 = lv_line_create(main_screen);
-  static lv_point_t h_line3_points[] = {{120, 92}, {SCREEN_WIDTH, 92}};
+  static lv_point_t h_line3_points[] = {{120, 94}, {SCREEN_WIDTH, 94}};
   lv_line_set_points(h_line3, h_line3_points, 2);
   lv_obj_set_style_line_color(h_line3,
                              darkMode ? LVGL_GRAY : LVGL_BLACK,
@@ -423,7 +421,7 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_style_line_width(h_line3, 1, LV_PART_MAIN);
 
   lv_obj_t* h_line4 = lv_line_create(main_screen);
-  static lv_point_t h_line4_points[] = {{120, 109}, {SCREEN_WIDTH, 109}};
+  static lv_point_t h_line4_points[] = {{120, 111}, {SCREEN_WIDTH, 111}};
   lv_line_set_points(h_line4, h_line4_points, 2);
   lv_obj_set_style_line_color(h_line4,
                              darkMode ? LVGL_GRAY : LVGL_BLACK,

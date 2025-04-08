@@ -161,8 +161,8 @@
  * Enable built-in fonts - only enable a minimal set
  */
 #define LV_FONT_MONTSERRAT_8  0
-#define LV_FONT_MONTSERRAT_10 1  /* For small text like voltage and temps */
-#define LV_FONT_MONTSERRAT_12 1  /* For medium text */
+#define LV_FONT_MONTSERRAT_10 1  /* For small text like voltage */
+#define LV_FONT_MONTSERRAT_12 1  /* For medium text, temperatures, and voltage labels */
 #define LV_FONT_MONTSERRAT_14 1  /* Used as default font */
 #define LV_FONT_MONTSERRAT_16 1  /* For battery percentage and power */
 #define LV_FONT_MONTSERRAT_18 0
