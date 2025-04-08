@@ -25,7 +25,7 @@
 
 #include "../../inc/sp140/globals.h"  // device config
 #include "../../inc/sp140/esc.h"
-#include "../../inc/sp140/display.h"
+#include "../../inc/sp140/lvgl/lvgl_display.h"
 #include "../../inc/sp140/bms.h"
 #include "../../inc/sp140/altimeter.h"
 #include "../../inc/sp140/debug.h"
@@ -37,6 +37,11 @@
 #include "../../inc/sp140/throttle.h"
 #include "../../inc/sp140/vibration_pwm.h"
 #include "../../inc/sp140/led.h"
+
+// Comment out the old display and use LVGL display
+#include "../../inc/sp140/display.h"  // Still needed for some definitions
+#include "../../inc/sp140/lvgl/lvgl_display.h"
+#include "../../inc/sp140/lvgl/lvgl_task.h"
 
 // Global variable for shared SPI
 SPIClass* hardwareSPI = nullptr;
@@ -301,6 +306,8 @@ void trackPowerTask(void *pvParameters) {
 }
 
 void refreshDisplay() {
+  // Comment out the old display update code
+  /*
   const float altitude = getAltitude(deviceData);
   bool isArmed = (currentState != DISARMED);
   bool isCruising = (currentState == ARMED_CRUISING);
@@ -312,6 +319,10 @@ void refreshDisplay() {
     isArmed,
     isCruising,
     armedAtMillis);
+  */
+
+  // For now, just update LVGL (main display implementation will come later)
+  updateLvgl();
 }
 
 #define TELEMETRY_TIMEOUT_MS 1000  // Add near other defines
@@ -352,7 +363,6 @@ void spiCommTask(void *pvParameters) {
         }
 
         // Update display - CS pin management is now handled inside refreshDisplay
-
         refreshDisplay();
 
       #endif
@@ -456,8 +466,10 @@ void setup() {
   // First initialize the shared SPI bus
   setupSPI(board_config);
 
-  // Then setup the display
-  setupDisplay(deviceData, board_config, hardwareSPI);
+  // Then setup the display - use LVGL display instead of the old one
+  // setupDisplay(deviceData, board_config, hardwareSPI);
+  // Pass hardcoded pin values for DC and RST
+  setupLvglDisplay(deviceData, board_config.tft_dc, board_config.tft_rst, hardwareSPI);
 
   #ifndef SCREEN_DEBUG
     // Pass the hardware SPI instance to the BMS_CAN initialization
@@ -507,6 +519,9 @@ void setup() {
 
   setLEDColor(LED_GREEN);
 
+  // Show LVGL splash screen
+  displayLvglSplash(deviceData, 2000);
+
   // Send initial device data after setup
   send_device_data();
 }
@@ -522,6 +537,9 @@ void setupTasks() {
   // Create BLE update task with high priority but on core 1
   xTaskCreatePinnedToCore(bleStateUpdateTask, "BLEStateUpdate", 4096, NULL, 4, &bleStateUpdateTaskHandle, 1);
   //xTaskCreate(timeDebugTask, "Time Debug", 2048, NULL, 1, &timeDebugTaskHandle);
+
+  // Add LVGL task - pin to core 1 to avoid interference
+  xTaskCreatePinnedToCore(lvglTask, "LVGL", 8192, NULL, 2, &lvglTaskHandle, 1);
 
   // Create melody queue
   melodyQueue = xQueueCreate(5, sizeof(MelodyRequest));
