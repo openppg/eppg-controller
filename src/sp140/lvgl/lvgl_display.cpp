@@ -443,14 +443,20 @@ void setupMainScreen(bool darkMode) {
 
   // Create spinning animation at the top center
   spinner = lv_spinner_create(main_screen, 1000, 60);  // 1000ms period, 60 arcade width
-  lv_obj_set_size(spinner, 16, 16);  // Small 16x16 spinner
-  lv_obj_align(spinner, LV_ALIGN_TOP_MID, 0, 4);  // Position at top center
-  lv_obj_set_style_arc_width(spinner, 2, LV_PART_INDICATOR);  // Thin arc
-  lv_obj_set_style_arc_width(spinner, 2, LV_PART_MAIN);  // Thin background arc
+  lv_obj_set_size(spinner, 80, 80);  // Even larger spinner for visibility
+  lv_obj_align(spinner, LV_ALIGN_CENTER, 0, 0);  // Position at center of screen
 
-  // Set spinner colors
-  lv_obj_set_style_arc_color(spinner, darkMode ? LVGL_GRAY : lv_color_make(200, 200, 200), LV_PART_MAIN);
-  lv_obj_set_style_arc_color(spinner, LVGL_BLUE, LV_PART_INDICATOR);
+  // Make the spinner more visible with strong colors and good contrast
+  lv_obj_set_style_arc_width(spinner, 8, LV_PART_INDICATOR);  // Thicker arc for indicator
+  lv_obj_set_style_arc_width(spinner, 8, LV_PART_MAIN);  // Thicker background arc
+
+  // Apply proper shading and gradients for a more attractive appearance
+  lv_obj_set_style_arc_rounded(spinner, true, LV_PART_INDICATOR);
+  lv_obj_set_style_arc_rounded(spinner, true, LV_PART_MAIN);
+
+  // Set spinner colors with better contrast
+  lv_obj_set_style_arc_color(spinner, darkMode ? lv_color_make(100, 100, 100) : lv_color_make(230, 230, 230), LV_PART_MAIN);
+  lv_obj_set_style_arc_color(spinner, lv_palette_main(LV_PALETTE_BLUE), LV_PART_INDICATOR);
 
   // Load the screen
   lv_scr_load(main_screen);
@@ -483,8 +489,8 @@ void updateLvglMainScreen(
     last_theme = deviceData.theme;
   } else if (last_theme == deviceData.theme) {
     // Just update spinner colors if theme didn't change but screen exists
-    lv_obj_set_style_arc_color(spinner, darkMode ? LVGL_GRAY : lv_color_make(200, 200, 200), LV_PART_MAIN);
-    lv_obj_set_style_arc_color(spinner, LVGL_BLUE, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_color(spinner, darkMode ? lv_color_make(100, 100, 100) : lv_color_make(230, 230, 230), LV_PART_MAIN);
+    lv_obj_set_style_arc_color(spinner, lv_palette_main(LV_PALETTE_BLUE), LV_PART_INDICATOR);
   }
 
   // Update battery bar and percentage
