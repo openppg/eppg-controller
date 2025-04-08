@@ -179,6 +179,9 @@ void displayLvglSplash(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
   lv_obj_t* splash_screen = lv_obj_create(NULL);
   lv_scr_load(splash_screen);
 
+  // Disable scrollbars
+  lv_obj_clear_flag(splash_screen, LV_OBJ_FLAG_SCROLLABLE);
+
   // Set background color based on theme
   lv_obj_set_style_bg_color(splash_screen,
                            deviceData.theme == 1 ? lv_color_black() : lv_color_white(),
@@ -250,6 +253,9 @@ void setupMainScreen(bool darkMode) {
   // Create main screen
   main_screen = lv_obj_create(NULL);
 
+  // Disable scrollbars
+  lv_obj_clear_flag(main_screen, LV_OBJ_FLAG_SCROLLABLE);
+
   // Set theme based on dark/light mode
   lv_obj_set_style_bg_color(main_screen,
                           darkMode ? LVGL_BLACK : LVGL_WHITE,
@@ -318,7 +324,9 @@ void setupMainScreen(bool darkMode) {
 
   // Bottom section - altitude and temperatures
   altitude_label = lv_label_create(main_screen);
-  lv_obj_align(altitude_label, LV_ALIGN_BOTTOM_LEFT, 2, -15);
+  lv_obj_align(altitude_label, LV_ALIGN_BOTTOM_LEFT, 5, -25);
+  // Use a larger font for altitude
+  lv_obj_set_style_text_font(altitude_label, &lv_font_montserrat_24, 0);
   lv_obj_set_style_text_color(altitude_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
 
