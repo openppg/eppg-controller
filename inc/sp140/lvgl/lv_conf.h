@@ -224,7 +224,7 @@
 
 /*Documentation of the widgets: https://docs.lvgl.io/latest/en/html/widgets/index.html*/
 
-#define LV_USE_ANIMIMG    1
+#define LV_USE_ANIMIMG    0
 
 #define LV_USE_ARC        1
 
@@ -232,13 +232,13 @@
 
 #define LV_USE_BTN        1
 
-#define LV_USE_BTNMATRIX  1
+#define LV_USE_BTNMATRIX  1  /* Required by other components */
 
-#define LV_USE_CANVAS     1
+#define LV_USE_CANVAS     0  /* Don't need canvas */
 
-#define LV_USE_CHECKBOX   1
+#define LV_USE_CHECKBOX   0  /* Don't need checkbox */
 
-#define LV_USE_DROPDOWN   1   /*Requires: lv_label*/
+#define LV_USE_DROPDOWN   1  /* Don't need dropdown */
 
 #define LV_USE_IMG        1   /*Requires: lv_label*/
 
@@ -250,12 +250,9 @@
 
 #define LV_USE_LINE       1
 
-#define LV_USE_ROLLER     1   /*Requires: lv_label*/
-#if LV_USE_ROLLER
-    #define LV_ROLLER_INF_PAGES 7 /*Number of extra "pages" when the roller is infinite*/
-#endif
+#define LV_USE_ROLLER     1  /* Don't need roller */
 
-#define LV_USE_SLIDER     1   /*Requires: lv_bar*/
+#define LV_USE_SLIDER     1  /* Don't need slider */
 
 #define LV_USE_SPAN       1
 #if LV_USE_SPAN
@@ -263,12 +260,15 @@
     #define LV_SPAN_SNIPPET_STACK_SIZE 64
 #endif
 
-#define LV_USE_SWITCH     1
+#define LV_USE_SWITCH     0  /* Don't need switch */
 
-#define LV_USE_TEXTAREA   1   /*Requires: lv_label*/
-#if LV_USE_TEXTAREA != 0
-    #define LV_TEXTAREA_DEF_PWD_SHOW_TIME 1500    /*ms*/
-#endif
+#define LV_USE_TEXTAREA   1  /* Required by other components */
+
+/* Add spinner widget */
+#define LV_USE_SPINNER    1
+
+/* Add keyboard widget (set to 0 since we don't use it but dependency might exist) */
+#define LV_USE_KEYBOARD   0
 
 /*==================
  * THEMES

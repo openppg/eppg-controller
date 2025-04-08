@@ -47,6 +47,7 @@ static lv_obj_t* batt_temp_label = NULL;
 static lv_obj_t* esc_temp_label = NULL;
 static lv_obj_t* motor_temp_label = NULL;
 static lv_obj_t* arm_indicator = NULL;
+static lv_obj_t* spinner = NULL;       // For the spinning animation
 
 // Create a static array of temperature labels for easy access
 static lv_obj_t* temp_labels[3];
@@ -440,6 +441,17 @@ void setupMainScreen(bool darkMode) {
   lv_obj_move_background(arm_indicator);
   lv_obj_add_flag(arm_indicator, LV_OBJ_FLAG_HIDDEN);
 
+  // Create spinning animation at the top center
+  spinner = lv_spinner_create(main_screen, 1000, 60);  // 1000ms period, 60 arcade width
+  lv_obj_set_size(spinner, 16, 16);  // Small 16x16 spinner
+  lv_obj_align(spinner, LV_ALIGN_TOP_MID, 0, 4);  // Position at top center
+  lv_obj_set_style_arc_width(spinner, 2, LV_PART_INDICATOR);  // Thin arc
+  lv_obj_set_style_arc_width(spinner, 2, LV_PART_MAIN);  // Thin background arc
+
+  // Set spinner colors
+  lv_obj_set_style_arc_color(spinner, darkMode ? LVGL_GRAY : lv_color_make(200, 200, 200), LV_PART_MAIN);
+  lv_obj_set_style_arc_color(spinner, LVGL_BLUE, LV_PART_INDICATOR);
+
   // Load the screen
   lv_scr_load(main_screen);
 }
@@ -469,6 +481,10 @@ void updateLvglMainScreen(
   if (main_screen == NULL || last_theme != deviceData.theme) {
     setupMainScreen(darkMode);
     last_theme = deviceData.theme;
+  } else if (last_theme == deviceData.theme) {
+    // Just update spinner colors if theme didn't change but screen exists
+    lv_obj_set_style_arc_color(spinner, darkMode ? LVGL_GRAY : lv_color_make(200, 200, 200), LV_PART_MAIN);
+    lv_obj_set_style_arc_color(spinner, LVGL_BLUE, LV_PART_INDICATOR);
   }
 
   // Update battery bar and percentage
