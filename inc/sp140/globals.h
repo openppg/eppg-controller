@@ -4,6 +4,7 @@
 
 #include "sp140/shared-config.h"
 #include "sp140/structs.h"
+#include "sp140/sp140-defs.h"
 
 extern unsigned long cruisedAtMillis;
 extern int prevPotLvl;

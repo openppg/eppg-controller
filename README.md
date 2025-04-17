@@ -38,7 +38,7 @@ Suitable for Mac, Windows, and Linux
 
 #### Install the driver
 
-Batch 3+ OpenPPG controllers and early SP140 controllers are powered by Atmel’s SAMD21G18A MCU, featuring a 32-bit ARM Cortex® M0+ core. On some operating systems you may need extra drivers to communicate with it.
+Batch 3+ OpenPPG controllers and early SP140 controllers are powered by Atmel's SAMD21G18A MCU, featuring a 32-bit ARM Cortex® M0+ core. On some operating systems you may need extra drivers to communicate with it.
 Newer SP140 controllers feature the RP2040 MCU which is a dual-core variant of the ARM Cortex® M0+.
 
 #### Download and Prepare OpenPPG Code
@@ -70,6 +70,37 @@ $ python3 utils/uf2conv.py eppg-controller/.pio/build/OpenPPG\ CM0/firmware.bin 
 
 The open source web based config tool for updating certain settings over USB (without needing to flash firmware) can be found at https://config.openppg.com.
 
+## State Management Architecture
+
+The controller uses a queue-based architecture for handling state changes (like DISARMED -> ARMED) and providing feedback to the user through melodies and vibrations:
+
+### Components:
+
+1. **Event Handler (handleButtonEvent)**: Detects user actions and sends state change requests to the state manager task.
+
+2. **State Manager Task**: Processes state change requests, validates them, updates the system state while holding the stateMutex for the shortest possible time, and queues notification requests.
+
+3. **Notification Task**: Handles feedback requests from the State Manager Task, playing sounds and vibration patterns without blocking other critical tasks.
+
+### Queues:
+
+- **stateChangeRequestQueue**: Receives requests from button events to change the system state.
+- **notificationQueue**: Used by the State Manager Task to send feedback commands to the Notification Task.
+
+### Workflow Example: DISARMED -> ARMED
+
+1. User performs a long press on the button.
+2. The AceButton library detects this and calls `handleButtonEvent` with `kEventLongPressed`.
+3. `handleButtonEvent` sends an `ARM_DISARM_REQUEST` to the `stateChangeRequestQueue`.
+4. The State Manager Task receives the request and:
+   - Validates the preconditions (throttle not engaged, cooldown period passed)
+   - Acquires the stateMutex
+   - Updates the state to ARMED and performs minimal setup
+   - Releases the stateMutex
+   - Sends notification requests for melody and vibration feedback
+5. The Notification Task receives the requests and plays the appropriate melody and vibration pattern.
+
+This architecture ensures that critical operations aren't delayed by user feedback actions, making the system more responsive and robust.
 
 ## Help improve these docs
 

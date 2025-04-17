@@ -42,6 +42,8 @@
 #include "../../inc/sp140/display.h"
 #include "../../inc/sp140/altimeter.h"
 #include "../../inc/sp140/vibration.h"
+#include "../../inc/sp140/task_manager.h"
+#include "../../inc/sp140/sp140-defs.h"
 
 using namespace ace_button;
 
@@ -70,13 +72,6 @@ CircularBuffer<int, 8> potBuffer;
 Adafruit_NeoPixel pixels(1, LED_BUILTIN, NEO_GRB + NEO_KHZ800);
 uint32_t led_color = LED_RED; // current LED color
 
-// New enum for device state
-enum DeviceState {
-  DISARMED,
-  ARMED,
-  ARMED_CRUISING
-};
-
 // Global variable for device state
 volatile DeviceState currentState = DISARMED;
 
@@ -84,40 +79,31 @@ SemaphoreHandle_t eepromSemaphore;
 SemaphoreHandle_t tftSemaphore;
 SemaphoreHandle_t stateMutex;
 
+// Modify changeDeviceState to use our task-based architecture
 void changeDeviceState(DeviceState newState) {
-  if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
-    DeviceState oldState = currentState;
-    currentState = newState;
-    switch (newState) {
-      case DISARMED:
-        disarmSystem();
-        break;
-      case ARMED:
-        if (oldState == DISARMED) {
-          // Perform full arm sequence when transitioning from DISARMED to ARMED
-          armSystem();
-        } else if (oldState == ARMED_CRUISING) {
-          // When transitioning from ARMED_CRUISING to ARMED, only remove cruise
-          // This avoids re-arming the system unnecessarily
-           afterCruiseEnd();
-        }
-        break;
-      case ARMED_CRUISING:
-        if (oldState == ARMED) {
-          afterCruiseStart();
-        } else {
-          // Should never happen
-          // Do nothing if not already in ARMED state
-          currentState = oldState;  // Revert to the previous state
-        }
-        break;
-    }
-    xSemaphoreGive(stateMutex);
+  // Instead of directly changing the state and performing actions,
+  // determine the appropriate request type based on the current and new states
+  if (newState == DISARMED && currentState != DISARMED) {
+    // Requesting to disarm
+    StateChangeRequest request = {.type = ARM_DISARM_REQUEST};
+    sendStateChangeRequest(request);
+  } else if (newState == ARMED && currentState == DISARMED) {
+    // Requesting to arm
+    StateChangeRequest request = {.type = ARM_DISARM_REQUEST};
+    sendStateChangeRequest(request);
+  } else if (newState == ARMED_CRUISING && currentState == ARMED) {
+    // Requesting to start cruise
+    StateChangeRequest request = {.type = CRUISE_REQUEST};
+    sendStateChangeRequest(request);
+  } else if (newState == ARMED && currentState == ARMED_CRUISING) {
+    // Requesting to end cruise
+    StateChangeRequest request = {.type = CRUISE_REQUEST};
+    sendStateChangeRequest(request);
   }
+  // Other state transitions are not supported or valid
 }
 
 uint32_t armedAtMillis = 0;
-uint32_t cruisedAtMillisMilis = 0;
 unsigned long armedSecs = 0;
 
 TaskHandle_t blinkLEDTaskHandle = NULL;
@@ -330,6 +316,9 @@ void setupTasks() {
   eepromSemaphore = xSemaphoreCreateBinary();
   xSemaphoreGive(eepromSemaphore);
   stateMutex = xSemaphoreCreateMutex();
+
+  // Initialize the task manager
+  initTaskManager();
 }
 
 std::map<eTaskState, const char *> eTaskStateName { {eReady, "Ready"}, { eRunning, "Running" }, {eBlocked, "Blocked"}, {eSuspended, "Suspended"}, {eDeleted, "Deleted"} };
@@ -424,13 +413,6 @@ void resumeLEDTask() {
   vTaskResume(blinkLEDTaskHandle);  // blink LED while disarmed
 }
 
-void runDisarmAlert() {
-  u_int16_t disarm_melody[] = { 2093, 1976, 880 };
-  const unsigned int disarm_vibes[] = { 78, 49 };
-  runVibePattern(disarm_vibes, 2);
-  playMelody(disarm_melody, 3);
-}
-
 void updateArmedTime() {
   uint16_t newArmedTime = round(armedSecs / 60);
   if (newArmedTime <= UINT16_MAX - deviceData.armed_time) {
@@ -445,7 +427,6 @@ void disarmSystem() {
   disarmESC();
   resetSmoothing();
   resumeLEDTask();
-  runDisarmAlert();
   updateArmedTime();
   writeDeviceData();
 
@@ -453,43 +434,8 @@ void disarmSystem() {
   lastDisarmTime = millis();
 }
 
-void toggleArm() {
-  if (currentState == DISARMED) {
-    // Check if enough time has passed since last disarm
-    if (millis() - lastDisarmTime >= DISARM_COOLDOWN) {
-      if (!throttleEngaged()) {
-        changeDeviceState(ARMED);
-      } else {
-        handleArmFail();
-      }
-    }
-    // If we're still in the cooldown period, do nothing
-  } else {
-    changeDeviceState(DISARMED);
-  }
-}
-
-void toggleCruise() {
-  switch (currentState) {
-    case ARMED:
-      if (throttleEngaged()) {
-        changeDeviceState(ARMED_CRUISING);
-      } else {
-        // Call modeSwitch when armed but throttle not engaged
-        modeSwitch(false);
-      }
-      break;
-    case ARMED_CRUISING:
-      changeDeviceState(ARMED);  // This will now call removeCruise
-      break;
-    case DISARMED:
-      // show stats screen
-      vTaskSuspend(updateDisplayTaskHandle);
-      displayMeta(deviceData);
-      vTaskResume(updateDisplayTaskHandle);
-      break;
-  }
-}
+// Remove toggleArm and toggleCruise functions since they've been replaced by the task-based approach
+// Function disarmSystem, armSystem, and other helper functions can remain as they are used by the tasks
 
 // Variable to track if a button was clicked
 bool wasClicked = false;
@@ -516,11 +462,15 @@ void handleButtonEvent(AceButton* btn, uint8_t eventType, uint8_t /* st */) {
     break;
   case AceButton::kEventLongPressed:
     if (!wasClicked && (millis() - releaseTime <= longClickThreshold)) {
-      toggleArm(); //
-      //Serial.println("Long Press after Click and Release");
+      // Send ARM_DISARM_REQUEST to the state manager task instead of calling toggleArm directly
+      StateChangeRequest request = {.type = ARM_DISARM_REQUEST};
+      sendStateChangeRequest(request);
+      //Serial.println("Long Press after Click and Release - ARM/DISARM Request Sent");
     } else {
-      toggleCruise();
-      //Serial.println("Long Press");
+      // Send CRUISE_REQUEST to the state manager task instead of calling toggleCruise directly
+      StateChangeRequest request = {.type = CRUISE_REQUEST};
+      sendStateChangeRequest(request);
+      //Serial.println("Long Press - CRUISE Request Sent");
     }
     break;
   }
@@ -595,19 +545,13 @@ int averagePotBuffer() {
 
 // get the PPG ready to fly
 bool armSystem() {
-  uint16_t arm_melody[] = { 1760, 1976, 2093 };
-  const unsigned int arm_vibes[] = { 1, 85, 1, 85, 1, 85, 1 };
-
   setESCThrottle(ESC_DISARMED_PWM);  // initialize the signal to low
 
-  //ledBlinkThread.enabled = false;
   armedAtMillis = millis();
   setGroundAltitude(deviceData);
 
   vTaskSuspend(blinkLEDTaskHandle);
   setLEDs(HIGH); // solid LED while armed
-  runVibePattern(arm_vibes, 7);
-  playMelody(arm_melody, 3);
 
   return true;
 }
@@ -624,21 +568,10 @@ bool throttleEngaged() {
 void afterCruiseStart() {
   cruisedPotVal = pot->getValue();
   cruisedAtMillis = millis();
-  playCruiseSound();
-  pulseVibeMotor();
 }
 
 void afterCruiseEnd() {
   cruisedPotVal = 0;
-  playCruiseSound();
-  pulseVibeMotor();
-}
-
-void playCruiseSound() {
-  if (ENABLE_BUZ) {
-    uint16_t notify_melody[] = { 900, 900 };
-    playMelody(notify_melody, 2);
-  }
 }
 
 unsigned long prevPwrMillis = 0;
