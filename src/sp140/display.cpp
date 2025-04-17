@@ -99,7 +99,7 @@ void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
     display->setCursor(x, y);
     display->print(text[i]);
     x += display->getCursorX() - x;  // Move cursor to the right
-    delay(100);  // Adjust delay for animation speed
+    vTaskDelay(pdMS_TO_TICKS(100));
   }
 
   display->setFont(&Open_Sans_Reg_16);
@@ -115,7 +115,7 @@ void displayMeta(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
   const int hours = deviceData.armed_time / 60;
   const int minutes = deviceData.armed_time % 60;
   display->printf("%02d:%02d", hours, minutes);
-  delay(duration);
+  vTaskDelay(pdMS_TO_TICKS(duration));
 }
 
 // inital screen setup and config with devicedata and boardconfig passed in

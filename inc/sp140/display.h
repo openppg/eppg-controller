@@ -2,6 +2,8 @@
 #define INC_SP140_DISPLAY_H_
 
 #include <Arduino.h>
+#include <FreeRTOS.h>
+#include <task.h>
 
 #include "sp140/structs.h"
 
