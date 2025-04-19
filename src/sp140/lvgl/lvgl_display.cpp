@@ -52,6 +52,7 @@ static lv_obj_t* spinner_overlay = NULL; // Overlay for the spinner
 
 // Create a static array of temperature labels for easy access
 static lv_obj_t* temp_labels[3];
+static lv_obj_t* temp_letter_labels[3];  // For B, E, M letters
 
 // Colors for LVGL - matching ST7735 colors as much as possible
 #define LVGL_BLACK lv_color_black()
@@ -328,14 +329,14 @@ void setupMainScreen(bool darkMode) {
 
   // Armed time label - adjust position now that there's no bluetooth icon
   armed_time_label = lv_label_create(main_screen);
-  lv_obj_align(armed_time_label, LV_ALIGN_RIGHT_MID, -15, 5);
+  lv_obj_align(armed_time_label, LV_ALIGN_RIGHT_MID, -15, 2);
   lv_obj_set_style_text_font(armed_time_label, &lv_font_montserrat_14, 0);
   lv_obj_set_style_text_color(armed_time_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
 
   // Bottom section - altitude and temperatures
   altitude_label = lv_label_create(main_screen);
-  lv_obj_align(altitude_label, LV_ALIGN_BOTTOM_LEFT, 5, -25);
+  lv_obj_align(altitude_label, LV_ALIGN_BOTTOM_LEFT, 5, -5);
   // Use a larger font for altitude
   lv_obj_set_style_text_font(altitude_label, &lv_font_montserrat_24, 0);
   lv_obj_set_style_text_color(altitude_label,
@@ -352,31 +353,70 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_style_pad_right(batt_temp_label, 3, 0);
   lv_obj_set_style_pad_top(batt_temp_label, 2, 0);
   lv_obj_set_style_pad_bottom(batt_temp_label, 2, 0);
+  lv_obj_set_style_text_align(batt_temp_label, LV_TEXT_ALIGN_RIGHT, 0); // Right align temperature values
   temp_labels[0] = batt_temp_label;
 
+  // Create letter label for B
+  lv_obj_t* batt_letter_label = lv_label_create(main_screen);
+  lv_obj_align(batt_letter_label, LV_ALIGN_BOTTOM_LEFT, 122, -35);  // Just right of vertical line
+  lv_obj_set_style_text_font(batt_letter_label, &lv_font_montserrat_12, 0);
+  lv_obj_set_style_text_color(batt_letter_label, darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+  lv_obj_set_style_pad_left(batt_letter_label, 3, 0); // Add padding for when background is visible
+  lv_obj_set_style_pad_right(batt_letter_label, 3, 0);
+  lv_obj_set_style_pad_top(batt_letter_label, 2, 0);
+  lv_obj_set_style_pad_bottom(batt_letter_label, 2, 0);
+  lv_label_set_text(batt_letter_label, "B");
+  temp_letter_labels[0] = batt_letter_label;
+
   esc_temp_label = lv_label_create(main_screen);
-  lv_obj_align(esc_temp_label, LV_ALIGN_BOTTOM_RIGHT, -5, -18);  // Between middle and bottom line
+  lv_obj_align(esc_temp_label, LV_ALIGN_BOTTOM_RIGHT, -5, -16);  // Adjusted to match E label
   lv_obj_set_style_text_font(esc_temp_label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(esc_temp_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
-  lv_obj_set_style_bg_opa(esc_temp_label, LV_OPA_0, 0); // Initially transparent
-  lv_obj_set_style_pad_left(esc_temp_label, 3, 0); // Add padding for when background is visible
+  lv_obj_set_style_bg_opa(esc_temp_label, LV_OPA_0, 0);  // Initially transparent
+  lv_obj_set_style_pad_left(esc_temp_label, 3, 0);  // Add padding for when background is visible
   lv_obj_set_style_pad_right(esc_temp_label, 3, 0);
   lv_obj_set_style_pad_top(esc_temp_label, 2, 0);
   lv_obj_set_style_pad_bottom(esc_temp_label, 2, 0);
+  lv_obj_set_style_text_align(esc_temp_label, LV_TEXT_ALIGN_RIGHT, 0);  // Right align temperature values
   temp_labels[1] = esc_temp_label;
 
+  // Create letter label for E
+  lv_obj_t* esc_letter_label = lv_label_create(main_screen);
+  lv_obj_align(esc_letter_label, LV_ALIGN_BOTTOM_LEFT, 122, -16);  // Just right of vertical line
+  lv_obj_set_style_text_font(esc_letter_label, &lv_font_montserrat_12, 0);
+  lv_obj_set_style_text_color(esc_letter_label, darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+  lv_obj_set_style_pad_left(esc_letter_label, 3, 0); // Add padding for when background is visible
+  lv_obj_set_style_pad_right(esc_letter_label, 3, 0);
+  lv_obj_set_style_pad_top(esc_letter_label, 2, 0);
+  lv_obj_set_style_pad_bottom(esc_letter_label, 2, 0);
+  lv_label_set_text(esc_letter_label, "E");
+  temp_letter_labels[1] = esc_letter_label;
+
   motor_temp_label = lv_label_create(main_screen);
-  lv_obj_align(motor_temp_label, LV_ALIGN_BOTTOM_RIGHT, -5, -2);  // Below bottom line
+  lv_obj_align(motor_temp_label, LV_ALIGN_BOTTOM_RIGHT, -5, 0);  // Adjusted to match M label
   lv_obj_set_style_text_font(motor_temp_label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(motor_temp_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   lv_obj_set_style_bg_opa(motor_temp_label, LV_OPA_0, 0); // Initially transparent
-  lv_obj_set_style_pad_left(motor_temp_label, 3, 0); // Add padding for when background is visible
+  lv_obj_set_style_pad_left(motor_temp_label, 3, 0);  // Add padding for when background is visible
   lv_obj_set_style_pad_right(motor_temp_label, 3, 0);
   lv_obj_set_style_pad_top(motor_temp_label, 2, 0);
   lv_obj_set_style_pad_bottom(motor_temp_label, 2, 0);
+  lv_obj_set_style_text_align(motor_temp_label, LV_TEXT_ALIGN_RIGHT, 0);  // Right align temperature values
   temp_labels[2] = motor_temp_label;
+
+  // Create letter label for M
+  lv_obj_t* motor_letter_label = lv_label_create(main_screen);
+  lv_obj_align(motor_letter_label, LV_ALIGN_BOTTOM_LEFT, 122, 0);
+  lv_obj_set_style_text_font(motor_letter_label, &lv_font_montserrat_12, 0);
+  lv_obj_set_style_text_color(motor_letter_label, darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+  lv_obj_set_style_pad_left(motor_letter_label, 3, 0);  // Add padding for when background is visible
+  lv_obj_set_style_pad_right(motor_letter_label, 3, 0);
+  lv_obj_set_style_pad_top(motor_letter_label, 2, 0);
+  lv_obj_set_style_pad_bottom(motor_letter_label, 2, 0);
+  lv_label_set_text(motor_letter_label, "M");
+  temp_letter_labels[2] = motor_letter_label;
 
   // Draw divider lines
   // Create horizontal line between top and middle sections
@@ -447,7 +487,7 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_size(spinner_overlay, SCREEN_WIDTH, SCREEN_HEIGHT);
   lv_obj_set_pos(spinner_overlay, 0, 0);
   lv_obj_set_style_bg_color(spinner_overlay, darkMode ? LVGL_BLACK : LVGL_WHITE, LV_PART_MAIN);
-  lv_obj_set_style_bg_opa(spinner_overlay, LV_OPA_70, LV_PART_MAIN); // 70% opacity
+  lv_obj_set_style_bg_opa(spinner_overlay, LV_OPA_70, LV_PART_MAIN);  // 70% opacity
   lv_obj_set_style_border_width(spinner_overlay, 0, LV_PART_MAIN);
   lv_obj_clear_flag(spinner_overlay, LV_OBJ_FLAG_CLICKABLE);
 
@@ -487,7 +527,7 @@ void showLoadingOverlay() {
 void hideLoadingOverlay() {
   if (spinner_overlay != NULL) {
     lv_obj_add_flag(spinner_overlay, LV_OBJ_FLAG_HIDDEN);
-    updateLvgl(); // Force immediate update
+    updateLvgl();  // Force immediate update
   }
 }
 
@@ -629,31 +669,44 @@ void updateLvglMainScreen(
   };
 
   for (int i = 0; i < 3; i++) {
-    char tempBuffer[10];
+    // Set the temperature value or dash
+    if (temps[i].state == TelemetryState::CONNECTED) {
+      lv_label_set_text_fmt(temp_labels[i], "%d", static_cast<int>(temps[i].temp));
+    } else {
+      lv_label_set_text(temp_labels[i], "-");
+    }
+
+    // Set colors based on temperature
+    lv_color_t bg_color;
+    lv_color_t text_color;
+    lv_opa_t bg_opacity = LV_OPA_0;  // Default transparent
 
     if (temps[i].state == TelemetryState::CONNECTED) {
-      snprintf(tempBuffer, sizeof(tempBuffer), "%s %d", temps[i].label, static_cast<int>(temps[i].temp));
-      lv_label_set_text(temp_labels[i], tempBuffer);
-
       if (temps[i].temp >= TEMP_CRITICAL_THRESHOLD) {
-        lv_obj_set_style_bg_color(temp_labels[i], LVGL_RED, LV_PART_MAIN);
-        lv_obj_set_style_bg_opa(temp_labels[i], LV_OPA_100, 0); // Full opacity
-        lv_obj_set_style_text_color(temp_labels[i], LVGL_WHITE, 0);
+        bg_color = LVGL_RED;
+        text_color = LVGL_WHITE;
+        bg_opacity = LV_OPA_100;
       } else if (temps[i].temp >= TEMP_WARNING_THRESHOLD) {
-        lv_obj_set_style_bg_color(temp_labels[i], LVGL_ORANGE, LV_PART_MAIN);
-        lv_obj_set_style_bg_opa(temp_labels[i], LV_OPA_100, 0); // Full opacity
-        lv_obj_set_style_text_color(temp_labels[i], LVGL_BLACK, 0);
+        bg_color = LVGL_ORANGE;
+        text_color = LVGL_BLACK;
+        bg_opacity = LV_OPA_100;
       } else {
-        lv_obj_set_style_bg_opa(temp_labels[i], LV_OPA_0, 0); // Transparent
-        lv_obj_set_style_text_color(temp_labels[i],
-                                  darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+        text_color = darkMode ? LVGL_WHITE : LVGL_BLACK;
       }
     } else {
-      snprintf(tempBuffer, sizeof(tempBuffer), "%s -", temps[i].label);
-      lv_label_set_text(temp_labels[i], tempBuffer);
-      lv_obj_set_style_bg_opa(temp_labels[i], LV_OPA_0, 0); // Transparent
-      lv_obj_set_style_text_color(temp_labels[i],
-                                darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+      text_color = darkMode ? LVGL_WHITE : LVGL_BLACK;
+    }
+
+    // Apply same styles to both labels
+    lv_obj_set_style_bg_opa(temp_labels[i], bg_opacity, 0);
+    lv_obj_set_style_bg_opa(temp_letter_labels[i], bg_opacity, 0);
+
+    lv_obj_set_style_text_color(temp_labels[i], text_color, 0);
+    lv_obj_set_style_text_color(temp_letter_labels[i], text_color, 0);
+
+    if (bg_opacity > 0) {
+      lv_obj_set_style_bg_color(temp_labels[i], bg_color, LV_PART_MAIN);
+      lv_obj_set_style_bg_color(temp_letter_labels[i], bg_color, LV_PART_MAIN);
     }
   }
 
