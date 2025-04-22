@@ -41,7 +41,6 @@
 // Comment out the old display and use LVGL display
 #include "../../inc/sp140/display.h"  // Still needed for some definitions
 #include "../../inc/sp140/lvgl/lvgl_display.h"
-#include "../../inc/sp140/lvgl/lvgl_task.h"
 
 // Global variable for shared SPI
 SPIClass* hardwareSPI = nullptr;
@@ -569,9 +568,6 @@ void setupTasks() {
   // Create BLE update task with high priority but on core 1
   xTaskCreatePinnedToCore(bleStateUpdateTask, "BLEStateUpdate", 4096, NULL, 4, &bleStateUpdateTaskHandle, 1);
   //xTaskCreate(timeDebugTask, "Time Debug", 2048, NULL, 1, &timeDebugTaskHandle);
-
-  // Add LVGL task - pin to core 1 to avoid interference
-  xTaskCreatePinnedToCore(lvglTask, "LVGL", 8192, NULL, 2, &lvglTaskHandle, 1);
 
   // Create melody queue
   melodyQueue = xQueueCreate(5, sizeof(MelodyRequest));
