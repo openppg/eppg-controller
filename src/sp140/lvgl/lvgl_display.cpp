@@ -519,7 +519,6 @@ void setupMainScreen(bool darkMode) {
 void showLoadingOverlay() {
   if (spinner_overlay != NULL) {
     lv_obj_clear_flag(spinner_overlay, LV_OBJ_FLAG_HIDDEN);
-    updateLvgl(); // Force immediate update
   }
 }
 
@@ -527,7 +526,6 @@ void showLoadingOverlay() {
 void hideLoadingOverlay() {
   if (spinner_overlay != NULL) {
     lv_obj_add_flag(spinner_overlay, LV_OBJ_FLAG_HIDDEN);
-    updateLvgl();  // Force immediate update
   }
 }
 

@@ -382,7 +382,7 @@ void spiCommTask(void *pvParameters) {
         refreshDisplay();
 
       #endif
-      delay(100);  // ~10fps
+      vTaskDelay(pdMS_TO_TICKS(40));  // ~25ps
   }
 }
 
