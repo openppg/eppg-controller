@@ -17,7 +17,7 @@
 #define MOTOR_WARN 90
 #define MOTOR_CRIT 110
 
-bool initESC(int escPin);
+void initESC();
 void setESCThrottle(int throttlePWM);
 void readESCTelemetry();
 bool setupTWAI();

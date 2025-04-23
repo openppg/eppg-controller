@@ -22,7 +22,7 @@ STR_ESC_TELEMETRY_140 escTelemetryData = {
   .state = TelemetryState::NOT_CONNECTED
 };
 
-void initESC(int escPin) {
+void initESC() {
   escTwaiInitialized = setupTWAI();
   if (!escTwaiInitialized) {
     USBSerial.println("ESC TWAI Initialization failed. ESC will not function.");
@@ -121,15 +121,24 @@ void readESCTelemetry() {
 
 // CAN specific setup
 bool setupTWAI() {
-  // Check if already installed
+  // Check if already installed by checking status
   twai_status_info_t status_info;
-  if (twai_get_status_info(&status_info) == ESP_OK) {
-    USBSerial.println("TWAI driver already installed and started.");
-    // Optionally, you could stop and uninstall if re-configuration is needed,
-    // but for now, assume it's okay if already running.
-    return true;
-  }
+  esp_err_t status_result = twai_get_status_info(&status_info);
 
+  if (status_result == ESP_OK) {
+    // Driver is installed. We can check its state if needed.
+    USBSerial.printf("TWAI driver already installed. State: %d\n", status_info.state);
+    // If it's stopped, maybe we need to start it? For now, assume it's okay.
+    // if (status_info.state == TWAI_STATE_STOPPED) { twai_start(); }
+    return true; // Already initialized
+  } else if (status_result != ESP_ERR_INVALID_STATE) {
+    // An error other than "not installed" occurred
+    USBSerial.printf("Error checking TWAI status: %s\n", esp_err_to_name(status_result));
+    return false; // Don't proceed if status check failed unexpectedly
+  }
+  // If status_result was ESP_ERR_INVALID_STATE, proceed with installation
+
+  USBSerial.println("TWAI driver not installed. Proceeding with installation...");
 
   twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(
                                       (gpio_num_t)ESC_TX_PIN,

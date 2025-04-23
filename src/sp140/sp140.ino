@@ -74,7 +74,9 @@ UBaseType_t uxCoreAffinityMask1 = (1 << 1);  // Core 1
 
 HardwareConfig board_config;
 bool bmsCanInitialized = false;
+bool escTwaiInitialized = false;
 volatile bool isBMSConnected = false;
+volatile bool isESCConnected = false;
 
 ResponsiveAnalogRead* pot;
 
@@ -524,7 +526,7 @@ void setup() {
     initBMSCAN(hardwareSPI);
   #endif
 
-  initESC(0);
+  initESC();
   eepromSemaphore = xSemaphoreCreateBinary();
   xSemaphoreGive(eepromSemaphore);
   stateMutex = xSemaphoreCreateMutex();
