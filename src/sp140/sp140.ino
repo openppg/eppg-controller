@@ -75,8 +75,6 @@ UBaseType_t uxCoreAffinityMask1 = (1 << 1);  // Core 1
 HardwareConfig board_config;
 bool bmsCanInitialized = false;
 bool escTwaiInitialized = false;
-volatile bool isBMSConnected = false;
-volatile bool isESCConnected = false;
 
 ResponsiveAnalogRead* pot;
 
@@ -362,8 +360,6 @@ void refreshDisplay() {
   }
 }
 
-#define TELEMETRY_TIMEOUT_MS 1000  // Add near other defines
-
 
 void spiCommTask(void *pvParameters) {
   for (;;) {
@@ -381,22 +377,22 @@ void spiCommTask(void *pvParameters) {
         if (bmsCanInitialized) {
           // Select BMS CS pin to check connection
           updateBMSData();  // This function handles its own CS pins
+
+          // checks to see if BMS data is newer than 1 second old
           currentBmsConnectionState = bms_can->isConnected();
         }
-        // Update global volatile state *after* check
-        isBMSConnected = currentBmsConnectionState;
 
         // 2. Use BMS data if connected, otherwise use ESC data
-        if (isBMSConnected) {
+        if (currentBmsConnectionState) {
           // BMS is initialized AND currently connected
           unifiedBatteryData.volts = bmsTelemetryData.battery_voltage;
           unifiedBatteryData.amps = bmsTelemetryData.battery_current;
           unifiedBatteryData.soc = bmsTelemetryData.soc;
-          bmsTelemetryData.state = TelemetryState::CONNECTED;
+          bmsTelemetryData.bmsState = TelemetryState::CONNECTED;
           xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);
         } else {
           // BMS is either not initialized OR not currently connected
-          bmsTelemetryData.state = TelemetryState::NOT_CONNECTED;
+          bmsTelemetryData.bmsState = TelemetryState::NOT_CONNECTED;
           // Send the not connected state update
           xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);
 
@@ -961,24 +957,22 @@ void handleThrottle() {
   syncESCTelemetry();
 }
 
-// push telemetry data to the queue for BLE updates etc
+// Declare the static variable from esc.cpp as extern here so sync can access it
+// extern unsigned long lastEscTimeUpdateMillis; // REMOVED - Using struct member now
+
 void syncESCTelemetry() {
   unsigned long currentTime = millis();
 
   // Use isBMSConnected to decide if unified data needs update from ESC
-  if (!isBMSConnected) {
+  if (bmsTelemetryData.bmsState != TelemetryState::CONNECTED) {
     unifiedBatteryData.volts = escTelemetryData.volts;
     unifiedBatteryData.amps = escTelemetryData.amps;
     unifiedBatteryData.soc = 0.0; // We don't estimate SOC from voltage anymore
   }
 
-  // Update ESC state based on last update time
-  if (escTelemetryData.lastUpdateMs == 0) {
-    escTelemetryData.state = TelemetryState::NOT_CONNECTED;
-  } else if (currentTime - escTelemetryData.lastUpdateMs > TELEMETRY_TIMEOUT_MS) {
-    escTelemetryData.state = TelemetryState::STALE;
-  } else {
-    escTelemetryData.state = TelemetryState::CONNECTED;
+  // Update ESC state based first on TWAI init, then on time since last update received
+  if (!escTwaiInitialized) {
+    escTelemetryData.escState = TelemetryState::NOT_CONNECTED;
   }
 
   // Send ESC telemetry data to queue for BLE updates

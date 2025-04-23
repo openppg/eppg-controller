@@ -1,9 +1,10 @@
 #include "sp140/bms.h"
 #include "sp140/display.h"
 #include "sp140/structs.h"
+#include "sp140/globals.h"
 
 STR_BMS_TELEMETRY_140 bmsTelemetryData = {
-  .state = TelemetryState::NOT_CONNECTED
+  .bmsState = TelemetryState::NOT_CONNECTED
 };
 
 // Initialize bms_can as nullptr, to be set in initBMSCAN
@@ -13,8 +14,6 @@ BMS_CAN* bms_can = nullptr;
 extern Adafruit_ST7735* display;
 extern int8_t displayCS;
 extern int8_t bmsCS;
-extern bool bmsCanInitialized;     // Extern for CAN transceiver init state
-extern volatile bool isBMSConnected;  // Extern for live BMS connection state
 
 // BMS initialization is now handled in sp140.ino
 

@@ -547,7 +547,8 @@ void updateLvglMainScreen(
   float batteryTemp = bmsTelemetry.highest_temperature;
   float escTemp = escTelemetry.mos_temp;
   float motorTemp = escTelemetry.motor_temp;
-  TelemetryState bmsState = bmsTelemetry.state;
+  TelemetryState bmsState = bmsTelemetry.bmsState;
+  TelemetryState escState = escTelemetry.escState;
 
   // Check if the theme has changed or if the main screen needs to be created
   static int last_theme = -1;
@@ -662,8 +663,8 @@ void updateLvglMainScreen(
     const char* label;
   } temps[] = {
     {batteryTemp, bmsState, "B"},
-    {escTemp, escTelemetry.state, "E"},
-    {motorTemp, escTelemetry.state, "M"}
+    {escTemp, escTelemetry.escState, "E"},
+    {motorTemp, escTelemetry.escState, "M"}
   };
 
   for (int i = 0; i < 3; i++) {

@@ -46,7 +46,7 @@ typedef struct {
   TempState cap_state;        // CAP temperature state
   TempState motor_state;      // Motor temperature state
   bool temp_sensor_error;     // True if any sensor is invalid
-  TelemetryState state;       // Current connection state
+  TelemetryState escState;       // Current connection state
 }STR_ESC_TELEMETRY_140;
 
 // Internal device data
@@ -96,7 +96,7 @@ typedef struct {
   uint8_t battery_failure_level;  // Battery failure status
   float voltage_differential;   // Highest cell minus lowest cell voltage (V)
   unsigned long lastUpdateMs;   // Timestamp of last telemetry update
-  TelemetryState state;        // Current connection state
+  TelemetryState bmsState;        // Current connection state
 } STR_BMS_TELEMETRY_140;
 #pragma pack(pop)
 

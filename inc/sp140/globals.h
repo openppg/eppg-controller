@@ -20,4 +20,8 @@ extern UnifiedBatteryData unifiedBatteryData;  // Instance to hold battery data
 
 extern STR_BMS_TELEMETRY_140 bmsTelemetryData;
 
+// Hardware/Connection Status Flags
+extern bool bmsCanInitialized;
+extern bool escTwaiInitialized;
+
 #endif  // INC_SP140_GLOBALS_H_

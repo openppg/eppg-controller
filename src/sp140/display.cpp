@@ -141,7 +141,7 @@ void updateDisplay(
   // Draw all backgrounds first
   // Top section backgrounds
   // Battery background if connected and has percentage
-  if (bmsTelemetry.state == TelemetryState::CONNECTED && batteryPercent > 0) {
+  if (bmsTelemetry.bmsState == TelemetryState::CONNECTED && batteryPercent > 0) {
     unsigned int batteryColor = RED;
     if (batteryPercent >= BATTERY_MEDIUM_THRESHOLD) batteryColor = GREEN;
     else if (batteryPercent >= BATTERY_LOW_THRESHOLD) batteryColor = YELLOW;
@@ -161,7 +161,7 @@ void updateDisplay(
   const int tempBoxX = 120;
 
   // Draw temperature backgrounds only if devices are connected
-  if (bmsTelemetry.state == TelemetryState::CONNECTED) {
+  if (bmsTelemetry.bmsState == TelemetryState::CONNECTED) {
     if (batteryTemp >= TEMP_CRITICAL_THRESHOLD) {
       canvas.fillRect(tempBoxX, tempStartY, tempBoxWidth, tempBoxHeight, RED);
     } else if (batteryTemp >= TEMP_WARNING_THRESHOLD) {
@@ -169,7 +169,7 @@ void updateDisplay(
     }
   }
 
-  if (escTelemetry.state == TelemetryState::CONNECTED) {
+  if (escTelemetry.escState == TelemetryState::CONNECTED) {
     if (escTemp >= TEMP_CRITICAL_THRESHOLD) {
       canvas.fillRect(tempBoxX, tempStartY + tempBoxHeight, tempBoxWidth, tempBoxHeight, RED);
     } else if (escTemp >= TEMP_WARNING_THRESHOLD) {
@@ -199,7 +199,7 @@ void updateDisplay(
   // Now draw all text and content
   // Top section text
   // Left voltage - only if BMS connected
-  if (bmsTelemetry.state == TelemetryState::CONNECTED) {
+  if (bmsTelemetry.bmsState == TelemetryState::CONNECTED) {
     if (lowestCellV <= CELL_VOLTAGE_CRITICAL) {
       canvas.setTextColor(RED);
     } else if (lowestCellV <= CELL_VOLTAGE_WARNING) {
@@ -213,7 +213,7 @@ void updateDisplay(
   }
 
   // Battery percentage and status
-  if (bmsTelemetry.state == TelemetryState::CONNECTED) {
+  if (bmsTelemetry.bmsState == TelemetryState::CONNECTED) {
     canvas.setTextColor(BLACK);
     canvas.setFont(Fonts::SemiBold22);
     int xPos = (batteryPercent == 100) ? 50 : 60;
@@ -226,7 +226,7 @@ void updateDisplay(
   }
 
   // Right voltage - only if BMS connected
-  if (bmsTelemetry.state == TelemetryState::CONNECTED) {
+  if (bmsTelemetry.bmsState == TelemetryState::CONNECTED) {
     canvas.setTextColor(currentTheme->default_text);
     canvas.setFont(Fonts::Regular12);
     canvas.setCursor(128, 12 + FONT_HEIGHT_OFFSET);
@@ -235,7 +235,7 @@ void updateDisplay(
 
   // Middle section text
   // Power display - only if BMS connected
-  if (bmsTelemetry.state == TelemetryState::CONNECTED) {
+  if (bmsTelemetry.bmsState == TelemetryState::CONNECTED) {
     canvas.setFont(Fonts::SemiBold24);
     canvas.setTextColor(currentTheme->default_text);
     canvas.setCursor(2, 60);
@@ -321,9 +321,9 @@ void updateDisplay(
     }
   };
 
-  drawTempText("B", batteryTemp, tempStartY, bmsTelemetry.state);
-  drawTempText("E", escTemp, tempStartY + tempBoxHeight, escTelemetry.state);
-  drawTempText("M", motorTemp, tempStartY + (tempBoxHeight * 2), escTelemetry.state);
+  drawTempText("B", batteryTemp, tempStartY, bmsTelemetry.bmsState);
+  drawTempText("E", escTemp, tempStartY + tempBoxHeight, escTelemetry.escState);
+  drawTempText("M", motorTemp, tempStartY + (tempBoxHeight * 2), escTelemetry.escState);
 
   // Draw the canvas to the display
   display->drawRGBBitmap(0, 0, canvas.getBuffer(), canvas.width(), canvas.height());

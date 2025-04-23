@@ -9,24 +9,23 @@
 #define ESC_TX_PIN 2  // CAN TX pin to transceiver
 #define LOCAL_NODE_ID 0x01  // The ID on the network of this device
 
+#define TELEMETRY_TIMEOUT_MS 1000  // Threshold to determine stale ESC telemetry in ms
+
 static CanardAdapter adapter;
 static uint8_t memory_pool[1024] __attribute__((aligned(8)));
 static SineEsc esc(adapter);
+static uint32_t previousEscTime10ms = 0; // Store the last time_10ms value
 
-// Extern global variables from sp140.ino
-extern bool escTwaiInitialized;
-extern volatile bool isESCConnected;
 extern CircularBuffer<float, 50> voltageBuffer;
 
 STR_ESC_TELEMETRY_140 escTelemetryData = {
-  .state = TelemetryState::NOT_CONNECTED
+  .escState = TelemetryState::NOT_CONNECTED
 };
 
 void initESC() {
   escTwaiInitialized = setupTWAI();
   if (!escTwaiInitialized) {
     USBSerial.println("ESC TWAI Initialization failed. ESC will not function.");
-    isESCConnected = false;
     return; // Can't proceed without TWAI driver
   }
 
@@ -37,7 +36,6 @@ void initESC() {
   // Find ESC
   int attempts = 0;
   const int maxAttempts = 5;
-  bool escFound = false;
   while (!esc.getModel().hasGetHardwareInfoResponse && attempts < maxAttempts) {
     esc.getHardwareInfo();
     adapter.processTxRxOnce();
@@ -47,22 +45,28 @@ void initESC() {
     attempts++;
   }
 
-  escFound = esc.getModel().hasGetHardwareInfoResponse;
-  isESCConnected = escFound; // Set connection status based on finding the ESC
+  if (esc.getModel().hasGetHardwareInfoResponse) {
+    escTelemetryData.escState = TelemetryState::CONNECTED;
+    USBSerial.println("ESC Found.");
 
-  if (!escFound) {
-      USBSerial.println("Failed to find ESC after multiple attempts.");
-      return; // Can't set throttle if ESC not found
+    const sine_esc_GetHwInfoResponse *hwInfo = &esc.getModel().getHardwareInfoResponse;
+    USBSerial.print("\thardware_id: ");
+    USBSerial.println(hwInfo->hardware_id, HEX);
+    USBSerial.print("\tbootloader_version: ");
+    USBSerial.println(hwInfo->bootloader_version, HEX);
+    USBSerial.print("\tapp_version: ");
+    USBSerial.println(hwInfo->app_version, HEX);
+  } else {
+    escTelemetryData.escState = TelemetryState::NOT_CONNECTED;
+    USBSerial.println("Failed to find ESC after multiple attempts.");
+    return;
   }
 
-  USBSerial.println("ESC Found.");
   // Set idle throttle only if ESC is found
   const uint16_t IdleThrottle_us = 10000;  // 1000us (0.1us resolution)
   esc.setThrottleSettings2(IdleThrottle_us);
   delay(250);  // Wait for ESC to process the command
   adapter.processTxRxOnce();
-
-  // No return needed
 }
 
 void setESCThrottle(int throttlePWM) {
@@ -76,17 +80,42 @@ void setESCThrottle(int throttlePWM) {
   esc.setThrottleSettings2(scaledThrottle);
 }
 
-void readESCTelemetry() {
-  // USBSerial.println("readESCTelemetry");
+void updateESCTelemetryState(unsigned long oldTime, unsigned long newTime) {
+  if (newTime == 0) { // Never received data since boot or reset
+    escTelemetryData.escState = TelemetryState::NOT_CONNECTED;
+  } else if (newTime - oldTime > TELEMETRY_TIMEOUT_MS) {
+    escTelemetryData.escState = TelemetryState::STALE;
+  } else if (oldTime > 0 && newTime < oldTime) {
+    USBSerial.println("WARN: ESC time_10ms counter reset detected.");
+    escTelemetryData.escState = TelemetryState::CONNECTED;
+  } else {
+    escTelemetryData.escState = TelemetryState::CONNECTED;
+  }
+}
 
-  // TODO: Skip if the esc is not initialized?
+void readESCTelemetry() {
+  // Only proceed if TWAI is initialized
+  if (!escTwaiInitialized) {
+      return;
+  }
 
   const SineEscModel &model = esc.getModel();
 
   if (model.hasSetThrottleSettings2Response) {
     const sine_esc_SetThrottleSettings2Response *res = &model.setThrottleSettings2Response;
-    // dumpThrottleResponse(res);
-    // Voltage
+
+    uint32_t current_time_10ms = res->time_10ms;
+    escTelemetryData.lastUpdateMs = current_time_10ms;
+
+    updateESCTelemetryState(previousEscTime10ms, current_time_10ms);
+
+    // Check for timer reset (value decreased)
+    if (previousEscTime10ms > 0 && current_time_10ms < previousEscTime10ms) { // Avoid check on first run
+      USBSerial.println("WARN: ESC time_10ms counter reset detected.");
+      // Optional: Handle reset consequences here if needed
+    }
+
+    // Update telemetry data
     escTelemetryData.volts = res->voltage / 10.0f;
     voltageBuffer.push(escTelemetryData.volts);
     escTelemetryData.amps = res->bus_current / 10.0f;
@@ -98,7 +127,6 @@ void readESCTelemetry() {
     escTelemetryData.eRPM = res->speed;
     escTelemetryData.inPWM = res->recv_pwm / 10.0f;
     watts = escTelemetryData.amps * escTelemetryData.volts;
-    escTelemetryData.lastUpdateMs = millis();
 
     // Temperature states
     escTelemetryData.mos_state = checkTempState(escTelemetryData.mos_temp, COMP_ESC_MOS);

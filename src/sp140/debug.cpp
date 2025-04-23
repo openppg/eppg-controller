@@ -52,7 +52,6 @@ void generateFakeTelemetry(STR_ESC_TELEMETRY_140& escTelemetry,
     escTelemetry.inPWM = map(escTelemetry.amps * 100, 0, 5000, 1000, 2000);
     escTelemetry.outPWM = escTelemetry.inPWM;
     escTelemetry.statusFlag = 0;
-    escTelemetry.lastUpdateMs = now;
 
     // BMS Telemetry
     bmsTelemetry.soc = map(escTelemetry.volts * 100, 8000, 10000, 0, 100);
