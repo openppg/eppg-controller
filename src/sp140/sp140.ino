@@ -109,6 +109,9 @@ TaskHandle_t deviceStateUpdateTaskHandle = NULL;
 // Add near other task handles
 TaskHandle_t webSerialTaskHandle = NULL;
 
+// Add mutex for LVGL thread safety
+SemaphoreHandle_t lvglMutex;
+
 // Add this function to handle BLE updates safely
 void bleStateUpdateTask(void* parameter) {
   BLEStateUpdate update;
@@ -305,40 +308,29 @@ void trackPowerTask(void *pvParameters) {
 }
 
 void refreshDisplay() {
-  // Comment out the old display update code
-  /*
-  const float altitude = getAltitude(deviceData);
-  bool isArmed = (currentState != DISARMED);
-  bool isCruising = (currentState == ARMED_CRUISING);
-  updateDisplay(deviceData,
-    escTelemetryData,
-    bmsTelemetryData,
-    unifiedBatteryData,
-    altitude,
-    isArmed,
-    isCruising,
-    armedAtMillis);
-  */
+  if (xSemaphoreTake(lvglMutex, portMAX_DELAY) == pdTRUE) {
+    const float altitude = getAltitude(deviceData);
+    bool isArmed = (currentState != DISARMED);
+    bool isCruising = (currentState == ARMED_CRUISING);
 
-  // Now use the LVGL main screen
-  const float altitude = getAltitude(deviceData);
-  bool isArmed = (currentState != DISARMED);
-  bool isCruising = (currentState == ARMED_CRUISING);
+    // Update the LVGL main screen with current data
+    updateLvglMainScreen(
+      deviceData,
+      escTelemetryData,
+      bmsTelemetryData,
+      unifiedBatteryData,
+      altitude,
+      isArmed,
+      isCruising,
+      armedAtMillis
+    );
 
-  // Update the LVGL main screen with current data
-  updateLvglMainScreen(
-    deviceData,
-    escTelemetryData,
-    bmsTelemetryData,
-    unifiedBatteryData,
-    altitude,
-    isArmed,
-    isCruising,
-    armedAtMillis
-  );
-
-  // General LVGL update
-  updateLvgl();  // this must be called only when SPI is not being used by BMS
+    // General LVGL update
+    updateLvgl();  // this must be called only when SPI is not being used by BMS
+    xSemaphoreGive(lvglMutex);
+  } else {
+    USBSerial.println("Failed to acquire LVGL mutex");
+  }
 }
 
 #define TELEMETRY_TIMEOUT_MS 1000  // Add near other defines
@@ -462,6 +454,12 @@ void setup() {
   digitalWrite(42, HIGH);
   pinMode(42, OUTPUT);
 
+  // Initialize LVGL mutex before anything else
+  lvglMutex = xSemaphoreCreateMutex();
+  if (lvglMutex == NULL) {
+    USBSerial.println("Error creating LVGL mutex");
+  }
+
   refreshDeviceData();
   printBootMessage();
   setupBarometer();
@@ -536,21 +534,31 @@ void setup() {
   setLEDColor(LED_GREEN);
 
   // Show LVGL splash screen
-  displayLvglSplash(deviceData, 2000);
+  if (xSemaphoreTake(lvglMutex, portMAX_DELAY) == pdTRUE) {
+    displayLvglSplash(deviceData, 2000);
+    xSemaphoreGive(lvglMutex);
+  } else {
+    USBSerial.println("Failed to acquire LVGL mutex for splash");
+  }
 
   // Update main screen with initial data
   USBSerial.println("Initializing main screen after splash");
   const float altitude = getAltitude(deviceData);
-  updateLvglMainScreen(
-    deviceData,
-    escTelemetryData,
-    bmsTelemetryData,
-    unifiedBatteryData,
-    altitude,
-    false, // not armed
-    false, // not cruising
-    0      // armedAtMillis
-  );
+  if (xSemaphoreTake(lvglMutex, portMAX_DELAY) == pdTRUE) {
+    updateLvglMainScreen(
+      deviceData,
+      escTelemetryData,
+      bmsTelemetryData,
+      unifiedBatteryData,
+      altitude,
+      false, // not armed
+      false, // not cruising
+      0      // armedAtMillis
+    );
+    xSemaphoreGive(lvglMutex);
+  } else {
+    USBSerial.println("Failed to acquire LVGL mutex for main screen init");
+  }
   USBSerial.println("Main screen initialized");
 
   // Send initial device data after setup
@@ -587,8 +595,7 @@ void setupTasks() {
     4096,
     NULL,
     1,
-    &webSerialTaskHandle
-  );
+    &webSerialTaskHandle);
 }
 
 
