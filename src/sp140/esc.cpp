@@ -12,39 +12,57 @@
 static CanardAdapter adapter;
 static uint8_t memory_pool[1024] __attribute__((aligned(8)));
 static SineEsc esc(adapter);
-static bool twaiDriverInstalled = false;
 
+// Extern global variables from sp140.ino
+extern bool escTwaiInitialized;
+extern volatile bool isESCConnected;
 extern CircularBuffer<float, 50> voltageBuffer;
 
 STR_ESC_TELEMETRY_140 escTelemetryData = {
   .state = TelemetryState::NOT_CONNECTED
 };
 
-bool initESC(int escPin) {
-  setupTWAI();
+void initESC(int escPin) {
+  escTwaiInitialized = setupTWAI();
+  if (!escTwaiInitialized) {
+    USBSerial.println("ESC TWAI Initialization failed. ESC will not function.");
+    isESCConnected = false;
+    return; // Can't proceed without TWAI driver
+  }
+
   adapter.begin(memory_pool, sizeof(memory_pool));
   adapter.setLocalNodeId(LOCAL_NODE_ID);
   esc.begin(0x20);  // Default ID for the ESC
 
   // Find ESC
-  // TODO better handling of this
   int attempts = 0;
   const int maxAttempts = 5;
+  bool escFound = false;
   while (!esc.getModel().hasGetHardwareInfoResponse && attempts < maxAttempts) {
     esc.getHardwareInfo();
     adapter.processTxRxOnce();
-    USBSerial.println("Waiting for ESC");
+    USBSerial.print("Waiting for ESC... Attempt ");
+    USBSerial.println(attempts + 1);
     delay(200);
     attempts++;
   }
 
-  // Set idle throttle
+  escFound = esc.getModel().hasGetHardwareInfoResponse;
+  isESCConnected = escFound; // Set connection status based on finding the ESC
+
+  if (!escFound) {
+      USBSerial.println("Failed to find ESC after multiple attempts.");
+      return; // Can't set throttle if ESC not found
+  }
+
+  USBSerial.println("ESC Found.");
+  // Set idle throttle only if ESC is found
   const uint16_t IdleThrottle_us = 10000;  // 1000us (0.1us resolution)
   esc.setThrottleSettings2(IdleThrottle_us);
   delay(250);  // Wait for ESC to process the command
   adapter.processTxRxOnce();
 
-  return true;
+  // No return needed
 }
 
 void setESCThrottle(int throttlePWM) {
@@ -71,59 +89,31 @@ void readESCTelemetry() {
     // Voltage
     escTelemetryData.volts = res->voltage / 10.0f;
     voltageBuffer.push(escTelemetryData.volts);
-
-    // Current
     escTelemetryData.amps = res->bus_current / 10.0f;
-
-    // Temperature (using MOS temperature as an example)
     escTelemetryData.mos_temp = res->mos_temp / 10.0f;
-    // cap_temp
     escTelemetryData.cap_temp = res->cap_temp / 10.0f;
-    // mcu_temp
     escTelemetryData.mcu_temp = res->mcu_temp / 10.0f;
-    // motor_temp
     escTelemetryData.motor_temp = res->motor_temp / 10.0f;
-
-    // Calculate highest temperature
-    escTelemetryData.highest_temp = escTelemetryData.mos_temp;
-    if (escTelemetryData.cap_temp > escTelemetryData.highest_temp) {
-      escTelemetryData.highest_temp = escTelemetryData.cap_temp;
-    }
-    if (escTelemetryData.mcu_temp > escTelemetryData.highest_temp) {
-      escTelemetryData.highest_temp = escTelemetryData.mcu_temp;
-    }
-
-    // eRPM (assuming 'speed' is in eRPM)
+    escTelemetryData.highest_temp = max({escTelemetryData.mos_temp, escTelemetryData.cap_temp, escTelemetryData.mcu_temp, escTelemetryData.motor_temp}); // Simplified max
     escTelemetryData.eRPM = res->speed;
-
-    // Input PWM (assuming 'recv_pwm' is equivalent)
     escTelemetryData.inPWM = res->recv_pwm / 10.0f;
-
-    // Status flags (combining running_error and selfcheck_error)
-    // escTelemetryData.statusFlag = (res->running_error & 0xFF) | ((res->selfcheck_error & 0xFF) << 8);
-
-    // Calculate watts
     watts = escTelemetryData.amps * escTelemetryData.volts;
-
-    // Update timestamp
     escTelemetryData.lastUpdateMs = millis();
-
-    // debug the esc recpwm
-    // USBSerial.print(", ");
-    // USBSerial.println(res->comm_pwm);
 
     // Temperature states
     escTelemetryData.mos_state = checkTempState(escTelemetryData.mos_temp, COMP_ESC_MOS);
     escTelemetryData.mcu_state = checkTempState(escTelemetryData.mcu_temp, COMP_ESC_MCU);
     escTelemetryData.cap_state = checkTempState(escTelemetryData.cap_temp, COMP_ESC_CAP);
     escTelemetryData.motor_state = checkTempState(escTelemetryData.motor_temp, COMP_MOTOR);
-
-    // Check for any invalid sensors
     escTelemetryData.temp_sensor_error =
       (escTelemetryData.mos_state == TEMP_INVALID) ||
       (escTelemetryData.mcu_state == TEMP_INVALID) ||
       (escTelemetryData.cap_state == TEMP_INVALID) ||
       (escTelemetryData.motor_state == TEMP_INVALID);
+
+  } else {
+      // If we are connected but don't have a response, perhaps mark as stale or log?
+      // For now, do nothing, the sync function handles staleness.
   }
 
   adapter.processTxRxOnce();  // Process CAN messages
@@ -131,6 +121,16 @@ void readESCTelemetry() {
 
 // CAN specific setup
 bool setupTWAI() {
+  // Check if already installed
+  twai_status_info_t status_info;
+  if (twai_get_status_info(&status_info) == ESP_OK) {
+    USBSerial.println("TWAI driver already installed and started.");
+    // Optionally, you could stop and uninstall if re-configuration is needed,
+    // but for now, assume it's okay if already running.
+    return true;
+  }
+
+
   twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(
                                       (gpio_num_t)ESC_TX_PIN,
                                       (gpio_num_t)ESC_RX_PIN,
@@ -138,17 +138,21 @@ bool setupTWAI() {
   twai_timing_config_t t_config = TWAI_TIMING_CONFIG_1MBITS();
   twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
-  if (twai_driver_install(&g_config, &t_config, &f_config) == ESP_OK) {
-      USBSerial.println("Driver installed");
+  esp_err_t install_err = twai_driver_install(&g_config, &t_config, &f_config);
+  if (install_err == ESP_OK) {
+      USBSerial.println("TWAI Driver installed");
   } else {
-      USBSerial.println("Failed to install driver");
+      USBSerial.printf("Failed to install TWAI driver: %s\n", esp_err_to_name(install_err));
       return false;
   }
 
-  if (twai_start() == ESP_OK) {
-      USBSerial.println("Driver started");
+  esp_err_t start_err = twai_start();
+  if (start_err == ESP_OK) {
+      USBSerial.println("TWAI Driver started");
   } else {
-      USBSerial.println("Failed to start driver");
+      USBSerial.printf("Failed to start TWAI driver: %s\n", esp_err_to_name(start_err));
+      // Attempt to uninstall if start failed
+      twai_driver_uninstall();
       return false;
   }
 
@@ -160,8 +164,8 @@ bool setupTWAI() {
   if (twai_reconfigure_alerts(alerts_to_enable, NULL) == ESP_OK) {
       USBSerial.println("CAN Alerts reconfigured");
   } else {
-      USBSerial.println("Failed to reconfigure alerts");
-      return false;
+      USBSerial.println("Failed to reconfigure CAN alerts");
+      // Consider this non-fatal for now? Or return false?
   }
 
   return true;
