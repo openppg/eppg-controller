@@ -338,7 +338,7 @@ void refreshDisplay() {
   );
 
   // General LVGL update
-  updateLvgl();
+  updateLvgl();  // this must be called only when SPI is not being used by BMS
 }
 
 #define TELEMETRY_TIMEOUT_MS 1000  // Add near other defines
@@ -375,7 +375,7 @@ void spiCommTask(void *pvParameters) {
           bmsTelemetryData.state = TelemetryState::NOT_CONNECTED;
           unifiedBatteryData.volts = escTelemetryData.volts;
           unifiedBatteryData.amps = escTelemetryData.amps;
-          unifiedBatteryData.soc = 0.0; // We don't estimate SOC from voltage anymore
+          unifiedBatteryData.soc = 0.0;  // We don't estimate SOC from voltage anymore
         }
 
         // Update display - CS pin management is now handled inside refreshDisplay
@@ -387,7 +387,7 @@ void spiCommTask(void *pvParameters) {
 }
 
 void loadHardwareConfig() {
-  board_config = s3_config; // ESP32S3 is only supported board
+  board_config = s3_config;  // ESP32S3 is only supported board
 
   pot = new ResponsiveAnalogRead(board_config.throttle_pin, false);
 }

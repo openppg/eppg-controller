@@ -195,11 +195,11 @@ void displayLvglSplash(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
   lv_obj_t* title_label = lv_label_create(splash_screen);
   lv_label_set_text(title_label, "OpenPPG");
   // Use a larger font for the title
-  lv_obj_set_style_text_font(title_label, &lv_font_montserrat_20, 0);
+  lv_obj_set_style_text_font(title_label, &lv_font_montserrat_28, 0);
   lv_obj_set_style_text_color(title_label,
                              deviceData.theme == 1 ? lv_color_white() : lv_color_black(),
                              0);
-  lv_obj_align(title_label, LV_ALIGN_TOP_MID, 0, 20);
+  lv_obj_align(title_label, LV_ALIGN_TOP_MID, 0, 15);
 
   // Create animation for title
   lv_anim_t title_anim;
