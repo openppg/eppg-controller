@@ -13,13 +13,15 @@ BMS_CAN* bms_can = nullptr;
 extern Adafruit_ST7735* display;
 extern int8_t displayCS;
 extern int8_t bmsCS;
-extern bool isBMSPresent;
+extern bool bmsCanInitialized;     // Extern for CAN transceiver init state
+extern volatile bool isBMSConnected;  // Extern for live BMS connection state
 
 // BMS initialization is now handled in sp140.ino
 
 // Update BMS data and populate unified battery data
 void updateBMSData() {
-  if (!isBMSPresent || bms_can == nullptr) return;  // Exit if BMS is not present or not initialized
+  // Check if BMS is currently connected and the object exists
+  if (bms_can == nullptr || !bmsCanInitialized) return;
 
   // TODO track bms incrementing cycle count
   // Ensure display CS is deselected and BMS CS is selected
@@ -60,7 +62,8 @@ void updateBMSData() {
 }
 
 void printBMSData() {
-  if (!isBMSPresent || bms_can == nullptr) return;  // Exit if BMS is not present or not initialized
+  // Check if BMS is currently connected and the object exists
+  if (bms_can == nullptr || !bmsCanInitialized) return;
 
   // Make sure BMS CS is selected before reading values
   digitalWrite(displayCS, HIGH);

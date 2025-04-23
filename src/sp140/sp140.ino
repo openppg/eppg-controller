@@ -73,7 +73,8 @@ UBaseType_t uxCoreAffinityMask0 = (1 << 0);  // Core 0
 UBaseType_t uxCoreAffinityMask1 = (1 << 1);  // Core 1
 
 HardwareConfig board_config;
-bool isBMSPresent = false;
+bool bmsCanInitialized = false;
+volatile bool isBMSConnected = false;
 
 ResponsiveAnalogRead* pot;
 
@@ -372,36 +373,42 @@ void spiCommTask(void *pvParameters) {
         refreshDisplay();
       #else
         unsigned long currentTime = millis();
+        bool currentBmsConnectionState = false;  // Local variable for this loop iteration
 
-        // Update BMS data and state
-        if (isBMSPresent) {
-          // CS pin management is now handled inside updateBMSData
-          updateBMSData();
+        // 1. Check if CAN transceiver is initialized
+        if (bmsCanInitialized) {
+          // Select BMS CS pin to check connection
+          updateBMSData();  // This function handles its own CS pins
+          currentBmsConnectionState = bms_can->isConnected();
+        }
+        // Update global volatile state *after* check
+        isBMSConnected = currentBmsConnectionState;
+
+        // 2. Use BMS data if connected, otherwise use ESC data
+        if (isBMSConnected) {
+          // BMS is initialized AND currently connected
           unifiedBatteryData.volts = bmsTelemetryData.battery_voltage;
           unifiedBatteryData.amps = bmsTelemetryData.battery_current;
           unifiedBatteryData.soc = bmsTelemetryData.soc;
-
-          // Update BMS state based on connection status
-          // Properly manage CS pins
-          digitalWrite(displayCS, HIGH);  // Deselect display
-          digitalWrite(bmsCS, LOW);       // Select BMS
-          isBMSPresent = bms_can->isConnected();
-          bmsTelemetryData.state = isBMSPresent ? TelemetryState::CONNECTED : TelemetryState::NOT_CONNECTED;
-          digitalWrite(bmsCS, HIGH);      // Deselect BMS when done
-
-          xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);  // Always latest data
+          bmsTelemetryData.state = TelemetryState::CONNECTED;
+          xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);
         } else {
+          // BMS is either not initialized OR not currently connected
           bmsTelemetryData.state = TelemetryState::NOT_CONNECTED;
+          // Send the not connected state update
+          xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);
+
+          // Fallback to ESC data for unified view
           unifiedBatteryData.volts = escTelemetryData.volts;
           unifiedBatteryData.amps = escTelemetryData.amps;
           unifiedBatteryData.soc = 0.0;  // We don't estimate SOC from voltage anymore
         }
 
-        // Update display - CS pin management is now handled inside refreshDisplay
+        // Update display - CS pin management is handled inside refreshDisplay via LVGL mutex
         refreshDisplay();
 
       #endif
-      vTaskDelay(pdMS_TO_TICKS(40));  // ~25ps
+      vTaskDelay(pdMS_TO_TICKS(40));  // ~25fps
   }
 }
 
@@ -514,7 +521,7 @@ void setup() {
 
   #ifndef SCREEN_DEBUG
     // Pass the hardware SPI instance to the BMS_CAN initialization
-    isBMSPresent = initBMSCAN(hardwareSPI);
+    initBMSCAN(hardwareSPI);
   #endif
 
   initESC(0);
@@ -956,7 +963,8 @@ void handleThrottle() {
 void syncESCTelemetry() {
   unsigned long currentTime = millis();
 
-  if (!isBMSPresent) {
+  // Use isBMSConnected to decide if unified data needs update from ESC
+  if (!isBMSConnected) {
     unifiedBatteryData.volts = escTelemetryData.volts;
     unifiedBatteryData.amps = escTelemetryData.amps;
     unifiedBatteryData.soc = 0.0; // We don't estimate SOC from voltage anymore
@@ -971,7 +979,7 @@ void syncESCTelemetry() {
     escTelemetryData.state = TelemetryState::CONNECTED;
   }
 
-  // Send to queue for BLE updates
+  // Send ESC telemetry data to queue for BLE updates
   if (escTelemetryQueue != NULL) {
     xQueueOverwrite(escTelemetryQueue, &escTelemetryData);  // Always use latest data
   } else {
@@ -1109,11 +1117,11 @@ bool initBMSCAN(SPIClass* spi) {
 
   if (!bms_can->begin()) {
     USBSerial.println("Error initializing BMS_CAN");
-    isBMSPresent = false;  // BMS initialization failed
+    bmsCanInitialized = false;  // BMS initialization failed
     return false;
   }
   USBSerial.println("BMS CAN initialized successfully");
-  isBMSPresent = true;  // BMS successfully initialized
+  bmsCanInitialized = true;  // BMS successfully initialized
   return true;
 }
 

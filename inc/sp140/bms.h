@@ -13,7 +13,6 @@
 // External declarations
 extern STR_BMS_TELEMETRY_140 bmsTelemetryData;
 extern BMS_CAN* bms_can;
-extern bool isBMSPresent;  // Use the global variable
 
 // BMS functions
 void updateBMSData();
