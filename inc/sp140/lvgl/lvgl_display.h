@@ -7,6 +7,18 @@
 // Include current device structures
 #include "../../sp140/structs.h"
 
+// Enum to define different screen pages
+typedef enum {
+  MAIN_SCREEN,  // Default main display screen
+  // Add other screen states here later (e.g., SETTINGS_SCREEN, INFO_SCREEN)
+} ScreenPage;
+
+// Global variable to track the current screen page
+extern ScreenPage currentScreenPage;
+
+// Function to switch between screen pages
+void switchScreenPage(ScreenPage newPage);
+
 // Initialize LVGL display and components
 void setupLvglDisplay(const STR_DEVICE_DATA_140_V1& deviceData, int8_t dc_pin, int8_t rst_pin, SPIClass* spi);
 

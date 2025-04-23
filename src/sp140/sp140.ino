@@ -112,6 +112,20 @@ TaskHandle_t webSerialTaskHandle = NULL;
 // Add mutex for LVGL thread safety
 SemaphoreHandle_t lvglMutex;
 
+// Variable to track the current screen page
+ScreenPage currentScreenPage = MAIN_SCREEN;
+
+// Function to switch screen pages safely
+void switchScreenPage(ScreenPage newPage) {
+  if (xSemaphoreTake(lvglMutex, portMAX_DELAY) == pdTRUE) {
+    currentScreenPage = newPage;
+    // Potentially add code here to initialize the new screen if needed
+    xSemaphoreGive(lvglMutex);
+  } else {
+    USBSerial.println("Failed to acquire LVGL mutex for screen switch");
+  }
+}
+
 // Add this function to handle BLE updates safely
 void bleStateUpdateTask(void* parameter) {
   BLEStateUpdate update;
@@ -313,23 +327,35 @@ void refreshDisplay() {
     bool isArmed = (currentState != DISARMED);
     bool isCruising = (currentState == ARMED_CRUISING);
 
-    // Update the LVGL main screen with current data
-    updateLvglMainScreen(
-      deviceData,
-      escTelemetryData,
-      bmsTelemetryData,
-      unifiedBatteryData,
-      altitude,
-      isArmed,
-      isCruising,
-      armedAtMillis
-    );
+    // Select the appropriate screen update function based on the current page
+    switch (currentScreenPage) {
+      case MAIN_SCREEN:
+        updateLvglMainScreen(
+          deviceData,
+          escTelemetryData,
+          bmsTelemetryData,
+          unifiedBatteryData,
+          altitude,
+          isArmed,
+          isCruising,
+          armedAtMillis
+        );
+        break;
+      // Add cases for other screens here later
+      // case SETTINGS_SCREEN:
+      //   updateLvglSettingsScreen(...);
+      //   break;
+      default:
+        // Handle unknown screen state if necessary
+        break;
+    }
 
-    // General LVGL update
-    updateLvgl();  // this must be called only when SPI is not being used by BMS
+    // General LVGL update handler
+    updateLvgl();
+
     xSemaphoreGive(lvglMutex);
   } else {
-    USBSerial.println("Failed to acquire LVGL mutex");
+    USBSerial.println("Failed to acquire LVGL mutex in refreshDisplay");
   }
 }
 
@@ -541,20 +567,31 @@ void setup() {
     USBSerial.println("Failed to acquire LVGL mutex for splash");
   }
 
-  // Update main screen with initial data
+  // Update main screen with initial data (respecting currentScreenPage)
   USBSerial.println("Initializing main screen after splash");
-  const float altitude = getAltitude(deviceData);
   if (xSemaphoreTake(lvglMutex, portMAX_DELAY) == pdTRUE) {
-    updateLvglMainScreen(
-      deviceData,
-      escTelemetryData,
-      bmsTelemetryData,
-      unifiedBatteryData,
-      altitude,
-      false, // not armed
-      false, // not cruising
-      0      // armedAtMillis
-    );
+    // Initial call will use the default MAIN_SCREEN
+    const float altitude = getAltitude(deviceData);
+    bool isArmed = (currentState != DISARMED);
+    bool isCruising = (currentState == ARMED_CRUISING);
+
+    switch (currentScreenPage) {
+        case MAIN_SCREEN:
+          updateLvglMainScreen(
+            deviceData,
+            escTelemetryData,
+            bmsTelemetryData,
+            unifiedBatteryData,
+            altitude,
+            isArmed,
+            isCruising,
+            armedAtMillis
+          );
+          break;
+        // Add cases for other screens if needed for initial setup
+        default:
+          break;
+    }
     xSemaphoreGive(lvglMutex);
   } else {
     USBSerial.println("Failed to acquire LVGL mutex for main screen init");
