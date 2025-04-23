@@ -21,6 +21,7 @@ extern bool isBMSPresent;
 void updateBMSData() {
   if (!isBMSPresent || bms_can == nullptr) return;  // Exit if BMS is not present or not initialized
 
+  // TODO track bms incrementing cycle count
   // Ensure display CS is deselected and BMS CS is selected
   digitalWrite(displayCS, HIGH);
   digitalWrite(bmsCS, LOW);

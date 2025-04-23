@@ -385,7 +385,8 @@ void spiCommTask(void *pvParameters) {
           // Properly manage CS pins
           digitalWrite(displayCS, HIGH);  // Deselect display
           digitalWrite(bmsCS, LOW);       // Select BMS
-          bmsTelemetryData.state = bms_can->isConnected() ? TelemetryState::CONNECTED : TelemetryState::NOT_CONNECTED;
+          isBMSPresent = bms_can->isConnected();
+          bmsTelemetryData.state = isBMSPresent ? TelemetryState::CONNECTED : TelemetryState::NOT_CONNECTED;
           digitalWrite(bmsCS, HIGH);      // Deselect BMS when done
 
           xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);  // Always latest data
