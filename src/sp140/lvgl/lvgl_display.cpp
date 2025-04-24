@@ -18,8 +18,8 @@
 // Constants from the original display.h
 #define TEMP_WARNING_THRESHOLD 55.0f
 #define TEMP_CRITICAL_THRESHOLD 70.0f
-#define BATTERY_LOW_THRESHOLD 30.0f
-#define BATTERY_MEDIUM_THRESHOLD 60.0f
+#define BATTERY_LOW_THRESHOLD 5.0f
+#define BATTERY_MEDIUM_THRESHOLD 20.0f
 #define CELL_VOLTAGE_WARNING 3.6f
 #define CELL_VOLTAGE_CRITICAL 3.5f
 
@@ -272,7 +272,7 @@ void setupMainScreen(bool darkMode) {
 
   // Top section - battery status
   battery_bar = lv_bar_create(main_screen);
-  lv_obj_set_size(battery_bar, SCREEN_WIDTH, 32);
+  lv_obj_set_size(battery_bar, SCREEN_WIDTH, 37);
   lv_obj_set_pos(battery_bar, 0, 0);
   lv_bar_set_range(battery_bar, 0, 100);
   lv_obj_set_style_bg_color(battery_bar,
@@ -284,8 +284,8 @@ void setupMainScreen(bool darkMode) {
 
   // Battery percentage label
   battery_label = lv_label_create(main_screen);
-  lv_obj_align(battery_label, LV_ALIGN_TOP_MID, 0, 8);
-  lv_obj_set_style_text_font(battery_label, &lv_font_montserrat_16, 0);
+  lv_obj_align(battery_label, LV_ALIGN_TOP_MID, 0, 5);
+  lv_obj_set_style_text_font(battery_label, &lv_font_montserrat_24, 0);
   lv_obj_set_style_text_color(battery_label, LVGL_BLACK, 0);
 
   // Left voltage label
@@ -431,7 +431,7 @@ void setupMainScreen(bool darkMode) {
   // Draw divider lines
   // Create horizontal line between top and middle sections
   lv_obj_t* h_line1 = lv_line_create(main_screen);
-  static lv_point_t h_line1_points[] = {{0, 32}, {SCREEN_WIDTH, 32}};
+  static lv_point_t h_line1_points[] = {{0, 37}, {SCREEN_WIDTH, 37}};
   lv_line_set_points(h_line1, h_line1_points, 2);
   lv_obj_set_style_line_color(h_line1,
                              LVGL_GRAY,
@@ -449,7 +449,7 @@ void setupMainScreen(bool darkMode) {
 
   // Create vertical line in middle section
   lv_obj_t* v_line1 = lv_line_create(main_screen);
-  static lv_point_t v_line1_points[] = {{90, 32}, {90, 75}};
+  static lv_point_t v_line1_points[] = {{90, 37}, {90, 75}};
   lv_line_set_points(v_line1, v_line1_points, 2);
   lv_obj_set_style_line_color(v_line1,
                              LVGL_GRAY,
