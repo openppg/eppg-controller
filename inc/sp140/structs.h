@@ -79,6 +79,7 @@ struct BatteryVoltagePoint {
 struct UnifiedBatteryData {
   float volts;
   float amps;
+  float power;  // power in kW
   float soc;    // State of Charge
 };
 // BMS telemetry data

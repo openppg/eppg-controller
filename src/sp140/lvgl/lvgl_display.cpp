@@ -43,6 +43,7 @@ static lv_obj_t* power_bar = NULL;
 static lv_obj_t* perf_mode_label = NULL;
 static lv_obj_t* armed_time_label = NULL;
 static lv_obj_t* altitude_label = NULL;
+static lv_obj_t* altitude_unit_label = NULL;
 static lv_obj_t* batt_temp_label = NULL;
 static lv_obj_t* esc_temp_label = NULL;
 static lv_obj_t* motor_temp_label = NULL;
@@ -342,6 +343,14 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_style_text_color(altitude_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
 
+  // Altitude unit label (e.g., "m" or "ft")
+  altitude_unit_label = lv_label_create(main_screen);
+  // Align to the bottom right, then offset leftwards to be next to the vertical line at x=120
+  lv_obj_align(altitude_unit_label, LV_ALIGN_BOTTOM_RIGHT, -(SCREEN_WIDTH - 120 + 3), -5); // - (160 - 120 + 3) = -43
+  lv_obj_set_style_text_font(altitude_unit_label, &lv_font_montserrat_16, 0); // Use a smaller font
+  lv_obj_set_style_text_color(altitude_unit_label,
+                             darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+
   // Create temperature labels - adjust positions to align with divider lines
   batt_temp_label = lv_label_create(main_screen);
   lv_obj_align(batt_temp_label, LV_ALIGN_BOTTOM_RIGHT, -5, -35);  // Between top and middle line
@@ -632,8 +641,8 @@ void updateLvglMainScreen(
   // Update power display
   if (bmsConnected || escConnected) {
     char buffer[10];
-    float kWatts = bmsTelemetry.power;
-    snprintf(buffer, sizeof(buffer), kWatts < 10 ? "%.1f kW" : "%.1f kW", kWatts);
+    float kWatts = unifiedBatteryData.power;
+    snprintf(buffer, sizeof(buffer), kWatts < 1.0 ? "%.2f kW" : "%.1f kW", kWatts);
     lv_label_set_text(power_label, buffer);
 
     // Update power bar
@@ -659,15 +668,23 @@ void updateLvglMainScreen(
   char altBuffer[15];
   if (altitude == __FLT_MIN__) {
     lv_label_set_text(altitude_label, "ERR");
+    lv_label_set_text(altitude_unit_label, ""); // Clear unit on error
     lv_obj_set_style_text_color(altitude_label, LVGL_RED, 0);
+    lv_obj_set_style_text_color(altitude_unit_label, LVGL_RED, 0); // Match color
   } else {
     if (deviceData.metric_alt) {
-      snprintf(altBuffer, sizeof(altBuffer), "%.1f m", altitude);
+      snprintf(altBuffer, sizeof(altBuffer), "%.1f", altitude); // Format number only
+      lv_label_set_text(altitude_label, altBuffer);
+      lv_label_set_text(altitude_unit_label, "m"); // Set unit separately
     } else {
-      snprintf(altBuffer, sizeof(altBuffer), "%d ft", static_cast<int>(round(altitude * 3.28084)));
+      snprintf(altBuffer, sizeof(altBuffer), "%d", static_cast<int>(round(altitude * 3.28084))); // Format number only
+      lv_label_set_text(altitude_label, altBuffer);
+      lv_label_set_text(altitude_unit_label, "ft"); // Set unit separately
     }
-    lv_label_set_text(altitude_label, altBuffer);
+    // Set color for both labels
     lv_obj_set_style_text_color(altitude_label,
+                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+    lv_obj_set_style_text_color(altitude_unit_label,
                               darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   }
 

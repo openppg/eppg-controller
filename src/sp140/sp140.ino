@@ -386,6 +386,7 @@ void spiCommTask(void *pvParameters) {
           unifiedBatteryData.volts = bmsTelemetryData.battery_voltage;
           unifiedBatteryData.amps = bmsTelemetryData.battery_current;
           unifiedBatteryData.soc = bmsTelemetryData.soc;
+          unifiedBatteryData.power = bmsTelemetryData.power;
           xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);
         } else if (escTelemetryData.escState == TelemetryState::CONNECTED) {
           // BMS is either not initialized OR not currently connected
@@ -393,6 +394,8 @@ void spiCommTask(void *pvParameters) {
           // Fallback to ESC data for unified view
           unifiedBatteryData.volts = escTelemetryData.volts;
           unifiedBatteryData.amps = escTelemetryData.amps;
+          unifiedBatteryData.power = escTelemetryData.amps * escTelemetryData.volts / 1000.0;
+
           unifiedBatteryData.soc = 0.0;  // We don't estimate SOC from voltage anymore
         } else {  // Not connected to either BMS or ESC, probably USB powered
           // No connection to either BMS or ESC
