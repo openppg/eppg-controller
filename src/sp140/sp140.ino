@@ -995,9 +995,8 @@ bool armSystem() {
 
   vTaskSuspend(blinkLEDTaskHandle);
   setLEDs(HIGH); // solid LED while armed
-  runVibePattern(arm_vibes, 7);
   playMelody(arm_melody, 3);
-
+  runVibePattern(arm_vibes, 7);
   return true;
 }
 

@@ -27,7 +27,7 @@ bool runVibePattern(const unsigned int pattern[], int patternSize) {
 
   for (int i = 0; i < patternSize; i++) {
     ledcWrite(PWM_CHANNEL, pattern[i]);
-    delay(100);  // Adjust timing as needed
+    vTaskDelay(pdMS_TO_TICKS(200));
   }
   ledcWrite(PWM_CHANNEL, 0);  // Turn off vibration
   return true;
@@ -98,7 +98,7 @@ void customVibePattern(const uint8_t intensities[], const uint16_t durations[], 
 
   for (int i = 0; i < steps; i++) {
     ledcWrite(PWM_CHANNEL, intensities[i]);
-    delay(durations[i]);
+    vTaskDelay(pdMS_TO_TICKS(durations[i]));
   }
   ledcWrite(PWM_CHANNEL, 0);
 }
