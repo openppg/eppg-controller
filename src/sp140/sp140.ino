@@ -61,6 +61,10 @@ int8_t bmsCS = MCP_CS;
 #define CHILL_MODE_RAMP_RATE 50  // How fast throttle can increase per cycle in chill mode
 #define SPORT_MODE_RAMP_RATE 120 // How fast throttle can increase per cycle in sport mode
 #define DECEL_MULTIPLIER 2.0     // How much faster deceleration is vs acceleration
+#define CRUISE_MAX_PERCENTAGE 0.60 // Maximum cruise throttle as a percentage of the total ESC range (e.g., 0.60 = 60%)
+#define CRUISE_DISENGAGE_POT_THRESHOLD_PERCENTAGE 0.80 // Current pot must be >= this % of activation value to disengage
+#define CRUISE_DISENGAGE_GRACE_PERIOD_MS 2000 // Delay before checking pot disengagement after cruise activation
+#define CRUISE_ACTIVATION_MAX_POT_PERCENTAGE 0.70 // Prevent cruise activation if pot is above this percentage
 
 // Button state tracking
 volatile bool buttonPressed = false;
@@ -845,18 +849,34 @@ void toggleArm() {
 void toggleCruise() {
   switch (currentState) {
     case ARMED:
+      // Check if throttle is engaged (not at zero)
       if (throttleEngaged()) {
-        changeDeviceState(ARMED_CRUISING);
+        // Check if throttle is too high to activate cruise
+        pot->update();  // Ensure we have the latest value
+        int currentPotVal = pot->getValue();
+        const int activationThreshold = (int)(4095 * CRUISE_ACTIVATION_MAX_POT_PERCENTAGE);  // Calculate 70% threshold
+
+        if (currentPotVal > activationThreshold) {
+          USBSerial.print("Cruise activation failed: Throttle too high (");
+          USBSerial.print(currentPotVal); USBSerial.print(" > ");
+          USBSerial.print(activationThreshold); USBSerial.println(")");
+        } else {
+          // Throttle is engaged but not too high, activate cruise
+          changeDeviceState(ARMED_CRUISING);
+        }
+      } else {
+         // Throttle not engaged, do nothing (or provide feedback?)
+         USBSerial.println("Cruise activation failed: Throttle not engaged.");
       }
       break;
     case ARMED_CRUISING:
-      changeDeviceState(ARMED);  // This will now call removeCruise
+      changeDeviceState(ARMED);  // Disengage cruise
       break;
     case DISARMED:
       // show stats screen
       //TODO refactor updateDisplayTaskHandle since now its shared spiCommTask.
       // the screen updates should be aware of this and
-      // suspend/resume in their own funcitons vs at a task level.
+      // suspend/resume in their own functions vs at a task level.
 
       // displayMeta(deviceData);
       break;
@@ -898,34 +918,51 @@ void handleThrottle() {
   static int prevPotLvl = 0;  // Local static variable for throttle smoothing
   uint16_t newPWM;
 
-  // Check for throttle updates from cruise control
+  // Check for throttle updates, potentially from afterCruiseStart setting the initial capped value
   if (xQueueReceive(throttleUpdateQueue, &newPWM, 0) == pdTRUE) {
     if (currentState == ARMED_CRUISING) {
       currentCruiseThrottlePWM = newPWM;
+      USBSerial.print("Cruise PWM initialized/updated to: ");
+      USBSerial.println(currentCruiseThrottlePWM);
     }
   }
 
   pot->update();
-  int potVal = pot->getValue();
-  int potLvl = potVal;
+  int potVal = pot->getValue(); // Raw potentiometer value (0-4095)
+  int potLvl = potVal;          // Value potentially modified by ramping
 
   // Handle throttle based on current state and update BLE accordingly
   if (currentState == DISARMED) {
     setESCThrottle(ESC_DISARMED_PWM);
-    updateThrottleBLE(0); // Send 0 throttle when disarmed
     prevPotLvl = 0;  // Reset throttle memory when disarmed
   } else if (currentState == ARMED_CRUISING) {
+    // Set the ESC throttle to the determined (and potentially capped) cruise PWM
     setESCThrottle(currentCruiseThrottlePWM);
-    // Map PWM back to throttle value for BLE
-    int mappedThrottle = map(currentCruiseThrottlePWM, ESC_MIN_SPIN_PWM, ESC_MAX_PWM, 0, 4095);
-    USBSerial.print("Cruise Mode - Sending throttle value: ");
-    USBSerial.print(mappedThrottle);
-    USBSerial.print(" (PWM: ");
-    USBSerial.print(currentCruiseThrottlePWM);
-    USBSerial.println(")");
-    updateThrottleBLE(mappedThrottle);
-    // Don't update prevPotLvl in cruise mode
-  } else {
+
+    // Map PWM back to a representative throttle value for BLE display
+    // int mappedThrottleForBLE = map(currentCruiseThrottlePWM, ESC_MIN_SPIN_PWM, ESC_MAX_PWM, 0, 4095);
+    // updateThrottleBLE(mappedThrottleForBLE);
+    // Don't update prevPotLvl in cruise mode to prevent drift
+
+    // --- Check for Cruise Disengagement via Potentiometer ---
+    unsigned long timeSinceCruiseStart = millis() - cruisedAtMillis;
+
+    // Only check for disengagement *after* the grace period has passed
+    if (timeSinceCruiseStart > CRUISE_DISENGAGE_GRACE_PERIOD_MS) {
+      // Calculate the disengagement threshold based on the *raw potentiometer value* when cruise was engaged
+      int disengageThresholdPotVal = (int)(cruisedPotVal * CRUISE_DISENGAGE_POT_THRESHOLD_PERCENTAGE);
+
+      // If the *current raw potentiometer value* is greater than or equal to the threshold
+      if (potVal >= disengageThresholdPotVal) {
+        USBSerial.print("Cruise override: potVal ");
+        USBSerial.print(potVal);
+        USBSerial.print(" >= threshold ");
+        USBSerial.println(disengageThresholdPotVal);
+        changeDeviceState(ARMED); // Transition back to normal ARMED state
+        return; // Exit early as state has changed
+      }
+    }
+  } else if (currentState == ARMED) { // Normal armed, non-cruise operation
     // Apply throttle limits based on performance mode
     int rampRate = deviceData.performance_mode == 0 ? CHILL_MODE_RAMP_RATE : SPORT_MODE_RAMP_RATE;
     maxPWM = deviceData.performance_mode == 0 ? CHILL_MODE_MAX_PWM : ESC_MAX_PWM;
@@ -937,19 +974,10 @@ void handleThrottle() {
     int localThrottlePWM = map(potLvl, 0, 4095, ESC_MIN_SPIN_PWM, maxPWM);
     setESCThrottle(localThrottlePWM);
     prevPotLvl = potLvl;  // Store locally for next iteration
-    updateThrottleBLE(potLvl); // Send actual throttle value
+    // updateThrottleBLE(potLvl); // Send actual (ramped) throttle value
   }
 
-  // Check if throttle has moved away from cruise position
-  if (currentState == ARMED_CRUISING) {
-    int safeThreshold = cruisedPotVal + 200; // Allow 5% movement
-    if (!throttleSafe(safeThreshold)) {
-      USBSerial.println("Cruise control override detected");
-      changeDeviceState(ARMED);
-      return;
-    }
-  }
-
+  // Read/Sync ESC Telemetry (runs in all armed states)
   readESCTelemetry();
   syncESCTelemetry();
 }
@@ -1001,25 +1029,31 @@ bool armSystem() {
 }
 
 void afterCruiseStart() {
-  cruisedPotVal = pot->getValue();
+  cruisedPotVal = pot->getValue();  // Store the raw pot value (0-4095) at activation
   cruisedAtMillis = millis();
 
-  // Calculate initial cruise PWM - respect the current throttle mode
-  int maxPWM = deviceData.performance_mode == 0 ? CHILL_MODE_MAX_PWM : ESC_MAX_PWM;
-  uint16_t initialPWM = map(cruisedPotVal, 0, 4095, ESC_MIN_SPIN_PWM, maxPWM);
+  // Determine the maximum PWM based on the current flight mode (Chill/Sport)
+  int maxPwmForCurrentMode = (deviceData.performance_mode == 0) ? CHILL_MODE_MAX_PWM : ESC_MAX_PWM;
 
-  // Send to queue
-  if (xQueueSend(throttleUpdateQueue, &initialPWM, pdMS_TO_TICKS(100)) != pdTRUE) {
-    USBSerial.println("Failed to queue initial cruise throttle");
+  // Calculate the PWM corresponding to the potentiometer value *at the time of activation*, respecting the current flight mode's maximum PWM.
+  uint16_t calculatedActivationPWM = map(cruisedPotVal, 0, 4095, ESC_MIN_SPIN_PWM, maxPwmForCurrentMode);
+
+  // Calculate the absolute maximum PWM allowed for cruise control (e.g., 60% of full ESC range)
+  uint16_t absoluteMaxCruisePWM = ESC_MIN_SPIN_PWM + (uint16_t)((ESC_MAX_PWM - ESC_MIN_SPIN_PWM) * CRUISE_MAX_PERCENTAGE);
+
+  // Determine the actual PWM to use for cruise: the lower of the calculated activation PWM and the absolute cap.
+  uint16_t initialCruisePWM = min(calculatedActivationPWM, absoluteMaxCruisePWM);
+
+  USBSerial.print("Cruise activating. PotVal: "); USBSerial.print(cruisedPotVal);
+  USBSerial.print(", ActivationPWM: "); USBSerial.print(calculatedActivationPWM);
+  USBSerial.print(", MaxCruisePWM: "); USBSerial.print(absoluteMaxCruisePWM);
+  USBSerial.print(", Setting initialCruisePWM to: "); USBSerial.println(initialCruisePWM);
+
+  // Send the capped initialCruisePWM value to the throttle task via queue
+  if (xQueueSend(throttleUpdateQueue, &initialCruisePWM, pdMS_TO_TICKS(100)) != pdTRUE) {
+    USBSerial.println("Failed to queue initial cruise throttle PWM");
   }
 
-  // Update BLE characteristic with raw throttle value
-  if (pThrottleCharacteristic && deviceConnected) {
-    pThrottleCharacteristic->setValue((uint8_t*)&cruisedPotVal, sizeof(cruisedPotVal));
-    pThrottleCharacteristic->notify();
-  }
-
-  playCruiseSound();
   pulseVibeMotor();
 }
 
