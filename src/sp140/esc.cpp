@@ -9,12 +9,12 @@
 #define ESC_TX_PIN 2  // CAN TX pin to transceiver
 #define LOCAL_NODE_ID 0x01  // The ID on the network of this device
 
-#define TELEMETRY_TIMEOUT_MS 1000  // Threshold to determine stale ESC telemetry in ms
+#define TELEMETRY_TIMEOUT_MS 50  // Threshold to determine stale ESC telemetry in ms
 
 static CanardAdapter adapter;
 static uint8_t memory_pool[1024] __attribute__((aligned(8)));
 static SineEsc esc(adapter);
-static uint32_t previousEscTime10ms = 0; // Store the last time_10ms value
+static unsigned long lastSuccessfulCommTimeMs = 0; // Store millis() time of last successful ESC comm
 
 extern CircularBuffer<float, 50> voltageBuffer;
 
@@ -33,40 +33,11 @@ void initESC() {
   adapter.setLocalNodeId(LOCAL_NODE_ID);
   esc.begin(0x20);  // Default ID for the ESC
 
-  // Find ESC
-  int attempts = 0;
-  const int maxAttempts = 5;
-  while (!esc.getModel().hasGetHardwareInfoResponse && attempts < maxAttempts) {
-    esc.getHardwareInfo();
-    adapter.processTxRxOnce();
-    USBSerial.print("Waiting for ESC... Attempt ");
-    USBSerial.println(attempts + 1);
-    delay(200);
-    attempts++;
-  }
-
-  if (esc.getModel().hasGetHardwareInfoResponse) {
-    escTelemetryData.escState = TelemetryState::CONNECTED;
-    USBSerial.println("ESC Found.");
-
-    const sine_esc_GetHwInfoResponse *hwInfo = &esc.getModel().getHardwareInfoResponse;
-    USBSerial.print("\thardware_id: ");
-    USBSerial.println(hwInfo->hardware_id, HEX);
-    USBSerial.print("\tbootloader_version: ");
-    USBSerial.println(hwInfo->bootloader_version, HEX);
-    USBSerial.print("\tapp_version: ");
-    USBSerial.println(hwInfo->app_version, HEX);
-  } else {
-    escTelemetryData.escState = TelemetryState::NOT_CONNECTED;
-    USBSerial.println("Failed to find ESC after multiple attempts.");
-    return;
-  }
-
   // Set idle throttle only if ESC is found
   const uint16_t IdleThrottle_us = 10000;  // 1000us (0.1us resolution)
   esc.setThrottleSettings2(IdleThrottle_us);
-  delay(250);  // Wait for ESC to process the command
   adapter.processTxRxOnce();
+  delay(20);  // Wait for ESC to process the command
 }
 
 void setESCThrottle(int throttlePWM) {
@@ -80,68 +51,73 @@ void setESCThrottle(int throttlePWM) {
   esc.setThrottleSettings2(scaledThrottle);
 }
 
-void updateESCTelemetryState(unsigned long oldTime, unsigned long newTime) {
-  if (newTime == 0) { // Never received data since boot or reset
-    escTelemetryData.escState = TelemetryState::NOT_CONNECTED;
-  } else if (newTime - oldTime > TELEMETRY_TIMEOUT_MS) {
-    escTelemetryData.escState = TelemetryState::STALE;
-  } else if (oldTime > 0 && newTime < oldTime) {
-    USBSerial.println("WARN: ESC time_10ms counter reset detected.");
-    escTelemetryData.escState = TelemetryState::CONNECTED;
-  } else {
-    escTelemetryData.escState = TelemetryState::CONNECTED;
-  }
-}
-
 void readESCTelemetry() {
   // Only proceed if TWAI is initialized
-  if (!escTwaiInitialized) {
-      return;
-  }
+  if (!escTwaiInitialized) { return; }
+
+  // Store the last known ESC timestamp before checking for new data
+  unsigned long previousEscReportedTimeMs = escTelemetryData.lastUpdateMs;
 
   const SineEscModel &model = esc.getModel();
 
   if (model.hasSetThrottleSettings2Response) {
     const sine_esc_SetThrottleSettings2Response *res = &model.setThrottleSettings2Response;
 
-    uint32_t current_time_10ms = res->time_10ms;
-    escTelemetryData.lastUpdateMs = current_time_10ms;
+    unsigned long newEscReportedTimeMs = res->time_10ms * 10;
 
-    updateESCTelemetryState(previousEscTime10ms, current_time_10ms);
+    // Check if the timestamp from the ESC has actually changed
+    if (newEscReportedTimeMs != previousEscReportedTimeMs) {
+      // Timestamp is new, process the telemetry data
+      escTelemetryData.lastUpdateMs = newEscReportedTimeMs;
 
-    // Check for timer reset (value decreased)
-    if (previousEscTime10ms > 0 && current_time_10ms < previousEscTime10ms) { // Avoid check on first run
-      USBSerial.println("WARN: ESC time_10ms counter reset detected.");
-      // Optional: Handle reset consequences here if needed
-    }
+      // Update telemetry data
+      escTelemetryData.volts = res->voltage / 10.0f;
+      voltageBuffer.push(escTelemetryData.volts);
+      escTelemetryData.amps = res->bus_current / 10.0f;
+      escTelemetryData.mos_temp = res->mos_temp / 10.0f;
+      escTelemetryData.cap_temp = res->cap_temp / 10.0f;
+      escTelemetryData.mcu_temp = res->mcu_temp / 10.0f;
+      escTelemetryData.motor_temp = res->motor_temp / 10.0f;
+      escTelemetryData.highest_temp = max({escTelemetryData.mos_temp, escTelemetryData.cap_temp, escTelemetryData.mcu_temp, escTelemetryData.motor_temp});
+      escTelemetryData.eRPM = res->speed;
+      escTelemetryData.inPWM = res->recv_pwm / 10.0f;
+      watts = escTelemetryData.amps * escTelemetryData.volts;
 
-    // Update telemetry data
-    escTelemetryData.volts = res->voltage / 10.0f;
-    voltageBuffer.push(escTelemetryData.volts);
-    escTelemetryData.amps = res->bus_current / 10.0f;
-    escTelemetryData.mos_temp = res->mos_temp / 10.0f;
-    escTelemetryData.cap_temp = res->cap_temp / 10.0f;
-    escTelemetryData.mcu_temp = res->mcu_temp / 10.0f;
-    escTelemetryData.motor_temp = res->motor_temp / 10.0f;
-    escTelemetryData.highest_temp = max({escTelemetryData.mos_temp, escTelemetryData.cap_temp, escTelemetryData.mcu_temp, escTelemetryData.motor_temp}); // Simplified max
-    escTelemetryData.eRPM = res->speed;
-    escTelemetryData.inPWM = res->recv_pwm / 10.0f;
-    watts = escTelemetryData.amps * escTelemetryData.volts;
+      // Temperature states
+      escTelemetryData.mos_state = checkTempState(escTelemetryData.mos_temp, COMP_ESC_MOS);
+      escTelemetryData.mcu_state = checkTempState(escTelemetryData.mcu_temp, COMP_ESC_MCU);
+      escTelemetryData.cap_state = checkTempState(escTelemetryData.cap_temp, COMP_ESC_CAP);
+      escTelemetryData.motor_state = checkTempState(escTelemetryData.motor_temp, COMP_MOTOR);
+      escTelemetryData.temp_sensor_error =
+        (escTelemetryData.mos_state == TEMP_INVALID) ||
+        (escTelemetryData.mcu_state == TEMP_INVALID) ||
+        (escTelemetryData.cap_state == TEMP_INVALID) ||
+        (escTelemetryData.motor_state == TEMP_INVALID);
 
-    // Temperature states
-    escTelemetryData.mos_state = checkTempState(escTelemetryData.mos_temp, COMP_ESC_MOS);
-    escTelemetryData.mcu_state = checkTempState(escTelemetryData.mcu_temp, COMP_ESC_MCU);
-    escTelemetryData.cap_state = checkTempState(escTelemetryData.cap_temp, COMP_ESC_CAP);
-    escTelemetryData.motor_state = checkTempState(escTelemetryData.motor_temp, COMP_MOTOR);
-    escTelemetryData.temp_sensor_error =
-      (escTelemetryData.mos_state == TEMP_INVALID) ||
-      (escTelemetryData.mcu_state == TEMP_INVALID) ||
-      (escTelemetryData.cap_state == TEMP_INVALID) ||
-      (escTelemetryData.motor_state == TEMP_INVALID);
+      // Record the time of this successful communication using the local clock
+      lastSuccessfulCommTimeMs = millis();
+    } // else: Timestamp hasn't changed, treat as stale data, don't update local timer or telemetry
 
   } else {
       // If we are connected but don't have a response, perhaps mark as stale or log?
-      // For now, do nothing, the sync function handles staleness.
+      // For now, do nothing
+  }
+
+  // Update connection state based on time since last successful communication
+  unsigned long currentTimeMs = millis();
+  if (lastSuccessfulCommTimeMs == 0 || (currentTimeMs - lastSuccessfulCommTimeMs) > TELEMETRY_TIMEOUT_MS) {
+    if (escTelemetryData.escState != TelemetryState::NOT_CONNECTED) {
+      // Log state change only if it actually changed
+      USBSerial.printf("ESC State: %d -> NOT_CONNECTED (Timeout)\n", escTelemetryData.escState);
+      escTelemetryData.escState = TelemetryState::NOT_CONNECTED;
+      // Optional: Consider resetting telemetry values here if needed when disconnected
+    }
+  } else {
+    if (escTelemetryData.escState != TelemetryState::CONNECTED) {
+      // Log state change only if it actually changed
+      USBSerial.printf("ESC State: %d -> CONNECTED\n", escTelemetryData.escState);
+      escTelemetryData.escState = TelemetryState::CONNECTED;
+    }
   }
 
   adapter.processTxRxOnce();  // Process CAN messages
@@ -158,11 +134,11 @@ bool setupTWAI() {
     USBSerial.printf("TWAI driver already installed. State: %d\n", status_info.state);
     // If it's stopped, maybe we need to start it? For now, assume it's okay.
     // if (status_info.state == TWAI_STATE_STOPPED) { twai_start(); }
-    return true; // Already initialized
+    return true;  // Already initialized
   } else if (status_result != ESP_ERR_INVALID_STATE) {
     // An error other than "not installed" occurred
     USBSerial.printf("Error checking TWAI status: %s\n", esp_err_to_name(status_result));
-    return false; // Don't proceed if status check failed unexpectedly
+    return false;  // Don't proceed if status check failed unexpectedly
   }
   // If status_result was ESP_ERR_INVALID_STATE, proceed with installation
 

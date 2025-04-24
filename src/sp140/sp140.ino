@@ -84,7 +84,7 @@ CircularBuffer<float, 50> voltageBuffer;
 CircularBuffer<int, 8> potBuffer;
 
 Adafruit_NeoPixel pixels(1, 21, NEO_GRB + NEO_KHZ800);
-uint32_t led_color = LED_RED; // current LED color
+uint32_t led_color = LED_RED;  // current LED color
 
 // Global variable for device state
 volatile DeviceState currentState = DISARMED;

@@ -21,9 +21,9 @@ enum TempState {
 
 // Telemetry connection state
 enum class TelemetryState : uint8_t {
-    NOT_CONNECTED,  // Never received data since boot
-    CONNECTED,      // Receiving data normally
-    STALE          // Was connected but hasn't received data recently
+  NOT_CONNECTED,  // Never received data since boot
+  CONNECTED,      // Receiving data normally
+  STALE          // Was connected but hasn't received data recently
 };
 
 // v1 ESC telemetry
