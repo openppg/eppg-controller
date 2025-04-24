@@ -362,6 +362,8 @@ void refreshDisplay() {
 
 
 void spiCommTask(void *pvParameters) {
+  bool currentBmsConnectionState = false;  // Local variable for this loop iteration
+
   for (;;) {
       #ifdef SCREEN_DEBUG
         float altitude = 0;
@@ -371,14 +373,12 @@ void spiCommTask(void *pvParameters) {
         refreshDisplay();
       #else
         unsigned long currentTime = millis();
-        bool currentBmsConnectionState = false;  // Local variable for this loop iteration
 
         // 1. Check if CAN transceiver is initialized
         if (bmsCanInitialized) {
           // Select BMS CS pin to check connection
           updateBMSData();  // This function handles its own CS pins
 
-          // checks to see if BMS data is newer than 1 second old
           currentBmsConnectionState = bms_can->isConnected();
         }
 
