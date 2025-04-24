@@ -50,6 +50,7 @@ static lv_obj_t* motor_temp_label = NULL;
 static lv_obj_t* arm_indicator = NULL;
 static lv_obj_t* spinner = NULL;       // For the spinning animation
 static lv_obj_t* spinner_overlay = NULL; // Overlay for the spinner
+static lv_obj_t* cruise_indicator_label = NULL; // New label for cruise mode
 
 // Create a static array of temperature labels for easy access
 static lv_obj_t* temp_labels[3];
@@ -433,7 +434,7 @@ void setupMainScreen(bool darkMode) {
   static lv_point_t h_line1_points[] = {{0, 32}, {SCREEN_WIDTH, 32}};
   lv_line_set_points(h_line1, h_line1_points, 2);
   lv_obj_set_style_line_color(h_line1,
-                             darkMode ? LVGL_GRAY : LVGL_BLACK,
+                             LVGL_GRAY,
                              LV_PART_MAIN);
   lv_obj_set_style_line_width(h_line1, 1, LV_PART_MAIN);
 
@@ -442,7 +443,7 @@ void setupMainScreen(bool darkMode) {
   static lv_point_t h_line2_points[] = {{0, 75}, {SCREEN_WIDTH, 75}};
   lv_line_set_points(h_line2, h_line2_points, 2);
   lv_obj_set_style_line_color(h_line2,
-                             darkMode ? LVGL_GRAY : LVGL_BLACK,
+                             LVGL_GRAY,
                              LV_PART_MAIN);
   lv_obj_set_style_line_width(h_line2, 1, LV_PART_MAIN);
 
@@ -451,7 +452,7 @@ void setupMainScreen(bool darkMode) {
   static lv_point_t v_line1_points[] = {{90, 32}, {90, 75}};
   lv_line_set_points(v_line1, v_line1_points, 2);
   lv_obj_set_style_line_color(v_line1,
-                             darkMode ? LVGL_GRAY : LVGL_BLACK,
+                             LVGL_GRAY,
                              LV_PART_MAIN);
   lv_obj_set_style_line_width(v_line1, 1, LV_PART_MAIN);
 
@@ -460,7 +461,7 @@ void setupMainScreen(bool darkMode) {
   static lv_point_t v_line2_points[] = {{120, 75}, {120, 128}};
   lv_line_set_points(v_line2, v_line2_points, 2);
   lv_obj_set_style_line_color(v_line2,
-                             darkMode ? LVGL_GRAY : LVGL_BLACK,
+                             LVGL_GRAY,
                              LV_PART_MAIN);
   lv_obj_set_style_line_width(v_line2, 1, LV_PART_MAIN);
 
@@ -469,7 +470,7 @@ void setupMainScreen(bool darkMode) {
   static lv_point_t h_line3_points[] = {{120, 94}, {SCREEN_WIDTH, 94}};
   lv_line_set_points(h_line3, h_line3_points, 2);
   lv_obj_set_style_line_color(h_line3,
-                             darkMode ? LVGL_GRAY : LVGL_BLACK,
+                             LVGL_GRAY,
                              LV_PART_MAIN);
   lv_obj_set_style_line_width(h_line3, 1, LV_PART_MAIN);
 
@@ -477,7 +478,7 @@ void setupMainScreen(bool darkMode) {
   static lv_point_t h_line4_points[] = {{120, 111}, {SCREEN_WIDTH, 111}};
   lv_line_set_points(h_line4, h_line4_points, 2);
   lv_obj_set_style_line_color(h_line4,
-                             darkMode ? LVGL_GRAY : LVGL_BLACK,
+                             LVGL_GRAY,
                              LV_PART_MAIN);
   lv_obj_set_style_line_width(h_line4, 1, LV_PART_MAIN);
 
@@ -522,6 +523,17 @@ void setupMainScreen(bool darkMode) {
 
   // Load the screen
   lv_scr_load(main_screen);
+
+  // Cruise indicator label (below power label)
+  cruise_indicator_label = lv_label_create(main_screen);
+  // Align below power label (kW value) instead of power bar, adjust y-offset to move up
+  lv_obj_align_to(cruise_indicator_label, power_label, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 0); // Changed y-offset from 2 to 0
+  lv_obj_set_style_text_font(cruise_indicator_label, &lv_font_montserrat_10, 0); // Smaller font
+  // Set text color based on theme
+  lv_obj_set_style_text_color(cruise_indicator_label,
+                              darkMode ? LVGL_WHITE : LVGL_BLACK,
+                              0);
+  lv_label_set_text(cruise_indicator_label, ""); // Initially empty
 }
 
 // Function to show the loading overlay
@@ -743,11 +755,18 @@ void updateLvglMainScreen(
 
   // Update armed indicator
   if (armed) {
-    lv_color_t bgColor = cruising ? LVGL_YELLOW : LVGL_CYAN;
-    lv_obj_set_style_bg_color(arm_indicator, bgColor, LV_PART_MAIN);
+    // Set background to CYAN when armed, regardless of cruise state
+    lv_obj_set_style_bg_color(arm_indicator, LVGL_CYAN, LV_PART_MAIN);
     lv_obj_clear_flag(arm_indicator, LV_OBJ_FLAG_HIDDEN);
   } else {
     lv_obj_add_flag(arm_indicator, LV_OBJ_FLAG_HIDDEN);
+  }
+
+  // Update Cruise Indicator Label
+  if (cruising) {
+    lv_label_set_text(cruise_indicator_label, "CRUISE");
+  } else {
+    lv_label_set_text(cruise_indicator_label, "");
   }
 
   // Deselect display CS when done
