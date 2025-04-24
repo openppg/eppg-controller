@@ -547,8 +547,9 @@ void updateLvglMainScreen(
   float batteryTemp = bmsTelemetry.highest_temperature;
   float escTemp = escTelemetry.mos_temp;
   float motorTemp = escTelemetry.motor_temp;
-  TelemetryState bmsState = bmsTelemetry.bmsState;
-  TelemetryState escState = escTelemetry.escState;
+  // Check if BMS or ESC is connected
+  bool bmsConnected = (bmsTelemetry.bmsState == TelemetryState::CONNECTED);
+  bool escConnected = (escTelemetry.escState == TelemetryState::CONNECTED);
 
   // Check if the theme has changed or if the main screen needs to be created
   static int last_theme = -1;
@@ -562,7 +563,7 @@ void updateLvglMainScreen(
   }
 
   // Update battery bar and percentage
-  if (bmsState == TelemetryState::CONNECTED && batteryPercent > 0) {
+  if (bmsConnected && batteryPercent > 0) {
     lv_bar_set_value(battery_bar, (int)batteryPercent, LV_ANIM_OFF);
 
     // Set color based on percentage
@@ -580,6 +581,9 @@ void updateLvglMainScreen(
     snprintf(buffer, sizeof(buffer), "%d%%", (int)batteryPercent);
     lv_label_set_text(battery_label, buffer);
     lv_obj_set_style_text_color(battery_label, LVGL_BLACK, 0);
+  } else if (escConnected) {
+    // clear the battery bar, we handle voltage later
+    lv_bar_set_value(battery_bar, 0, LV_ANIM_OFF);
   } else {
     lv_bar_set_value(battery_bar, 0, LV_ANIM_OFF);
     lv_label_set_text(battery_label, "NO DATA");
@@ -587,7 +591,7 @@ void updateLvglMainScreen(
   }
 
   // Update left voltage (cell voltage)
-  if (bmsState == TelemetryState::CONNECTED) {
+  if (bmsConnected) {
     char buffer[10];
     snprintf(buffer, sizeof(buffer), "%2.2fv", lowestCellV);
     lv_label_set_text(voltage_left_label, buffer);
@@ -601,21 +605,32 @@ void updateLvglMainScreen(
       lv_obj_set_style_text_color(voltage_left_label,
                                 darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
     }
+  } else if (escConnected) {
+    lv_obj_set_style_text_color(voltage_left_label, LVGL_RED, 0);
+    lv_label_set_text(voltage_left_label, "No BMS");
   } else {
     lv_label_set_text(voltage_left_label, "");
   }
 
   // Update right voltage (total voltage)
-  if (bmsState == TelemetryState::CONNECTED) {
+  // if esc connected, show esc voltage in center of screen
+  if (bmsConnected) {
     char buffer[10];
     snprintf(buffer, sizeof(buffer), "%2.0fv", totalVolts);
     lv_label_set_text(voltage_right_label, buffer);
+  } else if (escConnected) {
+    lv_label_set_text(voltage_right_label, "");
+
+    char buffer[10];
+    snprintf(buffer, sizeof(buffer), "%2.1fv", totalVolts);
+    lv_label_set_text(battery_label, buffer);
+    lv_obj_set_style_text_color(battery_label, LVGL_BLACK, 0);
   } else {
     lv_label_set_text(voltage_right_label, "");
   }
 
   // Update power display
-  if (bmsState == TelemetryState::CONNECTED) {
+  if (bmsConnected || escConnected) {
     char buffer[10];
     float kWatts = bmsTelemetry.power;
     snprintf(buffer, sizeof(buffer), kWatts < 10 ? "%.1f kW" : "%.1f kW", kWatts);
@@ -662,7 +677,7 @@ void updateLvglMainScreen(
     TelemetryState state;
     const char* label;
   } temps[] = {
-    {batteryTemp, bmsState, "B"},
+    {batteryTemp, bmsTelemetry.bmsState, "B"},
     {escTemp, escTelemetry.escState, "E"},
     {motorTemp, escTelemetry.escState, "M"}
   };

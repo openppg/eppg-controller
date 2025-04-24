@@ -370,32 +370,35 @@ void spiCommTask(void *pvParameters) {
         xQueueOverwrite(escTelemetryQueue, &escTelemetryData);  // Always latest data
         refreshDisplay();
       #else
-        unsigned long currentTime = millis();
-
         // 1. Check if CAN transceiver is initialized
         if (bmsCanInitialized) {
-          // Select BMS CS pin to check connection
           updateBMSData();  // This function handles its own CS pins
+          if (bms_can->isConnected()) {
+            bmsTelemetryData.bmsState = TelemetryState::CONNECTED;
+          } else {
+            bmsTelemetryData.bmsState = TelemetryState::NOT_CONNECTED;
+          }
         }
 
         // 2. Use BMS data if connected, otherwise use ESC data
-        if (bms_can->isConnected()) {
+        if (bmsTelemetryData.bmsState == TelemetryState::CONNECTED) {
           // BMS is initialized AND currently connected
           unifiedBatteryData.volts = bmsTelemetryData.battery_voltage;
           unifiedBatteryData.amps = bmsTelemetryData.battery_current;
           unifiedBatteryData.soc = bmsTelemetryData.soc;
-          bmsTelemetryData.bmsState = TelemetryState::CONNECTED;
           xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);
-        } else {
+        } else if (escTelemetryData.escState == TelemetryState::CONNECTED) {
           // BMS is either not initialized OR not currently connected
-          bmsTelemetryData.bmsState = TelemetryState::NOT_CONNECTED;
-          // Send the not connected state update
-          xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);
 
           // Fallback to ESC data for unified view
           unifiedBatteryData.volts = escTelemetryData.volts;
           unifiedBatteryData.amps = escTelemetryData.amps;
           unifiedBatteryData.soc = 0.0;  // We don't estimate SOC from voltage anymore
+        } else {  // Not connected to either BMS or ESC, probably USB powered
+          // No connection to either BMS or ESC
+          unifiedBatteryData.volts = 0.0;
+          unifiedBatteryData.amps = 0.0;
+          unifiedBatteryData.soc = 0.0;
         }
 
         // Update display - CS pin management is handled inside refreshDisplay via LVGL mutex
@@ -958,14 +961,6 @@ void handleThrottle() {
 
 void syncESCTelemetry() {
   unsigned long currentTime = millis();
-
-  // Use isBMSConnected to decide if unified data needs update from ESC
-  if (bmsTelemetryData.bmsState != TelemetryState::CONNECTED) {
-    unifiedBatteryData.volts = escTelemetryData.volts;
-    unifiedBatteryData.amps = escTelemetryData.amps;
-    unifiedBatteryData.soc = 0.0; // We don't estimate SOC from voltage anymore
-  }
-
   // Update ESC state based first on TWAI init, then on time since last update received
   if (!escTwaiInitialized) {
     escTelemetryData.escState = TelemetryState::NOT_CONNECTED;
