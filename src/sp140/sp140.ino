@@ -362,8 +362,6 @@ void refreshDisplay() {
 
 
 void spiCommTask(void *pvParameters) {
-  bool currentBmsConnectionState = false;  // Local variable for this loop iteration
-
   for (;;) {
       #ifdef SCREEN_DEBUG
         float altitude = 0;
@@ -378,12 +376,10 @@ void spiCommTask(void *pvParameters) {
         if (bmsCanInitialized) {
           // Select BMS CS pin to check connection
           updateBMSData();  // This function handles its own CS pins
-
-          currentBmsConnectionState = bms_can->isConnected();
         }
 
         // 2. Use BMS data if connected, otherwise use ESC data
-        if (currentBmsConnectionState) {
+        if (bms_can->isConnected()) {
           // BMS is initialized AND currently connected
           unifiedBatteryData.volts = bmsTelemetryData.battery_voltage;
           unifiedBatteryData.amps = bmsTelemetryData.battery_current;
