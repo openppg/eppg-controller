@@ -738,7 +738,7 @@ void buttonHandlerTask(void* parameter) {
             toggleArm();
             armSequenceStarted = false;
             buttonPressed = false;
-            buttonPressStartTime = currentTime; // Reset to prevent immediate cruise activation
+            buttonPressStartTime = currentTime;  // Reset to prevent immediate cruise activation
           }
         }
       }
@@ -748,8 +748,6 @@ void buttonHandlerTask(void* parameter) {
 
         // Handle performance mode (only when disarmed and held long enough)
         if (currentState == DISARMED && currentHoldTime >= PERFORMANCE_MODE_HOLD_MS) {
-          USBSerial.println("Toggling performance mode");
-          modeSwitch(false);
           buttonPressed = false;
           buttonPressStartTime = currentTime;
         }
@@ -765,7 +763,7 @@ void buttonHandlerTask(void* parameter) {
       // Debug current state
       if (buttonPressed) {
         uint32_t currentHoldTime = currentTime - buttonPressStartTime;
-        if (currentHoldTime % 500 == 0) { // Print every 500ms
+        if (currentHoldTime % 500 == 0) {  // Print every 500ms
           USBSerial.print("Current hold time: ");
           USBSerial.print(currentHoldTime);
           USBSerial.println("ms");
@@ -849,9 +847,6 @@ void toggleCruise() {
     case ARMED:
       if (throttleEngaged()) {
         changeDeviceState(ARMED_CRUISING);
-      } else {
-        // Call modeSwitch when armed but throttle not engaged
-        modeSwitch(false);
       }
       break;
     case ARMED_CRUISING:
