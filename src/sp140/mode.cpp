@@ -18,7 +18,7 @@ void writeDeviceData();
  *
  * @param update_display Whether to update the display after switching modes
  */
-void modeSwitch(bool update_display) {
+void perfModeSwitch() {
   // 0=CHILL 1=SPORT 2=LUDICROUS?!
   if (deviceData.performance_mode == 0) {
     deviceData.performance_mode = 1;

@@ -5,9 +5,7 @@
 
 /**
  * Switches between performance modes (Chill/Sport)
- *
- * @param update_display Whether to update the display after switching modes
- */
-void modeSwitch(bool update_display);
+*/
+void perfModeSwitch();
 
 #endif  // INC_SP140_MODE_H_

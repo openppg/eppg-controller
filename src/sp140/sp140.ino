@@ -566,7 +566,7 @@ void setup() {
 
   pulseVibeMotor();
   if (digitalRead(board_config.button_top) == LOW) {  // LOW means pressed since it's INPUT_PULLUP
-    modeSwitch(false);
+    perfModeSwitch();
   }
 
   setLEDColor(LED_GREEN);
@@ -752,6 +752,8 @@ void buttonHandlerTask(void* parameter) {
 
         // Handle performance mode (only when disarmed and held long enough)
         if (currentState == DISARMED && currentHoldTime >= PERFORMANCE_MODE_HOLD_MS) {
+          //toggle performance mode
+          perfModeSwitch();
           buttonPressed = false;
           buttonPressStartTime = currentTime;
         }
