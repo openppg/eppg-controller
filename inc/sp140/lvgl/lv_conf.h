@@ -236,9 +236,11 @@
 
 #define LV_USE_CANVAS     0  /* Don't need canvas */
 
+#define LV_USE_CALENDAR   0 /* Explicitly disable calendar widget */
+
 #define LV_USE_CHECKBOX   0  /* Don't need checkbox */
 
-#define LV_USE_DROPDOWN   1  /* Don't need dropdown */
+#define LV_USE_DROPDOWN   0  /* Don't need dropdown */
 
 #define LV_USE_IMG        1   /*Requires: lv_label*/
 

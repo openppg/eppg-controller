@@ -487,7 +487,7 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_size(arm_indicator, 70, 43);
   lv_obj_set_pos(arm_indicator, 90, 32);
   lv_obj_set_style_border_width(arm_indicator, 0, LV_PART_MAIN);
-  lv_obj_clear_flag(arm_indicator, LV_OBJ_FLAG_CLICKABLE); // Not clickable
+  lv_obj_set_style_radius(arm_indicator, 0, LV_PART_MAIN); // Ensure sharp corners
   // Move to background and hide initially
   lv_obj_move_background(arm_indicator);
   lv_obj_add_flag(arm_indicator, LV_OBJ_FLAG_HIDDEN);
@@ -499,7 +499,6 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_style_bg_color(spinner_overlay, darkMode ? LVGL_BLACK : LVGL_WHITE, LV_PART_MAIN);
   lv_obj_set_style_bg_opa(spinner_overlay, LV_OPA_70, LV_PART_MAIN);  // 70% opacity
   lv_obj_set_style_border_width(spinner_overlay, 0, LV_PART_MAIN);
-  lv_obj_clear_flag(spinner_overlay, LV_OBJ_FLAG_CLICKABLE);
 
   // Create spinning animation at the top center - now place on top of overlay
   spinner = lv_spinner_create(spinner_overlay, 1000, 60);  // 1000ms period, 60 arcade width
