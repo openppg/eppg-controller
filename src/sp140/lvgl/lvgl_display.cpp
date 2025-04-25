@@ -3,6 +3,10 @@
 #include "../../../inc/sp140/structs.h"
 #include "../../../inc/sp140/bms.h"
 #include <Adafruit_ST7735.h>
+#include <vector>
+#include <string>
+#include <map>
+#include <utility> // For std::pair
 
 // Display dimensions
 #define SCREEN_WIDTH 160
@@ -18,10 +22,40 @@
 // Constants from the original display.h
 #define TEMP_WARNING_THRESHOLD 55.0f
 #define TEMP_CRITICAL_THRESHOLD 70.0f
-#define BATTERY_LOW_THRESHOLD 5.0f
+#define BATTERY_LOW_THRESHOLD 5.0f // Note: These percentage thresholds seem unused currently
 #define BATTERY_MEDIUM_THRESHOLD 20.0f
 #define CELL_VOLTAGE_WARNING 3.6f
 #define CELL_VOLTAGE_CRITICAL 3.5f
+
+// Notification System Definitions
+#define NOTIFICATION_LATCH_MS 2000
+#define NOTIFICATION_CYCLE_MS 2000
+
+struct NotificationInfo {
+  const char* message;
+  lv_color_t color;
+  bool is_error; // true for error (red), false for warning (orange)
+  uint32_t last_active_time;
+};
+
+// Define notification message strings
+const char* const WARN_LOW_CELL = "BAT-LC";
+const char* const CRIT_LOW_CELL = "BAT-LC";
+const char* const WARN_LOW_PACK = "BAT-LV";
+const char* const CRIT_LOW_PACK = "BAT-LV";
+const char* const WARN_HIGH_PACK = "BAT-HV";
+const char* const CRIT_HIGH_PACK = "BAT-HV";
+const char* const WARN_CELL_DIFF = "BAT-DV";
+const char* const CRIT_CELL_DIFF = "BAT-DV";
+const char* const WARN_BATT_TEMP = "BAT-HT";
+const char* const CRIT_BATT_TEMP = "BAT-HT";
+const char* const WARN_ESC_TEMP = "ESC-HT";
+const char* const CRIT_ESC_TEMP = "ESC-HT";
+const char* const WARN_MOTOR_TEMP = "MOT-HT";
+const char* const CRIT_MOTOR_TEMP = "MOT-HT";
+const char* const ERR_BMS_TIMEOUT = "BMS-NC";
+const char* const ERR_ESC_TIMEOUT = "ESC-NC";
+// Add more message strings as needed...
 
 // Global variables
 static lv_disp_drv_t disp_drv;
@@ -51,6 +85,13 @@ static lv_obj_t* arm_indicator = NULL;
 static lv_obj_t* spinner = NULL;       // For the spinning animation
 static lv_obj_t* spinner_overlay = NULL; // Overlay for the spinner
 static lv_obj_t* cruise_indicator_label = NULL; // New label for cruise mode
+static lv_obj_t* warning_label = NULL; // New label for warnings/errors
+
+// Notification Counter Objects
+static lv_obj_t* error_counter_circle = NULL;
+static lv_obj_t* error_counter_label = NULL;
+static lv_obj_t* warning_counter_circle = NULL;
+static lv_obj_t* warning_counter_label = NULL;
 
 // Create a static array of temperature labels for easy access
 static lv_obj_t* temp_labels[3];
@@ -68,8 +109,42 @@ static lv_obj_t* temp_letter_labels[3];  // For B, E, M letters
 #define LVGL_PURPLE lv_color_make(128, 0, 128)
 #define LVGL_GRAY lv_color_make(128, 128, 128)
 
+struct DisplayedNotification {
+  const char* message = nullptr;
+  lv_color_t color = LVGL_BLACK; // Default color
+  bool visible = false;
+};
+
 // Function forward declarations
 void setupMainScreen(bool darkMode);
+// Forward declaration for the new notification management function
+static DisplayedNotification manageDisplayNotifications(
+  const STR_ESC_TELEMETRY_140& escTelemetry,
+  const STR_BMS_TELEMETRY_140& bmsTelemetry
+);
+
+// Helper function to manage notifications (keep static, pass map by reference)
+static void updateOrAddNotification(std::map<std::string, NotificationInfo>& notifications, const std::string& key, bool isActive, const char* msg, lv_color_t color, bool isError) {
+    uint32_t current_time = millis();
+    auto it = notifications.find(key);
+
+    if (isActive) {
+        if (it != notifications.end()) {
+            // Update last active time if it exists
+            it->second.last_active_time = current_time;
+            // Ensure message/color/error status are up-to-date if they can change
+            it->second.message = msg;
+            it->second.color = color;
+            it->second.is_error = isError;
+        } else {
+            // Add new notification
+            notifications[key] = {msg, color, isError, current_time};
+            // Reset logic moved to manageDisplayNotifications
+        }
+    }
+    // If !isActive, we don't remove it here. Latching logic below handles removal.
+}
+
 
 void setupLvglBuffer() {
   // Initialize LVGL library
@@ -338,19 +413,32 @@ void setupMainScreen(bool darkMode) {
 
   // Bottom section - altitude and temperatures
   altitude_label = lv_label_create(main_screen);
-  lv_obj_align(altitude_label, LV_ALIGN_BOTTOM_LEFT, 5, -5);
   // Use a larger font for altitude
   lv_obj_set_style_text_font(altitude_label, &lv_font_montserrat_24, 0);
   lv_obj_set_style_text_color(altitude_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
 
+  // Warning/Error message label
+  warning_label = lv_label_create(main_screen);
+  // Position above altitude area (which is now on the right)
+  lv_obj_set_width(warning_label, 115); // Limit width
+  // Align warning label to the top-left of the bottom section
+  lv_obj_align(warning_label, LV_ALIGN_TOP_LEFT, 5, 78); // Position below HLine2
+  lv_obj_set_style_text_font(warning_label, &lv_font_montserrat_12, 0); // Smaller font for warnings
+  lv_label_set_long_mode(warning_label, LV_LABEL_LONG_WRAP); // Allow wrapping
+  lv_label_set_text(warning_label, ""); // Initially empty
+  lv_obj_add_flag(warning_label, LV_OBJ_FLAG_HIDDEN); // Hide initially
+
   // Altitude unit label (e.g., "m" or "ft")
   altitude_unit_label = lv_label_create(main_screen);
-  // Align to the bottom right, then offset leftwards to be next to the vertical line at x=120
-  lv_obj_align(altitude_unit_label, LV_ALIGN_BOTTOM_RIGHT, -(SCREEN_WIDTH - 120 + 3), -5); // - (160 - 120 + 3) = -43
+  // Align unit label just left of the vertical line (x=120) at the bottom
+  lv_obj_align(altitude_unit_label, LV_ALIGN_BOTTOM_RIGHT, -(SCREEN_WIDTH - 120 + 5), -5); // x=-45, y=-5
   lv_obj_set_style_text_font(altitude_unit_label, &lv_font_montserrat_16, 0); // Use a smaller font
   lv_obj_set_style_text_color(altitude_unit_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+
+  // Align altitude value label to the left of the unit label
+  lv_obj_align_to(altitude_label, altitude_unit_label, LV_ALIGN_OUT_LEFT_BOTTOM, -1, 0); // Align bottom edges, reduce padding to 1px
 
   // Create temperature labels - adjust positions to align with divider lines
   batt_temp_label = lv_label_create(main_screen);
@@ -427,6 +515,45 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_style_pad_bottom(motor_letter_label, 2, 0);
   lv_label_set_text(motor_letter_label, "M");
   temp_letter_labels[2] = motor_letter_label;
+
+  // --- Notification Counters ---
+  const int counter_size = 16; // Made smaller
+
+  // Error Counter (Red Circle)
+  error_counter_circle = lv_obj_create(main_screen);
+  lv_obj_set_size(error_counter_circle, counter_size, counter_size);
+  lv_obj_set_style_radius(error_counter_circle, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_bg_color(error_counter_circle, LVGL_RED, 0);
+  lv_obj_set_style_border_width(error_counter_circle, 0, 0);
+
+  error_counter_label = lv_label_create(error_counter_circle);
+  lv_label_set_text(error_counter_label, "0");
+  lv_obj_set_style_text_color(error_counter_label, LVGL_WHITE, 0);
+  lv_obj_set_style_text_font(error_counter_label, &lv_font_montserrat_12, 0);
+  lv_obj_center(error_counter_label);
+
+  // Warning Counter (Orange Circle)
+  warning_counter_circle = lv_obj_create(main_screen);
+  lv_obj_set_size(warning_counter_circle, counter_size, counter_size);
+  // Align warning counter to bottom right corner, offset slightly
+  lv_obj_align(warning_counter_circle, LV_ALIGN_BOTTOM_RIGHT, -25, -35); // Adjusted: left 20px, up 10px
+  lv_obj_set_style_radius(warning_counter_circle, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_bg_color(warning_counter_circle, LVGL_ORANGE, 0);
+  lv_obj_set_style_border_width(warning_counter_circle, 0, 0);
+
+  warning_counter_label = lv_label_create(warning_counter_circle);
+  lv_label_set_text(warning_counter_label, "0");
+  lv_obj_set_style_text_color(warning_counter_label, LVGL_BLACK, 0); // Black text for orange
+  lv_obj_set_style_text_font(warning_counter_label, &lv_font_montserrat_12, 0);
+  lv_obj_center(warning_counter_label);
+
+  // Align error counter to the left of the warning counter
+  lv_obj_align_to(error_counter_circle, warning_counter_circle, LV_ALIGN_OUT_LEFT_MID, -3, 0);
+
+  // Hide counters initially
+  lv_obj_add_flag(error_counter_circle, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_add_flag(warning_counter_circle, LV_OBJ_FLAG_HIDDEN);
+  // --- End Notification Counters ---
 
   // Draw divider lines
   // Create horizontal line between top and middle sections
@@ -548,6 +675,177 @@ void hideLoadingOverlay() {
     lv_obj_add_flag(spinner_overlay, LV_OBJ_FLAG_HIDDEN);
   }
 }
+
+// New function to handle all notification logic
+static DisplayedNotification manageDisplayNotifications(
+  const STR_ESC_TELEMETRY_140& escTelemetry,
+  const STR_BMS_TELEMETRY_140& bmsTelemetry
+) {
+  // --- Notification System Static Variables ---
+  // Moved static variables inside the function to limit scope
+  static std::map<std::string, NotificationInfo> active_notifications;
+  static int current_error_index = -1;
+  static int current_warning_index = -1;
+  static uint32_t last_notification_switch_time = 0;
+  static bool was_displaying_error = false; // Track last cycle type for index reset
+
+  DisplayedNotification result; // Struct to return
+  uint32_t current_time = millis();
+
+  // --- Notification Checks ---
+  bool bmsConnected = (bmsTelemetry.bmsState == TelemetryState::CONNECTED);
+  bool escConnected = (escTelemetry.escState == TelemetryState::CONNECTED);
+
+  bool low_cell_warn = bmsConnected && (bmsTelemetry.lowest_cell_voltage > 0 && bmsTelemetry.lowest_cell_voltage <= CELL_VOLTAGE_WARNING);
+  bool low_cell_crit = bmsConnected && (bmsTelemetry.lowest_cell_voltage > 0 && bmsTelemetry.lowest_cell_voltage <= CELL_VOLTAGE_CRITICAL);
+  updateOrAddNotification(active_notifications, "LOW_CELL_CRIT", low_cell_crit, CRIT_LOW_CELL, LVGL_RED, true);
+  updateOrAddNotification(active_notifications, "LOW_CELL_WARN", low_cell_warn && !low_cell_crit, WARN_LOW_CELL, LVGL_ORANGE, false);
+
+  bool batt_temp_warn = bmsConnected && (bmsTelemetry.highest_temperature >= TEMP_WARNING_THRESHOLD);
+  bool batt_temp_crit = bmsConnected && (bmsTelemetry.highest_temperature >= TEMP_CRITICAL_THRESHOLD);
+  updateOrAddNotification(active_notifications, "BATT_TEMP_CRIT", batt_temp_crit, CRIT_BATT_TEMP, LVGL_RED, true);
+  updateOrAddNotification(active_notifications, "BATT_TEMP_WARN", batt_temp_warn && !batt_temp_crit, WARN_BATT_TEMP, LVGL_ORANGE, false);
+
+  bool esc_temp_warn = escConnected && (escTelemetry.mos_temp >= TEMP_WARNING_THRESHOLD);
+  bool esc_temp_crit = escConnected && (escTelemetry.mos_temp >= TEMP_CRITICAL_THRESHOLD);
+  updateOrAddNotification(active_notifications, "ESC_TEMP_CRIT", esc_temp_crit, CRIT_ESC_TEMP, LVGL_RED, true);
+  updateOrAddNotification(active_notifications, "ESC_TEMP_WARN", esc_temp_warn && !esc_temp_crit, WARN_ESC_TEMP, LVGL_ORANGE, false);
+
+  bool motor_temp_warn = escConnected && (escTelemetry.motor_temp >= TEMP_WARNING_THRESHOLD);
+  bool motor_temp_crit = escConnected && (escTelemetry.motor_temp >= TEMP_CRITICAL_THRESHOLD);
+  updateOrAddNotification(active_notifications, "MOTOR_TEMP_CRIT", motor_temp_crit, CRIT_MOTOR_TEMP, LVGL_RED, true);
+  updateOrAddNotification(active_notifications, "MOTOR_TEMP_WARN", motor_temp_warn && !motor_temp_crit, WARN_MOTOR_TEMP, LVGL_ORANGE, false);
+
+  bool bms_error = (bmsTelemetry.bmsState == TelemetryState::NOT_CONNECTED || bmsTelemetry.bmsState == TelemetryState::STALE);
+  updateOrAddNotification(active_notifications, "BMS_TIMEOUT", bms_error, ERR_BMS_TIMEOUT, LVGL_RED, true);
+
+  bool esc_error = (escTelemetry.escState == TelemetryState::NOT_CONNECTED || escTelemetry.escState == TelemetryState::STALE);
+  updateOrAddNotification(active_notifications, "ESC_TIMEOUT", esc_error, ERR_ESC_TIMEOUT, LVGL_RED, true);
+
+  // --- Latching & Cleanup ---
+  int previous_error_count = 0;
+  for(const auto& pair : active_notifications) { if(pair.second.is_error) previous_error_count++; }
+
+  for (auto it = active_notifications.begin(); it != active_notifications.end(); /* no increment */) {
+      // Remove based on latch time
+      if ((current_time - it->second.last_active_time) >= NOTIFICATION_LATCH_MS) {
+          // Simplified removal: Assume if time is up, condition *must* have cleared previously
+          it = active_notifications.erase(it);
+      } else {
+          ++it; // Advance iterator only if not erased
+      }
+  }
+
+  // --- Filtering & Counting ---
+  std::vector<const NotificationInfo*> errors_to_show;
+  std::vector<const NotificationInfo*> warnings_to_show;
+  for (const auto& pair : active_notifications) {
+    if (pair.second.is_error) {
+      errors_to_show.push_back(&pair.second);
+    } else {
+      warnings_to_show.push_back(&pair.second);
+    }
+  }
+  int error_count = errors_to_show.size();
+  int warning_count = warnings_to_show.size();
+
+  // Check if a new error appeared since last cycle
+  if (error_count > previous_error_count && !was_displaying_error) {
+    current_error_index = -1; // Force reset if a new error appears while warnings were showing
+  }
+
+  // --- Update Counter Display ---
+  if (error_counter_label != NULL && error_counter_circle != NULL) { // Check if objects exist
+      if (error_count > 0) {
+        lv_label_set_text_fmt(error_counter_label, "%d", error_count);
+        lv_obj_clear_flag(error_counter_circle, LV_OBJ_FLAG_HIDDEN);
+      } else {
+        lv_obj_add_flag(error_counter_circle, LV_OBJ_FLAG_HIDDEN);
+      }
+  }
+
+  if (warning_counter_label != NULL && warning_counter_circle != NULL) { // Check if objects exist
+      if (warning_count > 0) {
+        lv_label_set_text_fmt(warning_counter_label, "%d", warning_count);
+        lv_obj_clear_flag(warning_counter_circle, LV_OBJ_FLAG_HIDDEN);
+      } else {
+        lv_obj_add_flag(warning_counter_circle, LV_OBJ_FLAG_HIDDEN);
+      }
+  }
+
+  // --- Cycling & Display Logic ---
+  bool display_error = (error_count > 0);
+  bool display_warning = (warning_count > 0) && !display_error;
+  bool should_switch = (current_time - last_notification_switch_time >= NOTIFICATION_CYCLE_MS);
+  bool index_reset = false;
+
+  const NotificationInfo* notification_to_display = nullptr;
+
+  if (display_error) {
+    if (!was_displaying_error || current_error_index < 0 || current_error_index >= error_count) {
+      current_error_index = 0;
+      should_switch = true; // Force immediate display
+      index_reset = true;
+    } else if (should_switch) {
+      current_error_index = (current_error_index + 1) % error_count;
+    }
+    // Ensure index is valid after potential map changes
+    if (current_error_index >= error_count) current_error_index = 0;
+
+    if (error_count > 0 && (should_switch || index_reset)) {
+        notification_to_display = errors_to_show[current_error_index];
+        result.message = notification_to_display->message;
+        result.color = notification_to_display->color;
+        result.visible = true;
+        last_notification_switch_time = current_time;
+    } else if (error_count > 0) {
+        // Keep showing the same error if cycle time hasn't elapsed
+        notification_to_display = errors_to_show[current_error_index];
+        result.message = notification_to_display->message;
+        result.color = notification_to_display->color;
+        result.visible = true;
+    }
+    was_displaying_error = true;
+    current_warning_index = -1; // Reset warning index when showing errors
+
+  } else if (display_warning) {
+    if (was_displaying_error || current_warning_index < 0 || current_warning_index >= warning_count) {
+      current_warning_index = 0;
+      should_switch = true; // Force immediate display
+      index_reset = true;
+    } else if (should_switch) {
+      current_warning_index = (current_warning_index + 1) % warning_count;
+    }
+    // Ensure index is valid after potential map changes
+    if (current_warning_index >= warning_count) current_warning_index = 0;
+
+    if (warning_count > 0 && (should_switch || index_reset)) {
+        notification_to_display = warnings_to_show[current_warning_index];
+        result.message = notification_to_display->message;
+        result.color = notification_to_display->color;
+        result.visible = true;
+        last_notification_switch_time = current_time;
+    } else if (warning_count > 0) {
+        // Keep showing the same warning if cycle time hasn't elapsed
+        notification_to_display = warnings_to_show[current_warning_index];
+        result.message = notification_to_display->message;
+        result.color = notification_to_display->color;
+        result.visible = true;
+    }
+    was_displaying_error = false;
+    current_error_index = -1; // Reset error index when showing warnings
+
+  } else {
+    // No active notifications
+    result.visible = false;
+    current_error_index = -1;
+    current_warning_index = -1;
+    was_displaying_error = false;
+  }
+
+  return result;
+}
+
 
 void updateLvglMainScreen(
   const STR_DEVICE_DATA_140_V1& deviceData,
@@ -690,7 +988,7 @@ void updateLvglMainScreen(
     } else {
       snprintf(altBuffer, sizeof(altBuffer), "%d", static_cast<int>(round(altitude * 3.28084))); // Format number only
       lv_label_set_text(altitude_label, altBuffer);
-      lv_label_set_text(altitude_unit_label, "ft"); // Set unit separately
+      lv_label_set_text(altitude_unit_label, "f"); // Set unit separately (Changed from "ft")
     }
     // Set color for both labels
     lv_obj_set_style_text_color(altitude_label,
@@ -698,6 +996,23 @@ void updateLvglMainScreen(
     lv_obj_set_style_text_color(altitude_unit_label,
                               darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   }
+
+  // --- Get Current Notification ---
+  DisplayedNotification current_notification = manageDisplayNotifications(
+      escTelemetry, bmsTelemetry
+  );
+
+  // --- Update Notification Display ---
+  if (warning_label != NULL) { // Check if label exists
+    if (current_notification.visible) {
+      lv_label_set_text(warning_label, current_notification.message);
+      lv_obj_set_style_text_color(warning_label, current_notification.color, 0);
+      lv_obj_clear_flag(warning_label, LV_OBJ_FLAG_HIDDEN);
+    } else {
+      lv_obj_add_flag(warning_label, LV_OBJ_FLAG_HIDDEN);
+    }
+  }
+  // --- End Notification Update ---
 
   // Update temperature labels
   struct {
