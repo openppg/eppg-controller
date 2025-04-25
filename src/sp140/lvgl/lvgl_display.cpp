@@ -8,6 +8,9 @@
 #include <map>
 #include <utility> // For std::pair
 
+// Include the generated C file for the cruise icon
+#include "../../assets/img/cruise-control-340255-30.c" // New 30x30 icon
+
 // Display dimensions
 #define SCREEN_WIDTH 160
 #define SCREEN_HEIGHT 128
@@ -84,8 +87,8 @@ static lv_obj_t* motor_temp_label = NULL;
 static lv_obj_t* arm_indicator = NULL;
 static lv_obj_t* spinner = NULL;       // For the spinning animation
 static lv_obj_t* spinner_overlay = NULL; // Overlay for the spinner
-static lv_obj_t* cruise_indicator_label = NULL; // New label for cruise mode
 static lv_obj_t* warning_label = NULL; // New label for warnings/errors
+lv_obj_t* cruise_icon_img = NULL; // Cruise control icon image object
 
 // Notification Counter Objects
 static lv_obj_t* error_counter_circle = NULL;
@@ -585,7 +588,7 @@ void setupMainScreen(bool darkMode) {
 
   // Create vertical line in bottom section
   lv_obj_t* v_line2 = lv_line_create(main_screen);
-  static lv_point_t v_line2_points[] = {{120, 75}, {120, 128}};
+  static lv_point_t v_line2_points[] = {{120, 70}, {120, 128}};
   lv_line_set_points(v_line2, v_line2_points, 2);
   lv_obj_set_style_line_color(v_line2,
                              LVGL_GRAY,
@@ -619,6 +622,27 @@ void setupMainScreen(bool darkMode) {
   lv_obj_move_background(arm_indicator);
   lv_obj_add_flag(arm_indicator, LV_OBJ_FLAG_HIDDEN);
 
+  // Create cruise control icon (initially hidden)
+  cruise_icon_img = lv_img_create(main_screen);
+  // lv_img_set_src(cruise_icon_img, &noun_cruise_control_340255_1); // Use the old 40x40 image descriptor
+  lv_img_set_src(cruise_icon_img, &cruise_control_340255_30); // Use the new 30x30 image descriptor
+
+  // Set icon color using recoloring based on theme
+  lv_color_t icon_color;
+  if (darkMode) {
+    icon_color = lv_color_white(); // White icon on dark background
+  } else {
+    icon_color = lv_color_black(); // Black icon on light background
+  }
+  lv_obj_set_style_img_recolor(cruise_icon_img, icon_color, LV_PART_MAIN);
+  lv_obj_set_style_img_recolor_opa(cruise_icon_img, LV_OPA_COVER, LV_PART_MAIN); // Make icon fully opaque
+
+  // lv_obj_align(cruise_icon_img, LV_ALIGN_CENTER, 12, -12); // Align center, then offset right 12, up 12
+  lv_obj_align(cruise_icon_img, LV_ALIGN_CENTER, 12, -9); // Align center, offset right 12, up 9 (down 3 from -12)
+  lv_obj_move_foreground(cruise_icon_img); // Ensure icon is on the top layer
+  // Don't hide it initially for debugging
+  lv_obj_add_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN); // Hide initially
+
   // Create semi-transparent overlay for the spinner
   spinner_overlay = lv_obj_create(main_screen);
   lv_obj_set_size(spinner_overlay, SCREEN_WIDTH, SCREEN_HEIGHT);
@@ -649,17 +673,6 @@ void setupMainScreen(bool darkMode) {
 
   // Load the screen
   lv_scr_load(main_screen);
-
-  // Cruise indicator label (below power label)
-  cruise_indicator_label = lv_label_create(main_screen);
-  // Align below power label (kW value) instead of power bar, adjust y-offset to move up
-  lv_obj_align_to(cruise_indicator_label, power_label, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 0); // Changed y-offset from 2 to 0
-  lv_obj_set_style_text_font(cruise_indicator_label, &lv_font_montserrat_10, 0); // Smaller font
-  // Set text color based on theme
-  lv_obj_set_style_text_color(cruise_indicator_label,
-                              darkMode ? LVGL_WHITE : LVGL_BLACK,
-                              0);
-  lv_label_set_text(cruise_indicator_label, ""); // Initially empty
 }
 
 // Function to show the loading overlay
@@ -973,6 +986,13 @@ void updateLvglMainScreen(
   snprintf(timeBuffer, sizeof(timeBuffer), "%02d:%02d", sessionSeconds / 60, sessionSeconds % 60);
   lv_label_set_text(armed_time_label, timeBuffer);
 
+  // Update Cruise Control Icon Visibility (conditional)
+  if (cruising) {
+    lv_obj_clear_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);
+  } else {
+    lv_obj_add_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);
+  }
+
   // Update altitude
   char altBuffer[15];
   if (altitude == __FLT_MIN__) {
@@ -1074,13 +1094,6 @@ void updateLvglMainScreen(
     lv_obj_clear_flag(arm_indicator, LV_OBJ_FLAG_HIDDEN);
   } else {
     lv_obj_add_flag(arm_indicator, LV_OBJ_FLAG_HIDDEN);
-  }
-
-  // Update Cruise Indicator Label
-  if (cruising) {
-    lv_label_set_text(cruise_indicator_label, "CRUISE");
-  } else {
-    lv_label_set_text(cruise_indicator_label, "");
   }
 
   // Deselect display CS when done
