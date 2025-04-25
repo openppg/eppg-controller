@@ -1,5 +1,4 @@
 #include "sp140/bms.h"
-#include "sp140/display.h"
 #include "sp140/structs.h"
 #include "sp140/globals.h"
 
@@ -11,7 +10,6 @@ STR_BMS_TELEMETRY_140 bmsTelemetryData = {
 BMS_CAN* bms_can = nullptr;
 
 // These are defined in sp140.ino
-extern Adafruit_ST7735* display;
 extern int8_t displayCS;
 extern int8_t bmsCS;
 
@@ -117,4 +115,3 @@ void printBMSData() {
   // Deselect BMS CS when done
   digitalWrite(bmsCS, HIGH);
 }
-

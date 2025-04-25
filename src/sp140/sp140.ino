@@ -5,6 +5,7 @@
 #include "../../inc/sp140/esp32s3-config.h"
 
 #include "../../inc/sp140/structs.h"         // data structs
+#include "../../inc/sp140/utilities.h"
 #include <Adafruit_NeoPixel.h>   // LEDs
 #include <ArduinoJson.h>
 #include <CircularBuffer.hpp>      // smooth out readings
@@ -39,7 +40,6 @@
 #include "../../inc/sp140/led.h"
 
 // Comment out the old display and use LVGL display
-#include "../../inc/sp140/display.h"  // Still needed for some definitions
 #include "../../inc/sp140/lvgl/lvgl_display.h"
 
 // Global variable for shared SPI
@@ -568,7 +568,6 @@ void setup() {
   if (digitalRead(board_config.button_top) == LOW) {  // LOW means pressed since it's INPUT_PULLUP
     perfModeSwitch();
   }
-
   setLEDColor(LED_GREEN);
 
   // Show LVGL splash screen

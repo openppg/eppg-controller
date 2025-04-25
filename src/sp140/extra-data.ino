@@ -232,7 +232,7 @@ class ScreenRotationCallbacks: public BLECharacteristicCallbacks {
       if (rotation == 1 || rotation == 3) {  // Only allow valid rotation values
         deviceData.screen_rotation = rotation;
         writeDeviceData();
-        resetRotation(rotation);  // Update screen immediately
+        //resetRotation(rotation);  // Update screen immediately
         USBSerial.println("Screen rotation saved to Preferences");
       } else {
         USBSerial.println("Invalid rotation value");
@@ -688,8 +688,8 @@ void parse_serial_commands() {
 
       sanitizeDeviceData();
       writeDeviceData();
-      resetRotation(deviceData.screen_rotation);
-      setTheme(deviceData.theme);
+      //resetRotation(deviceData.screen_rotation);
+      //setTheme(deviceData.theme);
 
       send_device_data();
     }
