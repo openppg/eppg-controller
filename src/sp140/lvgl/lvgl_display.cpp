@@ -399,14 +399,14 @@ void setupMainScreen(bool darkMode) {
 
   // Performance mode label
   perf_mode_label = lv_label_create(main_screen);
-  lv_obj_align(perf_mode_label, LV_ALIGN_RIGHT_MID, -15, -12);
+  lv_obj_align(perf_mode_label, LV_ALIGN_RIGHT_MID, -6, -17);
   lv_obj_set_style_text_font(perf_mode_label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(perf_mode_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
 
   // Armed time label - adjust position now that there's no bluetooth icon
   armed_time_label = lv_label_create(main_screen);
-  lv_obj_align(armed_time_label, LV_ALIGN_RIGHT_MID, -15, 2);
+  lv_obj_align(armed_time_label, LV_ALIGN_RIGHT_MID, -6, -3);
   lv_obj_set_style_text_font(armed_time_label, &lv_font_montserrat_14, 0);
   lv_obj_set_style_text_color(armed_time_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
@@ -567,7 +567,7 @@ void setupMainScreen(bool darkMode) {
 
   // Create horizontal line between middle and bottom sections
   lv_obj_t* h_line2 = lv_line_create(main_screen);
-  static lv_point_t h_line2_points[] = {{0, 75}, {SCREEN_WIDTH, 75}};
+  static lv_point_t h_line2_points[] = {{0, 70}, {SCREEN_WIDTH, 70}};
   lv_line_set_points(h_line2, h_line2_points, 2);
   lv_obj_set_style_line_color(h_line2,
                              LVGL_GRAY,
@@ -576,7 +576,7 @@ void setupMainScreen(bool darkMode) {
 
   // Create vertical line in middle section
   lv_obj_t* v_line1 = lv_line_create(main_screen);
-  static lv_point_t v_line1_points[] = {{90, 37}, {90, 75}};
+  static lv_point_t v_line1_points[] = {{110, 37}, {110, 70}};
   lv_line_set_points(v_line1, v_line1_points, 2);
   lv_obj_set_style_line_color(v_line1,
                              LVGL_GRAY,
@@ -611,8 +611,8 @@ void setupMainScreen(bool darkMode) {
 
   // Create arm indicator (initially hidden)
   arm_indicator = lv_obj_create(main_screen);
-  lv_obj_set_size(arm_indicator, 70, 43);
-  lv_obj_set_pos(arm_indicator, 90, 32);
+  lv_obj_set_size(arm_indicator, 50, 33);
+  lv_obj_set_pos(arm_indicator, 110, 37);
   lv_obj_set_style_border_width(arm_indicator, 0, LV_PART_MAIN);
   lv_obj_set_style_radius(arm_indicator, 0, LV_PART_MAIN); // Ensure sharp corners
   // Move to background and hide initially
