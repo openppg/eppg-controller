@@ -57,7 +57,7 @@ void updateBMSData() {
   // Deselect BMS CS when done
   digitalWrite(bmsCS, HIGH);
 
-  // printBMSData();
+  //printBMSData();
 }
 
 void printBMSData() {
@@ -86,8 +86,33 @@ void printBMSData() {
   USBSerial.println(" kW");
 
   USBSerial.print("Highest Cell Voltage: ");
-  USBSerial.print(bms_can->getHighestCellVoltage());
+  USBSerial.print(bms_can->getHighestCellVoltage(), 3);
   USBSerial.println(" V");
+
+  USBSerial.print("Lowest Cell Voltage: ");
+  USBSerial.print(bms_can->getLowestCellVoltage(), 3);
+  USBSerial.println(" V");
+
+  USBSerial.print("Voltage Differential: ");
+  USBSerial.print(bms_can->getHighestCellVoltage() - bms_can->getLowestCellVoltage(), 3);
+  USBSerial.println(" V");
+
+  USBSerial.print("Discharge MOS Status: ");
+  USBSerial.println(bms_can->isDischargeMOSStatus() ? "OPEN" : "CLOSED");
+
+  USBSerial.print("Charge MOS Status: ");
+  USBSerial.println(bms_can->isChargeMOSStatus() ? "OPEN" : "CLOSED");
+
+  // Log each temperature sensor value
+  // The first 2 are for the BMS (mosfet and balance resistors)
+  // The next 4 are for the cell probes
+  for (uint8_t i = 0; i < 6; i++) {
+    USBSerial.print("Temperature Sensor ");
+    USBSerial.print(i);
+    USBSerial.print(": ");
+    USBSerial.print(bms_can->getTemperature(i));
+    USBSerial.println(" °C");
+  }
 
   // Deselect BMS CS when done
   digitalWrite(bmsCS, HIGH);
