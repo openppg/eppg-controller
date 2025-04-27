@@ -424,10 +424,10 @@ void setupMainScreen(bool darkMode) {
   // Warning/Error message label
   warning_label = lv_label_create(main_screen);
   // Position above altitude area (which is now on the right)
-  lv_obj_set_width(warning_label, 115); // Limit width
+  lv_obj_set_width(warning_label, 115);  // Limit width
   // Align warning label to the top-left of the bottom section
-  lv_obj_align(warning_label, LV_ALIGN_TOP_LEFT, 5, 78); // Position below HLine2
-  lv_obj_set_style_text_font(warning_label, &lv_font_montserrat_12, 0); // Smaller font for warnings
+  lv_obj_align(warning_label, LV_ALIGN_TOP_LEFT, 5, 78);  // Position below HLine2
+  lv_obj_set_style_text_font(warning_label, &lv_font_montserrat_12, 0);  // Smaller font for warnings
   lv_label_set_long_mode(warning_label, LV_LABEL_LONG_WRAP); // Allow wrapping
   lv_label_set_text(warning_label, ""); // Initially empty
   lv_obj_add_flag(warning_label, LV_OBJ_FLAG_HIDDEN); // Hide initially

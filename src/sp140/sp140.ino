@@ -135,9 +135,9 @@ void switchScreenPage(ScreenPage newPage) {
 void bleStateUpdateTask(void* parameter) {
   BLEStateUpdate update;
 
-  while(true) {
-    if(xQueueReceive(bleStateQueue, &update, portMAX_DELAY) == pdTRUE) {
-      if(pDeviceStateCharacteristic != nullptr) {
+  while (true) {
+    if (xQueueReceive(bleStateQueue, &update, portMAX_DELAY) == pdTRUE) {
+      if (pDeviceStateCharacteristic != nullptr) {
         // Add delay to give BLE stack breathing room
         vTaskDelay(pdMS_TO_TICKS(20));
 
@@ -145,7 +145,7 @@ void bleStateUpdateTask(void* parameter) {
         pDeviceStateCharacteristic->setValue(&update.state, sizeof(update.state));
 
         // Only notify if requested and connected
-        if(update.needsNotify && deviceConnected) {
+        if (update.needsNotify && deviceConnected) {
           vTaskDelay(pdMS_TO_TICKS(10)); // Additional delay before notify
           pDeviceStateCharacteristic->notify();
         }
@@ -161,9 +161,9 @@ void deviceStateUpdateTask(void* parameter) {
   uint8_t state;
 
   while(true) {
-    if(xQueueReceive(deviceStateQueue, &state, portMAX_DELAY) == pdTRUE) {
-      if(pDeviceStateCharacteristic != nullptr && deviceConnected) {
-        vTaskDelay(pdMS_TO_TICKS(20)); // Give BLE stack breathing room
+    if (xQueueReceive(deviceStateQueue, &state, portMAX_DELAY) == pdTRUE) {
+      if (pDeviceStateCharacteristic != nullptr && deviceConnected) {
+        vTaskDelay(pdMS_TO_TICKS(20));  // Give BLE stack breathing room
         pDeviceStateCharacteristic->setValue(&state, sizeof(state));
         // Temporarily remove the notify call
         // pDeviceStateCharacteristic->notify();
@@ -804,7 +804,8 @@ void resumeLEDTask() {
 void runDisarmAlert() {
   u_int16_t disarm_melody[] = { 2093, 1976, 880 };
   const unsigned int disarm_vibes[] = { 78, 49 };
-  runVibePattern(disarm_vibes, 2);
+  //runVibePattern(disarm_vibes, 2);
+  pulseVibeMotor();
   playMelody(disarm_melody, 3);
 }
 
@@ -1023,9 +1024,10 @@ bool armSystem() {
   setGroundAltitude(deviceData);
 
   vTaskSuspend(blinkLEDTaskHandle);
-  setLEDs(HIGH); // solid LED while armed
+  setLEDs(HIGH);  // solid LED while armed
   playMelody(arm_melody, 3);
-  runVibePattern(arm_vibes, 7);
+  //runVibePattern(arm_vibes, 7);
+  pulseVibeMotor();
   return true;
 }
 
