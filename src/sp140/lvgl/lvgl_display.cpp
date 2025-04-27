@@ -31,14 +31,15 @@
 #define CELL_VOLTAGE_CRITICAL 3.5f
 
 // Notification System Definitions
-#define NOTIFICATION_LATCH_MS 2000
-#define NOTIFICATION_CYCLE_MS 2000
+#define NOTIFICATION_LATCH_MS 2000 // Minimum time to display a notification
+#define NOTIFICATION_CYCLE_MS 2000 // Time between cycling to the *next* notification
 
 struct NotificationInfo {
   const char* message;
   lv_color_t color;
   bool is_error; // true for error (red), false for warning (orange)
-  uint32_t last_active_time;
+  uint32_t last_active_time; // Last time the condition for this notification was met
+  // Removed display_start_time as it's managed separately now
 };
 
 // Define notification message strings
@@ -142,10 +143,16 @@ static void updateOrAddNotification(std::map<std::string, NotificationInfo>& not
         } else {
             // Add new notification
             notifications[key] = {msg, color, isError, current_time};
-            // Reset logic moved to manageDisplayNotifications
         }
     }
-    // If !isActive, we don't remove it here. Latching logic below handles removal.
+    // If !isActive, we only update the last_active_time if the entry exists.
+    // The filtering logic in manageDisplayNotifications handles removal.
+    // It's important *not* to remove inactive entries here, as manageDisplayNotifications
+    // needs to know the last_active_time to enforce the latch.
+    else if (it != notifications.end()) {
+       // Condition is not active, but keep the entry for now so the latch can work.
+       // We don't update last_active_time here if isActive is false.
+    }
 }
 
 
@@ -612,6 +619,11 @@ void setupMainScreen(bool darkMode) {
                              LV_PART_MAIN);
   lv_obj_set_style_line_width(h_line4, 1, LV_PART_MAIN);
 
+  // Ensure warning_label is drawn on top of lines and other elements in its area
+  if (warning_label != NULL) {
+      lv_obj_move_foreground(warning_label);
+  }
+
   // Create arm indicator (initially hidden)
   arm_indicator = lv_obj_create(main_screen);
   lv_obj_set_size(arm_indicator, 50, 33);
@@ -689,172 +701,199 @@ void hideLoadingOverlay() {
   }
 }
 
-// New function to handle all notification logic
+// Refactored function to handle notification logic with proper latching
 static DisplayedNotification manageDisplayNotifications(
   const STR_ESC_TELEMETRY_140& escTelemetry,
   const STR_BMS_TELEMETRY_140& bmsTelemetry
 ) {
   // --- Notification System Static Variables ---
-  // Moved static variables inside the function to limit scope
-  static std::map<std::string, NotificationInfo> active_notifications;
-  static int current_error_index = -1;
-  static int current_warning_index = -1;
-  static uint32_t last_notification_switch_time = 0;
-  static bool was_displaying_error = false; // Track last cycle type for index reset
+  static std::map<std::string, NotificationInfo> notification_states; // Holds all potential notifications and their last active time
+  static std::string currently_displayed_key = "";                     // Key of the notification currently shown
+  static uint32_t currently_displayed_start_time = 0;                 // When the current notification started displaying
+  static uint32_t last_notification_switch_time = 0;                  // When we last *switched* to a new notification (for cycle timing)
+  static int current_error_index = -1;                                // Index for cycling through active errors
+  static int current_warning_index = -1;                              // Index for cycling through active warnings
+  static bool was_displaying_error_last_cycle = false;                // Track category (error/warning) for index reset logic
 
-  DisplayedNotification result; // Struct to return
   uint32_t current_time = millis();
+  DisplayedNotification result; // Struct to return
+  result.visible = false;       // Default to not visible
 
-  // --- Notification Checks ---
+  // --- 1. Update Notification States ---
+  // Check all conditions and update/add entries in notification_states
   bool bmsConnected = (bmsTelemetry.bmsState == TelemetryState::CONNECTED);
   bool escConnected = (escTelemetry.escState == TelemetryState::CONNECTED);
 
   bool low_cell_warn = bmsConnected && (bmsTelemetry.lowest_cell_voltage > 0 && bmsTelemetry.lowest_cell_voltage <= CELL_VOLTAGE_WARNING);
   bool low_cell_crit = bmsConnected && (bmsTelemetry.lowest_cell_voltage > 0 && bmsTelemetry.lowest_cell_voltage <= CELL_VOLTAGE_CRITICAL);
-  updateOrAddNotification(active_notifications, "LOW_CELL_CRIT", low_cell_crit, CRIT_LOW_CELL, LVGL_RED, true);
-  updateOrAddNotification(active_notifications, "LOW_CELL_WARN", low_cell_warn && !low_cell_crit, WARN_LOW_CELL, LVGL_ORANGE, false);
+  updateOrAddNotification(notification_states, "LOW_CELL_CRIT", low_cell_crit, CRIT_LOW_CELL, LVGL_RED, true);
+  updateOrAddNotification(notification_states, "LOW_CELL_WARN", low_cell_warn && !low_cell_crit, WARN_LOW_CELL, LVGL_ORANGE, false);
 
   bool batt_temp_warn = bmsConnected && (bmsTelemetry.highest_temperature >= TEMP_WARNING_THRESHOLD);
   bool batt_temp_crit = bmsConnected && (bmsTelemetry.highest_temperature >= TEMP_CRITICAL_THRESHOLD);
-  updateOrAddNotification(active_notifications, "BATT_TEMP_CRIT", batt_temp_crit, CRIT_BATT_TEMP, LVGL_RED, true);
-  updateOrAddNotification(active_notifications, "BATT_TEMP_WARN", batt_temp_warn && !batt_temp_crit, WARN_BATT_TEMP, LVGL_ORANGE, false);
+  updateOrAddNotification(notification_states, "BATT_TEMP_CRIT", batt_temp_crit, CRIT_BATT_TEMP, LVGL_RED, true);
+  updateOrAddNotification(notification_states, "BATT_TEMP_WARN", batt_temp_warn && !batt_temp_crit, WARN_BATT_TEMP, LVGL_ORANGE, false);
 
   bool esc_temp_warn = escConnected && (escTelemetry.mos_temp >= TEMP_WARNING_THRESHOLD);
   bool esc_temp_crit = escConnected && (escTelemetry.mos_temp >= TEMP_CRITICAL_THRESHOLD);
-  updateOrAddNotification(active_notifications, "ESC_TEMP_CRIT", esc_temp_crit, CRIT_ESC_TEMP, LVGL_RED, true);
-  updateOrAddNotification(active_notifications, "ESC_TEMP_WARN", esc_temp_warn && !esc_temp_crit, WARN_ESC_TEMP, LVGL_ORANGE, false);
+  updateOrAddNotification(notification_states, "ESC_TEMP_CRIT", esc_temp_crit, CRIT_ESC_TEMP, LVGL_RED, true);
+  updateOrAddNotification(notification_states, "ESC_TEMP_WARN", esc_temp_warn && !esc_temp_crit, WARN_ESC_TEMP, LVGL_ORANGE, false);
 
   bool motor_temp_warn = escConnected && (escTelemetry.motor_temp >= TEMP_WARNING_THRESHOLD);
   bool motor_temp_crit = escConnected && (escTelemetry.motor_temp >= TEMP_CRITICAL_THRESHOLD);
-  updateOrAddNotification(active_notifications, "MOTOR_TEMP_CRIT", motor_temp_crit, CRIT_MOTOR_TEMP, LVGL_RED, true);
-  updateOrAddNotification(active_notifications, "MOTOR_TEMP_WARN", motor_temp_warn && !motor_temp_crit, WARN_MOTOR_TEMP, LVGL_ORANGE, false);
+  updateOrAddNotification(notification_states, "MOTOR_TEMP_CRIT", motor_temp_crit, CRIT_MOTOR_TEMP, LVGL_RED, true);
+  updateOrAddNotification(notification_states, "MOTOR_TEMP_WARN", motor_temp_warn && !motor_temp_crit, WARN_MOTOR_TEMP, LVGL_ORANGE, false);
 
+  // Use STALE state as well for timeout errors
   bool bms_error = (bmsTelemetry.bmsState == TelemetryState::NOT_CONNECTED || bmsTelemetry.bmsState == TelemetryState::STALE);
-  updateOrAddNotification(active_notifications, "BMS_TIMEOUT", bms_error, ERR_BMS_TIMEOUT, LVGL_RED, true);
+  updateOrAddNotification(notification_states, "BMS_TIMEOUT", bms_error, ERR_BMS_TIMEOUT, LVGL_RED, true);
 
   bool esc_error = (escTelemetry.escState == TelemetryState::NOT_CONNECTED || escTelemetry.escState == TelemetryState::STALE);
-  updateOrAddNotification(active_notifications, "ESC_TIMEOUT", esc_error, ERR_ESC_TIMEOUT, LVGL_RED, true);
+  updateOrAddNotification(notification_states, "ESC_TIMEOUT", esc_error, ERR_ESC_TIMEOUT, LVGL_RED, true);
 
-  // --- Latching & Cleanup ---
-  int previous_error_count = 0;
-  for(const auto& pair : active_notifications) { if(pair.second.is_error) previous_error_count++; }
+  // --- 2. Filter *Currently Active* Notifications ---
+  // Create lists of notifications whose conditions are true *right now*
+  std::vector<std::string> currently_true_error_keys;
+  std::vector<std::string> currently_true_warning_keys;
+  bool current_displayed_condition_is_true = false;
 
-  for (auto it = active_notifications.begin(); it != active_notifications.end(); /* no increment */) {
-      // Remove based on latch time
-      if ((current_time - it->second.last_active_time) >= NOTIFICATION_LATCH_MS) {
-          // Simplified removal: Assume if time is up, condition *must* have cleared previously
-          it = active_notifications.erase(it);
-      } else {
-          ++it; // Advance iterator only if not erased
-      }
+  for (std::map<std::string, NotificationInfo>::const_iterator it = notification_states.begin(); it != notification_states.end(); ++it) {
+    const std::string& key = it->first;
+    const NotificationInfo& info = it->second;
+    // Check if condition was met *on this specific cycle*
+    // We rely on updateOrAddNotification having just updated last_active_time if the condition is true
+    bool condition_currently_true = (current_time - info.last_active_time < 50); // Use a small threshold to check if updated recently
+
+    if(condition_currently_true) {
+        if (info.is_error) {
+            currently_true_error_keys.push_back(key);
+        } else {
+            currently_true_warning_keys.push_back(key);
+        }
+        // Check if the one *currently* on screen is true right now
+        if (key == currently_displayed_key) {
+            current_displayed_condition_is_true = true;
+        }
+    }
   }
 
-  // --- Filtering & Counting ---
-  std::vector<const NotificationInfo*> errors_to_show;
-  std::vector<const NotificationInfo*> warnings_to_show;
-  for (const auto& pair : active_notifications) {
-    if (pair.second.is_error) {
-      errors_to_show.push_back(&pair.second);
+  int current_error_count = currently_true_error_keys.size();
+  int current_warning_count = currently_true_warning_keys.size();
+
+  // --- 3. Update Counter Display (Based on currently true conditions) ---
+  if (error_counter_label != NULL && error_counter_circle != NULL) {
+    if (current_error_count > 0) {
+      lv_label_set_text_fmt(error_counter_label, "%d", current_error_count);
+      lv_obj_clear_flag(error_counter_circle, LV_OBJ_FLAG_HIDDEN);
     } else {
-      warnings_to_show.push_back(&pair.second);
+      lv_obj_add_flag(error_counter_circle, LV_OBJ_FLAG_HIDDEN);
     }
   }
-  int error_count = errors_to_show.size();
-  int warning_count = warnings_to_show.size();
 
-  // Check if a new error appeared since last cycle
-  if (error_count > previous_error_count && !was_displaying_error) {
-    current_error_index = -1; // Force reset if a new error appears while warnings were showing
+  if (warning_counter_label != NULL && warning_counter_circle != NULL) {
+    if (current_warning_count > 0) {
+      lv_label_set_text_fmt(warning_counter_label, "%d", current_warning_count);
+      lv_obj_clear_flag(warning_counter_circle, LV_OBJ_FLAG_HIDDEN);
+    } else {
+      lv_obj_add_flag(warning_counter_circle, LV_OBJ_FLAG_HIDDEN);
+    }
   }
 
-  // --- Update Counter Display ---
-  if (error_counter_label != NULL && error_counter_circle != NULL) { // Check if objects exist
-      if (error_count > 0) {
-        lv_label_set_text_fmt(error_counter_label, "%d", error_count);
-        lv_obj_clear_flag(error_counter_circle, LV_OBJ_FLAG_HIDDEN);
-      } else {
-        lv_obj_add_flag(error_counter_circle, LV_OBJ_FLAG_HIDDEN);
-      }
-  }
+  // --- 4. Selection Logic --- Refined ---
+  std::string key_to_display_this_cycle = "";
+  uint32_t current_display_duration = current_time - currently_displayed_start_time;
+  bool current_latch_met = current_display_duration >= NOTIFICATION_LATCH_MS;
 
-  if (warning_counter_label != NULL && warning_counter_circle != NULL) { // Check if objects exist
-      if (warning_count > 0) {
-        lv_label_set_text_fmt(warning_counter_label, "%d", warning_count);
-        lv_obj_clear_flag(warning_counter_circle, LV_OBJ_FLAG_HIDDEN);
-      } else {
-        lv_obj_add_flag(warning_counter_circle, LV_OBJ_FLAG_HIDDEN);
-      }
-  }
+  bool currently_displaying = !currently_displayed_key.empty() && notification_states.count(currently_displayed_key);
 
-  // --- Cycling & Display Logic ---
-  bool display_error = (error_count > 0);
-  bool display_warning = (warning_count > 0) && !display_error;
-  bool should_switch = (current_time - last_notification_switch_time >= NOTIFICATION_CYCLE_MS);
-  bool index_reset = false;
-
-  const NotificationInfo* notification_to_display = nullptr;
-
-  if (display_error) {
-    if (!was_displaying_error || current_error_index < 0 || current_error_index >= error_count) {
-      current_error_index = 0;
-      should_switch = true; // Force immediate display
-      index_reset = true;
-    } else if (should_switch) {
-      current_error_index = (current_error_index + 1) % error_count;
-    }
-    // Ensure index is valid after potential map changes
-    if (current_error_index >= error_count) current_error_index = 0;
-
-    if (error_count > 0 && (should_switch || index_reset)) {
-        notification_to_display = errors_to_show[current_error_index];
-        result.message = notification_to_display->message;
-        result.color = notification_to_display->color;
-        result.visible = true;
-        last_notification_switch_time = current_time;
-    } else if (error_count > 0) {
-        // Keep showing the same error if cycle time hasn't elapsed
-        notification_to_display = errors_to_show[current_error_index];
-        result.message = notification_to_display->message;
-        result.color = notification_to_display->color;
-        result.visible = true;
-    }
-    was_displaying_error = true;
-    current_warning_index = -1; // Reset warning index when showing errors
-
-  } else if (display_warning) {
-    if (was_displaying_error || current_warning_index < 0 || current_warning_index >= warning_count) {
-      current_warning_index = 0;
-      should_switch = true; // Force immediate display
-      index_reset = true;
-    } else if (should_switch) {
-      current_warning_index = (current_warning_index + 1) % warning_count;
-    }
-    // Ensure index is valid after potential map changes
-    if (current_warning_index >= warning_count) current_warning_index = 0;
-
-    if (warning_count > 0 && (should_switch || index_reset)) {
-        notification_to_display = warnings_to_show[current_warning_index];
-        result.message = notification_to_display->message;
-        result.color = notification_to_display->color;
-        result.visible = true;
-        last_notification_switch_time = current_time;
-    } else if (warning_count > 0) {
-        // Keep showing the same warning if cycle time hasn't elapsed
-        notification_to_display = warnings_to_show[current_warning_index];
-        result.message = notification_to_display->message;
-        result.color = notification_to_display->color;
-        result.visible = true;
-    }
-    was_displaying_error = false;
-    current_error_index = -1; // Reset error index when showing warnings
-
+  // Decision: Keep current? Switch? Or select new?
+  if (currently_displaying && (current_displayed_condition_is_true || !current_latch_met)) {
+    // KEEP CURRENT: Either condition is still true, OR latch time isn't met yet.
+    key_to_display_this_cycle = currently_displayed_key;
+    USBSerial.println("[manageDisplay] Decision: Keep current notification.");
   } else {
-    // No active notifications
-    result.visible = false;
-    current_error_index = -1;
-    current_warning_index = -1;
-    was_displaying_error = false;
+    // SWITCH or SELECT NEW: Current is either done (condition false + latch met) or wasn't displaying.
+    if (currently_displaying) {
+        USBSerial.println("[manageDisplay] Decision: Current notification finished, selecting next.");
+        currently_displayed_key = ""; // Clear current since it's finished
+    } else {
+        USBSerial.println("[manageDisplay] Decision: Nothing displayed, selecting new.");
+    }
+
+    // Prioritize currently active errors
+    if (current_error_count > 0) {
+      bool switched_category = !was_displaying_error_last_cycle;
+      if (switched_category || current_error_index < 0 || current_error_index >= current_error_count) {
+          current_error_index = 0;
+      } else {
+          // Cycle to next error if not switching category
+          current_error_index = (current_error_index + 1) % current_error_count;
+      }
+      key_to_display_this_cycle = currently_true_error_keys[current_error_index];
+      was_displaying_error_last_cycle = true;
+      current_warning_index = -1; // Reset warning index
+      USBSerial.print("[manageDisplay] Selected Error: "); USBSerial.println(key_to_display_this_cycle.c_str());
+    }
+    // Else, prioritize currently active warnings
+    else if (current_warning_count > 0) {
+      bool switched_category = was_displaying_error_last_cycle;
+       if (switched_category || current_warning_index < 0 || current_warning_index >= current_warning_count) {
+          current_warning_index = 0;
+      } else {
+          // Cycle to next warning if not switching category
+          current_warning_index = (current_warning_index + 1) % current_warning_count;
+      }
+      key_to_display_this_cycle = currently_true_warning_keys[current_warning_index];
+      was_displaying_error_last_cycle = false;
+      current_error_index = -1; // Reset error index
+      USBSerial.print("[manageDisplay] Selected Warning: "); USBSerial.println(key_to_display_this_cycle.c_str());
+    } else {
+      // No active errors or warnings
+      key_to_display_this_cycle = "";
+      was_displaying_error_last_cycle = false;
+      current_error_index = -1;
+      current_warning_index = -1;
+       USBSerial.println("[manageDisplay] Selected: None");
+    }
+
+    // If we selected a *new* notification, update the state
+    if (!key_to_display_this_cycle.empty()) {
+        currently_displayed_key = key_to_display_this_cycle;
+        currently_displayed_start_time = current_time;
+        last_notification_switch_time = current_time; // Record switch time for potential future cycling logic
+    }
   }
+
+
+  // --- 5. Set Result ---
+  if (!key_to_display_this_cycle.empty() && notification_states.count(key_to_display_this_cycle)) {
+      const NotificationInfo& info_to_display = notification_states.at(key_to_display_this_cycle);
+      result.message = info_to_display.message;
+      result.color = info_to_display.color;
+      result.visible = true;
+  } else {
+      // Nothing to display this cycle
+      result.visible = false;
+      // Ensure the state reflects nothing is displayed if key_to_display is empty
+      if (key_to_display_this_cycle.empty()) {
+         currently_displayed_key = "";
+      }
+  }
+
+  // This step is not strictly necessary for correctness but prevents the map from growing indefinitely
+  // Remove entries whose last_active_time is very old (e.g., > 1 minute)
+  const uint32_t cleanup_threshold = 60000; // 1 minute
+  for (auto it = notification_states.begin(); it != notification_states.end(); /* manual increment */) {
+    if (it->first != currently_displayed_key && (current_time - it->second.last_active_time) > cleanup_threshold) {
+      it = notification_states.erase(it);
+    } else {
+      ++it;
+    }
+  }
+
+  // DEBUG: Print final result before returning
+  USBSerial.print("[manageDisplay] Visible: "); USBSerial.print(result.visible);
+  USBSerial.print(", Message: "); USBSerial.println(result.message ? result.message : "NULL");
 
   return result;
 }
@@ -868,7 +907,7 @@ void updateLvglMainScreen(
   float altitude, bool armed, bool cruising,
   unsigned int armedStartMillis
 ) {
-  // Make sure display CS is selected
+  // Make sure display CS is selected before any LVGL calls that might draw
   digitalWrite(displayCS, LOW);
 
   bool darkMode = (deviceData.theme == 1);
@@ -922,75 +961,91 @@ void updateLvglMainScreen(
   }
 
   // Update left voltage (cell voltage)
-  if (bmsConnected) {
-    char buffer[10];
-    snprintf(buffer, sizeof(buffer), "%2.2fv", lowestCellV);
-    lv_label_set_text(voltage_left_label, buffer);
+  if (voltage_left_label != NULL) { // Check object exists
+    if (bmsConnected) {
+        char buffer[10];
+        snprintf(buffer, sizeof(buffer), "%2.2fv", lowestCellV);
+        lv_label_set_text(voltage_left_label, buffer);
 
-    // Set color based on voltage
-    if (lowestCellV <= CELL_VOLTAGE_CRITICAL) {
-      lv_obj_set_style_text_color(voltage_left_label, LVGL_RED, 0);
-    } else if (lowestCellV <= CELL_VOLTAGE_WARNING) {
-      lv_obj_set_style_text_color(voltage_left_label, LVGL_ORANGE, 0);
+        // Set color based on voltage
+        if (lowestCellV <= CELL_VOLTAGE_CRITICAL && lowestCellV > 0) { // Add > 0 check
+        lv_obj_set_style_text_color(voltage_left_label, LVGL_RED, 0);
+        } else if (lowestCellV <= CELL_VOLTAGE_WARNING && lowestCellV > 0) { // Add > 0 check
+        lv_obj_set_style_text_color(voltage_left_label, LVGL_ORANGE, 0);
+        } else {
+        lv_obj_set_style_text_color(voltage_left_label,
+                                    darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+        }
+    } else if (escConnected) {
+        lv_obj_set_style_text_color(voltage_left_label, LVGL_RED, 0);
+        lv_label_set_text(voltage_left_label, "No BMS");
     } else {
-      lv_obj_set_style_text_color(voltage_left_label,
-                                darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+        lv_label_set_text(voltage_left_label, "");
     }
-  } else if (escConnected) {
-    lv_obj_set_style_text_color(voltage_left_label, LVGL_RED, 0);
-    lv_label_set_text(voltage_left_label, "No BMS");
-  } else {
-    lv_label_set_text(voltage_left_label, "");
   }
 
   // Update right voltage (total voltage)
   // if esc connected, show esc voltage in center of screen
-  if (bmsConnected) {
-    char buffer[10];
-    snprintf(buffer, sizeof(buffer), "%2.0fv", totalVolts);
-    lv_label_set_text(voltage_right_label, buffer);
-  } else if (escConnected) {
-    lv_label_set_text(voltage_right_label, "");
+  if (voltage_right_label != NULL && battery_label != NULL) { // Check objects exist
+    if (bmsConnected) {
+        char buffer[10];
+        snprintf(buffer, sizeof(buffer), "%2.0fv", totalVolts);
+        lv_label_set_text(voltage_right_label, buffer);
+        // Ensure battery label shows percentage if BMS is connected
+        if (batteryPercent > 0) {
+           char batt_buffer[10];
+           snprintf(batt_buffer, sizeof(batt_buffer), "%d%%", (int)batteryPercent);
+           lv_label_set_text(battery_label, batt_buffer);
+           lv_obj_set_style_text_color(battery_label, LVGL_BLACK, 0);
+        } else {
+           // If SOC is 0, maybe show voltage instead or clear? Let's clear for now.
+           lv_label_set_text(battery_label, "-");
+           lv_obj_set_style_text_color(battery_label, LVGL_BLACK, 0);
+        }
 
-    char buffer[10];
-    snprintf(buffer, sizeof(buffer), "%2.1fv", totalVolts);
-    lv_label_set_text(battery_label, buffer);
-    lv_obj_set_style_text_color(battery_label, LVGL_BLACK, 0);
-  } else {
-    lv_label_set_text(voltage_right_label, "");
+    } else if (escConnected) {
+        lv_label_set_text(voltage_right_label, "");
+
+        char buffer[10];
+        snprintf(buffer, sizeof(buffer), "%2.1fv", totalVolts);
+        lv_label_set_text(battery_label, buffer);
+        lv_obj_set_style_text_color(battery_label, LVGL_BLACK, 0);
+    } else {
+        lv_label_set_text(voltage_right_label, "");
+    }
   }
 
   // Update power display
-  if (bmsConnected || escConnected) {
-    char buffer[10];
-    float kWatts = unifiedBatteryData.power;
-    snprintf(buffer, sizeof(buffer), kWatts < 1.0 ? "%.2f kW" : "%.1f kW", kWatts);
-    lv_label_set_text(power_label, buffer);
+  if (power_label != NULL && power_bar != NULL) { // Check objects exist
+    if (bmsConnected || escConnected) {
+        char buffer[10];
+        float kWatts = unifiedBatteryData.power;
+        snprintf(buffer, sizeof(buffer), kWatts < 1.0 ? "%.2f kW" : "%.1f kW", kWatts);
+        lv_label_set_text(power_label, buffer);
 
-    // Update power bar
-    lv_bar_set_value(power_bar, (int)(kWatts * 100), LV_ANIM_OFF);
-  } else {
-    lv_label_set_text(power_label, "");
-    lv_bar_set_value(power_bar, 0, LV_ANIM_OFF);
+        // Update power bar (range 0-2000 representing 0-20kW)
+        lv_bar_set_value(power_bar, (int)(kWatts * 100), LV_ANIM_OFF);
+    } else {
+        lv_label_set_text(power_label, "");
+        lv_bar_set_value(power_bar, 0, LV_ANIM_OFF);
+    }
   }
 
-  // Update performance mode
-  lv_label_set_text(perf_mode_label, deviceData.performance_mode == 0 ? "CHILL" : "SPORT");
+  // Update performance mode - Re-added this section
+  if (perf_mode_label != NULL) { // Check object exists
+     lv_label_set_text(perf_mode_label, deviceData.performance_mode == 0 ? "CHILL" : "SPORT");
+  }
 
   // Update armed time
-  const unsigned int nowMillis = millis();
-  static unsigned int _lastArmedMillis = 0;
-  if (armed) _lastArmedMillis = nowMillis;
-  const int sessionSeconds = (_lastArmedMillis - armedStartMillis) / 1000.0;
-  char timeBuffer[10];
-  snprintf(timeBuffer, sizeof(timeBuffer), "%02d:%02d", sessionSeconds / 60, sessionSeconds % 60);
-  lv_label_set_text(armed_time_label, timeBuffer);
-
-  // Update Cruise Control Icon Visibility (conditional)
-  if (cruising) {
-    lv_obj_clear_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);
-  } else {
-    lv_obj_add_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);
+  if (armed_time_label != NULL) { // Check object exists
+    const unsigned int nowMillis = millis();
+    static unsigned int _lastArmedMillis = 0; // Renamed to avoid conflict
+    if (armed) _lastArmedMillis = nowMillis;
+    // Calculate session time only if armedStartMillis is valid (not 0)
+    const int sessionSeconds = (armedStartMillis > 0) ? ((_lastArmedMillis - armedStartMillis) / 1000) : 0;
+    char timeBuffer[10];
+    snprintf(timeBuffer, sizeof(timeBuffer), "%02d:%02d", sessionSeconds / 60, sessionSeconds % 60);
+    lv_label_set_text(armed_time_label, timeBuffer);
   }
 
   // Update altitude
@@ -1024,11 +1079,20 @@ void updateLvglMainScreen(
 
   // --- Update Notification Display ---
   if (warning_label != NULL) { // Check if label exists
+    // DEBUG: Print notification state received by updateLvglMainScreen
+    USBSerial.print("[updateLvgl] Received Visible: "); USBSerial.print(current_notification.visible);
+    USBSerial.print(", Message: "); USBSerial.println(current_notification.message ? current_notification.message : "NULL");
+
     if (current_notification.visible) {
+      // Ensure text and color are set correctly
       lv_label_set_text(warning_label, current_notification.message);
+      // DEBUG: Confirm text set
+      USBSerial.print("[updateLvgl] Set warning_label text to: "); USBSerial.println(current_notification.message);
       lv_obj_set_style_text_color(warning_label, current_notification.color, 0);
+      // Ensure the label is made visible
       lv_obj_clear_flag(warning_label, LV_OBJ_FLAG_HIDDEN);
     } else {
+      // Ensure the label is hidden when no notification is active
       lv_obj_add_flag(warning_label, LV_OBJ_FLAG_HIDDEN);
     }
   }
@@ -1039,18 +1103,25 @@ void updateLvglMainScreen(
     float temp;
     TelemetryState state;
     const char* label;
-  } temps[] = {
-    {batteryTemp, bmsTelemetry.bmsState, "B"},
-    {escTemp, escTelemetry.escState, "E"},
-    {motorTemp, escTelemetry.escState, "M"}
+    lv_obj_t* value_label;
+    lv_obj_t* char_label;
+  } temps_to_update[] = {
+    {batteryTemp, bmsTelemetry.bmsState, "B", temp_labels[0], temp_letter_labels[0]},
+    {escTemp, escTelemetry.escState, "E", temp_labels[1], temp_letter_labels[1]},
+    {motorTemp, escTelemetry.escState, "M", temp_labels[2], temp_letter_labels[2]}
   };
 
   for (int i = 0; i < 3; i++) {
+     // Check labels exist using correct member names
+     if (temps_to_update[i].value_label == NULL || temps_to_update[i].char_label == NULL) continue;
+
     // Set the temperature value or dash
-    if (temps[i].state == TelemetryState::CONNECTED) {
-      lv_label_set_text_fmt(temp_labels[i], "%d", static_cast<int>(temps[i].temp));
+    if (temps_to_update[i].state == TelemetryState::CONNECTED) {
+      // Use value_label for the numeric temperature display
+      lv_label_set_text_fmt(temps_to_update[i].value_label, "%d", static_cast<int>(temps_to_update[i].temp));
     } else {
-      lv_label_set_text(temp_labels[i], "-");
+      // Use value_label for the dash display
+      lv_label_set_text(temps_to_update[i].value_label, "-");
     }
 
     // Set colors based on temperature
@@ -1058,12 +1129,12 @@ void updateLvglMainScreen(
     lv_color_t text_color;
     lv_opa_t bg_opacity = LV_OPA_0;  // Default transparent
 
-    if (temps[i].state == TelemetryState::CONNECTED) {
-      if (temps[i].temp >= TEMP_CRITICAL_THRESHOLD) {
+    if (temps_to_update[i].state == TelemetryState::CONNECTED) {
+      if (temps_to_update[i].temp >= TEMP_CRITICAL_THRESHOLD) {
         bg_color = LVGL_RED;
         text_color = LVGL_WHITE;
         bg_opacity = LV_OPA_100;
-      } else if (temps[i].temp >= TEMP_WARNING_THRESHOLD) {
+      } else if (temps_to_update[i].temp >= TEMP_WARNING_THRESHOLD) {
         bg_color = LVGL_ORANGE;
         text_color = LVGL_BLACK;
         bg_opacity = LV_OPA_100;
@@ -1074,16 +1145,16 @@ void updateLvglMainScreen(
       text_color = darkMode ? LVGL_WHITE : LVGL_BLACK;
     }
 
-    // Apply same styles to both labels
-    lv_obj_set_style_bg_opa(temp_labels[i], bg_opacity, 0);
-    lv_obj_set_style_bg_opa(temp_letter_labels[i], bg_opacity, 0);
+    // Apply same styles to both labels using correct member names
+    lv_obj_set_style_bg_opa(temps_to_update[i].value_label, bg_opacity, 0);
+    lv_obj_set_style_bg_opa(temps_to_update[i].char_label, bg_opacity, 0);
 
-    lv_obj_set_style_text_color(temp_labels[i], text_color, 0);
-    lv_obj_set_style_text_color(temp_letter_labels[i], text_color, 0);
+    lv_obj_set_style_text_color(temps_to_update[i].value_label, text_color, 0);
+    lv_obj_set_style_text_color(temps_to_update[i].char_label, text_color, 0);
 
     if (bg_opacity > 0) {
-      lv_obj_set_style_bg_color(temp_labels[i], bg_color, LV_PART_MAIN);
-      lv_obj_set_style_bg_color(temp_letter_labels[i], bg_color, LV_PART_MAIN);
+      lv_obj_set_style_bg_color(temps_to_update[i].value_label, bg_color, LV_PART_MAIN);
+      lv_obj_set_style_bg_color(temps_to_update[i].char_label, bg_color, LV_PART_MAIN);
     }
   }
 
@@ -1096,6 +1167,13 @@ void updateLvglMainScreen(
     lv_obj_add_flag(arm_indicator, LV_OBJ_FLAG_HIDDEN);
   }
 
-  // Deselect display CS when done
+  // Update Cruise Control Icon Visibility (conditional)
+  if (cruising) {
+    lv_obj_clear_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);
+  } else {
+    lv_obj_add_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);
+  }
+
+  // Deselect display CS when done drawing
   digitalWrite(displayCS, HIGH);
 }
