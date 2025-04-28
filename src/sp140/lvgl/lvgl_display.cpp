@@ -354,18 +354,6 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_style_text_color(power_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
 
-  // Power bar
-  power_bar = lv_bar_create(main_screen);
-  lv_obj_set_size(power_bar, 85, 8);
-  lv_obj_align(power_bar, LV_ALIGN_LEFT_MID, 5, 8);
-  lv_bar_set_range(power_bar, 0, 20);  // 0-20kW
-  lv_obj_set_style_bg_color(power_bar,
-                           darkMode ? LVGL_BLACK : LVGL_WHITE,
-                           LV_PART_MAIN);
-  lv_obj_set_style_bg_color(power_bar, LVGL_GREEN, LV_PART_INDICATOR);
-  // Remove rounded corners from power bar
-  lv_obj_set_style_radius(power_bar, 0, LV_PART_MAIN);  // Background part
-  lv_obj_set_style_radius(power_bar, 0, LV_PART_INDICATOR);  // Indicator part
 
   // Performance mode label
   perf_mode_label = lv_label_create(main_screen);
@@ -797,24 +785,20 @@ void updateLvglMainScreen(
   }
 
   // Update power display
-  if (power_label != NULL && power_bar != NULL) { // Check objects exist
+  if (power_label != NULL) {  // Check objects exist
     if (bmsConnected || escConnected) {
         char buffer[10];
         float kWatts = unifiedBatteryData.power;
         snprintf(buffer, sizeof(buffer), kWatts < 1.0 ? "%.2f kW" : "%.1f kW", kWatts);
         lv_label_set_text(power_label, buffer);
-
-        // Update power bar (range 0-2000 representing 0-20kW)
-        lv_bar_set_value(power_bar, (int)(kWatts * 100), LV_ANIM_OFF);
     } else {
         lv_label_set_text(power_label, "");
-        lv_bar_set_value(power_bar, 0, LV_ANIM_OFF);
     }
   }
 
   // Update performance mode - Re-added this section
-  if (perf_mode_label != NULL) { // Check object exists
-     lv_label_set_text(perf_mode_label, deviceData.performance_mode == 0 ? "CHILL" : "SPORT");
+  if (perf_mode_label != NULL) {  // Check object exists
+      lv_label_set_text(perf_mode_label, deviceData.performance_mode == 0 ? "CHILL" : "SPORT");
   }
 
   // Update armed time
