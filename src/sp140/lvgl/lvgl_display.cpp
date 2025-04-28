@@ -9,7 +9,10 @@
 #include <utility> // For std::pair
 
 // Include the generated C file for the cruise icon
-#include "../../assets/img/cruise-control-340255-30.c" // New 30x30 icon
+#include "../../assets/img/cruise-control-340255-30.c" // Cruise control icon
+
+// Include the generated C file for the charging icon
+#include "../../assets/img/energy-539741-26.c" // Charging icon
 
 // Display dimensions
 #define SCREEN_WIDTH 160
@@ -90,6 +93,7 @@ static lv_obj_t* spinner = NULL;       // For the spinning animation
 static lv_obj_t* spinner_overlay = NULL; // Overlay for the spinner
 static lv_obj_t* warning_label = NULL; // New label for warnings/errors
 lv_obj_t* cruise_icon_img = NULL; // Cruise control icon image object
+static lv_obj_t* charging_icon_img = NULL; // Charging icon image object
 
 // Notification Counter Objects
 static lv_obj_t* error_counter_circle = NULL;
@@ -655,6 +659,18 @@ void setupMainScreen(bool darkMode) {
   // Don't hide it initially for debugging
   lv_obj_add_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN); // Hide initially
 
+  // Create charging icon (initially hidden)
+  charging_icon_img = lv_img_create(main_screen);
+  lv_img_set_src(charging_icon_img, &energy_539741_26);
+  lv_obj_align_to(charging_icon_img, battery_label, LV_ALIGN_OUT_RIGHT_MID, 3, 0); // Align to right of battery label
+
+  // Set charging icon color based on theme
+  lv_obj_set_style_img_recolor(charging_icon_img, icon_color, LV_PART_MAIN); // Use same icon_color as cruise
+  lv_obj_set_style_img_recolor_opa(charging_icon_img, LV_OPA_COVER, LV_PART_MAIN);
+
+  lv_obj_move_foreground(charging_icon_img); // Ensure icon is on top
+  lv_obj_add_flag(charging_icon_img, LV_OBJ_FLAG_HIDDEN); // Hide initially
+
   // Create semi-transparent overlay for the spinner
   spinner_overlay = lv_obj_create(main_screen);
   lv_obj_set_size(spinner_overlay, SCREEN_WIDTH, SCREEN_HEIGHT);
@@ -1172,6 +1188,15 @@ void updateLvglMainScreen(
     lv_obj_clear_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);
   } else {
     lv_obj_add_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);
+  }
+
+  // Update Charging Icon Visibility
+  if (charging_icon_img != NULL) { // Check object exists
+    if (bmsTelemetry.is_charging) { // Check the charging flag
+      lv_obj_clear_flag(charging_icon_img, LV_OBJ_FLAG_HIDDEN);
+    } else {
+      lv_obj_add_flag(charging_icon_img, LV_OBJ_FLAG_HIDDEN);
+    }
   }
 
   // Deselect display CS when done drawing

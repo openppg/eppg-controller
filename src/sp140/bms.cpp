@@ -50,6 +50,9 @@ void updateBMSData() {
   bmsTelemetryData.energy_cycle = bms_can->getEnergyCycle();
   bmsTelemetryData.battery_failure_level = bms_can->getBatteryFailureLevel();
 
+  // Battery status
+  bmsTelemetryData.is_charging = bms_can->isBatteryCharging();
+
   bmsTelemetryData.lastUpdateMs = millis();
 
   // Deselect BMS CS when done
@@ -100,6 +103,9 @@ void printBMSData() {
 
   USBSerial.print("Charge MOS Status: ");
   USBSerial.println(bms_can->isChargeMOSStatus() ? "OPEN" : "CLOSED");
+
+  USBSerial.print("Battery Charging: ");
+  USBSerial.println(bms_can->isBatteryCharging() ? "YES" : "NO");
 
   // Log each temperature sensor value
   // The first 2 are for the BMS (mosfet and balance resistors)
