@@ -859,15 +859,15 @@ void toggleCruise() {
         const int activationThreshold = (int)(4095 * CRUISE_ACTIVATION_MAX_POT_PERCENTAGE);  // Calculate 70% threshold
 
         if (currentPotVal > activationThreshold) {
-          USBSerial.print("Cruise activation failed: Throttle too high (");
-          USBSerial.print(currentPotVal); USBSerial.print(" > ");
-          USBSerial.print(activationThreshold); USBSerial.println(")");
+          // Throttle is engaged and too high, flash the icon
+          startCruiseIconFlash();
         } else {
-          // Throttle is engaged but not too high, activate cruise
+          // Throttle is engaged and not too high, activate cruise
           changeDeviceState(ARMED_CRUISING);
         }
       } else {
-         // Throttle not engaged, do nothing (or provide feedback?)
+         // Throttle not engaged enough to set level, flash the icon
+         startCruiseIconFlash();
          USBSerial.println("Cruise activation failed: Throttle not engaged.");
       }
       break;
@@ -1062,7 +1062,7 @@ void afterCruiseStart() {
 
 void afterCruiseEnd() {
   cruisedPotVal = 0;
-  playCruiseSound();
+  // startCruiseIconFlash();  // Start flashing the icon
   pulseVibeMotor();
 }
 

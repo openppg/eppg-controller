@@ -115,6 +115,13 @@ static lv_obj_t* temp_letter_labels[3];  // For B, E, M letters
 // Function forward declarations
 void setupMainScreen(bool darkMode);
 
+// --- Cruise Icon Flashing ---
+static lv_timer_t* cruise_flash_timer = NULL;
+static int cruise_flash_count = 0;
+static bool isFlashingCruiseIcon = false;
+static void cruise_flash_timer_cb(lv_timer_t* timer); // Forward declaration
+static lv_color_t original_cruise_icon_color; // To restore color after flashing
+// --- End Cruise Icon Flashing ---
 
 void setupLvglBuffer() {
   // Initialize LVGL library
@@ -594,6 +601,9 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_style_img_recolor(cruise_icon_img, icon_color, LV_PART_MAIN);
   lv_obj_set_style_img_recolor_opa(cruise_icon_img, LV_OPA_COVER, LV_PART_MAIN); // Make icon fully opaque
 
+  // Store the original color for restoring after flash
+  original_cruise_icon_color = icon_color;
+
   // lv_obj_align(cruise_icon_img, LV_ALIGN_CENTER, 12, -12); // Align center, then offset right 12, up 12
   lv_obj_align(cruise_icon_img, LV_ALIGN_CENTER, 12, -9); // Align center, offset right 12, up 9 (down 3 from -12)
   lv_obj_move_foreground(cruise_icon_img); // Ensure icon is on the top layer
@@ -658,6 +668,81 @@ void hideLoadingOverlay() {
   }
 }
 
+// --- Cruise Icon Flashing Implementation ---
+static void cruise_flash_timer_cb(lv_timer_t* timer) {
+  // This callback runs within the LVGL task handler, which is already protected by lvglMutex
+
+  if (cruise_icon_img == NULL) {
+    // Should not happen, but safety check
+    if (cruise_flash_timer != NULL) {
+      lv_timer_del(cruise_flash_timer);
+      cruise_flash_timer = NULL;
+    }
+    cruise_flash_count = 0;
+    isFlashingCruiseIcon = false;
+    return;
+  }
+
+  // Toggle visibility
+  if (lv_obj_has_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN)) {
+    lv_obj_clear_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);
+  } else {
+    lv_obj_add_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);
+  }
+
+  cruise_flash_count++;
+
+  // Check if flashing is complete (3 flashes = 6 toggles)
+  if (cruise_flash_count >= 6) {
+    lv_timer_del(cruise_flash_timer);
+    cruise_flash_timer = NULL;
+    cruise_flash_count = 0;
+    isFlashingCruiseIcon = false;
+    // Ensure icon is hidden after flashing as cruise is off
+    lv_obj_add_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);
+  }
+}
+
+void startCruiseIconFlash() {
+  // This function can be called from other tasks, so protect with mutex
+  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(50)) == pdTRUE) { // Use a timeout
+    if (cruise_icon_img == NULL) {
+      xSemaphoreGive(lvglMutex);
+      return; // Can't flash if icon doesn't exist
+    }
+
+    // If a flash timer is already running, delete it first
+    if (cruise_flash_timer != NULL) {
+      lv_timer_del(cruise_flash_timer);
+      cruise_flash_timer = NULL;
+    }
+
+    // Reset state and start flashing
+    cruise_flash_count = 0;
+    isFlashingCruiseIcon = true;
+
+    // Start with the icon visible
+    lv_obj_clear_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);
+
+    // Create the timer (250ms interval for on/off cycle)
+    cruise_flash_timer = lv_timer_create(cruise_flash_timer_cb, 250, NULL);
+    if (cruise_flash_timer == NULL) {
+      // Failed to create timer, reset state
+      isFlashingCruiseIcon = false;
+      lv_obj_add_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN); // Hide it again
+      lv_obj_set_style_img_recolor(cruise_icon_img, original_cruise_icon_color, LV_PART_MAIN); // Restore color on failure
+      USBSerial.println("Error: Failed to create cruise flash timer!");
+    } else {
+      // Set icon to red for flashing
+      lv_obj_set_style_img_recolor(cruise_icon_img, LVGL_RED, LV_PART_MAIN);
+    }
+
+    xSemaphoreGive(lvglMutex);
+  } else {
+     USBSerial.println("Warning: Failed to acquire LVGL mutex for startCruiseIconFlash");
+  }
+}
+// --- End Cruise Icon Flashing Implementation ---
 
 void updateLvglMainScreen(
   const STR_DEVICE_DATA_140_V1& deviceData,
@@ -897,10 +982,15 @@ void updateLvglMainScreen(
   }
 
   // Update Cruise Control Icon Visibility (conditional)
-  if (cruising) {
-    lv_obj_clear_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);
-  } else {
-    lv_obj_add_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);
+  // Only update based on `cruising` state if not currently flashing
+  if (!isFlashingCruiseIcon) {
+    if (cruising) {
+      lv_obj_clear_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);
+    } else {
+      lv_obj_add_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);
+    }
+    // Restore original color after flashing is done
+    lv_obj_set_style_img_recolor(cruise_icon_img, original_cruise_icon_color, LV_PART_MAIN);
   }
 
   // Update Charging Icon Visibility

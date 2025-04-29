@@ -3,6 +3,8 @@
 #include <Arduino.h>
 #include <lvgl.h>
 #include <SPI.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h> // Include for SemaphoreHandle_t
 
 // Include current device structures
 #include "../../sp140/structs.h"
@@ -18,6 +20,9 @@ extern ScreenPage currentScreenPage;
 
 // Expose main screen object for setup sequence control
 extern lv_obj_t* main_screen;
+
+// Mutex for thread-safe LVGL operations
+extern SemaphoreHandle_t lvglMutex;
 
 // Function to switch between screen pages
 void switchScreenPage(ScreenPage newPage);
@@ -56,6 +61,9 @@ void updateLvglMainScreen(
 // Functions to control the loading overlay
 void showLoadingOverlay();
 void hideLoadingOverlay();
+
+// Function to start the flashing animation
+void startCruiseIconFlash();
 
 // Cruise Control Icon
 // LV_IMG_DECLARE(noun_cruise_control_340255_1); // Old 40x40 icon
