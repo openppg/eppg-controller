@@ -355,7 +355,7 @@ void setupMainScreen(bool darkMode) {
 
   // Performance mode label
   perf_mode_label = lv_label_create(main_screen);
-  lv_obj_align(perf_mode_label, LV_ALIGN_RIGHT_MID, -6, -17);
+  lv_obj_align(perf_mode_label, LV_ALIGN_RIGHT_MID, -5, -17);
   lv_obj_set_style_text_font(perf_mode_label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(perf_mode_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);

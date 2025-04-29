@@ -18,7 +18,7 @@ bool initVibeMotor() {
 void pulseVibeMotor() {
   if (!vibeMotorInitialized) return;
   ledcWrite(PWM_CHANNEL, 255);
-  delay(200);
+  vTaskDelay(pdMS_TO_TICKS(400));
   ledcWrite(PWM_CHANNEL, 0);
 }
 
