@@ -359,6 +359,8 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_style_text_font(perf_mode_label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(perf_mode_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+  // Ensure text within the label is centered
+  lv_obj_set_style_text_align(perf_mode_label, LV_TEXT_ALIGN_CENTER, 0);
 
   // Armed time label - adjust position now that there's no bluetooth icon
   armed_time_label = lv_label_create(main_screen);
@@ -400,7 +402,7 @@ void setupMainScreen(bool darkMode) {
 
   // Create temperature labels - adjust positions to align with divider lines
   batt_temp_label = lv_label_create(main_screen);
-  lv_obj_align(batt_temp_label, LV_ALIGN_BOTTOM_RIGHT, -5, -35);  // Between top and middle line
+  lv_obj_align(batt_temp_label, LV_ALIGN_BOTTOM_RIGHT, -1, -35);
   lv_obj_set_style_text_font(batt_temp_label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(batt_temp_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
@@ -425,7 +427,7 @@ void setupMainScreen(bool darkMode) {
   temp_letter_labels[0] = batt_letter_label;
 
   esc_temp_label = lv_label_create(main_screen);
-  lv_obj_align(esc_temp_label, LV_ALIGN_BOTTOM_RIGHT, -5, -16);  // Adjusted to match E label
+  lv_obj_align(esc_temp_label, LV_ALIGN_BOTTOM_RIGHT, -1, -16);
   lv_obj_set_style_text_font(esc_temp_label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(esc_temp_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
@@ -450,7 +452,7 @@ void setupMainScreen(bool darkMode) {
   temp_letter_labels[1] = esc_letter_label;
 
   motor_temp_label = lv_label_create(main_screen);
-  lv_obj_align(motor_temp_label, LV_ALIGN_BOTTOM_RIGHT, -5, 0);  // Adjusted to match M label
+  lv_obj_align(motor_temp_label, LV_ALIGN_BOTTOM_RIGHT, -1, 0);
   lv_obj_set_style_text_font(motor_temp_label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(motor_temp_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
