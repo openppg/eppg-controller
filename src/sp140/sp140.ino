@@ -93,6 +93,9 @@ uint32_t led_color = LED_RED;  // current LED color
 // Global variable for device state
 volatile DeviceState currentState = DISARMED;
 
+// Add volatile bool flag to control UI drawing start
+volatile bool uiReady = false;
+
 SemaphoreHandle_t eepromSemaphore;
 SemaphoreHandle_t tftSemaphore;
 SemaphoreHandle_t stateMutex;
@@ -327,6 +330,11 @@ void trackPowerTask(void *pvParameters) {
 }
 
 void refreshDisplay() {
+  // Prevent drawing until setup() signals UI is ready
+  if (!uiReady || main_screen == NULL) {
+    return;
+  }
+
   if (xSemaphoreTake(lvglMutex, portMAX_DELAY) == pdTRUE) {
     const float altitude = getAltitude(deviceData);
     bool isArmed = (currentState != DISARMED);
@@ -573,44 +581,36 @@ void setup() {
   // Show LVGL splash screen
   if (xSemaphoreTake(lvglMutex, portMAX_DELAY) == pdTRUE) {
     displayLvglSplash(deviceData, 2000);
-    xSemaphoreGive(lvglMutex);
+    // Don't release mutex here yet
   } else {
     USBSerial.println("Failed to acquire LVGL mutex for splash");
+    // If we failed mutex, maybe skip main screen setup? Or attempt anyway?
+    // Let's assume splash failed but we try to proceed.
   }
 
-  // Update main screen with initial data (respecting currentScreenPage)
-  USBSerial.println("Initializing main screen after splash");
-  if (xSemaphoreTake(lvglMutex, portMAX_DELAY) == pdTRUE) {
-    // Initial call will use the default MAIN_SCREEN
-    const float altitude = getAltitude(deviceData);
-    bool isArmed = (currentState != DISARMED);
-    bool isCruising = (currentState == ARMED_CRUISING);
+  // Setup the main screen UI elements AFTER the splash
+  USBSerial.println("Setting up main screen after splash");
+  if (main_screen == NULL) { // Check if it wasn't somehow created already
+    setupMainScreen(deviceData.theme == 1);
+  }
 
-    switch (currentScreenPage) {
-        case MAIN_SCREEN:
-          updateLvglMainScreen(
-            deviceData,
-            escTelemetryData,
-            bmsTelemetryData,
-            unifiedBatteryData,
-            altitude,
-            isArmed,
-            isCruising,
-            armedAtMillis
-          );
-          break;
-        // Add cases for other screens if needed for initial setup
-        default:
-          break;
-    }
-    xSemaphoreGive(lvglMutex);
+  // Explicitly load the main screen to make it active
+  if (main_screen != NULL) {
+      lv_scr_load(main_screen);
+      USBSerial.println("Main screen loaded");
   } else {
-    USBSerial.println("Failed to acquire LVGL mutex for main screen init");
+     USBSerial.println("Error: Main screen object is NULL after setup attempt.");
   }
-  USBSerial.println("Main screen initialized");
+
+  // Release the mutex if it was taken for the splash
+  if (lvglMutex != NULL && xSemaphoreGetMutexHolder(lvglMutex) == xTaskGetCurrentTaskHandle()) {
+      xSemaphoreGive(lvglMutex);
+  }
 
   // Send initial device data after setup
   send_device_data();
+  // Signal that the UI is ready for updates from tasks
+  uiReady = true;
 }
 
 // set up all the main threads/tasks with core 0 affinity

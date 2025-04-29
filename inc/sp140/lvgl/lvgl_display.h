@@ -16,8 +16,14 @@ typedef enum {
 // Global variable to track the current screen page
 extern ScreenPage currentScreenPage;
 
+// Expose main screen object for setup sequence control
+extern lv_obj_t* main_screen;
+
 // Function to switch between screen pages
 void switchScreenPage(ScreenPage newPage);
+
+// Function to set up the main screen UI elements
+void setupMainScreen(bool darkMode);
 
 // Initialize LVGL display and components
 void setupLvglDisplay(const STR_DEVICE_DATA_140_V1& deviceData, int8_t dc_pin, int8_t rst_pin, SPIClass* spi);

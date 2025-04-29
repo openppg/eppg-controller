@@ -67,7 +67,7 @@ static Adafruit_ST7735* tft_driver = nullptr;
 static uint32_t lvgl_last_update = 0;
 
 // Main screen objects
-static lv_obj_t* main_screen = NULL;
+lv_obj_t* main_screen = NULL;
 static lv_obj_t* battery_bar = NULL;
 static lv_obj_t* battery_label = NULL;
 static lv_obj_t* voltage_left_label = NULL;
@@ -83,10 +83,10 @@ static lv_obj_t* esc_temp_label = NULL;
 static lv_obj_t* motor_temp_label = NULL;
 static lv_obj_t* arm_indicator = NULL;
 static lv_obj_t* spinner = NULL;       // For the spinning animation
-static lv_obj_t* spinner_overlay = NULL; // Overlay for the spinner
+static lv_obj_t* spinner_overlay = NULL;  // Overlay for the spinner
 // static lv_obj_t* warning_label = NULL; // New label for warnings/errors // REMOVED
 lv_obj_t* cruise_icon_img = NULL; // Cruise control icon image object
-static lv_obj_t* charging_icon_img = NULL; // Charging icon image object
+static lv_obj_t* charging_icon_img = NULL;  // Charging icon image object
 
 // Notification Counter Objects
 /* // REMOVED
@@ -133,12 +133,7 @@ void setupLvglDisplay(const STR_DEVICE_DATA_140_V1& deviceData, int8_t dc_pin, i
 
   // Create the TFT driver instance if not already created
   if (tft_driver == nullptr) {
-    tft_driver = new Adafruit_ST7735(
-      spi,
-      displayCS,
-      dc_pin,
-      rst_pin
-    );
+    tft_driver = new Adafruit_ST7735(spi, displayCS, dc_pin, rst_pin);
 
     // Initialize the display
     tft_driver->initR(INITR_BLACKTAB);
@@ -168,8 +163,8 @@ void setupLvglDisplay(const STR_DEVICE_DATA_140_V1& deviceData, int8_t dc_pin, i
     lv_palette_main(LV_PALETTE_BLUE),     // Primary color
     lv_palette_main(LV_PALETTE_AMBER),    // Secondary color
     deviceData.theme == 1,                // Dark mode
-    LV_FONT_DEFAULT                       // Default font
-  );
+    LV_FONT_DEFAULT);                     // Default font
+
   lv_disp_set_theme(lv_disp_get_default(), theme);
 }
 
@@ -292,10 +287,6 @@ void displayLvglSplash(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
 
   // Deselect display CS when done
   digitalWrite(displayCS, HIGH);
-
-  // Initialize the main screen
-  USBSerial.println("Switching from splash to main screen");
-  setupMainScreen(deviceData.theme == 1);
 }
 
 // Setup the main screen layout once
@@ -690,13 +681,12 @@ void updateLvglMainScreen(
   bool bmsConnected = (bmsTelemetry.bmsState == TelemetryState::CONNECTED);
   bool escConnected = (escTelemetry.escState == TelemetryState::CONNECTED);
 
-  // Check if the theme has changed or if the main screen needs to be created
-  static int last_theme = -1;
-  if (main_screen == NULL || last_theme != deviceData.theme) {
-    setupMainScreen(darkMode);
-    last_theme = deviceData.theme;
-  } else if (last_theme == deviceData.theme) {
-    // Just update spinner colors if theme didn't change but screen exists
+
+  // Assume main_screen is already created and loaded by setup()
+  // We might need a separate function later if we want to dynamically change themes
+  // For now, just ensure spinner colors match the current theme state potentially set at boot
+  // Check if spinner exists before styling it
+  if (spinner != NULL) {
     lv_obj_set_style_arc_color(spinner, darkMode ? lv_color_make(100, 100, 100) : lv_color_make(230, 230, 230), LV_PART_MAIN);
     lv_obj_set_style_arc_color(spinner, lv_palette_main(LV_PALETTE_BLUE), LV_PART_INDICATOR);
   }
