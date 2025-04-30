@@ -1061,7 +1061,6 @@ void afterCruiseStart() {
 
 void afterCruiseEnd() {
   cruisedPotVal = 0;
-  // startCruiseIconFlash();  // Start flashing the icon
   pulseVibeMotor();
 }
 

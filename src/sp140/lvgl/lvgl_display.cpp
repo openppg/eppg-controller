@@ -77,7 +77,6 @@ static lv_obj_t* power_bar = NULL;
 static lv_obj_t* perf_mode_label = NULL;
 static lv_obj_t* armed_time_label = NULL;
 static lv_obj_t* altitude_label = NULL;
-static lv_obj_t* altitude_unit_label = NULL;
 static lv_obj_t* batt_temp_label = NULL;
 static lv_obj_t* esc_temp_label = NULL;
 static lv_obj_t* motor_temp_label = NULL;
@@ -375,6 +374,8 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_style_text_font(altitude_label, &lv_font_montserrat_24, 0);
   lv_obj_set_style_text_color(altitude_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+  // Align altitude label to the bottom-right corner of its section (left of vertical line)
+  lv_obj_align(altitude_label, LV_ALIGN_BOTTOM_LEFT, 5, -5); // Position slightly from bottom-left
 
   // Warning/Error message label
   /* // REMOVED
@@ -388,17 +389,6 @@ void setupMainScreen(bool darkMode) {
   lv_label_set_text(warning_label, ""); // Initially empty
   lv_obj_add_flag(warning_label, LV_OBJ_FLAG_HIDDEN); // Hide initially
   */
-
-  // Altitude unit label (e.g., "m" or "ft")
-  altitude_unit_label = lv_label_create(main_screen);
-  // Align unit label just left of the vertical line (x=120) at the bottom
-  lv_obj_align(altitude_unit_label, LV_ALIGN_BOTTOM_RIGHT, -(SCREEN_WIDTH - 120 + 5), -5); // x=-45, y=-5
-  lv_obj_set_style_text_font(altitude_unit_label, &lv_font_montserrat_16, 0); // Use a smaller font
-  lv_obj_set_style_text_color(altitude_unit_label,
-                             darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
-
-  // Align altitude value label to the left of the unit label
-  lv_obj_align_to(altitude_label, altitude_unit_label, LV_ALIGN_OUT_LEFT_BOTTOM, -1, 0); // Align bottom edges, reduce padding to 1px
 
   // Create temperature labels - adjust positions to align with divider lines
   batt_temp_label = lv_label_create(main_screen);
@@ -538,7 +528,7 @@ void setupMainScreen(bool darkMode) {
 
   // Create vertical line in middle section
   lv_obj_t* v_line1 = lv_line_create(main_screen);
-  static lv_point_t v_line1_points[] = {{110, 37}, {110, 70}};
+  static lv_point_t v_line1_points[] = {{108, 37}, {108, 70}};
   lv_line_set_points(v_line1, v_line1_points, 2);
   lv_obj_set_style_line_color(v_line1,
                              LVGL_GRAY,
@@ -580,8 +570,8 @@ void setupMainScreen(bool darkMode) {
 
   // Create arm indicator (initially hidden)
   arm_indicator = lv_obj_create(main_screen);
-  lv_obj_set_size(arm_indicator, 50, 33);
-  lv_obj_set_pos(arm_indicator, 110, 37);
+  lv_obj_set_size(arm_indicator, 52, 33);
+  lv_obj_set_pos(arm_indicator, 108, 37);
   lv_obj_set_style_border_width(arm_indicator, 0, LV_PART_MAIN);
   lv_obj_set_style_radius(arm_indicator, 0, LV_PART_MAIN); // Ensure sharp corners
   // Move to background and hide initially
@@ -875,13 +865,13 @@ void updateLvglMainScreen(
 
   // Update performance mode - Re-added this section
   if (perf_mode_label != NULL) {  // Check object exists
-      lv_label_set_text(perf_mode_label, deviceData.performance_mode == 0 ? "CHILL" : "SPORT");
+      lv_label_set_text(perf_mode_label, deviceData.performance_mode == 0 ? "CHILL " : "SPORT");
   }
 
   // Update armed time
-  if (armed_time_label != NULL) { // Check object exists
+  if (armed_time_label != NULL) {  // Check object exists
     const unsigned int nowMillis = millis();
-    static unsigned int _lastArmedMillis = 0; // Renamed to avoid conflict
+    static unsigned int _lastArmedMillis = 0;  // Renamed to avoid conflict
     if (armed) _lastArmedMillis = nowMillis;
     // Calculate session time only if armedStartMillis is valid (not 0)
     const int sessionSeconds = (armedStartMillis > 0) ? ((_lastArmedMillis - armedStartMillis) / 1000) : 0;
@@ -894,23 +884,17 @@ void updateLvglMainScreen(
   char altBuffer[15];
   if (altitude == __FLT_MIN__) {
     lv_label_set_text(altitude_label, "ERR");
-    lv_label_set_text(altitude_unit_label, ""); // Clear unit on error
     lv_obj_set_style_text_color(altitude_label, LVGL_RED, 0);
-    lv_obj_set_style_text_color(altitude_unit_label, LVGL_RED, 0); // Match color
   } else {
     if (deviceData.metric_alt) {
-      snprintf(altBuffer, sizeof(altBuffer), "%.1f", altitude); // Format number only
+      snprintf(altBuffer, sizeof(altBuffer), "%.1f m", altitude);  // Format number with unit
       lv_label_set_text(altitude_label, altBuffer);
-      lv_label_set_text(altitude_unit_label, "m"); // Set unit separately
     } else {
-      snprintf(altBuffer, sizeof(altBuffer), "%d", static_cast<int>(round(altitude * 3.28084))); // Format number only
+      snprintf(altBuffer, sizeof(altBuffer), "%d f", static_cast<int>(round(altitude * 3.28084))); // Format number with unit
       lv_label_set_text(altitude_label, altBuffer);
-      lv_label_set_text(altitude_unit_label, "f"); // Set unit separately (Changed from "ft")
     }
-    // Set color for both labels
+    // Set color for the combined label
     lv_obj_set_style_text_color(altitude_label,
-                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
-    lv_obj_set_style_text_color(altitude_unit_label,
                               darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   }
 
@@ -996,8 +980,8 @@ void updateLvglMainScreen(
   }
 
   // Update Charging Icon Visibility
-  if (charging_icon_img != NULL) { // Check object exists
-    if (bmsTelemetry.is_charging) { // Check the charging flag
+  if (charging_icon_img != NULL) {  // Check object exists
+    if (bmsTelemetry.is_charging) {  // Check the charging flag
       lv_obj_clear_flag(charging_icon_img, LV_OBJ_FLAG_HIDDEN);
     } else {
       lv_obj_add_flag(charging_icon_img, LV_OBJ_FLAG_HIDDEN);
