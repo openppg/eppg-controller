@@ -844,7 +844,12 @@ void updateLvglMainScreen(
     lv_obj_set_style_text_color(altitude_label, LVGL_RED, 0);
   } else {
     if (deviceData.metric_alt) {
-      snprintf(altBuffer, sizeof(altBuffer), "%.1f m", altitude);  // Format number with unit
+      // Explicitly handle small negative values to avoid "-0.0"
+      float display_altitude = altitude;
+      if (display_altitude > -0.05f && display_altitude < 0.0f) {
+          display_altitude = 0.0f;
+      }
+      snprintf(altBuffer, sizeof(altBuffer), "%.1f m", display_altitude); // Use corrected value
       lv_label_set_text(altitude_label, altBuffer);
     } else {
       snprintf(altBuffer, sizeof(altBuffer), "%d f", static_cast<int>(round(altitude * 3.28084))); // Format number with unit

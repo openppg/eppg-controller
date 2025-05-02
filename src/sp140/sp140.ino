@@ -229,7 +229,6 @@ unsigned long armedSecs = 0;
 TaskHandle_t blinkLEDTaskHandle = NULL;
 TaskHandle_t throttleTaskHandle = NULL;
 TaskHandle_t telemetryEscTaskHandle = NULL;
-TaskHandle_t trackPowerTaskHandle = NULL;
 TaskHandle_t watchdogTaskHandle = NULL;
 TaskHandle_t spiCommTaskHandle = NULL;
 
@@ -318,17 +317,6 @@ void updateBLETask(void *pvParameters) {
   }
 }
 
-
-void trackPowerTask(void *pvParameters) {
-  (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
-
-  for (;;) {  // infinite loop
-    trackPower();
-    delay(500);  // wait for 250ms
-  }
-  vTaskDelete(NULL);  // should never reach this
-}
-
 void refreshDisplay() {
   // Prevent drawing until setup() signals UI is ready
   if (!uiReady || main_screen == NULL) {
@@ -371,7 +359,6 @@ void refreshDisplay() {
     USBSerial.println("Failed to acquire LVGL mutex in refreshDisplay");
   }
 }
-
 
 void spiCommTask(void *pvParameters) {
   for (;;) {
@@ -460,7 +447,6 @@ void setupWatchdog() {
   //ESP_ERROR_CHECK(esp_task_wdt_init(3000, true));  // 3 second timeout, panic on timeout
 #endif // OPENPPG_DEBUG
 }
-
 
 void upgradeDeviceRevision() {  // Renamed to reflect the change from EEPROM to Preferences
   deviceData.revision = ESPCAN;
@@ -645,7 +631,6 @@ void setupTasks() {
     1,
     &webSerialTaskHandle);
 }
-
 
 void setup140() {
   // TODO: write to CAN bus
@@ -1068,18 +1053,6 @@ void playCruiseSound() {
   if (ENABLE_BUZ) {
     uint16_t notify_melody[] = { 900, 900 };
     playMelody(notify_melody, 2);
-  }
-}
-
-unsigned long prevPwrMillis = 0;
-
-void trackPower() {
-  unsigned long currentPwrMillis = millis();
-  unsigned long msec_diff = (currentPwrMillis - prevPwrMillis);  // eg 0.30 sec
-  prevPwrMillis = currentPwrMillis;
-
-  if (currentState != DISARMED) {
-    wattHoursUsed += round(watts/60/60*msec_diff)/1000.0;
   }
 }
 
