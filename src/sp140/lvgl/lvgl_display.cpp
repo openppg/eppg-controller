@@ -25,11 +25,16 @@
 // LVGL refresh time in ms - match the config file setting
 #define LVGL_REFRESH_TIME 40
 
-// Constants from the original display.h
-#define TEMP_WARNING_THRESHOLD 55.0f
-#define TEMP_CRITICAL_THRESHOLD 70.0f
-#define BATTERY_LOW_THRESHOLD 5.0f // Note: These percentage thresholds seem unused currently
-#define BATTERY_MEDIUM_THRESHOLD 20.0f
+
+#define BATT_TEMP_WARNING 45.0f
+#define BATT_TEMP_CRITICAL 55.0f
+#define ESC_TEMP_WARNING 90.0f
+#define ESC_TEMP_CRITICAL 100.0f
+#define MOTOR_TEMP_WARNING 90.0f
+#define MOTOR_TEMP_CRITICAL 110.0f
+
+#define BATT_CRITICAL_SOC_THRESHOLD 5.0f
+#define BATT_WARNING_SOC_THRESHOLD 20.0f
 #define CELL_VOLTAGE_WARNING 3.6f
 #define CELL_VOLTAGE_CRITICAL 3.5f
 
@@ -726,9 +731,9 @@ void updateLvglMainScreen(
 
     // Set color based on percentage
     lv_color_t batteryColor = LVGL_RED;
-    if (batteryPercent >= BATTERY_MEDIUM_THRESHOLD) {
+    if (batteryPercent >= BATT_WARNING_SOC_THRESHOLD) {
       batteryColor = LVGL_GREEN;
-    } else if (batteryPercent >= BATTERY_LOW_THRESHOLD) {
+    } else if (batteryPercent >= BATT_CRITICAL_SOC_THRESHOLD) {
       batteryColor = LVGL_YELLOW;
     }
 
@@ -860,11 +865,11 @@ void updateLvglMainScreen(
     if (bmsTelemetry.bmsState == TelemetryState::CONNECTED) {
       lv_label_set_text_fmt(batt_temp_label, "%d", static_cast<int>(batteryTemp));
 
-      if (batteryTemp >= TEMP_CRITICAL_THRESHOLD) {
+      if (batteryTemp >= BATT_TEMP_CRITICAL) {
         bg_color = LVGL_RED;
         text_color = LVGL_WHITE;
         bg_opacity = LV_OPA_100;
-      } else if (batteryTemp >= TEMP_WARNING_THRESHOLD) {
+      } else if (batteryTemp >= BATT_TEMP_WARNING) {
         bg_color = LVGL_ORANGE;
         text_color = LVGL_BLACK;
         bg_opacity = LV_OPA_100;
@@ -892,11 +897,11 @@ void updateLvglMainScreen(
     if (escTelemetry.escState == TelemetryState::CONNECTED) {
       lv_label_set_text_fmt(esc_temp_label, "%d", static_cast<int>(escTemp));
 
-      if (escTemp >= TEMP_CRITICAL_THRESHOLD) {
+      if (escTemp >= ESC_TEMP_CRITICAL) {
         bg_color = LVGL_RED;
         text_color = LVGL_WHITE;
         bg_opacity = LV_OPA_100;
-      } else if (escTemp >= TEMP_WARNING_THRESHOLD) {
+      } else if (escTemp >= ESC_TEMP_WARNING) {
         bg_color = LVGL_ORANGE;
         text_color = LVGL_BLACK;
         bg_opacity = LV_OPA_100;
@@ -924,11 +929,11 @@ void updateLvglMainScreen(
     if (escTelemetry.escState == TelemetryState::CONNECTED) {
       lv_label_set_text_fmt(motor_temp_label, "%d", static_cast<int>(motorTemp));
 
-      if (motorTemp >= TEMP_CRITICAL_THRESHOLD) {
+      if (motorTemp >= MOTOR_TEMP_CRITICAL) {
         bg_color = LVGL_RED;
         text_color = LVGL_WHITE;
         bg_opacity = LV_OPA_100;
-      } else if (motorTemp >= TEMP_WARNING_THRESHOLD) {
+      } else if (motorTemp >= MOTOR_TEMP_WARNING) {
         bg_color = LVGL_ORANGE;
         text_color = LVGL_BLACK;
         bg_opacity = LV_OPA_100;
