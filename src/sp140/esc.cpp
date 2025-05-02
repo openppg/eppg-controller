@@ -78,7 +78,6 @@ void readESCTelemetry() {
       escTelemetryData.cap_temp = res->cap_temp / 10.0f;
       escTelemetryData.mcu_temp = res->mcu_temp / 10.0f;
       escTelemetryData.motor_temp = res->motor_temp / 10.0f;
-      escTelemetryData.highest_temp = max({escTelemetryData.mos_temp, escTelemetryData.cap_temp, escTelemetryData.mcu_temp, escTelemetryData.motor_temp});
       escTelemetryData.eRPM = res->speed;
       escTelemetryData.inPWM = res->recv_pwm / 10.0f;
       watts = escTelemetryData.amps * escTelemetryData.volts;

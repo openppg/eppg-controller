@@ -83,6 +83,9 @@ static lv_obj_t* motor_temp_label = NULL;
 static lv_obj_t* arm_indicator = NULL;
 static lv_obj_t* spinner = NULL;       // For the spinning animation
 static lv_obj_t* spinner_overlay = NULL;  // Overlay for the spinner
+static lv_obj_t* batt_letter_label = NULL; // Letter label for Battery temp
+static lv_obj_t* esc_letter_label = NULL; // Letter label for ESC temp
+static lv_obj_t* motor_letter_label = NULL; // Letter label for Motor temp
 // static lv_obj_t* warning_label = NULL; // New label for warnings/errors // REMOVED
 lv_obj_t* cruise_icon_img = NULL; // Cruise control icon image object
 static lv_obj_t* charging_icon_img = NULL;  // Charging icon image object
@@ -94,10 +97,6 @@ static lv_obj_t* error_counter_label = NULL;
 static lv_obj_t* warning_counter_circle = NULL;
 static lv_obj_t* warning_counter_label = NULL;
 */
-
-// Create a static array of temperature labels for easy access
-static lv_obj_t* temp_labels[3];
-static lv_obj_t* temp_letter_labels[3];  // For B, E, M letters
 
 // Colors for LVGL - matching ST7735 colors as much as possible
 #define LVGL_BLACK lv_color_black()
@@ -397,24 +396,22 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_style_text_color(batt_temp_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   lv_obj_set_style_bg_opa(batt_temp_label, LV_OPA_0, 0); // Initially transparent
-  lv_obj_set_style_pad_left(batt_temp_label, 3, 0); // Add padding for when background is visible
+  lv_obj_set_style_pad_left(batt_temp_label, 3, 0);
   lv_obj_set_style_pad_right(batt_temp_label, 3, 0);
   lv_obj_set_style_pad_top(batt_temp_label, 2, 0);
   lv_obj_set_style_pad_bottom(batt_temp_label, 2, 0);
   lv_obj_set_style_text_align(batt_temp_label, LV_TEXT_ALIGN_RIGHT, 0); // Right align temperature values
-  temp_labels[0] = batt_temp_label;
 
   // Create letter label for B
-  lv_obj_t* batt_letter_label = lv_label_create(main_screen);
+  batt_letter_label = lv_label_create(main_screen);
   lv_obj_align(batt_letter_label, LV_ALIGN_BOTTOM_LEFT, 122, -35);  // Just right of vertical line
   lv_obj_set_style_text_font(batt_letter_label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(batt_letter_label, darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
-  lv_obj_set_style_pad_left(batt_letter_label, 3, 0); // Add padding for when background is visible
+  lv_obj_set_style_pad_left(batt_letter_label, 3, 0);
   lv_obj_set_style_pad_right(batt_letter_label, 3, 0);
   lv_obj_set_style_pad_top(batt_letter_label, 2, 0);
   lv_obj_set_style_pad_bottom(batt_letter_label, 2, 0);
   lv_label_set_text(batt_letter_label, "B");
-  temp_letter_labels[0] = batt_letter_label;
 
   esc_temp_label = lv_label_create(main_screen);
   lv_obj_align(esc_temp_label, LV_ALIGN_BOTTOM_RIGHT, -1, -16);
@@ -422,24 +419,22 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_style_text_color(esc_temp_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   lv_obj_set_style_bg_opa(esc_temp_label, LV_OPA_0, 0);  // Initially transparent
-  lv_obj_set_style_pad_left(esc_temp_label, 3, 0);  // Add padding for when background is visible
+  lv_obj_set_style_pad_left(esc_temp_label, 3, 0);
   lv_obj_set_style_pad_right(esc_temp_label, 3, 0);
   lv_obj_set_style_pad_top(esc_temp_label, 2, 0);
   lv_obj_set_style_pad_bottom(esc_temp_label, 2, 0);
   lv_obj_set_style_text_align(esc_temp_label, LV_TEXT_ALIGN_RIGHT, 0);  // Right align temperature values
-  temp_labels[1] = esc_temp_label;
 
   // Create letter label for E
-  lv_obj_t* esc_letter_label = lv_label_create(main_screen);
+  esc_letter_label = lv_label_create(main_screen);
   lv_obj_align(esc_letter_label, LV_ALIGN_BOTTOM_LEFT, 122, -16);  // Just right of vertical line
   lv_obj_set_style_text_font(esc_letter_label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(esc_letter_label, darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
-  lv_obj_set_style_pad_left(esc_letter_label, 3, 0); // Add padding for when background is visible
+  lv_obj_set_style_pad_left(esc_letter_label, 3, 0);
   lv_obj_set_style_pad_right(esc_letter_label, 3, 0);
   lv_obj_set_style_pad_top(esc_letter_label, 2, 0);
   lv_obj_set_style_pad_bottom(esc_letter_label, 2, 0);
   lv_label_set_text(esc_letter_label, "E");
-  temp_letter_labels[1] = esc_letter_label;
 
   motor_temp_label = lv_label_create(main_screen);
   lv_obj_align(motor_temp_label, LV_ALIGN_BOTTOM_RIGHT, -1, 0);
@@ -447,65 +442,22 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_style_text_color(motor_temp_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   lv_obj_set_style_bg_opa(motor_temp_label, LV_OPA_0, 0); // Initially transparent
-  lv_obj_set_style_pad_left(motor_temp_label, 3, 0);  // Add padding for when background is visible
+  lv_obj_set_style_pad_left(motor_temp_label, 3, 0);
   lv_obj_set_style_pad_right(motor_temp_label, 3, 0);
   lv_obj_set_style_pad_top(motor_temp_label, 2, 0);
   lv_obj_set_style_pad_bottom(motor_temp_label, 2, 0);
   lv_obj_set_style_text_align(motor_temp_label, LV_TEXT_ALIGN_RIGHT, 0);  // Right align temperature values
-  temp_labels[2] = motor_temp_label;
 
   // Create letter label for M
-  lv_obj_t* motor_letter_label = lv_label_create(main_screen);
+  motor_letter_label = lv_label_create(main_screen);
   lv_obj_align(motor_letter_label, LV_ALIGN_BOTTOM_LEFT, 122, 0);
   lv_obj_set_style_text_font(motor_letter_label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(motor_letter_label, darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
-  lv_obj_set_style_pad_left(motor_letter_label, 3, 0);  // Add padding for when background is visible
+  lv_obj_set_style_pad_left(motor_letter_label, 3, 0);
   lv_obj_set_style_pad_right(motor_letter_label, 3, 0);
   lv_obj_set_style_pad_top(motor_letter_label, 2, 0);
   lv_obj_set_style_pad_bottom(motor_letter_label, 2, 0);
   lv_label_set_text(motor_letter_label, "M");
-  temp_letter_labels[2] = motor_letter_label;
-
-  // --- Notification Counters ---
-  /* // REMOVED
-  const int counter_size = 16; // Made smaller
-
-  // Error Counter (Red Circle)
-  error_counter_circle = lv_obj_create(main_screen);
-  lv_obj_set_size(error_counter_circle, counter_size, counter_size);
-  lv_obj_set_style_radius(error_counter_circle, LV_RADIUS_CIRCLE, 0);
-  lv_obj_set_style_bg_color(error_counter_circle, LVGL_RED, 0);
-  lv_obj_set_style_border_width(error_counter_circle, 0, 0);
-
-  error_counter_label = lv_label_create(error_counter_circle);
-  lv_label_set_text(error_counter_label, "0");
-  lv_obj_set_style_text_color(error_counter_label, LVGL_WHITE, 0);
-  lv_obj_set_style_text_font(error_counter_label, &lv_font_montserrat_12, 0);
-  lv_obj_center(error_counter_label);
-
-  // Warning Counter (Orange Circle)
-  warning_counter_circle = lv_obj_create(main_screen);
-  lv_obj_set_size(warning_counter_circle, counter_size, counter_size);
-  // Align warning counter to bottom right corner, offset slightly
-  lv_obj_align(warning_counter_circle, LV_ALIGN_BOTTOM_RIGHT, -25, -35); // Adjusted: left 20px, up 10px
-  lv_obj_set_style_radius(warning_counter_circle, LV_RADIUS_CIRCLE, 0);
-  lv_obj_set_style_bg_color(warning_counter_circle, LVGL_ORANGE, 0);
-  lv_obj_set_style_border_width(warning_counter_circle, 0, 0);
-
-  warning_counter_label = lv_label_create(warning_counter_circle);
-  lv_label_set_text(warning_counter_label, "0");
-  lv_obj_set_style_text_color(warning_counter_label, LVGL_BLACK, 0); // Black text for orange
-  lv_obj_set_style_text_font(warning_counter_label, &lv_font_montserrat_12, 0);
-  lv_obj_center(warning_counter_label);
-
-  // Align error counter to the left of the warning counter
-  lv_obj_align_to(error_counter_circle, warning_counter_circle, LV_ALIGN_OUT_LEFT_MID, -3, 0);
-
-  // Hide counters initially
-  lv_obj_add_flag(error_counter_circle, LV_OBJ_FLAG_HIDDEN);
-  lv_obj_add_flag(warning_counter_circle, LV_OBJ_FLAG_HIDDEN);
-  */
-  // --- End Notification Counters ---
 
   // Draw divider lines
   // Create horizontal line between top and middle sections
@@ -752,7 +704,7 @@ void updateLvglMainScreen(
   float totalVolts = unifiedBatteryData.volts;
   float lowestCellV = bmsTelemetry.lowest_cell_voltage;
   float batteryTemp = bmsTelemetry.highest_temperature;
-  float escTemp = escTelemetry.mos_temp;
+  float escTemp = escTelemetry.cap_temp;
   float motorTemp = escTelemetry.motor_temp;
   // Check if BMS or ESC is connected
   bool bmsConnected = (bmsTelemetry.bmsState == TelemetryState::CONNECTED);
@@ -899,62 +851,99 @@ void updateLvglMainScreen(
   }
 
   // Update temperature labels
-  struct {
-    float temp;
-    TelemetryState state;
-    const char* label;
-    lv_obj_t* value_label;
-    lv_obj_t* char_label;
-  } temps_to_update[] = {
-    {batteryTemp, bmsTelemetry.bmsState, "B", temp_labels[0], temp_letter_labels[0]},
-    {escTemp, escTelemetry.escState, "E", temp_labels[1], temp_letter_labels[1]},
-    {motorTemp, escTelemetry.escState, "M", temp_labels[2], temp_letter_labels[2]}
-  };
+  // -- Battery Temperature --
+  if (batt_temp_label != NULL && batt_letter_label != NULL) { // Check labels exist
+    lv_color_t bg_color = LVGL_BLACK; // Default, will be overridden if opaque
+    lv_color_t text_color = darkMode ? LVGL_WHITE : LVGL_BLACK;
+    lv_opa_t bg_opacity = LV_OPA_0; // Default transparent
 
-  for (int i = 0; i < 3; i++) {
-     // Check labels exist using correct member names
-     if (temps_to_update[i].value_label == NULL || temps_to_update[i].char_label == NULL) continue;
+    if (bmsTelemetry.bmsState == TelemetryState::CONNECTED) {
+      lv_label_set_text_fmt(batt_temp_label, "%d", static_cast<int>(batteryTemp));
 
-    // Set the temperature value or dash
-    if (temps_to_update[i].state == TelemetryState::CONNECTED) {
-      // Use value_label for the numeric temperature display
-      lv_label_set_text_fmt(temps_to_update[i].value_label, "%d", static_cast<int>(temps_to_update[i].temp));
-    } else {
-      // Use value_label for the dash display
-      lv_label_set_text(temps_to_update[i].value_label, "-");
-    }
-
-    // Set colors based on temperature
-    lv_color_t bg_color;
-    lv_color_t text_color;
-    lv_opa_t bg_opacity = LV_OPA_0;  // Default transparent
-
-    if (temps_to_update[i].state == TelemetryState::CONNECTED) {
-      if (temps_to_update[i].temp >= TEMP_CRITICAL_THRESHOLD) {
+      if (batteryTemp >= TEMP_CRITICAL_THRESHOLD) {
         bg_color = LVGL_RED;
         text_color = LVGL_WHITE;
         bg_opacity = LV_OPA_100;
-      } else if (temps_to_update[i].temp >= TEMP_WARNING_THRESHOLD) {
+      } else if (batteryTemp >= TEMP_WARNING_THRESHOLD) {
         bg_color = LVGL_ORANGE;
         text_color = LVGL_BLACK;
         bg_opacity = LV_OPA_100;
-      } else {
-        text_color = darkMode ? LVGL_WHITE : LVGL_BLACK;
       }
     } else {
-      text_color = darkMode ? LVGL_WHITE : LVGL_BLACK;
+      lv_label_set_text(batt_temp_label, "-");
     }
 
-    // Apply same styles to both labels using correct member names
-    lv_obj_set_style_bg_opa(temps_to_update[i].value_label, bg_opacity, 0);
-    lv_obj_set_style_bg_opa(temps_to_update[i].char_label, bg_opacity, 0);
-
-    lv_obj_set_style_text_color(temps_to_update[i].value_label, text_color, 0);
-    lv_obj_set_style_text_color(temps_to_update[i].char_label, text_color, 0);
-
+    lv_obj_set_style_bg_opa(batt_temp_label, bg_opacity, 0);
+    lv_obj_set_style_bg_opa(batt_letter_label, bg_opacity, 0);
+    lv_obj_set_style_text_color(batt_temp_label, text_color, 0);
+    lv_obj_set_style_text_color(batt_letter_label, text_color, 0);
     if (bg_opacity > 0) {
-      lv_obj_set_style_bg_color(temps_to_update[i].value_label, bg_color, LV_PART_MAIN);
-      lv_obj_set_style_bg_color(temps_to_update[i].char_label, bg_color, LV_PART_MAIN);
+      lv_obj_set_style_bg_color(batt_temp_label, bg_color, LV_PART_MAIN);
+      lv_obj_set_style_bg_color(batt_letter_label, bg_color, LV_PART_MAIN);
+    }
+  }
+
+  // -- ESC Temperature --
+  if (esc_temp_label != NULL && esc_letter_label != NULL) { // Check labels exist
+    lv_color_t bg_color = LVGL_BLACK;
+    lv_color_t text_color = darkMode ? LVGL_WHITE : LVGL_BLACK;
+    lv_opa_t bg_opacity = LV_OPA_0;
+
+    if (escTelemetry.escState == TelemetryState::CONNECTED) {
+      lv_label_set_text_fmt(esc_temp_label, "%d", static_cast<int>(escTemp));
+
+      if (escTemp >= TEMP_CRITICAL_THRESHOLD) {
+        bg_color = LVGL_RED;
+        text_color = LVGL_WHITE;
+        bg_opacity = LV_OPA_100;
+      } else if (escTemp >= TEMP_WARNING_THRESHOLD) {
+        bg_color = LVGL_ORANGE;
+        text_color = LVGL_BLACK;
+        bg_opacity = LV_OPA_100;
+      }
+    } else {
+      lv_label_set_text(esc_temp_label, "-");
+    }
+
+    lv_obj_set_style_bg_opa(esc_temp_label, bg_opacity, 0);
+    lv_obj_set_style_bg_opa(esc_letter_label, bg_opacity, 0);
+    lv_obj_set_style_text_color(esc_temp_label, text_color, 0);
+    lv_obj_set_style_text_color(esc_letter_label, text_color, 0);
+    if (bg_opacity > 0) {
+      lv_obj_set_style_bg_color(esc_temp_label, bg_color, LV_PART_MAIN);
+      lv_obj_set_style_bg_color(esc_letter_label, bg_color, LV_PART_MAIN);
+    }
+  }
+
+  // -- Motor Temperature --
+  if (motor_temp_label != NULL && motor_letter_label != NULL) { // Check labels exist
+    lv_color_t bg_color = LVGL_BLACK;
+    lv_color_t text_color = darkMode ? LVGL_WHITE : LVGL_BLACK;
+    lv_opa_t bg_opacity = LV_OPA_0;
+
+    if (escTelemetry.escState == TelemetryState::CONNECTED) {
+      lv_label_set_text_fmt(motor_temp_label, "%d", static_cast<int>(motorTemp));
+
+      if (motorTemp >= TEMP_CRITICAL_THRESHOLD) {
+        bg_color = LVGL_RED;
+        text_color = LVGL_WHITE;
+        bg_opacity = LV_OPA_100;
+      } else if (motorTemp >= TEMP_WARNING_THRESHOLD) {
+        bg_color = LVGL_ORANGE;
+        text_color = LVGL_BLACK;
+        bg_opacity = LV_OPA_100;
+      }
+    } else {
+      lv_label_set_text(motor_temp_label, "-");
+    }
+
+    lv_obj_set_style_bg_opa(motor_temp_label, bg_opacity, 0);
+    lv_obj_set_style_bg_opa(motor_letter_label, bg_opacity, 0);
+    lv_obj_set_style_text_color(motor_temp_label, text_color, 0);
+    lv_obj_set_style_text_color(motor_letter_label, text_color, 0);
+    if (bg_opacity > 0) {
+      lv_obj_set_style_bg_color(motor_temp_label, bg_color, LV_PART_MAIN);
+      lv_obj_set_style_bg_color(motor_letter_label, bg_color, LV_PART_MAIN);
     }
   }
 
