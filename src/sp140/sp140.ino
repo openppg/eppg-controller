@@ -97,7 +97,6 @@ volatile DeviceState currentState = DISARMED;
 volatile bool uiReady = false;
 
 SemaphoreHandle_t eepromSemaphore;
-SemaphoreHandle_t tftSemaphore;
 SemaphoreHandle_t stateMutex;
 
 // Add near other queue declarations
@@ -455,23 +454,6 @@ void upgradeDeviceRevision() {  // Renamed to reflect the change from EEPROM to 
 
 #define TAG "OpenPPG"
 
-// Add near other task declarations at the top
-TaskHandle_t timeDebugTaskHandle = NULL;
-
-// Add the new task function before setupTasks()
-void timeDebugTask(void *pvParameters) {
-  for (;;) {
-    timePrint();
-    vTaskDelay(pdMS_TO_TICKS(1000));  // Delay for 1 second
-  }
-}
-
-// Add near other helper functions
-void timePrint() {
-  struct tm now;
-  getLocalTime(&now, 0);
-  if (now.tm_year >= 117) USBSerial.println(&now, "%B %d %Y %H:%M:%S (%A)");
-}
 
 /**
  * Initializes the necessary components and configurations for the device setup.
@@ -609,7 +591,6 @@ void setupTasks() {
   xTaskCreate(deviceStateUpdateTask, "State Update Task", 4096, NULL, 1, &deviceStateUpdateTaskHandle);
   // Create BLE update task with high priority but on core 1
   xTaskCreatePinnedToCore(bleStateUpdateTask, "BLEStateUpdate", 4096, NULL, 4, &bleStateUpdateTaskHandle, 1);
-  //xTaskCreate(timeDebugTask, "Time Debug", 2048, NULL, 1, &timeDebugTaskHandle);
 
   // Create melody queue
   melodyQueue = xQueueCreate(5, sizeof(MelodyRequest));
