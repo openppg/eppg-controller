@@ -850,12 +850,14 @@ void handleThrottle() {
 
   pot->update();
   int potVal = pot->getValue();  // Raw potentiometer value (0-4095)
-  int potLvl = potVal;           // Value potentially modified by ramping
+  potBuffer.push(potVal);        // Add raw value to buffer
+  int potLvl = averagePotBuffer(); // Calculate smoothed value
 
   // Handle throttle based on current state and update BLE accordingly
   if (currentState == DISARMED) {
     setESCThrottle(ESC_DISARMED_PWM);
     prevPotLvl = 0;  // Reset throttle memory when disarmed
+    potBuffer.clear(); // Clear the buffer when disarmed
   } else if (currentState == ARMED_CRUISING) {
     // Set the ESC throttle to the determined (and potentially capped) cruise PWM
     setESCThrottle(currentCruiseThrottlePWM);
@@ -874,7 +876,7 @@ void handleThrottle() {
       int disengageThresholdPotVal = (int)(cruisedPotVal * CRUISE_DISENGAGE_POT_THRESHOLD_PERCENTAGE);
 
       // If the *current raw potentiometer value* is greater than or equal to the threshold
-      if (potVal >= disengageThresholdPotVal) {
+      if (potVal >= disengageThresholdPotVal) { // Use raw potVal for immediate disengage check
         USBSerial.print("Cruise override: potVal ");
         USBSerial.print(potVal);
         USBSerial.print(" >= threshold ");
@@ -888,13 +890,13 @@ void handleThrottle() {
     int rampRate = deviceData.performance_mode == 0 ? CHILL_MODE_RAMP_RATE : SPORT_MODE_RAMP_RATE;
     maxPWM = deviceData.performance_mode == 0 ? CHILL_MODE_MAX_PWM : ESC_MAX_PWM;
 
-    // Apply throttle ramping limits
+    // Apply throttle ramping limits using the smoothed value
     potLvl = limitedThrottle(potLvl, prevPotLvl, rampRate);
 
-    // Map throttle value to PWM range
+    // Map throttle value to PWM range using the smoothed value
     int localThrottlePWM = map(potLvl, 0, 4095, ESC_MIN_SPIN_PWM, maxPWM);
     setESCThrottle(localThrottlePWM);
-    prevPotLvl = potLvl;  // Store locally for next iteration
+    prevPotLvl = potLvl;  // Store smoothed value locally for next iteration
     // updateThrottleBLE(potLvl); // Send actual (ramped) throttle value
   }
 
@@ -925,7 +927,11 @@ bool throttleEngaged() {
   return !throttleSafe();
 }
 
+// average the pot buffer
 int averagePotBuffer() {
+  if (potBuffer.isEmpty()) {
+    return 0;
+  }
   int sum = 0;
   for (decltype(potBuffer)::index_t i = 0; i < potBuffer.size(); i++) {
     sum += potBuffer[i];
