@@ -29,12 +29,4 @@
 #define POT_MIN_VALUE         0       // 12 bit ADC //TODO: use calibration and store in EEPROM
 #define POT_MAX_VALUE         4095    // 12 bit ADC //TODO: use calibration and store in EEPROM
 
-// Variometer configuration
-#define MAX_VERTICAL_SPEED 250.0f  // Maximum vertical speed to display (m/s)
-#define VARIO_BUFFER_SIZE 10  // Number of samples to average for vertical speed
-
-enum DeviceRevision {
-  ESPCAN = 3
-};
-
 #endif  // INC_SP140_SHARED_CONFIG_H_

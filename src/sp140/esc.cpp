@@ -16,7 +16,6 @@ static uint8_t memory_pool[1024] __attribute__((aligned(8)));
 static SineEsc esc(adapter);
 static unsigned long lastSuccessfulCommTimeMs = 0; // Store millis() time of last successful ESC comm
 
-extern CircularBuffer<float, 50> voltageBuffer;
 
 STR_ESC_TELEMETRY_140 escTelemetryData = {
   .escState = TelemetryState::NOT_CONNECTED
@@ -72,7 +71,6 @@ void readESCTelemetry() {
 
       // Update telemetry data
       escTelemetryData.volts = res->voltage / 10.0f;
-      voltageBuffer.push(escTelemetryData.volts);
       escTelemetryData.amps = res->bus_current / 10.0f;
       escTelemetryData.mos_temp = res->mos_temp / 10.0f;
       escTelemetryData.cap_temp = res->cap_temp / 10.0f;

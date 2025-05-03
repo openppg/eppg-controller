@@ -84,7 +84,6 @@ ResponsiveAnalogRead* pot;
 
 UnifiedBatteryData unifiedBatteryData = {0.0f, 0.0f, 0.0f};
 
-CircularBuffer<float, 50> voltageBuffer;
 CircularBuffer<int, 8> potBuffer;
 
 Adafruit_NeoPixel pixels(1, 21, NEO_GRB + NEO_KHZ800);
@@ -227,11 +226,9 @@ unsigned long armedSecs = 0;
 
 TaskHandle_t blinkLEDTaskHandle = NULL;
 TaskHandle_t throttleTaskHandle = NULL;
-TaskHandle_t telemetryEscTaskHandle = NULL;
 TaskHandle_t watchdogTaskHandle = NULL;
 TaskHandle_t spiCommTaskHandle = NULL;
 
-// Add these near the top with other global declarations
 QueueHandle_t melodyQueue = NULL;
 TaskHandle_t audioTaskHandle = NULL;
 
@@ -447,11 +444,6 @@ void setupWatchdog() {
 #endif // OPENPPG_DEBUG
 }
 
-void upgradeDeviceRevision() {  // Renamed to reflect the change from EEPROM to Preferences
-  deviceData.revision = ESPCAN;
-  writeDeviceData();
-}
-
 #define TAG "OpenPPG"
 
 
@@ -478,7 +470,6 @@ void setup() {
   printBootMessage();
   setupBarometer();
 
-  upgradeDeviceRevision();
   loadHardwareConfig();
   setupLED();  // Defaults to RED
   setupAnalogRead();
@@ -583,7 +574,6 @@ void setup() {
 
 // set up all the main threads/tasks with core 0 affinity
 void setupTasks() {
-  //xTaskCreate(telemetryEscTask, "telemetryEscTask", 4096, NULL, 2, &telemetryEscTaskHandle);
   xTaskCreate(blinkLEDTask, "blinkLed", 1536, NULL, 1, &blinkLEDTaskHandle);
   xTaskCreatePinnedToCore(throttleTask, "throttle", 4096, NULL, 3, &throttleTaskHandle, 0);
   xTaskCreatePinnedToCore(spiCommTask, "SPIComm", 10096, NULL, 5, &spiCommTaskHandle, 1);
@@ -626,9 +616,8 @@ void setup140() {
   }
 }
 
-// main loop - check for serial commands
+// main loop all work is done in tasks
 void loop() {
-  // Just delay, all work is done in tasks
   delay(25);
 }
 
@@ -636,15 +625,7 @@ void initButtons() {
   pinMode(board_config.button_top, INPUT_PULLUP);
 
   // Create button handling task
-  xTaskCreatePinnedToCore(
-    buttonHandlerTask,
-    "ButtonHandler",
-    2048,
-    NULL,
-    2,
-    &buttonTaskHandle,
-    0
-  );
+  xTaskCreatePinnedToCore(buttonHandlerTask, "ButtonHandler", 2048, NULL, 2, &buttonTaskHandle, 0);
 }
 
 // Add new button handler task
@@ -662,7 +643,7 @@ void buttonHandlerTask(void* parameter) {
       if (buttonState != lastButtonState) {
         lastDebounceTime = currentTime;
 
-        if (buttonState == LOW) { // Button pressed
+        if (buttonState == LOW) {  // Button pressed
           buttonPressed = true;
           buttonPressStartTime = currentTime;
           USBSerial.println("Button pressed");
@@ -760,7 +741,6 @@ void disarmESC() {
 // reset smoothing
 void resetSmoothing() {
   potBuffer.clear();
-  // Note: prevPotLvl is now handled locally in handleThrottle function
 }
 
 void resumeLEDTask() {
@@ -770,7 +750,7 @@ void resumeLEDTask() {
 void runDisarmAlert() {
   u_int16_t disarm_melody[] = { 2093, 1976, 880 };
   // const unsigned int disarm_vibes[] = { 78, 49 };
-  pulseVibeMotor(); // Ensure this is the active call
+  pulseVibeMotor();  // Ensure this is the active call
   playMelody(disarm_melody, 3);
 }
 
@@ -840,38 +820,12 @@ void toggleCruise() {
       changeDeviceState(ARMED);  // Disengage cruise
       break;
     case DISARMED:
-      // show stats screen
-      //TODO refactor updateDisplayTaskHandle since now its shared spiCommTask.
-      // the screen updates should be aware of this and
-      // suspend/resume in their own functions vs at a task level.
-
-      // displayMeta(deviceData);
+      // Do nothing
       break;
   }
 }
 
-// Variable to track if a button was clicked
-bool wasClicked = false;
 
-// Timestamp when the button was released
-unsigned long releaseTime = 0;
-
-// Time threshold for LongClick after release (in milliseconds)
-const unsigned long longClickThreshold = 3500;  // adjust as necessary
-
-//#define THROTTLE_DEBUG
-
-#ifdef THROTTLE_DEBUG
-// Debug mode globals
-static int debugValue = 0;
-static bool increasing = true;
-static unsigned long lastStepTime = 0;
-static const int STEPS_PER_SECOND = 4;  // 4 steps per second
-static const unsigned long STEP_INTERVAL = 1000 / STEPS_PER_SECOND; // 250ms per step
-static const int STEP_SIZE = ceil(4096.0 / (STEPS_PER_SECOND * 30)); // Complete up or down in ~30 seconds
-#endif
-
- // Normal throttle behavior
 #define ESC_MIN_SPIN_PWM 1105
 
 bool throttleSafe(int threshold = POT_ENGAGEMENT_LEVEL) {
@@ -895,8 +849,8 @@ void handleThrottle() {
   }
 
   pot->update();
-  int potVal = pot->getValue(); // Raw potentiometer value (0-4095)
-  int potLvl = potVal;          // Value potentially modified by ramping
+  int potVal = pot->getValue();  // Raw potentiometer value (0-4095)
+  int potLvl = potVal;           // Value potentially modified by ramping
 
   // Handle throttle based on current state and update BLE accordingly
   if (currentState == DISARMED) {
@@ -1012,11 +966,6 @@ void afterCruiseStart() {
   // Determine the actual PWM to use for cruise: the lower of the calculated activation PWM and the absolute cap.
   uint16_t initialCruisePWM = min(calculatedActivationPWM, absoluteMaxCruisePWM);
 
-  USBSerial.print("Cruise activating. PotVal: "); USBSerial.print(cruisedPotVal);
-  USBSerial.print(", ActivationPWM: "); USBSerial.print(calculatedActivationPWM);
-  USBSerial.print(", MaxCruisePWM: "); USBSerial.print(absoluteMaxCruisePWM);
-  USBSerial.print(", Setting initialCruisePWM to: "); USBSerial.println(initialCruisePWM);
-
   // Send the capped initialCruisePWM value to the throttle task via queue
   if (xQueueSend(throttleUpdateQueue, &initialCruisePWM, pdMS_TO_TICKS(100)) != pdTRUE) {
     USBSerial.println("Failed to queue initial cruise throttle PWM");
@@ -1040,15 +989,15 @@ void playCruiseSound() {
 void audioTask(void* parameter) {
   MelodyRequest request;
 
-  for(;;) {
-    if(xQueueReceive(melodyQueue, &request, portMAX_DELAY) == pdTRUE) {
+  for (;;) {
+    if (xQueueReceive(melodyQueue, &request, portMAX_DELAY) == pdTRUE) {
       if (!ENABLE_BUZ) continue;
 
       TickType_t nextWakeTime = xTaskGetTickCount();
-      for(int i = 0; i < request.size; i++) {
+      for (int i = 0; i < request.size; i++) {
         tone(board_config.buzzer_pin, request.notes[i]);
         TickType_t delayTicks = pdMS_TO_TICKS(request.duration);
-        if(delayTicks == 0) { delayTicks = 1; } // Ensure non-zero delay
+        if (delayTicks == 0) { delayTicks = 1; }  // Ensure non-zero delay
         vTaskDelayUntil(&nextWakeTime, delayTicks);
       }
       noTone(board_config.buzzer_pin);
@@ -1069,7 +1018,6 @@ void updateESCBLETask(void *pvParameters) {
 
     // Wait for new data with timeout
     if (xQueueReceive(escTelemetryQueue, &newEscTelemetry, pdMS_TO_TICKS(100)) == pdTRUE) {
-
       // Update BLE characteristics with the received data
       updateESCTelemetryBLE(newEscTelemetry);
     }
@@ -1112,6 +1060,6 @@ void webSerialTask(void *pvParameters) {
         }
       }
     }
-    vTaskDelay(pdMS_TO_TICKS(100)); // Check every 100ms
+    vTaskDelay(pdMS_TO_TICKS(100));  // Check every 100ms
   }
 }
