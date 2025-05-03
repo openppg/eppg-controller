@@ -777,6 +777,11 @@ void disarmSystem() {
   lastDisarmTime = millis();
 }
 
+void handleArmFail() {
+  startArmFailIconFlash();
+  handleArmFailMelody();
+}
+
 void toggleArm() {
   if (currentState == DISARMED) {
     // Check if enough time has passed since last disarm

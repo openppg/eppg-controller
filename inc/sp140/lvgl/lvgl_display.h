@@ -65,6 +65,9 @@ void hideLoadingOverlay();
 // Function to start the flashing animation
 void startCruiseIconFlash();
 
+// Function to flash the arm fail warning icon
+void startArmFailIconFlash();
+
 // Cruise Control Icon
 // LV_IMG_DECLARE(noun_cruise_control_340255_1); // Old 40x40 icon
 LV_IMG_DECLARE(cruise_control_340255_30); // Use the corrected name from the new 30x30 C file

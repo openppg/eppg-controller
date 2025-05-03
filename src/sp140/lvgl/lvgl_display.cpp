@@ -8,11 +8,9 @@
 #include <map>
 #include <utility> // For std::pair
 
-// Include the generated C file for the cruise icon
-#include "../../assets/img/cruise-control-340255-30.c" // Cruise control icon
-
-// Include the generated C file for the charging icon
-#include "../../assets/img/energy-539741-26.c" // Charging icon
+#include "../../assets/img/cruise-control-340255-30.c"  // Cruise control icon
+#include "../../assets/img/energy-539741-26.c"  // Charging icon
+#include "../../assets/img/warning_2135850_30.c"  // Warning icon
 
 // Display dimensions
 #define SCREEN_WIDTH 160
@@ -94,6 +92,7 @@ static lv_obj_t* motor_letter_label = NULL; // Letter label for Motor temp
 // static lv_obj_t* warning_label = NULL; // New label for warnings/errors // REMOVED
 lv_obj_t* cruise_icon_img = NULL; // Cruise control icon image object
 static lv_obj_t* charging_icon_img = NULL;  // Charging icon image object
+static lv_obj_t* arm_fail_warning_icon_img = NULL; // Arm fail warning icon
 
 // Notification Counter Objects
 /* // REMOVED
@@ -125,6 +124,14 @@ static bool isFlashingCruiseIcon = false;
 static void cruise_flash_timer_cb(lv_timer_t* timer); // Forward declaration
 static lv_color_t original_cruise_icon_color; // To restore color after flashing
 // --- End Cruise Icon Flashing ---
+
+// --- Arm Fail Icon Flashing ---
+static lv_timer_t* arm_fail_flash_timer = NULL;
+static int arm_fail_flash_count = 0;
+static bool isFlashingArmFailIcon = false;
+static void arm_fail_flash_timer_cb(lv_timer_t* timer); // Forward declaration
+static lv_color_t original_arm_fail_icon_color; // To restore color after flashing
+// --- End Arm Fail Icon Flashing ---
 
 void setupLvglBuffer() {
   // Initialize LVGL library
@@ -571,6 +578,22 @@ void setupMainScreen(bool darkMode) {
   lv_obj_move_foreground(charging_icon_img); // Ensure icon is on top
   lv_obj_add_flag(charging_icon_img, LV_OBJ_FLAG_HIDDEN); // Hide initially
 
+  // Create arm fail warning icon (initially hidden)
+  arm_fail_warning_icon_img = lv_img_create(main_screen);
+  lv_img_set_src(arm_fail_warning_icon_img, &warning_2135850_30);
+  // Align in the same position as the cruise icon
+  lv_obj_align(arm_fail_warning_icon_img, LV_ALIGN_CENTER, 12, -9);
+
+  // Set icon color based on theme (using the same logic as cruise icon)
+  lv_obj_set_style_img_recolor(arm_fail_warning_icon_img, icon_color, LV_PART_MAIN);
+  lv_obj_set_style_img_recolor_opa(arm_fail_warning_icon_img, LV_OPA_COVER, LV_PART_MAIN);
+
+  // Store the original color for restoring after flash
+  original_arm_fail_icon_color = icon_color;
+
+  lv_obj_move_foreground(arm_fail_warning_icon_img); // Ensure icon is on top
+  lv_obj_add_flag(arm_fail_warning_icon_img, LV_OBJ_FLAG_HIDDEN); // Hide initially
+
   // Create semi-transparent overlay for the spinner
   spinner_overlay = lv_obj_create(main_screen);
   lv_obj_set_size(spinner_overlay, SCREEN_WIDTH, SCREEN_HEIGHT);
@@ -692,6 +715,84 @@ void startCruiseIconFlash() {
   }
 }
 // --- End Cruise Icon Flashing Implementation ---
+
+// --- Arm Fail Icon Flashing Implementation ---
+static void arm_fail_flash_timer_cb(lv_timer_t* timer) {
+  // This callback runs within the LVGL task handler, which is already protected by lvglMutex
+
+  if (arm_fail_warning_icon_img == NULL) {
+    // Safety check
+    if (arm_fail_flash_timer != NULL) {
+      lv_timer_del(arm_fail_flash_timer);
+      arm_fail_flash_timer = NULL;
+    }
+    arm_fail_flash_count = 0;
+    isFlashingArmFailIcon = false;
+    return;
+  }
+
+  // Toggle visibility
+  if (lv_obj_has_flag(arm_fail_warning_icon_img, LV_OBJ_FLAG_HIDDEN)) {
+    lv_obj_clear_flag(arm_fail_warning_icon_img, LV_OBJ_FLAG_HIDDEN);
+  } else {
+    lv_obj_add_flag(arm_fail_warning_icon_img, LV_OBJ_FLAG_HIDDEN);
+  }
+
+  arm_fail_flash_count++;
+
+  // Check if flashing is complete (3 flashes = 6 toggles)
+  if (arm_fail_flash_count >= 6) {
+    lv_timer_del(arm_fail_flash_timer);
+    arm_fail_flash_timer = NULL;
+    arm_fail_flash_count = 0;
+    isFlashingArmFailIcon = false;
+    // Ensure icon is hidden after flashing
+    lv_obj_add_flag(arm_fail_warning_icon_img, LV_OBJ_FLAG_HIDDEN);
+    // Restore original color after flashing is done
+    lv_obj_set_style_img_recolor(arm_fail_warning_icon_img, original_arm_fail_icon_color, LV_PART_MAIN);
+  }
+}
+
+void startArmFailIconFlash() {
+  // This function can be called from other tasks, so protect with mutex
+  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(50)) == pdTRUE) { // Use a timeout
+    if (arm_fail_warning_icon_img == NULL) {
+      xSemaphoreGive(lvglMutex);
+      return; // Can't flash if icon doesn't exist
+    }
+
+    // If a flash timer is already running, delete it first
+    if (arm_fail_flash_timer != NULL) {
+      lv_timer_del(arm_fail_flash_timer);
+      arm_fail_flash_timer = NULL;
+    }
+
+    // Reset state and start flashing
+    arm_fail_flash_count = 0;
+    isFlashingArmFailIcon = true;
+
+    // Start with the icon visible
+    lv_obj_clear_flag(arm_fail_warning_icon_img, LV_OBJ_FLAG_HIDDEN);
+
+    // Set icon to red for flashing
+    lv_obj_set_style_img_recolor(arm_fail_warning_icon_img, LVGL_RED, LV_PART_MAIN);
+
+    // Create the timer (250ms interval for on/off cycle)
+    arm_fail_flash_timer = lv_timer_create(arm_fail_flash_timer_cb, 250, NULL);
+    if (arm_fail_flash_timer == NULL) {
+      // Failed to create timer, reset state
+      isFlashingArmFailIcon = false;
+      lv_obj_add_flag(arm_fail_warning_icon_img, LV_OBJ_FLAG_HIDDEN); // Hide it again
+      lv_obj_set_style_img_recolor(arm_fail_warning_icon_img, original_arm_fail_icon_color, LV_PART_MAIN); // Restore color
+      USBSerial.println("Error: Failed to create arm fail flash timer!");
+    }
+
+    xSemaphoreGive(lvglMutex);
+  } else {
+     USBSerial.println("Warning: Failed to acquire LVGL mutex for startArmFailIconFlash");
+  }
+}
+// --- End Arm Fail Icon Flashing Implementation ---
 
 void updateLvglMainScreen(
   const STR_DEVICE_DATA_140_V1& deviceData,
@@ -985,6 +1086,14 @@ void updateLvglMainScreen(
     } else {
       lv_obj_add_flag(charging_icon_img, LV_OBJ_FLAG_HIDDEN);
     }
+  }
+
+  // Update Arm Fail Warning Icon Visibility (conditional)
+  // Only hide if not currently flashing
+  if (!isFlashingArmFailIcon && arm_fail_warning_icon_img != NULL) {
+    lv_obj_add_flag(arm_fail_warning_icon_img, LV_OBJ_FLAG_HIDDEN);
+    // Ensure color is reset if flashing ended abruptly elsewhere (though cb should handle it)
+    lv_obj_set_style_img_recolor(arm_fail_warning_icon_img, original_arm_fail_icon_color, LV_PART_MAIN);
   }
 
   // Deselect display CS when done drawing

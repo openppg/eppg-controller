@@ -58,7 +58,7 @@ bool playMelody(uint16_t melody[], int siz) {
 /**
  * Plays a melody to indicate arm failure
  */
-void handleArmFail() {
+void handleArmFailMelody() {
   uint16_t arm_fail_melody[] = { 820, 640 };
   playMelody(arm_fail_melody, 2);
 }

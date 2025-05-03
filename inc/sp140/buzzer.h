@@ -21,6 +21,6 @@ bool playMelody(uint16_t melody[], int siz);
 /**
  * Plays a melody to indicate arm failure
  */
-void handleArmFail();
+void handleArmFailMelody();
 
 #endif  // INC_SP140_BUZZER_H_
