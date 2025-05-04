@@ -22,4 +22,7 @@ float getVerticalSpeed();
 // Set the ground altitude to the current altitude to compute AGL
 void setGroundAltitude(const STR_DEVICE_DATA_140_V1& deviceData);
 
+// Get the temperature in degrees Celsius
+float getBaroTemperature();
+
 #endif  // INC_SP140_ALTIMETER_H_

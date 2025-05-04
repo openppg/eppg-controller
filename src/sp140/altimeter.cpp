@@ -59,6 +59,14 @@ void setGroundAltitude(const STR_DEVICE_DATA_140_V1& deviceData) {
   }
 }
 
+// Get the temperature in degrees Celsius
+float getBaroTemperature() {
+  if (bmpPresent) {
+    return bmp.readTemperature();
+  }
+  return __FLT_MIN__; // Return a very small number if BMP is not present
+}
+
 // Start the bmp3XX sensor
 bool setupAltimeter(bool altWire) {
   TwoWire* wire = &Wire;
