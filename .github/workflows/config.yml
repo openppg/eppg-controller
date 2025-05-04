@@ -27,6 +27,10 @@ jobs:
           token: ${{ secrets.GH_TOKEN }}
           persist-credentials: true
           show-progress: false
+      - name: Setup Git Credentials
+        run: |
+          git config --global credential.helper store
+          echo "https://oauth2:${{ secrets.GH_TOKEN }}@github.com" > ~/.git-credentials
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
