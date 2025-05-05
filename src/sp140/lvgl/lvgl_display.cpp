@@ -403,7 +403,8 @@ void setupMainScreen(bool darkMode) {
 
   // Create temperature labels - adjust positions to align with divider lines
   batt_temp_label = lv_label_create(main_screen);
-  lv_obj_align(batt_temp_label, LV_ALIGN_BOTTOM_RIGHT, -1, -35);
+  // Align bottom-right, adjust Y offset for spacing
+  lv_obj_align(batt_temp_label, LV_ALIGN_BOTTOM_RIGHT, -1, -39);
   lv_obj_set_style_text_font(batt_temp_label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(batt_temp_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
@@ -416,7 +417,8 @@ void setupMainScreen(bool darkMode) {
 
   // Create letter label for B
   batt_letter_label = lv_label_create(main_screen);
-  lv_obj_align(batt_letter_label, LV_ALIGN_BOTTOM_LEFT, 122, -35);  // Just right of vertical line
+  // Align bottom-left, adjust Y offset for spacing
+  lv_obj_align(batt_letter_label, LV_ALIGN_BOTTOM_LEFT, 122, -39);
   lv_obj_set_style_text_font(batt_letter_label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(batt_letter_label, darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   lv_obj_set_style_pad_left(batt_letter_label, 3, 0);
@@ -426,7 +428,8 @@ void setupMainScreen(bool darkMode) {
   lv_label_set_text(batt_letter_label, "B");
 
   esc_temp_label = lv_label_create(main_screen);
-  lv_obj_align(esc_temp_label, LV_ALIGN_BOTTOM_RIGHT, -1, -16);
+  // Align bottom-right, adjust Y offset for spacing
+  lv_obj_align(esc_temp_label, LV_ALIGN_BOTTOM_RIGHT, -1, -20);
   lv_obj_set_style_text_font(esc_temp_label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(esc_temp_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
@@ -439,7 +442,8 @@ void setupMainScreen(bool darkMode) {
 
   // Create letter label for E
   esc_letter_label = lv_label_create(main_screen);
-  lv_obj_align(esc_letter_label, LV_ALIGN_BOTTOM_LEFT, 122, -16);  // Just right of vertical line
+  // Align bottom-left, adjust Y offset for spacing
+  lv_obj_align(esc_letter_label, LV_ALIGN_BOTTOM_LEFT, 122, -20);
   lv_obj_set_style_text_font(esc_letter_label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(esc_letter_label, darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   lv_obj_set_style_pad_left(esc_letter_label, 3, 0);
@@ -449,6 +453,7 @@ void setupMainScreen(bool darkMode) {
   lv_label_set_text(esc_letter_label, "E");
 
   motor_temp_label = lv_label_create(main_screen);
+  // Align bottom-right, adjust Y offset for spacing
   lv_obj_align(motor_temp_label, LV_ALIGN_BOTTOM_RIGHT, -1, 0);
   lv_obj_set_style_text_font(motor_temp_label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(motor_temp_label,
@@ -462,6 +467,7 @@ void setupMainScreen(bool darkMode) {
 
   // Create letter label for M
   motor_letter_label = lv_label_create(main_screen);
+  // Align bottom-left, adjust Y offset for spacing
   lv_obj_align(motor_letter_label, LV_ALIGN_BOTTOM_LEFT, 122, 0);
   lv_obj_set_style_text_font(motor_letter_label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(motor_letter_label, darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
@@ -509,16 +515,18 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_style_line_width(v_line2, 1, LV_PART_MAIN);
 
   // Create horizontal dividers for temperature section
+  // Line between B and E at Y=89
   lv_obj_t* h_line3 = lv_line_create(main_screen);
-  static lv_point_t h_line3_points[] = {{120, 94}, {SCREEN_WIDTH, 94}};
+  static lv_point_t h_line3_points[] = {{120, 89}, {SCREEN_WIDTH, 89}};
   lv_line_set_points(h_line3, h_line3_points, 2);
   lv_obj_set_style_line_color(h_line3,
                              LVGL_GRAY,
                              LV_PART_MAIN);
   lv_obj_set_style_line_width(h_line3, 1, LV_PART_MAIN);
 
+  // Line between E and M at Y=109
   lv_obj_t* h_line4 = lv_line_create(main_screen);
-  static lv_point_t h_line4_points[] = {{120, 111}, {SCREEN_WIDTH, 111}};
+  static lv_point_t h_line4_points[] = {{120, 109}, {SCREEN_WIDTH, 109}};
   lv_line_set_points(h_line4, h_line4_points, 2);
   lv_obj_set_style_line_color(h_line4,
                              LVGL_GRAY,
