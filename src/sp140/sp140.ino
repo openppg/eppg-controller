@@ -60,7 +60,6 @@ int8_t bmsCS = MCP_CS;
 #define CHILL_MODE_MAX_PWM 1850  // 85% max power in chill mode
 #define CHILL_MODE_RAMP_RATE 50  // How fast throttle can increase per cycle in chill mode
 #define SPORT_MODE_RAMP_RATE 120 // How fast throttle can increase per cycle in sport mode
-#define ESC_MIN_SPIN_PWM 1000
 
 #define DECEL_MULTIPLIER 2.0     // How much faster deceleration is vs acceleration
 #define CRUISE_MAX_PERCENTAGE 0.60  // Maximum cruise throttle as a percentage of the total ESC range (e.g., 0.60 = 60%)
@@ -840,7 +839,7 @@ bool throttleSafe(int threshold = POT_ENGAGEMENT_LEVEL) {
 
 void handleThrottle() {
   static int maxPWM = ESC_MAX_PWM;
-  static uint16_t currentCruiseThrottlePWM = ESC_MIN_SPIN_PWM;
+  static uint16_t currentCruiseThrottlePWM = ESC_MIN_PWM;
   static int prevPotLvl = 0;  // Local static variable for throttle smoothing
   uint16_t newPWM;
 
@@ -868,7 +867,7 @@ void handleThrottle() {
     setESCThrottle(currentCruiseThrottlePWM);
 
     // Map PWM back to a representative throttle value for BLE display
-    // int mappedThrottleForBLE = map(currentCruiseThrottlePWM, ESC_MIN_SPIN_PWM, ESC_MAX_PWM, 0, 4095);
+    // int mappedThrottleForBLE = map(currentCruiseThrottlePWM, ESC_MIN_PWM, ESC_MAX_PWM, 0, 4095);
     // updateThrottleBLE(mappedThrottleForBLE);
     // Don't update prevPotLvl in cruise mode to prevent drift
 
@@ -899,7 +898,7 @@ void handleThrottle() {
     potLvl = limitedThrottle(potLvl, prevPotLvl, rampRate);
 
     // Map throttle value to PWM range using the smoothed value
-    int localThrottlePWM = map(potLvl, 0, 4095, ESC_MIN_SPIN_PWM, maxPWM);
+    int localThrottlePWM = map(potLvl, 0, 4095, ESC_MIN_PWM, maxPWM);
     setESCThrottle(localThrottlePWM);
     prevPotLvl = potLvl;  // Store smoothed value locally for next iteration
     // updateThrottleBLE(potLvl); // Send actual (ramped) throttle value
@@ -969,10 +968,10 @@ void afterCruiseStart() {
   int maxPwmForCurrentMode = (deviceData.performance_mode == 0) ? CHILL_MODE_MAX_PWM : ESC_MAX_PWM;
 
   // Calculate the PWM corresponding to the potentiometer value *at the time of activation*, respecting the current flight mode's maximum PWM.
-  uint16_t calculatedActivationPWM = map(cruisedPotVal, 0, 4095, ESC_MIN_SPIN_PWM, maxPwmForCurrentMode);
+  uint16_t calculatedActivationPWM = map(cruisedPotVal, 0, 4095, ESC_MIN_PWM, maxPwmForCurrentMode);
 
   // Calculate the absolute maximum PWM allowed for cruise control (e.g., 60% of full ESC range)
-  uint16_t absoluteMaxCruisePWM = ESC_MIN_SPIN_PWM + (uint16_t)((ESC_MAX_PWM - ESC_MIN_SPIN_PWM) * CRUISE_MAX_PERCENTAGE);
+  uint16_t absoluteMaxCruisePWM = ESC_MIN_PWM + (uint16_t)((ESC_MAX_PWM - ESC_MIN_PWM) * CRUISE_MAX_PERCENTAGE);
 
   // Determine the actual PWM to use for cruise: the lower of the calculated activation PWM and the absolute cap.
   uint16_t initialCruisePWM = min(calculatedActivationPWM, absoluteMaxCruisePWM);
