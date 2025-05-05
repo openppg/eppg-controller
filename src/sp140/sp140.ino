@@ -333,6 +333,7 @@ void refreshDisplay() {
           bmsTelemetryData,
           unifiedBatteryData,
           altitude,
+          altitudeToShow, // Pass the conditionally determined altitude
           isArmed,
           isCruising,
           armedAtMillis
@@ -988,6 +989,7 @@ void afterCruiseStart() {
 void afterCruiseEnd() {
   cruisedPotVal = 0;
   pulseVibeMotor();
+  resetSmoothing(); // Clear the pot buffer to reset ramp baseline
 }
 
 void playCruiseSound() {
