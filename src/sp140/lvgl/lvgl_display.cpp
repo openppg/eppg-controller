@@ -1032,7 +1032,7 @@ void updateLvglMainScreen(
     lv_color_t text_color = darkMode ? LVGL_WHITE : LVGL_BLACK;
     lv_opa_t bg_opacity = LV_OPA_0;
 
-    if (escTelemetry.escState == TelemetryState::CONNECTED) {
+    if (escTelemetry.escState == TelemetryState::CONNECTED && motorTemp > -20.0f) {
       lv_label_set_text_fmt(motor_temp_label, "%d", static_cast<int>(motorTemp));
 
       if (motorTemp >= MOTOR_TEMP_CRITICAL) {
