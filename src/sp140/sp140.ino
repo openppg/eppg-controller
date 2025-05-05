@@ -60,8 +60,10 @@ int8_t bmsCS = MCP_CS;
 #define CHILL_MODE_MAX_PWM 1850  // 85% max power in chill mode
 #define CHILL_MODE_RAMP_RATE 50  // How fast throttle can increase per cycle in chill mode
 #define SPORT_MODE_RAMP_RATE 120 // How fast throttle can increase per cycle in sport mode
+#define ESC_MIN_SPIN_PWM 1000
+
 #define DECEL_MULTIPLIER 2.0     // How much faster deceleration is vs acceleration
-#define CRUISE_MAX_PERCENTAGE 0.60 // Maximum cruise throttle as a percentage of the total ESC range (e.g., 0.60 = 60%)
+#define CRUISE_MAX_PERCENTAGE 0.60  // Maximum cruise throttle as a percentage of the total ESC range (e.g., 0.60 = 60%)
 #define CRUISE_DISENGAGE_POT_THRESHOLD_PERCENTAGE 0.80 // Current pot must be >= this % of activation value to disengage
 #define CRUISE_DISENGAGE_GRACE_PERIOD_MS 2000 // Delay before checking pot disengagement after cruise activation
 #define CRUISE_ACTIVATION_MAX_POT_PERCENTAGE 0.70 // Prevent cruise activation if pot is above this percentage
@@ -837,8 +839,6 @@ void toggleCruise() {
 }
 
 
-#define ESC_MIN_SPIN_PWM 1105
-
 bool throttleSafe(int threshold = POT_ENGAGEMENT_LEVEL) {
   pot->update();
   return pot->getRawValue() < threshold;
@@ -988,12 +988,12 @@ void afterCruiseStart() {
     USBSerial.println("Failed to queue initial cruise throttle PWM");
   }
 
-  pulseVibeMotor();
+  //pulseVibeMotor();
 }
 
 void afterCruiseEnd() {
   cruisedPotVal = 0;
-  pulseVibeMotor();
+  //pulseVibeMotor();
   resetSmoothing(); // Clear the pot buffer to reset ramp baseline
 }
 
