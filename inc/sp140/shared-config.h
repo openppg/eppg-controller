@@ -21,7 +21,7 @@
 #define NO_ADAFRUIT_SSD1306_COLOR_COMPATIBILITY
 
 #define ESC_DISARMED_PWM      1000
-#define ESC_MIN_PWM           1050  // ESC min is 1080
+#define ESC_MIN_PWM           1035  // ESC min
 #define ESC_MAX_PWM           1950  // ESC max 1900
 
 #define ENABLE_BUZ            true    // enable buzzer
