@@ -322,14 +322,7 @@ void refreshDisplay() {
   }
 
   if (xSemaphoreTake(lvglMutex, portMAX_DELAY) == pdTRUE) {
-    // Get the current relative altitude (updates buffer for vario)
-    const float currentRelativeAltitude = getAltitude(deviceData);
-
-    // Determine the altitude to show on the display
-    float altitudeToShow = 0.0f;  // Default to 0
-    if (currentState != DISARMED) {
-      altitudeToShow = currentRelativeAltitude;  // Show relative altitude when armed/cruising
-    }
+    const float altitude = getAltitude(deviceData);
     bool isArmed = (currentState != DISARMED);
     bool isCruising = (currentState == ARMED_CRUISING);
 
@@ -341,10 +334,11 @@ void refreshDisplay() {
           escTelemetryData,
           bmsTelemetryData,
           unifiedBatteryData,
-          altitudeToShow,
+          altitude,
           isArmed,
           isCruising,
-          armedAtMillis);
+          armedAtMillis
+        );
         break;
       // Add cases for other screens here later
       // case SETTINGS_SCREEN:
