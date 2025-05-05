@@ -6,11 +6,11 @@
 #include <vector>
 #include <string>
 #include <map>
-#include <utility> // For std::pair
+#include <utility>
 
-#include "../../assets/img/cruise-control-340255-30.c"  // Cruise control icon
-#include "../../assets/img/energy-539741-26.c"  // Charging icon
-#include "../../assets/img/warning_2135850_30.c"  // Warning icon
+#include "../../assets/img/cruise-control-340255-30.c"  // Cruise control icon  // NOLINT(build/include)
+#include "../../assets/img/energy-539741-26.c"  // Charging icon  // NOLINT(build/include)
+#include "../../assets/img/warning_2135850_30.c"  // Warning icon  // NOLINT(build/include)
 
 // Display dimensions
 #define SCREEN_WIDTH 160
@@ -44,8 +44,8 @@
 struct NotificationInfo {
   const char* message;
   lv_color_t color;
-  bool is_error; // true for error (red), false for warning (orange)
-  uint32_t last_active_time; // Last time the condition for this notification was met
+  bool is_error;  // true for error (red), false for warning (orange)
+  uint32_t last_active_time;  // Last time the condition for this notification was met
   // Removed display_start_time as it's managed separately now
 };
 */
@@ -86,13 +86,13 @@ static lv_obj_t* motor_temp_label = NULL;
 static lv_obj_t* arm_indicator = NULL;
 static lv_obj_t* spinner = NULL;       // For the spinning animation
 static lv_obj_t* spinner_overlay = NULL;  // Overlay for the spinner
-static lv_obj_t* batt_letter_label = NULL; // Letter label for Battery temp
-static lv_obj_t* esc_letter_label = NULL; // Letter label for ESC temp
-static lv_obj_t* motor_letter_label = NULL; // Letter label for Motor temp
-// static lv_obj_t* warning_label = NULL; // New label for warnings/errors // REMOVED
-lv_obj_t* cruise_icon_img = NULL; // Cruise control icon image object
+static lv_obj_t* batt_letter_label = NULL;  // Letter label for Battery temp
+static lv_obj_t* esc_letter_label = NULL;  // Letter label for ESC temp
+static lv_obj_t* motor_letter_label = NULL;  // Letter label for Motor temp
+// static lv_obj_t* warning_label = NULL;  // New label for warnings/errors // REMOVED
+lv_obj_t* cruise_icon_img = NULL;  // Cruise control icon image object
 static lv_obj_t* charging_icon_img = NULL;  // Charging icon image object
-static lv_obj_t* arm_fail_warning_icon_img = NULL; // Arm fail warning icon
+static lv_obj_t* arm_fail_warning_icon_img = NULL;  // Arm fail warning icon
 
 // Notification Counter Objects
 /* // REMOVED
@@ -121,16 +121,16 @@ void setupMainScreen(bool darkMode);
 static lv_timer_t* cruise_flash_timer = NULL;
 static int cruise_flash_count = 0;
 static bool isFlashingCruiseIcon = false;
-static void cruise_flash_timer_cb(lv_timer_t* timer); // Forward declaration
-static lv_color_t original_cruise_icon_color; // To restore color after flashing
+static void cruise_flash_timer_cb(lv_timer_t* timer);  // Forward declaration
+static lv_color_t original_cruise_icon_color;  // To restore color after flashing
 // --- End Cruise Icon Flashing ---
 
 // --- Arm Fail Icon Flashing ---
 static lv_timer_t* arm_fail_flash_timer = NULL;
 static int arm_fail_flash_count = 0;
 static bool isFlashingArmFailIcon = false;
-static void arm_fail_flash_timer_cb(lv_timer_t* timer); // Forward declaration
-static lv_color_t original_arm_fail_icon_color; // To restore color after flashing
+static void arm_fail_flash_timer_cb(lv_timer_t* timer);  // Forward declaration
+static lv_color_t original_arm_fail_icon_color;  // To restore color after flashing
 // --- End Arm Fail Icon Flashing ---
 
 void setupLvglBuffer() {
@@ -386,7 +386,7 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_style_text_color(altitude_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   // Align altitude label to the bottom-right corner of its section (left of vertical line)
-  lv_obj_align(altitude_label, LV_ALIGN_BOTTOM_LEFT, 5, -5); // Position slightly from bottom-left
+  lv_obj_align(altitude_label, LV_ALIGN_BOTTOM_LEFT, 5, -5);  // Position slightly from bottom-left
 
   // Warning/Error message label
   /* // REMOVED
@@ -396,9 +396,9 @@ void setupMainScreen(bool darkMode) {
   // Align warning label to the top-left of the bottom section
   lv_obj_align(warning_label, LV_ALIGN_TOP_LEFT, 5, 78);  // Position below HLine2
   lv_obj_set_style_text_font(warning_label, &lv_font_montserrat_12, 0);  // Smaller font for warnings
-  lv_label_set_long_mode(warning_label, LV_LABEL_LONG_WRAP); // Allow wrapping
-  lv_label_set_text(warning_label, ""); // Initially empty
-  lv_obj_add_flag(warning_label, LV_OBJ_FLAG_HIDDEN); // Hide initially
+  lv_label_set_long_mode(warning_label, LV_LABEL_LONG_WRAP);  // Allow wrapping
+  lv_label_set_text(warning_label, "");  // Initially empty
+  lv_obj_add_flag(warning_label, LV_OBJ_FLAG_HIDDEN);  // Hide initially
   */
 
   // Create temperature labels - adjust positions to align with divider lines
@@ -408,12 +408,12 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_style_text_font(batt_temp_label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(batt_temp_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
-  lv_obj_set_style_bg_opa(batt_temp_label, LV_OPA_0, 0); // Initially transparent
+  lv_obj_set_style_bg_opa(batt_temp_label, LV_OPA_0, 0);  // Initially transparent
   lv_obj_set_style_pad_left(batt_temp_label, 3, 0);
   lv_obj_set_style_pad_right(batt_temp_label, 3, 0);
   lv_obj_set_style_pad_top(batt_temp_label, 2, 0);
   lv_obj_set_style_pad_bottom(batt_temp_label, 2, 0);
-  lv_obj_set_style_text_align(batt_temp_label, LV_TEXT_ALIGN_RIGHT, 0); // Right align temperature values
+  lv_obj_set_style_text_align(batt_temp_label, LV_TEXT_ALIGN_RIGHT, 0);  // Right align temperature values
 
   // Create letter label for B
   batt_letter_label = lv_label_create(main_screen);
@@ -458,7 +458,7 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_style_text_font(motor_temp_label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(motor_temp_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
-  lv_obj_set_style_bg_opa(motor_temp_label, LV_OPA_0, 0); // Initially transparent
+  lv_obj_set_style_bg_opa(motor_temp_label, LV_OPA_0, 0);  // Initially transparent
   lv_obj_set_style_pad_left(motor_temp_label, 3, 0);
   lv_obj_set_style_pad_right(motor_temp_label, 3, 0);
   lv_obj_set_style_pad_top(motor_temp_label, 2, 0);
@@ -545,46 +545,46 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_size(arm_indicator, 52, 33);
   lv_obj_set_pos(arm_indicator, 108, 37);
   lv_obj_set_style_border_width(arm_indicator, 0, LV_PART_MAIN);
-  lv_obj_set_style_radius(arm_indicator, 0, LV_PART_MAIN); // Ensure sharp corners
+  lv_obj_set_style_radius(arm_indicator, 0, LV_PART_MAIN);  // Ensure sharp corners
   // Move to background and hide initially
   lv_obj_move_background(arm_indicator);
   lv_obj_add_flag(arm_indicator, LV_OBJ_FLAG_HIDDEN);
 
   // Create cruise control icon (initially hidden)
   cruise_icon_img = lv_img_create(main_screen);
-  // lv_img_set_src(cruise_icon_img, &noun_cruise_control_340255_1); // Use the old 40x40 image descriptor
-  lv_img_set_src(cruise_icon_img, &cruise_control_340255_30); // Use the new 30x30 image descriptor
+  // lv_img_set_src(cruise_icon_img, &noun_cruise_control_340255_1);  // Use the old 40x40 image descriptor
+  lv_img_set_src(cruise_icon_img, &cruise_control_340255_30);  // Use the new 30x30 image descriptor
 
   // Set icon color using recoloring based on theme
   lv_color_t icon_color;
   if (darkMode) {
-    icon_color = lv_color_white(); // White icon on dark background
+    icon_color = lv_color_white();  // White icon on dark background
   } else {
-    icon_color = lv_color_black(); // Black icon on light background
+    icon_color = lv_color_black();  // Black icon on light background
   }
   lv_obj_set_style_img_recolor(cruise_icon_img, icon_color, LV_PART_MAIN);
-  lv_obj_set_style_img_recolor_opa(cruise_icon_img, LV_OPA_COVER, LV_PART_MAIN); // Make icon fully opaque
+  lv_obj_set_style_img_recolor_opa(cruise_icon_img, LV_OPA_COVER, LV_PART_MAIN);  // Make icon fully opaque
 
   // Store the original color for restoring after flash
   original_cruise_icon_color = icon_color;
 
-  // lv_obj_align(cruise_icon_img, LV_ALIGN_CENTER, 12, -12); // Align center, then offset right 12, up 12
-  lv_obj_align(cruise_icon_img, LV_ALIGN_CENTER, 12, -9); // Align center, offset right 12, up 9 (down 3 from -12)
-  lv_obj_move_foreground(cruise_icon_img); // Ensure icon is on the top layer
+  // lv_obj_align(cruise_icon_img, LV_ALIGN_CENTER, 12, -12);  // Align center, then offset right 12, up 12
+  lv_obj_align(cruise_icon_img, LV_ALIGN_CENTER, 12, -9);  // Align center, offset right 12, up 9 (down 3 from -12)
+  lv_obj_move_foreground(cruise_icon_img);  // Ensure icon is on the top layer
   // Don't hide it initially for debugging
-  lv_obj_add_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN); // Hide initially
+  lv_obj_add_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);  // Hide initially
 
   // Create charging icon (initially hidden)
   charging_icon_img = lv_img_create(main_screen);
   lv_img_set_src(charging_icon_img, &energy_539741_26);
-  lv_obj_align_to(charging_icon_img, battery_label, LV_ALIGN_OUT_RIGHT_MID, 3, 0); // Align to right of battery label
+  lv_obj_align_to(charging_icon_img, battery_label, LV_ALIGN_OUT_RIGHT_MID, 3, 0);  // Align to right of battery label
 
   // Set charging icon color based on theme
-  lv_obj_set_style_img_recolor(charging_icon_img, icon_color, LV_PART_MAIN); // Use same icon_color as cruise
+  lv_obj_set_style_img_recolor(charging_icon_img, icon_color, LV_PART_MAIN);  // Use same icon_color as cruise
   lv_obj_set_style_img_recolor_opa(charging_icon_img, LV_OPA_COVER, LV_PART_MAIN);
 
-  lv_obj_move_foreground(charging_icon_img); // Ensure icon is on top
-  lv_obj_add_flag(charging_icon_img, LV_OBJ_FLAG_HIDDEN); // Hide initially
+  lv_obj_move_foreground(charging_icon_img);  // Ensure icon is on top
+  lv_obj_add_flag(charging_icon_img, LV_OBJ_FLAG_HIDDEN);  // Hide initially
 
   // Create arm fail warning icon (initially hidden)
   arm_fail_warning_icon_img = lv_img_create(main_screen);
@@ -599,8 +599,8 @@ void setupMainScreen(bool darkMode) {
   // Store the original color for restoring after flash
   original_arm_fail_icon_color = icon_color;
 
-  lv_obj_move_foreground(arm_fail_warning_icon_img); // Ensure icon is on top
-  lv_obj_add_flag(arm_fail_warning_icon_img, LV_OBJ_FLAG_HIDDEN); // Hide initially
+  lv_obj_move_foreground(arm_fail_warning_icon_img);  // Ensure icon is on top
+  lv_obj_add_flag(arm_fail_warning_icon_img, LV_OBJ_FLAG_HIDDEN);  // Hide initially
 
   // Create semi-transparent overlay for the spinner
   spinner_overlay = lv_obj_create(main_screen);
@@ -685,10 +685,10 @@ static void cruise_flash_timer_cb(lv_timer_t* timer) {
 
 void startCruiseIconFlash() {
   // This function can be called from other tasks, so protect with mutex
-  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(50)) == pdTRUE) { // Use a timeout
+  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(50)) == pdTRUE) {  // Use a timeout
     if (cruise_icon_img == NULL) {
       xSemaphoreGive(lvglMutex);
-      return; // Can't flash if icon doesn't exist
+      return;  // Can't flash if icon doesn't exist
     }
 
     // If a flash timer is already running, delete it first
@@ -709,8 +709,8 @@ void startCruiseIconFlash() {
     if (cruise_flash_timer == NULL) {
       // Failed to create timer, reset state
       isFlashingCruiseIcon = false;
-      lv_obj_add_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN); // Hide it again
-      lv_obj_set_style_img_recolor(cruise_icon_img, original_cruise_icon_color, LV_PART_MAIN); // Restore color on failure
+      lv_obj_add_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);  // Hide it again
+      lv_obj_set_style_img_recolor(cruise_icon_img, original_cruise_icon_color, LV_PART_MAIN);  // Restore color on failure
       USBSerial.println("Error: Failed to create cruise flash timer!");
     } else {
       // Set icon to red for flashing
@@ -763,10 +763,10 @@ static void arm_fail_flash_timer_cb(lv_timer_t* timer) {
 
 void startArmFailIconFlash() {
   // This function can be called from other tasks, so protect with mutex
-  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(50)) == pdTRUE) { // Use a timeout
+  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(50)) == pdTRUE) {  // Use a timeout
     if (arm_fail_warning_icon_img == NULL) {
       xSemaphoreGive(lvglMutex);
-      return; // Can't flash if icon doesn't exist
+      return;  // Can't flash if icon doesn't exist
     }
 
     // If a flash timer is already running, delete it first
@@ -790,8 +790,8 @@ void startArmFailIconFlash() {
     if (arm_fail_flash_timer == NULL) {
       // Failed to create timer, reset state
       isFlashingArmFailIcon = false;
-      lv_obj_add_flag(arm_fail_warning_icon_img, LV_OBJ_FLAG_HIDDEN); // Hide it again
-      lv_obj_set_style_img_recolor(arm_fail_warning_icon_img, original_arm_fail_icon_color, LV_PART_MAIN); // Restore color
+      lv_obj_add_flag(arm_fail_warning_icon_img, LV_OBJ_FLAG_HIDDEN);  // Hide it again
+      lv_obj_set_style_img_recolor(arm_fail_warning_icon_img, original_arm_fail_icon_color, LV_PART_MAIN);  // Restore color
       USBSerial.println("Error: Failed to create arm fail flash timer!");
     }
 
@@ -863,16 +863,16 @@ void updateLvglMainScreen(
   }
 
   // Update left voltage (cell voltage)
-  if (voltage_left_label != NULL) { // Check object exists
+  if (voltage_left_label != NULL) {  // Check object exists
     if (bmsConnected) {
         char buffer[10];
         snprintf(buffer, sizeof(buffer), "%2.2fv", lowestCellV);
         lv_label_set_text(voltage_left_label, buffer);
 
         // Set color based on voltage
-        if (lowestCellV <= CELL_VOLTAGE_CRITICAL && lowestCellV > 0) { // Add > 0 check
+        if (lowestCellV <= CELL_VOLTAGE_CRITICAL && lowestCellV > 0) {  // Add > 0 check
         lv_obj_set_style_text_color(voltage_left_label, LVGL_RED, 0);
-        } else if (lowestCellV <= CELL_VOLTAGE_WARNING && lowestCellV > 0) { // Add > 0 check
+        } else if (lowestCellV <= CELL_VOLTAGE_WARNING && lowestCellV > 0) {  // Add > 0 check
         lv_obj_set_style_text_color(voltage_left_label, LVGL_ORANGE, 0);
         } else {
         lv_obj_set_style_text_color(voltage_left_label,
@@ -888,7 +888,7 @@ void updateLvglMainScreen(
 
   // Update right voltage (total voltage)
   // if esc connected, show esc voltage in center of screen
-  if (voltage_right_label != NULL && battery_label != NULL) { // Check objects exist
+  if (voltage_right_label != NULL && battery_label != NULL) {  // Check objects exist
     if (bmsConnected) {
         char buffer[10];
         snprintf(buffer, sizeof(buffer), "%2.0fv", totalVolts);
@@ -958,10 +958,10 @@ void updateLvglMainScreen(
       if (display_altitude > -0.05f && display_altitude < 0.0f) {
           display_altitude = 0.0f;
       }
-      snprintf(altBuffer, sizeof(altBuffer), "%.1f m", display_altitude); // Use corrected value
+      snprintf(altBuffer, sizeof(altBuffer), "%.1f m", display_altitude);  // Use corrected value
       lv_label_set_text(altitude_label, altBuffer);
     } else {
-      snprintf(altBuffer, sizeof(altBuffer), "%d f", static_cast<int>(round(altitude * 3.28084))); // Format number with unit
+      snprintf(altBuffer, sizeof(altBuffer), "%d f", static_cast<int>(round(altitude * 3.28084)));  // Format number with unit
       lv_label_set_text(altitude_label, altBuffer);
     }
     // Set color for the combined label
@@ -971,10 +971,10 @@ void updateLvglMainScreen(
 
   // Update temperature labels
   // -- Battery Temperature --
-  if (batt_temp_label != NULL && batt_letter_label != NULL) { // Check labels exist
-    lv_color_t bg_color = LVGL_BLACK; // Default, will be overridden if opaque
+  if (batt_temp_label != NULL && batt_letter_label != NULL) {  // Check labels exist
+    lv_color_t bg_color = LVGL_BLACK;  // Default, will be overridden if opaque
     lv_color_t text_color = darkMode ? LVGL_WHITE : LVGL_BLACK;
-    lv_opa_t bg_opacity = LV_OPA_0; // Default transparent
+    lv_opa_t bg_opacity = LV_OPA_0;  // Default transparent
 
     if (bmsTelemetry.bmsState == TelemetryState::CONNECTED) {
       lv_label_set_text_fmt(batt_temp_label, "%d", static_cast<int>(batteryTemp));
@@ -1003,7 +1003,7 @@ void updateLvglMainScreen(
   }
 
   // -- ESC Temperature --
-  if (esc_temp_label != NULL && esc_letter_label != NULL) { // Check labels exist
+  if (esc_temp_label != NULL && esc_letter_label != NULL) {  // Check labels exist
     lv_color_t bg_color = LVGL_BLACK;
     lv_color_t text_color = darkMode ? LVGL_WHITE : LVGL_BLACK;
     lv_opa_t bg_opacity = LV_OPA_0;
@@ -1035,7 +1035,7 @@ void updateLvglMainScreen(
   }
 
   // -- Motor Temperature --
-  if (motor_temp_label != NULL && motor_letter_label != NULL) { // Check labels exist
+  if (motor_temp_label != NULL && motor_letter_label != NULL) {  // Check labels exist
     lv_color_t bg_color = LVGL_BLACK;
     lv_color_t text_color = darkMode ? LVGL_WHITE : LVGL_BLACK;
     lv_opa_t bg_opacity = LV_OPA_0;

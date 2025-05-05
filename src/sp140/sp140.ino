@@ -148,7 +148,7 @@ void bleStateUpdateTask(void* parameter) {
 
         // Only notify if requested and connected
         if (update.needsNotify && deviceConnected) {
-          vTaskDelay(pdMS_TO_TICKS(10)); // Additional delay before notify
+          vTaskDelay(pdMS_TO_TICKS(10));  // Additional delay before notify
           pDeviceStateCharacteristic->notify();
         }
       }
@@ -183,7 +183,7 @@ void changeDeviceState(DeviceState newState) {
     // Send state update to queue
     uint8_t state = (uint8_t)newState;
     if (deviceStateQueue != NULL) {
-      xQueueOverwrite(deviceStateQueue, &state); // Always use latest state
+      xQueueOverwrite(deviceStateQueue, &state);  // Always use latest state
     }
 
     USBSerial.print("Device State Changed to: ");
@@ -279,7 +279,7 @@ void blinkLEDTask(void *pvParameters) {
     blinkLED();  // call blinkLED function
     delay(500);  // wait for 500ms
   }
-  vTaskDelete(NULL); // should never reach this
+  vTaskDelete(NULL);  // should never reach this
 }
 
 void throttleTask(void *pvParameters) {
@@ -289,7 +289,7 @@ void throttleTask(void *pvParameters) {
     handleThrottle();  //
     delay(20);  // wait for 20ms
   }
-  vTaskDelete(NULL); // should never reach this
+  vTaskDelete(NULL);  // should never reach this
 }
 
 void updateBLETask(void *pvParameters) {
@@ -428,7 +428,7 @@ void printBootMessage() {
 void setupBarometer() {
   const int bmp_enabler = 9;
   pinMode(bmp_enabler, OUTPUT);
-  digitalWrite(bmp_enabler, HIGH); // barometer fix for V2 board
+  digitalWrite(bmp_enabler, HIGH);  // barometer fix for V2 board
 }
 
 void setupLED() {
@@ -460,7 +460,7 @@ void setupWatchdog() {
  */
 
 void setup() {
-  USBSerial.begin(115200); // This is for debug output and WebSerial
+  USBSerial.begin(115200);  // This is for debug output and WebSerial
 
   // Pull CSB (pin 42) high to activate I2C mode
   // temporary fix TODO remove
@@ -556,7 +556,7 @@ void setup() {
 
   // Setup the main screen UI elements AFTER the splash
   USBSerial.println("Setting up main screen after splash");
-  if (main_screen == NULL) { // Check if it wasn't somehow created already
+  if (main_screen == NULL) {  // Check if it wasn't somehow created already
     setupMainScreen(deviceData.theme == 1);
   }
 
@@ -656,7 +656,7 @@ void buttonHandlerTask(void* parameter) {
           USBSerial.println("Button pressed");
           USBSerial.print("Arm sequence state: ");
           USBSerial.println(armSequenceStarted ? "ACTIVE" : "INACTIVE");
-        } else { // Button released
+        } else {  // Button released
           buttonPressed = false;
           buttonReleaseStartTime = currentTime;
 
@@ -861,13 +861,13 @@ void handleThrottle() {
   pot->update();
   int potVal = pot->getValue();  // Raw potentiometer value (0-4095)
   potBuffer.push(potVal);        // Add raw value to buffer
-  int potLvl = averagePotBuffer(); // Calculate smoothed value
+  int potLvl = averagePotBuffer();  // Calculate smoothed value
 
   // Handle throttle based on current state and update BLE accordingly
   if (currentState == DISARMED) {
     setESCThrottle(ESC_DISARMED_PWM);
     prevPotLvl = 0;  // Reset throttle memory when disarmed
-    potBuffer.clear(); // Clear the buffer when disarmed
+    potBuffer.clear();  // Clear the buffer when disarmed
   } else if (currentState == ARMED_CRUISING) {
     // Set the ESC throttle to the determined (and potentially capped) cruise PWM
     setESCThrottle(currentCruiseThrottlePWM);
@@ -886,16 +886,16 @@ void handleThrottle() {
       int disengageThresholdPotVal = (int)(cruisedPotVal * CRUISE_DISENGAGE_POT_THRESHOLD_PERCENTAGE);
 
       // If the *current raw potentiometer value* is greater than or equal to the threshold
-      if (potVal >= disengageThresholdPotVal) { // Use raw potVal for immediate disengage check
+      if (potVal >= disengageThresholdPotVal) {  // Use raw potVal for immediate disengage check
         USBSerial.print("Cruise override: potVal ");
         USBSerial.print(potVal);
         USBSerial.print(" >= threshold ");
         USBSerial.println(disengageThresholdPotVal);
-        changeDeviceState(ARMED); // Transition back to normal ARMED state
-        return; // Exit early as state has changed
+        changeDeviceState(ARMED);  // Transition back to normal ARMED state
+        return;  // Exit early as state has changed
       }
     }
-  } else if (currentState == ARMED) { // Normal armed, non-cruise operation
+  } else if (currentState == ARMED) {  // Normal armed, non-cruise operation
     // Apply throttle limits based on performance mode
     int rampRate = deviceData.performance_mode == 0 ? CHILL_MODE_RAMP_RATE : SPORT_MODE_RAMP_RATE;
     maxPWM = deviceData.performance_mode == 0 ? CHILL_MODE_MAX_PWM : ESC_MAX_PWM;
@@ -907,7 +907,7 @@ void handleThrottle() {
     int localThrottlePWM = map(potLvl, 0, 4095, ESC_MIN_PWM, maxPWM);
     setESCThrottle(localThrottlePWM);
     prevPotLvl = potLvl;  // Store smoothed value locally for next iteration
-    // updateThrottleBLE(potLvl); // Send actual (ramped) throttle value
+    // updateThrottleBLE(potLvl);  // Send actual (ramped) throttle value
   }
 
   // Read/Sync ESC Telemetry (runs in all armed states)
@@ -916,7 +916,7 @@ void handleThrottle() {
 }
 
 // Declare the static variable from esc.cpp as extern here so sync can access it
-// extern unsigned long lastEscTimeUpdateMillis; // REMOVED - Using struct member now
+// extern unsigned long lastEscTimeUpdateMillis;  // REMOVED - Using struct member now
 
 void syncESCTelemetry() {
   unsigned long currentTime = millis();
@@ -962,7 +962,7 @@ bool armSystem() {
   setLEDs(HIGH);  // solid LED while armed
   playMelody(arm_melody, 3);
   // runVibePattern(arm_vibes, 7);
-  pulseVibeMotor(); // Ensure this is the active call
+  pulseVibeMotor();  // Ensure this is the active call
   return true;
 }
 
@@ -993,7 +993,7 @@ void afterCruiseStart() {
 void afterCruiseEnd() {
   cruisedPotVal = 0;
   //pulseVibeMotor();
-  resetSmoothing(); // Clear the pot buffer to reset ramp baseline
+  resetSmoothing();  // Clear the pot buffer to reset ramp baseline
 }
 
 void playCruiseSound() {

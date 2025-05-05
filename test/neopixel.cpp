@@ -29,7 +29,7 @@ void test_neopixel_pin_number(void)
 
 void test_neopixel_state_high(void)
 {
-  uint32_t color = pixels.Color(255, 255, 255); // white color
+  uint32_t color = pixels.Color(255, 255, 255);  // white color
   pixels.setPixelColor(0, color);
   pixels.show();
   TEST_ASSERT_EQUAL_UINT32(color, pixels.getPixelColor(0));
@@ -37,7 +37,7 @@ void test_neopixel_state_high(void)
 
 void test_neopixel_state_low(void)
 {
-  pixels.clear(); // turn off the NeoPixel
+  pixels.clear();  // turn off the NeoPixel
   pixels.show();
   TEST_ASSERT_EQUAL_UINT32(pixels.Color(0, 0, 0), pixels.getPixelColor(0));
 }
@@ -70,9 +70,9 @@ void setup()
   // NOTE!!! Wait for >2 secs
   // if board doesn't support software reset via Serial.DTR/RTS
   delay(2000);
-  pixels.begin(); // This initializes the NeoPixel library.
+  pixels.begin();  // This initializes the NeoPixel library.
 
-  UNITY_BEGIN(); // IMPORTANT LINE!
+  UNITY_BEGIN();  // IMPORTANT LINE!
   RUN_TEST(test_neopixel_pin_number);
 }
 
@@ -93,6 +93,6 @@ void loop()
   }
   else if (i == max_blinks)
   {
-    UNITY_END(); // stop unit testing
+    UNITY_END();  // stop unit testing
   }
 }

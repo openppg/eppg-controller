@@ -14,7 +14,7 @@
 static CanardAdapter adapter;
 static uint8_t memory_pool[1024] __attribute__((aligned(8)));
 static SineEsc esc(adapter);
-static unsigned long lastSuccessfulCommTimeMs = 0; // Store millis() time of last successful ESC comm
+static unsigned long lastSuccessfulCommTimeMs = 0;  // Store millis() time of last successful ESC comm
 
 
 STR_ESC_TELEMETRY_140 escTelemetryData = {
@@ -25,7 +25,7 @@ void initESC() {
   escTwaiInitialized = setupTWAI();
   if (!escTwaiInitialized) {
     USBSerial.println("ESC TWAI Initialization failed. ESC will not function.");
-    return; // Can't proceed without TWAI driver
+    return;  // Can't proceed without TWAI driver
   }
 
   adapter.begin(memory_pool, sizeof(memory_pool));
@@ -52,7 +52,7 @@ void setESCThrottle(int throttlePWM) {
 
 void readESCTelemetry() {
   // Only proceed if TWAI is initialized
-  if (!escTwaiInitialized) { return; }
+  if (!escTwaiInitialized) { return; }  // NOLINT(whitespace/newline)
 
   // Store the last known ESC timestamp before checking for new data
   unsigned long previousEscReportedTimeMs = escTelemetryData.lastUpdateMs;
@@ -93,7 +93,7 @@ void readESCTelemetry() {
 
       // Record the time of this successful communication using the local clock
       lastSuccessfulCommTimeMs = millis();
-    } // else: Timestamp hasn't changed, treat as stale data, don't update local timer or telemetry
+    }  // else: Timestamp hasn't changed, treat as stale data, don't update local timer or telemetry
 
   } else {
       // If we are connected but don't have a response, perhaps mark as stale or log?

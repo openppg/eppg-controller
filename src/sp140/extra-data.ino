@@ -135,8 +135,8 @@ static BLECharacteristic* pBMSVoltageDiff = nullptr;
 void updateThrottleBLE(int value) {
   // Handle disconnecting
   if (!deviceConnected && oldDeviceConnected) {
-    delay(500); // give the bluetooth stack the chance to get things ready
-    pServer->startAdvertising(); // restart advertising
+    delay(500);  // give the bluetooth stack the chance to get things ready
+    pServer->startAdvertising();  // restart advertising
     USBSerial.println("Start advertising");
     oldDeviceConnected = deviceConnected;
   }
@@ -151,7 +151,7 @@ void updateThrottleBLE(int value) {
     try {
       pThrottleCharacteristic->setValue((uint8_t*)&value, sizeof(value));
       pThrottleCharacteristic->notify();
-      delay(5); // prevent bluetooth stack congestion - can be as low as 3ms
+      delay(5);  // prevent bluetooth stack congestion - can be as low as 3ms
     } catch (...) {
       USBSerial.println("Error sending BLE notification");
     }
@@ -564,14 +564,14 @@ void refreshDeviceData() {
   deviceData.performance_mode = preferences.getUChar(KEY_PERFORMANCE_MODE, DEFAULT_PERFORMANCE_MODE);
   deviceData.theme = preferences.getUChar(KEY_THEME, DEFAULT_THEME);
   deviceData.armed_time = preferences.getUShort(KEY_ARMED_TIME, 0);
-  deviceData.revision = preferences.getUChar(KEY_REVISION, 3); // Default to ESP32-S3
+  deviceData.revision = preferences.getUChar(KEY_REVISION, 3);  // Default to ESP32-S3
   deviceData.timezone_offset = preferences.getInt(KEY_TIMEZONE_OFFSET, 0);
 
   preferences.end();
 
   // Ensure values are within valid ranges
   if (sanitizeDeviceData()) {
-    writeDeviceData(); // Save sanitized values
+    writeDeviceData();  // Save sanitized values
   }
 
   USBSerial.println(F("Device data loaded from Preferences"));
@@ -717,7 +717,7 @@ void send_device_data() {
 
   // Send the JSON document over the USBSerial connection
   serializeJson(doc, USBSerial);
-  USBSerial.println(); // Add newline for better readability
+  USBSerial.println();  // Add newline for better readability
 }
 
 /**
@@ -759,7 +759,7 @@ bool sanitizeDeviceData() {
   }
   // Ensure theme is either 0 or 1, default to 0
   if (deviceData.theme > 1) {
-    deviceData.theme = 0; // 0=light, 1=dark
+    deviceData.theme = 0;  // 0=light, 1=dark
     changed = true;
   }
   return changed;

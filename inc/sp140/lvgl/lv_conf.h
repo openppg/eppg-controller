@@ -3,8 +3,8 @@
  * Configuration file for LVGL
  */
 
-#ifndef LV_CONF_H
-#define LV_CONF_H
+#ifndef LV_CONF_H  // NOLINT(build/header_guard)
+#define LV_CONF_H  // NOLINT(build/header_guard)
 
 #include <stdint.h>
 
@@ -38,8 +38,7 @@
     #define LV_MEM_ADR 0     /*0: unused*/
     /*Instead of an address give a memory allocator that will be called to get a memory pool for LVGL. E.g. my_malloc*/
     #if LV_MEM_ADR == 0
-        //#define LV_MEM_POOL_INCLUDE your_alloc_library  /* Uncomment if using an external allocator*/
-        //#define LV_MEM_POOL_ALLOC   your_alloc          /* Uncomment if using an external allocator*/
+
     #endif
 
 #else       /*LV_MEM_CUSTOM*/
@@ -222,7 +221,9 @@
  *  WIDGET USAGE
  *=================*/
 
-/*Documentation of the widgets: https://docs.lvgl.io/latest/en/html/widgets/index.html*/
+/*
+Documentation of the widgets: https://docs.lvgl.io/latest/en/html/widgets/index.html
+*/
 
 #define LV_USE_ANIMIMG    0
 

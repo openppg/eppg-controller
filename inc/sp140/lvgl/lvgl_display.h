@@ -4,7 +4,7 @@
 #include <lvgl.h>
 #include <SPI.h>
 #include <freertos/FreeRTOS.h>
-#include <freertos/semphr.h> // Include for SemaphoreHandle_t
+#include <freertos/semphr.h>  // Include for SemaphoreHandle_t
 
 // Include current device structures
 #include "../../sp140/structs.h"
@@ -69,9 +69,9 @@ void startCruiseIconFlash();
 void startArmFailIconFlash();
 
 // Cruise Control Icon
-// LV_IMG_DECLARE(noun_cruise_control_340255_1); // Old 40x40 icon
-LV_IMG_DECLARE(cruise_control_340255_30); // Use the corrected name from the new 30x30 C file
-extern lv_obj_t *cruise_icon_img; // Declaration for the image object
+// LV_IMG_DECLARE(noun_cruise_control_340255_1);  // Old 40x40 icon
+LV_IMG_DECLARE(cruise_control_340255_30);  // Use the corrected name from the new 30x30 C file
+extern lv_obj_t *cruise_icon_img;  // Declaration for the image object
 
 // External declarations
 extern SPIClass* hardwareSPI;

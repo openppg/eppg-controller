@@ -64,7 +64,7 @@ float getBaroTemperature() {
   if (bmpPresent) {
     return bmp.readTemperature();
   }
-  return __FLT_MIN__; // Return a very small number if BMP is not present
+  return __FLT_MIN__;  // Return a very small number if BMP is not present
 }
 
 // Start the bmp3XX sensor
