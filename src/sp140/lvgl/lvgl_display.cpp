@@ -33,8 +33,8 @@
 
 #define BATT_CRITICAL_SOC_THRESHOLD 5.0f
 #define BATT_WARNING_SOC_THRESHOLD 20.0f
-#define CELL_VOLTAGE_WARNING 3.6f
-#define CELL_VOLTAGE_CRITICAL 3.5f
+#define CELL_VOLTAGE_WARNING 3.2f
+#define CELL_VOLTAGE_CRITICAL 2.95f
 
 // Notification System Definitions
 /*
