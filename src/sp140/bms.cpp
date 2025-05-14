@@ -54,20 +54,17 @@ void updateBMSData() {
   bmsTelemetryData.is_charging = bms_can->isBatteryCharging();
 
   bmsTelemetryData.lastUpdateMs = millis();
+  // printBMSData();
 
   // Deselect BMS CS when done
   digitalWrite(bmsCS, HIGH);
 
-  // printBMSData();
 }
 
 void printBMSData() {
   // Check if BMS is currently connected and the object exists
   if (bms_can == nullptr || !bmsCanInitialized) return;
 
-  // Make sure BMS CS is selected before reading values
-  digitalWrite(displayCS, HIGH);
-  digitalWrite(bmsCS, LOW);
 
   // USBSerial.println("BMS Data:");
   USBSerial.print("SOC: ");  // State of Charge
@@ -118,6 +115,12 @@ void printBMSData() {
     USBSerial.println(" °C");
   }
 
-  // Deselect BMS CS when done
-  digitalWrite(bmsCS, HIGH);
+  // Print all cell voltages
+  for (uint8_t i = 0; i < 24; i++) {
+    USBSerial.print("Cell ");
+    USBSerial.print(i + 1);
+    USBSerial.print(": ");
+    USBSerial.print(bms_can->getCellVoltage(i), 3);
+    USBSerial.println(" V");
+  }
 }

@@ -4,9 +4,9 @@
 
 #include "../../inc/sp140/esp32s3-config.h"
 
-#include "../../inc/sp140/structs.h"         // data structs
+#include "../../inc/sp140/structs.h"  // data structs
 #include "../../inc/sp140/utilities.h"
-#include <Adafruit_NeoPixel.h>   // LEDs
+#include <Adafruit_NeoPixel.h>        // RGB LED
 #include <ArduinoJson.h>
 #include <CircularBuffer.hpp>      // smooth out readings
 #include <ResponsiveAnalogRead.h>  // smoothing for throttle
@@ -31,16 +31,12 @@
 #include "../../inc/sp140/altimeter.h"
 #include "../../inc/sp140/debug.h"
 
-// New modular includes
 #include "../../inc/sp140/buzzer.h"
 #include "../../inc/sp140/device_state.h"
 #include "../../inc/sp140/mode.h"
 #include "../../inc/sp140/throttle.h"
 #include "../../inc/sp140/vibration_pwm.h"
 #include "../../inc/sp140/led.h"
-
-// Comment out the old display and use LVGL display
-#include "../../inc/sp140/lvgl/lvgl_display.h"
 
 // Global variable for shared SPI
 SPIClass* hardwareSPI = nullptr;
@@ -57,15 +53,15 @@ int8_t bmsCS = MCP_CS;
 #define PERFORMANCE_MODE_HOLD_MS 3000   // Longer hold time for performance mode
 
 // Throttle control constants
-#define CHILL_MODE_MAX_PWM 1850  // 85% max power in chill mode
-#define CHILL_MODE_RAMP_RATE 50  // How fast throttle can increase per cycle in chill mode
-#define SPORT_MODE_RAMP_RATE 120 // How fast throttle can increase per cycle in sport mode
+#define CHILL_MODE_MAX_PWM 1850   // 85% max power in chill mode
+#define CHILL_MODE_RAMP_RATE 50   // How fast throttle can increase per cycle in chill mode
+#define SPORT_MODE_RAMP_RATE 120  // How fast throttle can increase per cycle in sport mode
 
 #define DECEL_MULTIPLIER 2.0     // How much faster deceleration is vs acceleration
 #define CRUISE_MAX_PERCENTAGE 0.60  // Maximum cruise throttle as a percentage of the total ESC range (e.g., 0.60 = 60%)
-#define CRUISE_DISENGAGE_POT_THRESHOLD_PERCENTAGE 0.80 // Current pot must be >= this % of activation value to disengage
-#define CRUISE_DISENGAGE_GRACE_PERIOD_MS 2000 // Delay before checking pot disengagement after cruise activation
-#define CRUISE_ACTIVATION_MAX_POT_PERCENTAGE 0.70 // Prevent cruise activation if pot is above this percentage
+#define CRUISE_DISENGAGE_POT_THRESHOLD_PERCENTAGE 0.80  // Current pot must be >= this % of activation value to disengage
+#define CRUISE_DISENGAGE_GRACE_PERIOD_MS 2000  // Delay before checking pot disengagement after cruise activation
+#define CRUISE_ACTIVATION_MAX_POT_PERCENTAGE 0.70  // Prevent cruise activation if pot is above this percentage
 
 // Button state tracking
 volatile bool buttonPressed = false;
@@ -162,7 +158,7 @@ void bleStateUpdateTask(void* parameter) {
 void deviceStateUpdateTask(void* parameter) {
   uint8_t state;
 
-  while(true) {
+  while (true) {
     if (xQueueReceive(deviceStateQueue, &state, portMAX_DELAY) == pdTRUE) {
       if (pDeviceStateCharacteristic != nullptr && deviceConnected) {
         vTaskDelay(pdMS_TO_TICKS(20));  // Give BLE stack breathing room
@@ -433,7 +429,7 @@ void setupBarometer() {
 
 void setupLED() {
   pinMode(board_config.led_sw, OUTPUT);   // set up the internal LED2 pin
-  if(board_config.enable_neopixel){
+  if (board_config.enable_neopixel) {
     pixels.begin();
     setLEDColor(led_color);
   }
@@ -705,7 +701,7 @@ void buttonHandlerTask(void* parameter) {
 
         // Handle performance mode (only when disarmed and held long enough)
         if (currentState == DISARMED && currentHoldTime >= PERFORMANCE_MODE_HOLD_MS) {
-          //toggle performance mode
+          // toggle performance mode
           perfModeSwitch();
           buttonPressed = false;
           buttonPressStartTime = currentTime;
