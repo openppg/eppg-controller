@@ -108,6 +108,7 @@ Preferences preferences;
 #define BMS_LOW_TEMP_UUID           "26CD6E8A-175D-4C8E-B487-DEFF0B034F2A"
 #define BMS_FAILURE_LEVEL_UUID      "396C768B-F348-44CC-9D46-92388F25A557"
 #define BMS_VOLTAGE_DIFF_UUID       "1C45825B-7C81-430B-8D5F-B644FFFC71BB"
+#define BMS_CELL_VOLTAGES_UUID      "4337e58b-8462-49b2-b061-c3bf379ef4af"
 
 // ESC Characteristic UUIDs
 #define ESC_VOLTAGE_UUID           "0528ecd8-9337-4249-95e4-9aba69f6c1f4"
@@ -131,6 +132,7 @@ static BLECharacteristic* pBMSHighTemp = nullptr;
 static BLECharacteristic* pBMSLowTemp = nullptr;
 static BLECharacteristic* pBMSFailureLevel = nullptr;
 static BLECharacteristic* pBMSVoltageDiff = nullptr;
+static BLECharacteristic* pBMSCellVoltages = nullptr;
 
 void updateThrottleBLE(int value) {
   // Handle disconnecting
@@ -159,7 +161,9 @@ void updateThrottleBLE(int value) {
 }
 
 void updateBMSTelemetry(const STR_BMS_TELEMETRY_140& telemetry) {
-  if (!deviceConnected) return;
+  // Set characteristic values regardless of connection state,
+  // so they have values when a client connects and reads them.
+  // Notifications will only be sent if connected.
 
   // Create temporary variables for the float values
   float soc = telemetry.soc;
@@ -173,16 +177,49 @@ void updateBMSTelemetry(const STR_BMS_TELEMETRY_140& telemetry) {
   float voltageDiff = telemetry.voltage_differential;
 
   // Update each characteristic using the temporary variables
-  pBMSSOC->setValue(soc);
-  pBMSVoltage->setValue(voltage);
-  pBMSCurrent->setValue(current);
-  pBMSPower->setValue(power);
-  pBMSHighCell->setValue(highCell);
-  pBMSLowCell->setValue(lowCell);
-  pBMSHighTemp->setValue(highTemp);
-  pBMSLowTemp->setValue(lowTemp);
-  pBMSFailureLevel->setValue((uint8_t*)&telemetry.battery_failure_level, sizeof(uint8_t));
-  pBMSVoltageDiff->setValue(voltageDiff);
+  if (pBMSSOC) pBMSSOC->setValue(soc);
+  if (pBMSVoltage) pBMSVoltage->setValue(voltage);
+  if (pBMSCurrent) pBMSCurrent->setValue(current);
+  if (pBMSPower) pBMSPower->setValue(power);
+  if (pBMSHighCell) pBMSHighCell->setValue(highCell);
+  if (pBMSLowCell) pBMSLowCell->setValue(lowCell);
+  if (pBMSHighTemp) pBMSHighTemp->setValue(highTemp);
+  if (pBMSLowTemp) pBMSLowTemp->setValue(lowTemp);
+  if (pBMSFailureLevel) pBMSFailureLevel->setValue((uint8_t*)&telemetry.battery_failure_level, sizeof(uint8_t));
+  if (pBMSVoltageDiff) pBMSVoltageDiff->setValue(voltageDiff);
+
+  // Update cell voltages characteristic
+  if (pBMSCellVoltages != nullptr) {
+    uint16_t cell_millivolts[BMS_CELLS_NUM];
+    for (uint8_t i = 0; i < BMS_CELLS_NUM; i++) {
+      cell_millivolts[i] = (uint16_t)(telemetry.cell_voltages[i] * 1000.0f);
+    }
+
+    // Debug print first and last cell voltage
+    USBSerial.print("Setting cell voltages: Cell 1 = ");
+    USBSerial.print(cell_millivolts[0]);
+    USBSerial.print(" mV, Cell ");
+    USBSerial.print(BMS_CELLS_NUM);
+    USBSerial.print(" = ");
+    USBSerial.print(cell_millivolts[BMS_CELLS_NUM-1]);
+    USBSerial.println(" mV");
+
+    pBMSCellVoltages->setValue((uint8_t*)cell_millivolts, BMS_CELLS_NUM * sizeof(uint16_t));
+  }
+
+  // Only send notifications if a device is actually connected
+  if (deviceConnected) {
+    if (pBMSSOC) pBMSSOC->notify();
+    if (pBMSVoltage) pBMSVoltage->notify();
+    if (pBMSCurrent) pBMSCurrent->notify();
+    if (pBMSPower) pBMSPower->notify();
+    if (pBMSHighCell) pBMSHighCell->notify();
+    if (pBMSLowCell) pBMSLowCell->notify();
+    if (pBMSHighTemp) pBMSHighTemp->notify();
+    if (pBMSLowTemp) pBMSLowTemp->notify();
+    if (pBMSFailureLevel) pBMSFailureLevel->notify();
+    if (pBMSVoltageDiff) pBMSVoltageDiff->notify();
+  }
 }
 
 class MetricAltCallbacks: public BLECharacteristicCallbacks {
@@ -349,17 +386,17 @@ void setupBLE() {
   pServer = BLEDevice::createServer();
   pServer->setCallbacks(new MyServerCallbacks());
 
-  BLEService *pConfigService = pServer->createService(CONFIG_SERVICE_UUID);
+  BLEService *pConfigService = pServer->createService(BLEUUID(CONFIG_SERVICE_UUID), 30);
 
   // Add time characteristics BEFORE starting the service
   BLECharacteristic *pUnixTime = pConfigService->createCharacteristic(
-                                    UNIX_TIME_UUID,
+                                    BLEUUID(UNIX_TIME_UUID),
                                     BLECharacteristic::PROPERTY_READ |
                                     BLECharacteristic::PROPERTY_WRITE);
   pUnixTime->setCallbacks(new TimeCallbacks());
 
   BLECharacteristic *pTimezone = pConfigService->createCharacteristic(
-                                  TIMEZONE_UUID,
+                                  BLEUUID(TIMEZONE_UUID),
                                   BLECharacteristic::PROPERTY_READ |
                                   BLECharacteristic::PROPERTY_WRITE);
   pTimezone->setCallbacks(new TimezoneCallbacks());
@@ -367,7 +404,7 @@ void setupBLE() {
 
   // Add device state characteristic
   pDeviceStateCharacteristic = pConfigService->createCharacteristic(
-    DEVICE_STATE_UUID,
+    BLEUUID(DEVICE_STATE_UUID),
     BLECharacteristic::PROPERTY_READ |
     BLECharacteristic::PROPERTY_NOTIFY);
 
@@ -376,7 +413,7 @@ void setupBLE() {
   pDeviceStateCharacteristic->addDescriptor(new BLE2902());
 
   BLECharacteristic *pMetricAlt = pConfigService->createCharacteristic(
-                                   METRIC_ALT_UUID,
+                                   BLEUUID(METRIC_ALT_UUID),
                                    BLECharacteristic::PROPERTY_READ |
                                    BLECharacteristic::PROPERTY_WRITE);
 
@@ -386,7 +423,7 @@ void setupBLE() {
   pMetricAlt->setValue(metricAlt);
 
   BLECharacteristic *pPerformanceMode = pConfigService->createCharacteristic(
-                                         PERFORMANCE_MODE_UUID,
+                                         BLEUUID(PERFORMANCE_MODE_UUID),
                                          BLECharacteristic::PROPERTY_READ |
                                          BLECharacteristic::PROPERTY_WRITE);
 
@@ -396,7 +433,7 @@ void setupBLE() {
   pPerformanceMode->setValue(performanceMode);
 
   BLECharacteristic *pScreenRotation = pConfigService->createCharacteristic(
-                                        SCREEN_ROTATION_UUID,
+                                        BLEUUID(SCREEN_ROTATION_UUID),
                                         BLECharacteristic::PROPERTY_READ |
                                         BLECharacteristic::PROPERTY_WRITE);
 
@@ -408,33 +445,33 @@ void setupBLE() {
 
   // Add read-only characteristics for device info
   BLECharacteristic *pFirmwareVersion = pConfigService->createCharacteristic(
-                                        FW_VERSION_UUID,
+                                        BLEUUID(FW_VERSION_UUID),
                                         BLECharacteristic::PROPERTY_READ);
   pFirmwareVersion->setValue(VERSION_STRING);
 
   BLECharacteristic *pHardwareRevision = pConfigService->createCharacteristic(
-                                         HW_REVISION_UUID,
+                                         BLEUUID(HW_REVISION_UUID),
                                          BLECharacteristic::PROPERTY_READ);
   // Send revision directly as a byte
   pHardwareRevision->setValue(&deviceData.revision, sizeof(deviceData.revision));
 
   BLECharacteristic *pArmedTime = pConfigService->createCharacteristic(
-                                  ARMED_TIME_UUID,
+                                  BLEUUID(ARMED_TIME_UUID),
                                   BLECharacteristic::PROPERTY_READ);
   pArmedTime->setValue((uint8_t*)&deviceData.armed_time, sizeof(deviceData.armed_time));
 
   // Create the Device Information Service
-  BLEService *pDeviceInfoService = pServer->createService(DEVICE_INFO_SERVICE_UUID);
+  BLEService *pDeviceInfoService = pServer->createService(BLEUUID(DEVICE_INFO_SERVICE_UUID), 10);
 
   // Add Manufacturer Name characteristic
   BLECharacteristic *pManufacturer = pDeviceInfoService->createCharacteristic(
-                                     MANUFACTURER_NAME_UUID,
+                                     BLEUUID(MANUFACTURER_NAME_UUID),
                                      BLECharacteristic::PROPERTY_READ);
   pManufacturer->setValue("OpenPPG");
 
   // Create throttle characteristic with notify capability
   pThrottleCharacteristic = pConfigService->createCharacteristic(
-    THROTTLE_VALUE_UUID,
+    BLEUUID(THROTTLE_VALUE_UUID),
     BLECharacteristic::PROPERTY_READ |
     BLECharacteristic::PROPERTY_WRITE |  // Add write permission
     BLECharacteristic::PROPERTY_NOTIFY |
@@ -444,80 +481,89 @@ void setupBLE() {
   pThrottleCharacteristic->addDescriptor(new BLE2902());
 
   // Create BMS Telemetry Service
-  BLEService *pBMSService = pServer->createService(BMS_TELEMETRY_SERVICE_UUID);
+  BLEService *pBMSService = pServer->createService(BLEUUID(BMS_TELEMETRY_SERVICE_UUID), 30);
 
   // Create read-only characteristics for BMS data
   pBMSSOC = pBMSService->createCharacteristic(
-      BMS_SOC_UUID,
+      BLEUUID(BMS_SOC_UUID),
       BLECharacteristic::PROPERTY_READ
   );
 
   pBMSVoltage = pBMSService->createCharacteristic(
-      BMS_VOLTAGE_UUID,
+      BLEUUID(BMS_VOLTAGE_UUID),
       BLECharacteristic::PROPERTY_READ
   );
 
   pBMSCurrent = pBMSService->createCharacteristic(
-      BMS_CURRENT_UUID,
+      BLEUUID(BMS_CURRENT_UUID),
       BLECharacteristic::PROPERTY_READ
   );
 
   pBMSPower = pBMSService->createCharacteristic(
-      BMS_POWER_UUID,
+      BLEUUID(BMS_POWER_UUID),
       BLECharacteristic::PROPERTY_READ
   );
 
   pBMSHighCell = pBMSService->createCharacteristic(
-      BMS_HIGH_CELL_UUID,
+      BLEUUID(BMS_HIGH_CELL_UUID),
       BLECharacteristic::PROPERTY_READ
   );
 
   pBMSLowCell = pBMSService->createCharacteristic(
-      BMS_LOW_CELL_UUID,
+      BLEUUID(BMS_LOW_CELL_UUID),
       BLECharacteristic::PROPERTY_READ
   );
 
   pBMSHighTemp = pBMSService->createCharacteristic(
-      BMS_HIGH_TEMP_UUID,
+      BLEUUID(BMS_HIGH_TEMP_UUID),
       BLECharacteristic::PROPERTY_READ
   );
 
   pBMSLowTemp = pBMSService->createCharacteristic(
-      BMS_LOW_TEMP_UUID,
+      BLEUUID(BMS_LOW_TEMP_UUID),
       BLECharacteristic::PROPERTY_READ
   );
 
   pBMSFailureLevel = pBMSService->createCharacteristic(
-      BMS_FAILURE_LEVEL_UUID,
+      BLEUUID(BMS_FAILURE_LEVEL_UUID),
       BLECharacteristic::PROPERTY_READ
   );
 
   pBMSVoltageDiff = pBMSService->createCharacteristic(
-      BMS_VOLTAGE_DIFF_UUID,
+      BLEUUID(BMS_VOLTAGE_DIFF_UUID),
       BLECharacteristic::PROPERTY_READ
   );
 
+  pBMSCellVoltages = pBMSService->createCharacteristic(
+      BLEUUID(BMS_CELL_VOLTAGES_UUID),
+      BLECharacteristic::PROPERTY_READ // Only READ property for debugging
+  );
+
+  // Set initial value for pBMSCellVoltages (array of zeros)
+  uint16_t initial_cell_values[BMS_CELLS_NUM] = {0};
+  pBMSCellVoltages->setValue((uint8_t*)initial_cell_values, BMS_CELLS_NUM * sizeof(uint16_t));
+
   // Create ESC Telemetry Service
-  BLEService *pESCService = pServer->createService(ESC_TELEMETRY_SERVICE_UUID);
+  BLEService *pESCService = pServer->createService(BLEUUID(ESC_TELEMETRY_SERVICE_UUID), 20);
 
   // Create characteristics for ESC data
   pESCVoltage = pESCService->createCharacteristic(
-      ESC_VOLTAGE_UUID,
+      BLEUUID(ESC_VOLTAGE_UUID),
       BLECharacteristic::PROPERTY_READ
   );
 
   pESCCurrent = pESCService->createCharacteristic(
-      ESC_CURRENT_UUID,
+      BLEUUID(ESC_CURRENT_UUID),
       BLECharacteristic::PROPERTY_READ
   );
 
   pESCRPM = pESCService->createCharacteristic(
-      ESC_RPM_UUID,
+      BLEUUID(ESC_RPM_UUID),
       BLECharacteristic::PROPERTY_READ
   );
 
   pESCTemps = pESCService->createCharacteristic(
-      ESC_TEMPS_UUID,
+      BLEUUID(ESC_TEMPS_UUID),
       BLECharacteristic::PROPERTY_READ
   );
 
@@ -529,7 +575,8 @@ void setupBLE() {
 
   // Start advertising
   BLEAdvertising *pAdvertising = pServer->getAdvertising();
-  pAdvertising->addServiceUUID(CONFIG_SERVICE_UUID);
+  pAdvertising->addServiceUUID(BLEUUID(CONFIG_SERVICE_UUID));
+  pAdvertising->addServiceUUID(BLEUUID(BMS_TELEMETRY_SERVICE_UUID));
   pAdvertising->setScanResponse(false);
   pAdvertising->setMinPreferred(0x0);
   pAdvertising->start();

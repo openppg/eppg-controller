@@ -81,6 +81,9 @@ struct UnifiedBatteryData {
   float power;  // power in kW
   float soc;    // State of Charge
 };
+
+#define BMS_CELLS_NUM 24 // Maximum number of cells supported
+
 // BMS telemetry data
 typedef struct {
   float soc;                    // State of Charge (%)
@@ -98,6 +101,7 @@ typedef struct {
   unsigned long lastUpdateMs;   // Timestamp of last telemetry update
   bool is_charging;
   TelemetryState bmsState;        // Current connection state
+  float cell_voltages[BMS_CELLS_NUM];  // Individual cell voltages
 } STR_BMS_TELEMETRY_140;
 #pragma pack(pop)
 

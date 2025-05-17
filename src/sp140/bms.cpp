@@ -53,6 +53,11 @@ void updateBMSData() {
   // Battery status
   bmsTelemetryData.is_charging = bms_can->isBatteryCharging();
 
+  // Populate individual cell voltages
+  for (uint8_t i = 0; i < BMS_CELLS_NUM; i++) {
+    bmsTelemetryData.cell_voltages[i] = bms_can->getCellVoltage(i);
+  }
+
   bmsTelemetryData.lastUpdateMs = millis();
   // printBMSData();
 

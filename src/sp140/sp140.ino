@@ -150,7 +150,7 @@ void bleStateUpdateTask(void* parameter) {
       }
     }
     // Small delay between updates
-    vTaskDelay(pdMS_TO_TICKS(5));
+    vTaskDelay(pdMS_TO_TICKS(20));
   }
 }
 
@@ -306,7 +306,7 @@ void updateBLETask(void *pvParameters) {
     }
 
     // Add a small delay to prevent task starvation
-    vTaskDelay(pdMS_TO_TICKS(10));
+    vTaskDelay(pdMS_TO_TICKS(20));
   }
 }
 
@@ -580,10 +580,10 @@ void setupTasks() {
   xTaskCreate(blinkLEDTask, "blinkLed", 1536, NULL, 1, &blinkLEDTaskHandle);
   xTaskCreatePinnedToCore(throttleTask, "throttle", 4096, NULL, 3, &throttleTaskHandle, 0);
   xTaskCreatePinnedToCore(spiCommTask, "SPIComm", 10096, NULL, 5, &spiCommTaskHandle, 1);
-  xTaskCreate(updateBLETask, "BLE Update Task", 4096, NULL, 1, NULL);
+  xTaskCreate(updateBLETask, "BLE Update Task", 8192, NULL, 1, NULL);
   xTaskCreate(deviceStateUpdateTask, "State Update Task", 4096, NULL, 1, &deviceStateUpdateTaskHandle);
   // Create BLE update task with high priority but on core 1
-  xTaskCreatePinnedToCore(bleStateUpdateTask, "BLEStateUpdate", 4096, NULL, 4, &bleStateUpdateTaskHandle, 1);
+  xTaskCreatePinnedToCore(bleStateUpdateTask, "BLEStateUpdate", 8192, NULL, 4, &bleStateUpdateTaskHandle, 1);
 
   // Create melody queue
   melodyQueue = xQueueCreate(5, sizeof(MelodyRequest));
@@ -594,7 +594,7 @@ void setupTasks() {
   // TODO: add watchdog task (based on esc writing to CAN)
   //xTaskCreatePinnedToCore(watchdogTask, "watchdog", 1000, NULL, 5, &watchdogTaskHandle, 0);  // Run on core 0
 
-  xTaskCreate(updateESCBLETask, "ESC BLE Update Task", 4096, NULL, 1, NULL);
+  xTaskCreate(updateESCBLETask, "ESC BLE Update Task", 8192, NULL, 1, NULL);
 
   // Create WebSerial task
   xTaskCreate(
@@ -1036,7 +1036,7 @@ void updateESCBLETask(void *pvParameters) {
     }
 
     // Add a small delay to prevent task starvation
-    vTaskDelay(pdMS_TO_TICKS(10));
+    vTaskDelay(pdMS_TO_TICKS(40));
   }
 }
 
