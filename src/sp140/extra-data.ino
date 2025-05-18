@@ -196,13 +196,13 @@ void updateBMSTelemetry(const STR_BMS_TELEMETRY_140& telemetry) {
     }
 
     // Debug print first and last cell voltage
-    USBSerial.print("Setting cell voltages: Cell 1 = ");
-    USBSerial.print(cell_millivolts[0]);
-    USBSerial.print(" mV, Cell ");
-    USBSerial.print(BMS_CELLS_NUM);
-    USBSerial.print(" = ");
-    USBSerial.print(cell_millivolts[BMS_CELLS_NUM-1]);
-    USBSerial.println(" mV");
+    // USBSerial.print("Setting cell voltages: Cell 1 = ");
+    // USBSerial.print(cell_millivolts[0]);
+    // USBSerial.print(" mV, Cell ");
+    // USBSerial.print(BMS_CELLS_NUM);
+    // USBSerial.print(" = ");
+    // USBSerial.print(cell_millivolts[BMS_CELLS_NUM-1]);
+    // USBSerial.println(" mV");
 
     pBMSCellVoltages->setValue((uint8_t*)cell_millivolts, BMS_CELLS_NUM * sizeof(uint16_t));
   }
