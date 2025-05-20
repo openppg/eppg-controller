@@ -144,10 +144,16 @@ void watchdogTask(void* parameter) {
 
 void blinkLEDTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
+  TickType_t xLastWakeTime;
+  const TickType_t xFrequency = pdMS_TO_TICKS(500); // 500 ms blink interval
+
+  // Initialise the xLastWakeTime variable with the current time.
+  xLastWakeTime = xTaskGetTickCount();
 
   for (;;) {  // infinite loop
     blinkLED();  // call blinkLED function
-    delay(500);  // wait for 500ms
+    // Wait for the next cycle.
+    vTaskDelayUntil(&xLastWakeTime, xFrequency);
   }
   vTaskDelete(NULL); // should never reach this
 }
@@ -157,7 +163,7 @@ void throttleTask(void *pvParameters) {
 
   for (;;) {  // infinite loop
     handleThrottle();  //
-    delay(22);  // wait for 22ms
+    vTaskDelay(pdMS_TO_TICKS(22));  // wait for 22ms
   }
   vTaskDelete(NULL); // should never reach this
 }
@@ -167,7 +173,7 @@ void telemetryTask(void *pvParameters) {
 
   for (;;) {  // infinite loop
     readESCTelemetry();
-    delay(50);  // wait for 50ms
+    vTaskDelay(pdMS_TO_TICKS(50));  // wait for 50ms
   }
   vTaskDelete(NULL);  // should never reach this
 }
@@ -177,20 +183,26 @@ void trackPowerTask(void *pvParameters) {
 
   for (;;) {  // infinite loop
     trackPower();
-    delay(250);  // wait for 250ms
+    vTaskDelay(pdMS_TO_TICKS(250));  // wait for 250ms
   }
   vTaskDelete(NULL);  // should never reach this
 }
 
 void updateDisplayTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
+  TickType_t xLastWakeTime;
+  const TickType_t xFrequency = pdMS_TO_TICKS(250); // 250 ms = 4 Hz/FPS
+
+  // Initialise the xLastWakeTime variable with the current time.
+  xLastWakeTime = xTaskGetTickCount();
 
   for (;;) {
     const float altitude = getAltitude(deviceData);
     bool isArmed = (currentState != DISARMED);
     bool isCruising = (currentState == ARMED_CRUISING);
     updateDisplay(deviceData, escTelemetryData, altitude, isArmed, isCruising, armedAtMillis);
-    delay(250);
+    // Wait for the next cycle.
+    vTaskDelayUntil(&xLastWakeTime, xFrequency);
   }
   vTaskDelete(NULL);  // should never reach this
 }
@@ -384,7 +396,7 @@ void loop() {
 
   // more stable in main loop
   checkButtons();
-  delay(5);
+  vTaskDelay(pdMS_TO_TICKS(5));
   //ps();
   //psTop();
 }
