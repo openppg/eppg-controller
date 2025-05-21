@@ -142,6 +142,7 @@ static BLECharacteristic* pBMSCellVoltages = nullptr;
 
 static BLECharacteristic* pControllerBaroTemp = nullptr;
 static BLECharacteristic* pControllerBaroPressure = nullptr;
+static BLECharacteristic* pControllerCPUTemp = nullptr;
 
 void updateThrottleBLE(int value) {
   // Handle disconnecting
@@ -393,7 +394,8 @@ class BaroTempCallbacks: public BLECharacteristicCallbacks {
   void onRead(BLECharacteristic *pCharacteristic) {
     float temperature = getBaroTemperature();
     if (temperature != __FLT_MIN__) {
-      pCharacteristic->setValue((uint8_t*)&temperature, sizeof(temperature));
+      int16_t tempInt = (int16_t)round(temperature * 100.0f);  // Multiply by 100 and round to preserve 2 decimal places
+      pCharacteristic->setValue((uint8_t*)&tempInt, sizeof(tempInt));
     }
   }
 };
@@ -402,8 +404,17 @@ class BaroPressureCallbacks: public BLECharacteristicCallbacks {
   void onRead(BLECharacteristic *pCharacteristic) {
     float pressure = getBaroPressure();
     if (pressure != __FLT_MIN__) {
-      pCharacteristic->setValue((uint8_t*)&pressure, sizeof(pressure));
+      uint16_t pressureInt = (uint16_t)round(pressure * 10.0f);  // Multiply by 10 and round to preserve 1 decimal place (hPa/mbar)
+      pCharacteristic->setValue((uint8_t*)&pressureInt, sizeof(pressureInt));
     }
+  }
+};
+
+class CPUTempCallbacks: public BLECharacteristicCallbacks {
+  void onRead(BLECharacteristic *pCharacteristic) {
+    float tempFloat = temperatureRead();
+    int16_t tempInt = (int16_t)round(tempFloat * 100.0f);  // Multiply by 100 and round to preserve 2 decimal places
+    pCharacteristic->setValue((uint8_t*)&tempInt, sizeof(tempInt));
   }
 };
 
@@ -432,6 +443,12 @@ void setupBLE() {
                                   BLEUUID(CONTROLLER_BARO_PRESSURE_UUID),
                                   BLECharacteristic::PROPERTY_READ);
   pControllerBaroPressure->setCallbacks(new BaroPressureCallbacks());
+
+  // Add CPU temperature characteristic
+  pControllerCPUTemp = pConfigService->createCharacteristic(
+                                BLEUUID(CONTROLLER_CPU_TEMP_UUID),
+                                BLECharacteristic::PROPERTY_READ);
+  pControllerCPUTemp->setCallbacks(new CPUTempCallbacks());
 
   BLECharacteristic *pTimezone = pConfigService->createCharacteristic(
                                   BLEUUID(TIMEZONE_UUID),
