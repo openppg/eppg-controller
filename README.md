@@ -13,7 +13,7 @@ See stable releases [here](https://github.com/openppg/eppg-controller/releases)
 <details>
 <summary>Older Version Information</summary>
 
- For non-CAN bus controllers please use [version/6 branch](https://github.com/openppg/eppg-controller/tree/version/6).
+For non-CAN bus controllers please use [version/6 branch](https://github.com/openppg/eppg-controller/tree/version/6).
 
 Version 6.1 was initially released only for the reworked RP2040 module based controller and being ported to the original RP2040 PCB which is currently in testing. The version shipped with that hardware can be found on the [rp2040-module-release branch](https://github.com/openppg/eppg-controller/tree/rp2040-module-release)
 
@@ -30,7 +30,7 @@ OpenPPG supports flashing the firmware PlatformIO. Older versions were also comp
 
 ## Using PlatformIO
 
-Suitable for Mac, Windows, and Linux
+(Mac, Windows, and Linux)
 
 ### Setup
 
@@ -54,7 +54,15 @@ Suitable for Mac, Windows, and Linux
 esp32 uses esptool to build a binary file from the compiled .bin file.
 
 ```bash
-$ esptool.py
+$ esptool.py --chip esp32s3 merge_bin \
+  -o .pio/build/OpenPPG-CESP32S3-CAN-SP140/merged-firmware.bin \
+  --flash_mode dio \
+  --flash_freq 80m \
+  --flash_size 8MB \
+  0x0 .pio/build/OpenPPG-CESP32S3-CAN-SP140/bootloader.bin \
+  0x8000 .pio/build/OpenPPG-CESP32S3-CAN-SP140/partitions.bin \
+  0xe000 /Users/username/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin \
+  0x10000 .pio/build/OpenPPG-CESP32S3-CAN-SP140/firmware.bin
 ```
 
 ## Config tool
