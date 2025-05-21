@@ -1,0 +1,11 @@
+{
+  "coding_style": {
+    "indentation": {
+      "type": "spaces",
+      "size": 2
+    },
+    "cpp": {
+      "space_between_code_and_comments": 2
+    }
+  }
+}

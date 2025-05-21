@@ -588,9 +588,15 @@ const GFXfont SymbolMono18pt7b PROGMEM = {
 #define MY_DOUBLE_GREATER_THAN 133
 #define MY_SPACE_BAR 134
 
-const GFXglyph SymbolMono18pt7bGlyphs[] PROGMEM = {
+const GFXglyph CompactSymbolMono18pt7bGlyphs[] PROGMEM = {
   //Index,  W, H,xAdv,dX, dY
   {  0, 16,16, 21, 3,-17 }, // 00 power symbol
   {  32, 16, 17, 21, 3,-18}, // 01 Bluetooth
   {  478, 8, 9, 21, 3,-2 } // 02 smaller bluetooth
-}
+};
+
+const GFXfont CompactSymbolMono18pt7b PROGMEM = {
+  (uint8_t  *)SymbolMono18pt7bBitmaps,
+  (GFXglyph *)CompactSymbolMono18pt7bGlyphs,
+  0, 48, 35 //ASCII start, ASCII stop, y Advance
+};

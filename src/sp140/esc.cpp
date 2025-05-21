@@ -1,208 +1,288 @@
 #include "sp140/esc.h"
-#include <Servo.h>
 #include "sp140/globals.h"
 #include <CircularBuffer.hpp>
 
-Servo esc;
-extern CircularBuffer<float, 50> voltageBuffer;
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#include "driver/twai.h"
 
-STR_ESC_TELEMETRY_140 escTelemetryData;
-static telem_esc_t raw_esc_telemdata;
+#define ESC_RX_PIN 3  // CAN RX pin to transceiver
+#define ESC_TX_PIN 2  // CAN TX pin to transceiver
+#define LOCAL_NODE_ID 0x01  // The ID on the network of this device
 
-void initESC(int escPin) {
-  esc.attach(escPin);
-  esc.writeMicroseconds(ESC_DISARMED_PWM);
-  setupESCSerial();
-}
+#define TELEMETRY_TIMEOUT_MS 50  // Threshold to determine stale ESC telemetry in ms
 
-void setupESCSerial() {
-  SerialESC.begin(ESC_BAUD_RATE);
-  SerialESC.setTimeout(ESC_TIMEOUT);
+static CanardAdapter adapter;
+static uint8_t memory_pool[1024] __attribute__((aligned(8)));
+static SineEsc esc(adapter);
+static unsigned long lastSuccessfulCommTimeMs = 0;  // Store millis() time of last successful ESC comm
+
+
+STR_ESC_TELEMETRY_140 escTelemetryData = {
+  .escState = TelemetryState::NOT_CONNECTED
+};
+
+void initESC() {
+  escTwaiInitialized = setupTWAI();
+  if (!escTwaiInitialized) {
+    USBSerial.println("ESC TWAI Initialization failed. ESC will not function.");
+    return;  // Can't proceed without TWAI driver
+  }
+
+  adapter.begin(memory_pool, sizeof(memory_pool));
+  adapter.setLocalNodeId(LOCAL_NODE_ID);
+  esc.begin(0x20);  // Default ID for the ESC
+
+  // Set idle throttle only if ESC is found
+  const uint16_t IdleThrottle_us = 10000;  // 1000us (0.1us resolution)
+  esc.setThrottleSettings2(IdleThrottle_us);
+  adapter.processTxRxOnce();
+  delay(20);  // Wait for ESC to process the command
 }
 
 void setESCThrottle(int throttlePWM) {
-  esc.writeMicroseconds(throttlePWM);
+  // Input validation
+  if (throttlePWM < 1000 || throttlePWM > 2000) {
+    return;  // Ignore invalid throttle values
+  }
+
+  // Direct calculation: multiply by 10 to convert μs to 0.1μs resolution
+  uint16_t scaledThrottle = throttlePWM * 10;
+  esc.setThrottleSettings2(scaledThrottle);
 }
 
 void readESCTelemetry() {
-  prepareESCSerialRead();
-  static byte escDataV2[ESC_DATA_V2_SIZE];
-  SerialESC.readBytes(escDataV2, ESC_DATA_V2_SIZE);
-  handleESCSerialData(escDataV2);
-}
+  // Only proceed if TWAI is initialized
+  if (!escTwaiInitialized) { return; }  // NOLINT(whitespace/newline)
 
-void prepareESCSerialRead() {
-  while (SerialESC.available() > 0) {
-    SerialESC.read();
-  }
-}
+  // Store the last known ESC timestamp before checking for new data
+  unsigned long previousEscReportedTimeMs = escTelemetryData.lastUpdateMs;
 
-void handleESCSerialData(byte buffer[]) {
-  // if(sizeof(buffer) != 22) {
-  //     Serial.print("wrong size ");
-  //     Serial.println(sizeof(buffer));
-  //     return; //Ignore malformed packets
-  // }
+  const SineEscModel &model = esc.getModel();
 
-  if (buffer[20] != 255 || buffer[21] != 255) {
-    // Serial.println("no stop byte");
+  if (model.hasSetThrottleSettings2Response) {
+    const sine_esc_SetThrottleSettings2Response *res = &model.setThrottleSettings2Response;
 
-    return;  // Stop byte of 65535 not received
-  }
+    unsigned long newEscReportedTimeMs = res->time_10ms * 10;
 
-  // Check the fletcher checksum
-  int checkFletch = checkFletcher16(buffer);
+    // Check if the timestamp from the ESC has actually changed
+    if (newEscReportedTimeMs != previousEscReportedTimeMs) {
+      // Timestamp is new, process the telemetry data
+      escTelemetryData.lastUpdateMs = newEscReportedTimeMs;
 
-  // checksum
-  raw_esc_telemdata.CSUM_HI = buffer[19];
-  raw_esc_telemdata.CSUM_LO = buffer[18];
+      // Update telemetry data
+      escTelemetryData.volts = res->voltage / 10.0f;
+      escTelemetryData.amps = res->bus_current / 10.0f;
+      escTelemetryData.mos_temp = res->mos_temp / 10.0f;
+      escTelemetryData.cap_temp = res->cap_temp / 10.0f;
+      escTelemetryData.mcu_temp = res->mcu_temp / 10.0f;
+      escTelemetryData.motor_temp = res->motor_temp / 10.0f;
+      escTelemetryData.eRPM = res->speed;
+      escTelemetryData.inPWM = res->recv_pwm / 10.0f;
+      watts = escTelemetryData.amps * escTelemetryData.volts;
 
-  // TODO: alert if no new data in 3 seconds
-  int checkCalc = (int)(((raw_esc_telemdata.CSUM_HI << 8) + raw_esc_telemdata.CSUM_LO));
+      // Temperature states
+      escTelemetryData.mos_state = checkTempState(escTelemetryData.mos_temp, COMP_ESC_MOS);
+      escTelemetryData.mcu_state = checkTempState(escTelemetryData.mcu_temp, COMP_ESC_MCU);
+      escTelemetryData.cap_state = checkTempState(escTelemetryData.cap_temp, COMP_ESC_CAP);
+      escTelemetryData.motor_state = checkTempState(escTelemetryData.motor_temp, COMP_MOTOR);
+      escTelemetryData.temp_sensor_error =
+        (escTelemetryData.mos_state == TEMP_INVALID) ||
+        (escTelemetryData.mcu_state == TEMP_INVALID) ||
+        (escTelemetryData.cap_state == TEMP_INVALID) ||
+        (escTelemetryData.motor_state == TEMP_INVALID);
 
-  // Checksums do not match
-  if (checkFletch != checkCalc) {
-    return;
-  }
-  // Voltage
-  raw_esc_telemdata.V_HI = buffer[1];
-  raw_esc_telemdata.V_LO = buffer[0];
+      // Record the time of this successful communication using the local clock
+      lastSuccessfulCommTimeMs = millis();
+    }  // else: Timestamp hasn't changed, treat as stale data, don't update local timer or telemetry
 
-  float voltage = (raw_esc_telemdata.V_HI << 8 | raw_esc_telemdata.V_LO) / 100.0;
-  escTelemetryData.volts = voltage;  // Voltage
-
-  if (escTelemetryData.volts > BATT_MIN_V) {
-    escTelemetryData.volts += 1.0;  // calibration
-  }
-
-  voltageBuffer.push(escTelemetryData.volts);
-
-  // Temperature
-  raw_esc_telemdata.T_HI = buffer[3];
-  raw_esc_telemdata.T_LO = buffer[2];
-
-  float rawVal = (float)((raw_esc_telemdata.T_HI << 8) + raw_esc_telemdata.T_LO);
-
-  static int SERIESRESISTOR = 10000;
-  static int NOMINAL_RESISTANCE = 10000;
-  static int NOMINAL_TEMPERATURE = 25;
-  static int BCOEFFICIENT = 3455;
-
-  // convert value to resistance
-  float Rntc = (4096 / (float) rawVal) - 1;
-  Rntc = SERIESRESISTOR / Rntc;
-
-  // Get the temperature
-  float temperature = Rntc / (float) NOMINAL_RESISTANCE;  // (R/Ro)
-  temperature = (float) log(temperature);  // ln(R/Ro)
-  temperature /= BCOEFFICIENT;  // 1/B * ln(R/Ro)
-
-  temperature += 1.0 / ((float) NOMINAL_TEMPERATURE + 273.15);  // + (1/To)
-  temperature = 1.0 / temperature;  // Invert
-  temperature -= 273.15;  // convert to Celsius
-
-  // filter bad values
-  if (temperature < 0 || temperature > 200) {
-    escTelemetryData.temperatureC = __FLT_MIN__;
   } else {
-    temperature = (float) trunc(temperature * 100) / 100;  // 2 decimal places
-    escTelemetryData.temperatureC = temperature;
+      // If we are connected but don't have a response, perhaps mark as stale or log?
+      // For now, do nothing
   }
 
-  // Current
-  int16_t _amps = 0;
-  _amps = word(buffer[5], buffer[4]);
-  escTelemetryData.amps = _amps / 12.5;
+  // Update connection state based on time since last successful communication
+  unsigned long currentTimeMs = millis();
+  if (lastSuccessfulCommTimeMs == 0 || (currentTimeMs - lastSuccessfulCommTimeMs) > TELEMETRY_TIMEOUT_MS) {
+    if (escTelemetryData.escState != TelemetryState::NOT_CONNECTED) {
+      // Log state change only if it actually changed
+      USBSerial.printf("ESC State: %d -> NOT_CONNECTED (Timeout)\n", escTelemetryData.escState);
+      escTelemetryData.escState = TelemetryState::NOT_CONNECTED;
+      // Optional: Consider resetting telemetry values here if needed when disconnected
+    }
+  } else {
+    if (escTelemetryData.escState != TelemetryState::CONNECTED) {
+      // Log state change only if it actually changed
+      USBSerial.printf("ESC State: %d -> CONNECTED\n", escTelemetryData.escState);
+      escTelemetryData.escState = TelemetryState::CONNECTED;
+    }
+  }
 
-  // Serial.print("amps ");
-  // Serial.print(currentAmpsInput);
-  // Serial.print(" - ");
-
-  watts = escTelemetryData.amps * escTelemetryData.volts;
-
-  // Reserved
-  raw_esc_telemdata.R0_HI = buffer[7];
-  raw_esc_telemdata.R0_LO = buffer[6];
-
-  // eRPM
-  raw_esc_telemdata.RPM0 = buffer[11];
-  raw_esc_telemdata.RPM1 = buffer[10];
-  raw_esc_telemdata.RPM2 = buffer[9];
-  raw_esc_telemdata.RPM3 = buffer[8];
-
-  int poleCount = 62;
-  uint32_t rawERPM = (raw_esc_telemdata.RPM0 << 24) |
-                     (raw_esc_telemdata.RPM1 << 16) |
-                     (raw_esc_telemdata.RPM2 << 8) |
-                     raw_esc_telemdata.RPM3;
-  int currentERPM = static_cast<int>(rawERPM);  // ERPM output
-  int currentRPM = currentERPM / poleCount;  // Real RPM output
-  escTelemetryData.eRPM = currentRPM;
-
-  // Serial.print("RPM ");
-  // Serial.print(currentRPM);
-  // Serial.print(" - ");
-
-  // Input Duty
-  raw_esc_telemdata.DUTYIN_HI = buffer[13];
-  raw_esc_telemdata.DUTYIN_LO = buffer[12];
-
-  int throttleDuty = (int)(((raw_esc_telemdata.DUTYIN_HI << 8) + raw_esc_telemdata.DUTYIN_LO) / 10);
-  escTelemetryData.inPWM = (throttleDuty / 10);  // Input throttle
-
-  // Serial.print("throttle ");
-  // Serial.print(escTelemetryData.inPWM);
-  // Serial.print(" - ");
-
-  // Motor Duty
-  // raw_esc_telemdata.MOTORDUTY_HI = buffer[15];
-  // raw_esc_telemdata.MOTORDUTY_LO = buffer[14];
-
-  // int motorDuty = (int)(((raw_esc_telemdata.MOTORDUTY_HI << 8) + raw_esc_telemdata.MOTORDUTY_LO) / 10);
-  // int currentMotorDuty = (motorDuty / 10);  // Motor duty cycle
-
-  // Reserved
-  // raw_esc_telemdata.R1 = buffer[17];
-
-  /* Status Flags
-  # Bit position in byte indicates flag set, 1 is set, 0 is default
-  # Bit 0: Motor Started, set when motor is running as expected
-  # Bit 1: Motor Saturation Event, set when saturation detected and power is reduced for desync protection
-  # Bit 2: ESC Over temperature event occurring, shut down method as per configuration
-  # Bit 3: ESC Overvoltage event occurring, shut down method as per configuration
-  # Bit 4: ESC Undervoltage event occurring, shut down method as per configuration
-  # Bit 5: Startup error detected, motor stall detected upon trying to start*/
-  raw_esc_telemdata.statusFlag = buffer[16];
-  escTelemetryData.statusFlag = raw_esc_telemdata.statusFlag;
-  // Serial.print("status ");
-  // Serial.print(raw_esc_telemdata.statusFlag, BIN);
-  // Serial.print(" - ");
-  // Serial.println(" ");
+  adapter.processTxRxOnce();  // Process CAN messages
 }
 
-// new V2 ESC checking
-int checkFletcher16(byte byteBuffer[]) {
-  int fCCRC16;
-  int i;
-  int c0 = 0;
-  int c1 = 0;
+// CAN specific setup
+bool setupTWAI() {
+  // Check if already installed by checking status
+  twai_status_info_t status_info;
+  esp_err_t status_result = twai_get_status_info(&status_info);
 
-  // Calculate checksum intermediate bytesUInt16
-  for (i = 0; i < 18; i++) {  // Check only first 18 bytes, skip crc bytes
-    c0 = (int)(c0 + ((int)byteBuffer[i])) % 255;
-    c1 = (int)(c1 + c0) % 255;
+  if (status_result == ESP_OK) {
+    // Driver is installed. We can check its state if needed.
+    USBSerial.printf("TWAI driver already installed. State: %d\n", status_info.state);
+    // If it's stopped, maybe we need to start it? For now, assume it's okay.
+    // if (status_info.state == TWAI_STATE_STOPPED) { twai_start(); }
+    return true;  // Already initialized
+  } else if (status_result != ESP_ERR_INVALID_STATE) {
+    // An error other than "not installed" occurred
+    USBSerial.printf("Error checking TWAI status: %s\n", esp_err_to_name(status_result));
+    return false;  // Don't proceed if status check failed unexpectedly
   }
-  // Assemble the 16-bit checksum value
-  fCCRC16 = (c1 << 8) | c0;
-  return (int)fCCRC16;
+  // If status_result was ESP_ERR_INVALID_STATE, proceed with installation
+
+  USBSerial.println("TWAI driver not installed. Proceeding with installation...");
+
+  twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(
+                                      (gpio_num_t)ESC_TX_PIN,
+                                      (gpio_num_t)ESC_RX_PIN,
+                                      TWAI_MODE_NORMAL);
+  twai_timing_config_t t_config = TWAI_TIMING_CONFIG_1MBITS();
+  twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
+
+  esp_err_t install_err = twai_driver_install(&g_config, &t_config, &f_config);
+  if (install_err == ESP_OK) {
+      USBSerial.println("TWAI Driver installed");
+  } else {
+      USBSerial.printf("Failed to install TWAI driver: %s\n", esp_err_to_name(install_err));
+      return false;
+  }
+
+  esp_err_t start_err = twai_start();
+  if (start_err == ESP_OK) {
+      USBSerial.println("TWAI Driver started");
+  } else {
+      USBSerial.printf("Failed to start TWAI driver: %s\n", esp_err_to_name(start_err));
+      // Attempt to uninstall if start failed
+      twai_driver_uninstall();
+      return false;
+  }
+
+  // Reconfigure alerts to detect frame receive, Bus-Off error and RX queue full states
+  uint32_t alerts_to_enable = TWAI_ALERT_RX_DATA
+                              | TWAI_ALERT_ERR_PASS
+                              | TWAI_ALERT_BUS_ERROR
+                              | TWAI_ALERT_RX_QUEUE_FULL;
+  if (twai_reconfigure_alerts(alerts_to_enable, NULL) == ESP_OK) {
+      USBSerial.println("CAN Alerts reconfigured");
+  } else {
+      USBSerial.println("Failed to reconfigure CAN alerts");
+      // Consider this non-fatal for now? Or return false?
+  }
+
+  return true;
 }
 
-// for debugging
-static void printRawSentence(byte buffer[]) {
-  Serial.print(F("DATA: "));
-  for (int i = 0; i < ESC_DATA_V2_SIZE; i++) {
-    Serial.print(buffer[i], HEX);
-    Serial.print(F(" "));
+void dumpThrottleResponse(const sine_esc_SetThrottleSettings2Response *res) {
+  USBSerial.println("Got SetThrottleSettings2 response");
+
+  USBSerial.print("\trecv_pwm: ");
+  USBSerial.println(res->recv_pwm);
+
+  USBSerial.print("\tcomm_pwm: ");
+  USBSerial.println(res->comm_pwm);
+
+  USBSerial.print("\tspeed: ");
+  USBSerial.println(res->speed);
+
+  USBSerial.print("\tcurrent: ");
+  USBSerial.println(res->current);
+
+  USBSerial.print("\tbus_current: ");
+  USBSerial.println(res->bus_current);
+
+  USBSerial.print("\tvoltage: ");
+  USBSerial.println(res->voltage);
+
+  USBSerial.print("\tv_modulation: ");
+  USBSerial.println(res->v_modulation);
+
+  USBSerial.print("\tmos_temp: ");
+  USBSerial.println(res->mos_temp);
+
+  USBSerial.print("\tcap_temp: ");
+  USBSerial.println(res->cap_temp);
+
+  USBSerial.print("\tmcu_temp: ");
+  USBSerial.println(res->mcu_temp);
+
+  USBSerial.print("\trunning_error: ");
+  USBSerial.println(res->running_error);
+
+  USBSerial.print("\tselfcheck_error: ");
+  USBSerial.println(res->selfcheck_error);
+
+  USBSerial.print("\tmotor_temp: ");
+  USBSerial.println(res->motor_temp);
+
+  USBSerial.print("\ttime_10ms: ");
+  USBSerial.println(res->time_10ms);
+}
+
+void dumpESCMessages(void) {
+  const SineEscModel &model = esc.getModel();
+
+  if (model.hasGetHardwareInfoResponse) {
+    USBSerial.println("Got HwInfo response");
+
+    const sine_esc_GetHwInfoResponse *b = &model.getHardwareInfoResponse;
+    USBSerial.print("\thardware_id: ");
+    USBSerial.println(b->hardware_id, HEX);
+    USBSerial.print("\tbootloader_version: ");
+    USBSerial.println(b->bootloader_version, HEX);
+    USBSerial.print("\tapp_version: ");
+    USBSerial.println(b->app_version, HEX);
   }
-  Serial.println();
+
+  if (model.hasSetThrottleSettings2Response) {
+    dumpThrottleResponse(&model.setThrottleSettings2Response);
+  }
+
+  if (model.hasSetRotationSpeedSettingsResponse) {
+    USBSerial.println("Got SetRotationSpeedSettings response");
+  }
+}
+
+double mapDouble(double x, double in_min, double in_max, double out_min, double out_max) {
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+
+float getHighestTemp(const STR_ESC_TELEMETRY_140& telemetry) {
+  return max(telemetry.motor_temp, max(telemetry.mos_temp, telemetry.cap_temp));
+}
+
+TempState checkTempState(float temp, TempComponent component) {
+  // Check for invalid temperature readings
+  if (temp < -50 || temp > 200) {
+      return TEMP_INVALID;
+  }
+
+  switch (component) {
+    case COMP_ESC_MOS:
+      return temp >= ESC_MOS_CRIT ? TEMP_CRITICAL :
+              temp >= ESC_MOS_WARN ? TEMP_WARNING : TEMP_NORMAL;
+
+    case COMP_ESC_MCU:
+      return temp >= ESC_MCU_CRIT ? TEMP_CRITICAL :
+              temp >= ESC_MCU_WARN ? TEMP_WARNING : TEMP_NORMAL;
+
+    case COMP_ESC_CAP:
+      return temp >= ESC_CAP_CRIT ? TEMP_CRITICAL :
+              temp >= ESC_CAP_WARN ? TEMP_WARNING : TEMP_NORMAL;
+
+    case COMP_MOTOR:
+      return temp >= MOTOR_CRIT ? TEMP_CRITICAL :
+              temp >= MOTOR_WARN ? TEMP_WARNING : TEMP_NORMAL;
+
+    default:
+      return TEMP_INVALID;
+  }
 }
