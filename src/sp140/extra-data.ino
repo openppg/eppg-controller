@@ -596,6 +596,7 @@ void setupBLE() {
   BLEAdvertising *pAdvertising = pServer->getAdvertising();
   pAdvertising->addServiceUUID(BLEUUID(CONFIG_SERVICE_UUID));
   pAdvertising->addServiceUUID(BLEUUID(BMS_TELEMETRY_SERVICE_UUID));
+  pAdvertising->setAppearance(0x2603); // Aircraft -> Paraglider
   pAdvertising->setScanResponse(false);
   pAdvertising->setMinPreferred(0x0);
   pAdvertising->start();
