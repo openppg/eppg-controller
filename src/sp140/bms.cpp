@@ -63,7 +63,6 @@ void updateBMSData() {
 
   // Deselect BMS CS when done
   digitalWrite(bmsCS, HIGH);
-
 }
 
 void printBMSData() {

@@ -82,7 +82,7 @@ struct UnifiedBatteryData {
   float soc;    // State of Charge
 };
 
-#define BMS_CELLS_NUM 24 // Maximum number of cells supported
+#define BMS_CELLS_NUM 24  // Maximum number of cells supported
 
 // BMS telemetry data
 typedef struct {
