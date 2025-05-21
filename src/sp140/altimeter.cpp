@@ -67,6 +67,14 @@ float getBaroTemperature() {
   return __FLT_MIN__;  // Return a very small number if BMP is not present
 }
 
+// Get the pressure in hPa (mbar)
+float getBaroPressure() {
+  if (bmpPresent) {
+    return bmp.readPressure() / 100.0f;  // Convert Pa to hPa (mbar)
+  }
+  return __FLT_MIN__;  // Return a very small number if BMP is not present
+}
+
 // Start the bmp3XX sensor
 bool setupAltimeter(bool altWire) {
   TwoWire* wire = &Wire;

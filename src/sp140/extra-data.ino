@@ -82,8 +82,12 @@ Preferences preferences;
 #define METRIC_TEMP_UUID         "D4962473-A3FB-4754-AD6A-90B079C3FB38"
 #define PERFORMANCE_MODE_UUID    "D76C2E92-3547-4F5F-AFB4-515C5C08B06B"
 #define THEME_UUID               "AD0E4309-1EB2-461A-B36C-697B2E1604D2"
-#define UNIX_TIME_UUID           "E09FF0B7-5D02-4FD5-889E-C4251A58D9E7"  // Our custom UUID
+#define UNIX_TIME_UUID           "E09FF0B7-5D02-4FD5-889E-C4251A58D9E7"
 #define TIMEZONE_UUID            "CAE49D1A-7C21-4B0C-8520-416F3EF69DB1"
+
+#define CONTROLLER_BARO_TEMP_UUID "5438dddc-5878-4732-add9-3d4a349b7b0b"
+#define CONTROLLER_BARO_PRESSURE_UUID "81c03302-1f37-4cfc-919b-82e90a1a0ce4"
+#define CONTROLLER_CPU_TEMP_UUID "e7eae3fd-4023-4315-8511-895a8b7697c5"
 
 #define THROTTLE_VALUE_UUID      "50AB3859-9FBF-4D30-BF97-2516EE632FAD"
 
@@ -135,6 +139,9 @@ static BLECharacteristic* pBMSLowTemp = nullptr;
 static BLECharacteristic* pBMSFailureLevel = nullptr;
 static BLECharacteristic* pBMSVoltageDiff = nullptr;
 static BLECharacteristic* pBMSCellVoltages = nullptr;
+
+static BLECharacteristic* pControllerBaroTemp = nullptr;
+static BLECharacteristic* pControllerBaroPressure = nullptr;
 
 void updateThrottleBLE(int value) {
   // Handle disconnecting
@@ -382,6 +389,24 @@ class TimezoneCallbacks: public BLECharacteristicCallbacks {
   }
 };
 
+class BaroTempCallbacks: public BLECharacteristicCallbacks {
+  void onRead(BLECharacteristic *pCharacteristic) {
+    float temperature = getBaroTemperature();
+    if (temperature != __FLT_MIN__) {
+      pCharacteristic->setValue((uint8_t*)&temperature, sizeof(temperature));
+    }
+  }
+};
+
+class BaroPressureCallbacks: public BLECharacteristicCallbacks {
+  void onRead(BLECharacteristic *pCharacteristic) {
+    float pressure = getBaroPressure();
+    if (pressure != __FLT_MIN__) {
+      pCharacteristic->setValue((uint8_t*)&pressure, sizeof(pressure));
+    }
+  }
+};
+
 void setupBLE() {
   // Initialize BLE
   BLEDevice::init("OpenPPG Controller");
@@ -396,6 +421,17 @@ void setupBLE() {
                                     BLECharacteristic::PROPERTY_READ |
                                     BLECharacteristic::PROPERTY_WRITE);
   pUnixTime->setCallbacks(new TimeCallbacks());
+
+  // Add barometer characteristics
+  pControllerBaroTemp = pConfigService->createCharacteristic(
+                                   BLEUUID(CONTROLLER_BARO_TEMP_UUID),
+                                   BLECharacteristic::PROPERTY_READ);
+  pControllerBaroTemp->setCallbacks(new BaroTempCallbacks());
+
+  pControllerBaroPressure = pConfigService->createCharacteristic(
+                                  BLEUUID(CONTROLLER_BARO_PRESSURE_UUID),
+                                  BLECharacteristic::PROPERTY_READ);
+  pControllerBaroPressure->setCallbacks(new BaroPressureCallbacks());
 
   BLECharacteristic *pTimezone = pConfigService->createCharacteristic(
                                   BLEUUID(TIMEZONE_UUID),
