@@ -82,15 +82,17 @@ Preferences preferences;
 #define METRIC_TEMP_UUID         "D4962473-A3FB-4754-AD6A-90B079C3FB38"
 #define PERFORMANCE_MODE_UUID    "D76C2E92-3547-4F5F-AFB4-515C5C08B06B"
 #define THEME_UUID               "AD0E4309-1EB2-461A-B36C-697B2E1604D2"
-#define HW_REVISION_UUID         "2A27"  // Using standard BLE UUID for revision
-#define FW_VERSION_UUID          "2A26"  // Using standard BLE UUID for version
-#define UNIX_TIME_UUID          "E09FF0B7-5D02-4FD5-889E-C4251A58D9E7"  // Our custom UUID
-#define TIMEZONE_UUID           "CAE49D1A-7C21-4B0C-8520-416F3EF69DB1"
+#define UNIX_TIME_UUID           "E09FF0B7-5D02-4FD5-889E-C4251A58D9E7"  // Our custom UUID
+#define TIMEZONE_UUID            "CAE49D1A-7C21-4B0C-8520-416F3EF69DB1"
 
 #define THROTTLE_VALUE_UUID      "50AB3859-9FBF-4D30-BF97-2516EE632FAD"
 
 #define DEVICE_INFO_SERVICE_UUID   "180A"  // Standard BLE Device Information Service
 #define MANUFACTURER_NAME_UUID     "2A29"  // Standard BLE Manufacturer Name characteristic
+#define MODEL_NUMBER_UUID          "2A24"  // Standard BLE Model Number characteristic
+#define SERIAL_NUMBER_UUID         "2A25"  // Standard BLE Serial Number characteristic
+#define FIRMWARE_REVISION_UUID     "2A26"  // Standard BLE Firmware Revision characteristic
+#define HARDWARE_REVISION_UUID     "2A27"  // Standard BLE Hardware Revision characteristic
 
 #define BMS_TELEMETRY_SERVICE_UUID "9E0F2FA3-3F2B-49C0-A6A3-3D8923062133"
 #define ESC_TELEMETRY_SERVICE_UUID "C154DAE9-1984-40EA-B20F-5B23F9CBA0A9"
@@ -443,18 +445,6 @@ void setupBLE() {
   int screenRotation = deviceData.screen_rotation == 1 ? 1 : 3;
   pScreenRotation->setValue(screenRotation);
 
-  // Add read-only characteristics for device info
-  BLECharacteristic *pFirmwareVersion = pConfigService->createCharacteristic(
-                                        BLEUUID(FW_VERSION_UUID),
-                                        BLECharacteristic::PROPERTY_READ);
-  pFirmwareVersion->setValue(VERSION_STRING);
-
-  BLECharacteristic *pHardwareRevision = pConfigService->createCharacteristic(
-                                         BLEUUID(HW_REVISION_UUID),
-                                         BLECharacteristic::PROPERTY_READ);
-  // Send revision directly as a byte
-  pHardwareRevision->setValue(&deviceData.revision, sizeof(deviceData.revision));
-
   BLECharacteristic *pArmedTime = pConfigService->createCharacteristic(
                                   BLEUUID(ARMED_TIME_UUID),
                                   BLECharacteristic::PROPERTY_READ);
@@ -469,14 +459,43 @@ void setupBLE() {
                                      BLECharacteristic::PROPERTY_READ);
   pManufacturer->setValue("OpenPPG");
 
+  BLECharacteristic *pModelNumber = pDeviceInfoService->createCharacteristic(
+                                     BLEUUID(MODEL_NUMBER_UUID),
+                                     BLECharacteristic::PROPERTY_READ);
+  pModelNumber->setValue("SP140 Controller");
+
+  // Add Serial Number characteristic (using MAC address for uniqueness)
+  BLECharacteristic *pSerialNumber = pDeviceInfoService->createCharacteristic(
+                                     BLEUUID(SERIAL_NUMBER_UUID),
+                                     BLECharacteristic::PROPERTY_READ);
+  uint8_t mac[6];
+  esp_read_mac(mac, ESP_MAC_WIFI_STA);
+  char macStr[18];
+  sprintf(macStr, "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  pSerialNumber->setValue(macStr);
+
+  // Add Hardware Revision characteristic (using standard UUID)
+  BLECharacteristic *pHardwareRevision = pDeviceInfoService->createCharacteristic(
+                                         BLEUUID(HARDWARE_REVISION_UUID),
+                                         BLECharacteristic::PROPERTY_READ);
+  // Send revision directly as a byte
+  pHardwareRevision->setValue(&deviceData.revision, sizeof(deviceData.revision));
+
+  // Add Firmware Revision characteristic (using standard UUID)
+  BLECharacteristic *pFirmwareVersion = pDeviceInfoService->createCharacteristic(
+                                        BLEUUID(FIRMWARE_REVISION_UUID),
+                                        BLECharacteristic::PROPERTY_READ);
+  pFirmwareVersion->setValue(VERSION_STRING);
+
   // Create throttle characteristic with notify capability
   pThrottleCharacteristic = pConfigService->createCharacteristic(
     BLEUUID(THROTTLE_VALUE_UUID),
     BLECharacteristic::PROPERTY_READ |
-    BLECharacteristic::PROPERTY_WRITE |  // Add write permission
+    BLECharacteristic::PROPERTY_WRITE |
     BLECharacteristic::PROPERTY_NOTIFY |
     BLECharacteristic::PROPERTY_INDICATE
   );
+
   pThrottleCharacteristic->setCallbacks(new ThrottleValueCallbacks());
   pThrottleCharacteristic->addDescriptor(new BLE2902());
 
@@ -852,15 +871,15 @@ void updateESCTelemetryBLE(const STR_ESC_TELEMETRY_140& telemetry) {
 
   // Update voltage characteristic
   float voltage = telemetry.volts;
-  pESCVoltage->setValue((uint8_t*)&voltage, sizeof(voltage));
+  if(pESCVoltage) pESCVoltage->setValue((uint8_t*)&voltage, sizeof(voltage));
 
   // Update current characteristic
   float current = telemetry.amps;
-  pESCCurrent->setValue((uint8_t*)&current, sizeof(current));
+  if(pESCCurrent) pESCCurrent->setValue((uint8_t*)&current, sizeof(current));
 
   // Update RPM characteristic
   int32_t rpm = telemetry.eRPM;
-  pESCRPM->setValue((uint8_t*)&rpm, sizeof(rpm));
+  if(pESCRPM) pESCRPM->setValue((uint8_t*)&rpm, sizeof(rpm));
 
   // Create a struct for temperatures
   struct {
@@ -872,5 +891,5 @@ void updateESCTelemetryBLE(const STR_ESC_TELEMETRY_140& telemetry) {
     telemetry.cap_temp,
     telemetry.mcu_temp
   };
-  pESCTemps->setValue((uint8_t*)&temps, sizeof(temps));
+  if(pESCTemps) pESCTemps->setValue((uint8_t*)&temps, sizeof(temps));
 }
