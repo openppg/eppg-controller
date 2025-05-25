@@ -85,9 +85,9 @@ Preferences preferences;
 #define UNIX_TIME_UUID           "E09FF0B7-5D02-4FD5-889E-C4251A58D9E7"
 #define TIMEZONE_UUID            "CAE49D1A-7C21-4B0C-8520-416F3EF69DB1"
 
-#define CONTROLLER_BARO_TEMP_UUID "5438dddc-5878-4732-add9-3d4a349b7b0b"
-#define CONTROLLER_BARO_PRESSURE_UUID "81c03302-1f37-4cfc-919b-82e90a1a0ce4"
-#define CONTROLLER_CPU_TEMP_UUID "e7eae3fd-4023-4315-8511-895a8b7697c5"
+#define CONTROLLER_BARO_TEMP_UUID "5438DDDC-5878-4732-ADD9-3D4A349B7B0B"
+#define CONTROLLER_BARO_PRESSURE_UUID "81C03302-1F37-4CFC-919B-82E90A1A0CE4"
+#define CONTROLLER_CPU_TEMP_UUID "E7EAE3FD-4023-4315-8511-895A8B7697C5"
 
 #define THROTTLE_VALUE_UUID      "50AB3859-9FBF-4D30-BF97-2516EE632FAD"
 
@@ -523,8 +523,10 @@ void setupBLE() {
                                      BLECharacteristic::PROPERTY_READ);
   uint8_t mac[6];
   esp_read_mac(mac, ESP_MAC_WIFI_STA);
-  char macStr[18];
-  sprintf(macStr, "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  char macStr[13]; // 12 hex chars for MAC + 1 for null terminator
+  for (int i = 0; i < 6; i++) {
+    sprintf(&macStr[i*2], "%02X", mac[i]);
+  }
   pSerialNumber->setValue(macStr);
 
   // Add Hardware Revision characteristic (using standard UUID)
