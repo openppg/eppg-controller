@@ -163,8 +163,7 @@ void deviceStateUpdateTask(void* parameter) {
       if (pDeviceStateCharacteristic != nullptr && deviceConnected) {
         vTaskDelay(pdMS_TO_TICKS(20));  // Give BLE stack breathing room
         pDeviceStateCharacteristic->setValue(&state, sizeof(state));
-        // Temporarily remove the notify call
-        // pDeviceStateCharacteristic->notify();
+        pDeviceStateCharacteristic->notify();
       }
     }
     vTaskDelay(pdMS_TO_TICKS(5));

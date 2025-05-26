@@ -9,6 +9,7 @@
 // BLE globals
 extern BLECharacteristic* pThrottleCharacteristic;
 extern BLECharacteristic* pDeviceStateCharacteristic;
+extern BLECharacteristic* pPerformanceModeCharacteristic;
 extern BLEServer* pServer;
 extern bool deviceConnected;
 extern bool oldDeviceConnected;

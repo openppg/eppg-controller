@@ -2,6 +2,7 @@
 #include "sp140/buzzer.h"
 #include "sp140/structs.h"
 #include "sp140/device_state.h"
+#include "sp140/ble.h"
 
 // Platform-specific hardware config
 #include "sp140/esp32s3-config.h"
@@ -28,6 +29,16 @@ void perfModeSwitch() {
 
   if (currentState == DISARMED) {
     writeDeviceData();
+  }
+
+  // Update BLE characteristic and notify if connected
+  if (pPerformanceModeCharacteristic != nullptr) {
+    int performanceMode = deviceData.performance_mode;
+    pPerformanceModeCharacteristic->setValue(performanceMode);
+
+    if (deviceConnected) {
+      pPerformanceModeCharacteristic->notify();
+    }
   }
 
   uint16_t notify_melody[] = { 900, 1976 };

@@ -144,6 +144,13 @@ static BLECharacteristic* pControllerBaroTemp = nullptr;
 static BLECharacteristic* pControllerBaroPressure = nullptr;
 static BLECharacteristic* pControllerCPUTemp = nullptr;
 
+static BLECharacteristic* pMetricAltCharacteristic = nullptr;
+BLECharacteristic* pPerformanceModeCharacteristic = nullptr;
+static BLECharacteristic* pScreenRotationCharacteristic = nullptr;
+static BLECharacteristic* pSeaPressureCharacteristic = nullptr;
+static BLECharacteristic* pMetricTempCharacteristic = nullptr;
+static BLECharacteristic* pThemeCharacteristic = nullptr;
+
 void updateThrottleBLE(int value) {
   // Handle disconnecting
   if (!deviceConnected && oldDeviceConnected) {
@@ -245,6 +252,11 @@ class MetricAltCallbacks: public BLECharacteristicCallbacks {
 
       writeDeviceData();
       USBSerial.println("Metric alt setting saved to Preferences");
+
+      // Send notification if connected
+      if (deviceConnected && pMetricAltCharacteristic != nullptr) {
+        pMetricAltCharacteristic->notify();
+      }
     } else {
       USBSerial.println("Invalid value length - expected 1 byte");
     }
@@ -261,6 +273,11 @@ class PerformanceModeCallbacks: public BLECharacteristicCallbacks {
         deviceData.performance_mode = mode;
         writeDeviceData();
         USBSerial.println("Performance mode saved to Preferences");
+
+        // Send notification if connected
+        if (deviceConnected && pPerformanceModeCharacteristic != nullptr) {
+          pPerformanceModeCharacteristic->notify();
+        }
       } else {
         USBSerial.println("Invalid performance mode value");
       }
@@ -281,6 +298,11 @@ class ScreenRotationCallbacks: public BLECharacteristicCallbacks {
         writeDeviceData();
         //resetRotation(rotation);  // Update screen immediately
         USBSerial.println("Screen rotation saved to Preferences");
+
+        // Send notification if connected
+        if (deviceConnected && pScreenRotationCharacteristic != nullptr) {
+          pScreenRotationCharacteristic->notify();
+        }
       } else {
         USBSerial.println("Invalid rotation value");
       }
@@ -333,63 +355,6 @@ class MyServerCallbacks: public BLEServerCallbacks {
   }
 };
 
-class TimeCallbacks: public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic *pCharacteristic) {
-    std::string value = pCharacteristic->getValue();
-
-    if (value.length() == sizeof(time_t)) {  // Expecting just a unix timestamp
-      struct timeval tv;
-      time_t timestamp;
-
-      // Copy the incoming timestamp
-      memcpy(&timestamp, value.data(), sizeof(timestamp));
-
-      // Apply timezone offset
-      timestamp += deviceData.timezone_offset;
-
-      tv.tv_sec = timestamp;
-      tv.tv_usec = 0;
-
-      if (settimeofday(&tv, NULL) == 0) {
-        USBSerial.println("Time set successfully");
-      } else {
-        USBSerial.println("Failed to set time");
-      }
-    } else {
-      USBSerial.println("Invalid timestamp length");
-    }
-  }
-
-  void onRead(BLECharacteristic *pCharacteristic) {
-    time_t now;
-    time(&now);
-    now -= deviceData.timezone_offset;  // Remove timezone offset for UTC time
-    pCharacteristic->setValue((uint8_t*)&now, sizeof(now));
-  }
-};
-
-class TimezoneCallbacks: public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic *pCharacteristic) {
-    std::string value = pCharacteristic->getValue();
-
-    if (value.length() == 4) {  // Expecting 4 bytes for timezone offset
-      int32_t offset;
-      memcpy(&offset, value.data(), sizeof(offset));
-
-      deviceData.timezone_offset = offset;
-      writeDeviceData();
-      USBSerial.print("Timezone offset set to: ");
-      USBSerial.println(offset);
-    } else {
-      USBSerial.println("Invalid timezone offset length");
-    }
-  }
-
-  void onRead(BLECharacteristic *pCharacteristic) {
-    pCharacteristic->setValue((uint8_t*)&deviceData.timezone_offset, sizeof(deviceData.timezone_offset));
-  }
-};
-
 class BaroTempCallbacks: public BLECharacteristicCallbacks {
   void onRead(BLECharacteristic *pCharacteristic) {
     float temperature = getBaroTemperature();
@@ -418,6 +383,73 @@ class CPUTempCallbacks: public BLECharacteristicCallbacks {
   }
 };
 
+class SeaPressureCallbacks: public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *pCharacteristic) {
+    std::string value = pCharacteristic->getValue();
+
+    if (value.length() == 4) {  // Expecting 4 bytes for float
+      float pressure;
+      memcpy(&pressure, value.data(), sizeof(pressure));
+
+      // Validate pressure range (300-1200 hPa/mbar)
+      if (pressure >= 300.0f && pressure <= 1200.0f) {
+                deviceData.sea_pressure = pressure;
+        writeDeviceData();
+        USBSerial.println("Sea pressure saved to Preferences");
+      } else {
+        USBSerial.println("Invalid sea pressure value");
+      }
+    } else {
+      USBSerial.println("Invalid value length - expected 4 bytes");
+    }
+  }
+};
+
+class MetricTempCallbacks: public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *pCharacteristic) {
+    std::string value = pCharacteristic->getValue();
+
+    if (value.length() == 1) {  // Ensure we only get a single byte
+      // Convert the received byte to a boolean
+      deviceData.metric_temp = (value[0] != 0);
+
+      writeDeviceData();
+      USBSerial.println("Metric temp setting saved to Preferences");
+
+      // Send notification if connected
+      if (deviceConnected && pMetricTempCharacteristic != nullptr) {
+        pMetricTempCharacteristic->notify();
+      }
+    } else {
+      USBSerial.println("Invalid value length - expected 1 byte");
+    }
+  }
+};
+
+class ThemeCallbacks: public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *pCharacteristic) {
+    std::string value = pCharacteristic->getValue();
+
+    if (value.length() == 1) {
+      uint8_t theme = value[0];
+      if (theme <= 1) {  // Ensure value is 0 or 1
+        deviceData.theme = theme;
+        writeDeviceData();
+        USBSerial.println("Theme saved to Preferences");
+
+        // Send notification if connected
+        if (deviceConnected && pThemeCharacteristic != nullptr) {
+          pThemeCharacteristic->notify();
+        }
+      } else {
+        USBSerial.println("Invalid theme value");
+      }
+    } else {
+      USBSerial.println("Invalid value length - expected 1 byte");
+    }
+  }
+};
+
 void setupBLE() {
   // Initialize BLE
   BLEDevice::init("OpenPPG Controller");
@@ -425,13 +457,6 @@ void setupBLE() {
   pServer->setCallbacks(new MyServerCallbacks());
 
   BLEService *pConfigService = pServer->createService(BLEUUID(CONFIG_SERVICE_UUID), 30);
-
-  // Add time characteristics BEFORE starting the service
-  BLECharacteristic *pUnixTime = pConfigService->createCharacteristic(
-                                    BLEUUID(UNIX_TIME_UUID),
-                                    BLECharacteristic::PROPERTY_READ |
-                                    BLECharacteristic::PROPERTY_WRITE);
-  pUnixTime->setCallbacks(new TimeCallbacks());
 
   // Add barometer characteristics
   pControllerBaroTemp = pConfigService->createCharacteristic(
@@ -450,13 +475,6 @@ void setupBLE() {
                                 BLECharacteristic::PROPERTY_READ);
   pControllerCPUTemp->setCallbacks(new CPUTempCallbacks());
 
-  BLECharacteristic *pTimezone = pConfigService->createCharacteristic(
-                                  BLEUUID(TIMEZONE_UUID),
-                                  BLECharacteristic::PROPERTY_READ |
-                                  BLECharacteristic::PROPERTY_WRITE);
-  pTimezone->setCallbacks(new TimezoneCallbacks());
-  pTimezone->setValue((uint8_t*)&deviceData.timezone_offset, sizeof(deviceData.timezone_offset));
-
   // Add device state characteristic
   pDeviceStateCharacteristic = pConfigService->createCharacteristic(
     BLEUUID(DEVICE_STATE_UUID),
@@ -467,41 +485,75 @@ void setupBLE() {
   pDeviceStateCharacteristic->setValue(&initialState, sizeof(initialState));
   pDeviceStateCharacteristic->addDescriptor(new BLE2902());
 
-  BLECharacteristic *pMetricAlt = pConfigService->createCharacteristic(
+  pMetricAltCharacteristic = pConfigService->createCharacteristic(
                                    BLEUUID(METRIC_ALT_UUID),
                                    BLECharacteristic::PROPERTY_READ |
-                                   BLECharacteristic::PROPERTY_WRITE);
+                                   BLECharacteristic::PROPERTY_WRITE |
+                                   BLECharacteristic::PROPERTY_NOTIFY);
 
-  pMetricAlt->setCallbacks(new MetricAltCallbacks());
+  pMetricAltCharacteristic->setCallbacks(new MetricAltCallbacks());
+  pMetricAltCharacteristic->addDescriptor(new BLE2902());
 
   int metricAlt = deviceData.metric_alt ? 1 : 0;
-  pMetricAlt->setValue(metricAlt);
+  pMetricAltCharacteristic->setValue(metricAlt);
 
-  BLECharacteristic *pPerformanceMode = pConfigService->createCharacteristic(
+  pPerformanceModeCharacteristic = pConfigService->createCharacteristic(
                                          BLEUUID(PERFORMANCE_MODE_UUID),
                                          BLECharacteristic::PROPERTY_READ |
-                                         BLECharacteristic::PROPERTY_WRITE);
+                                         BLECharacteristic::PROPERTY_WRITE |
+                                         BLECharacteristic::PROPERTY_NOTIFY);
 
-  pPerformanceMode->setCallbacks(new PerformanceModeCallbacks());
+  pPerformanceModeCharacteristic->setCallbacks(new PerformanceModeCallbacks());
+  pPerformanceModeCharacteristic->addDescriptor(new BLE2902());
   int performanceMode = deviceData.performance_mode ? 1 : 0;
 
-  pPerformanceMode->setValue(performanceMode);
+  pPerformanceModeCharacteristic->setValue(performanceMode);
 
-  BLECharacteristic *pScreenRotation = pConfigService->createCharacteristic(
+  pScreenRotationCharacteristic = pConfigService->createCharacteristic(
                                         BLEUUID(SCREEN_ROTATION_UUID),
                                         BLECharacteristic::PROPERTY_READ |
-                                        BLECharacteristic::PROPERTY_WRITE);
+                                        BLECharacteristic::PROPERTY_WRITE |
+                                        BLECharacteristic::PROPERTY_NOTIFY);
 
-  pScreenRotation->setCallbacks(new ScreenRotationCallbacks());
+  pScreenRotationCharacteristic->setCallbacks(new ScreenRotationCallbacks());
+  pScreenRotationCharacteristic->addDescriptor(new BLE2902());
 
   // screen rotation is 1 or 3
   int screenRotation = deviceData.screen_rotation == 1 ? 1 : 3;
-  pScreenRotation->setValue(screenRotation);
+  pScreenRotationCharacteristic->setValue(screenRotation);
 
   BLECharacteristic *pArmedTime = pConfigService->createCharacteristic(
                                   BLEUUID(ARMED_TIME_UUID),
                                   BLECharacteristic::PROPERTY_READ);
   pArmedTime->setValue((uint8_t*)&deviceData.armed_time, sizeof(deviceData.armed_time));
+
+  // Create missing characteristics with NOTIFY capability
+  pSeaPressureCharacteristic = pConfigService->createCharacteristic(
+                                  BLEUUID(SEA_PRESSURE_UUID),
+                                  BLECharacteristic::PROPERTY_READ |
+                                  BLECharacteristic::PROPERTY_WRITE);
+  pSeaPressureCharacteristic->setCallbacks(new SeaPressureCallbacks());
+  pSeaPressureCharacteristic->setValue((uint8_t*)&deviceData.sea_pressure, sizeof(deviceData.sea_pressure));
+
+  pMetricTempCharacteristic = pConfigService->createCharacteristic(
+                                  BLEUUID(METRIC_TEMP_UUID),
+                                  BLECharacteristic::PROPERTY_READ |
+                                  BLECharacteristic::PROPERTY_WRITE |
+                                  BLECharacteristic::PROPERTY_NOTIFY);
+  pMetricTempCharacteristic->setCallbacks(new MetricTempCallbacks());
+  pMetricTempCharacteristic->addDescriptor(new BLE2902());
+  int metricTemp = deviceData.metric_temp ? 1 : 0;
+  pMetricTempCharacteristic->setValue(metricTemp);
+
+  pThemeCharacteristic = pConfigService->createCharacteristic(
+                                  BLEUUID(THEME_UUID),
+                                  BLECharacteristic::PROPERTY_READ |
+                                  BLECharacteristic::PROPERTY_WRITE |
+                                  BLECharacteristic::PROPERTY_NOTIFY);
+  pThemeCharacteristic->setCallbacks(new ThemeCallbacks());
+  pThemeCharacteristic->addDescriptor(new BLE2902());
+  int theme = deviceData.theme;
+  pThemeCharacteristic->setValue(theme);
 
   // Create the Device Information Service
   BLEService *pDeviceInfoService = pServer->createService(BLEUUID(DEVICE_INFO_SERVICE_UUID), 10);
