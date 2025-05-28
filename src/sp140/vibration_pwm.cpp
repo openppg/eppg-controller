@@ -19,13 +19,13 @@ bool vibeMotorInitialized = false;
  */
 void vibeTask(void* parameter) {
   VibeRequest request;
-  
+
   for (;;) {
     if (xQueueReceive(vibeQueue, &request, portMAX_DELAY) == pdTRUE) {
       if (vibeMotorInitialized && ENABLE_VIBE) {
         // Turn on vibration with specified intensity
         ledcWrite(VIBE_PWM_CHANNEL, request.intensity);
-        
+
         // Wait for specified duration
         vTaskDelay(pdMS_TO_TICKS(request.duration_ms));
         
@@ -43,19 +43,19 @@ void vibeTask(void* parameter) {
 bool initVibeMotor() {
   ledcSetup(VIBE_PWM_CHANNEL, VIBE_PWM_FREQ, VIBE_PWM_RESOLUTION);
   ledcAttachPin(VIBE_PWM_PIN, VIBE_PWM_CHANNEL);
-  
+
   // Create vibration queue
   vibeQueue = xQueueCreate(5, sizeof(VibeRequest));
   if (vibeQueue == NULL) {
     return false;
   }
-  
+
   // Create vibration task - pin to core 1 to keep it away from throttle task
   xTaskCreatePinnedToCore(vibeTask, "Vibration", 2048, NULL, 2, &vibeTaskHandle, 1);
   if (vibeTaskHandle == NULL) {
     return false;
   }
-  
+
   vibeMotorInitialized = true;
   return true;
 }
@@ -65,12 +65,12 @@ bool initVibeMotor() {
  */
 void pulseVibeMotor() {
   if (!vibeMotorInitialized || !ENABLE_VIBE || vibeQueue == NULL) return;
-  
+
   VibeRequest request = {
     .duration_ms = 400,
     .intensity = 255
   };
-  
+
   // Send request to queue (non-blocking)
   xQueueSend(vibeQueue, &request, 0);  // Don't wait if queue is full
 }
