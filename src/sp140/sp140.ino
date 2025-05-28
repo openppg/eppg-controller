@@ -706,9 +706,9 @@ void buttonHandlerTask(void* parameter) {
           buttonPressed = false;
           buttonPressStartTime = currentTime;
         }
-        // Handle cruise control (only when armed and held long enough)
-        else if (currentState == ARMED && currentHoldTime >= CRUISE_HOLD_TIME_MS) {
-          USBSerial.println("Cruise control activated");
+        // Handle cruise control (when armed or cruising and held long enough)
+        else if ((currentState == ARMED || currentState == ARMED_CRUISING) && currentHoldTime >= CRUISE_HOLD_TIME_MS) {
+          USBSerial.println("Cruise control button activated");
           toggleCruise();
           buttonPressed = false;
           buttonPressStartTime = currentTime;
