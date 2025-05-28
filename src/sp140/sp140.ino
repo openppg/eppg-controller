@@ -49,7 +49,7 @@ int8_t bmsCS = MCP_CS;
 #define FIRST_CLICK_MAX_HOLD_MS 500    // Maximum time for first click to be considered a click
 #define SECOND_HOLD_TIME_MS 2000       // How long to hold on second press to arm
 #define CRUISE_HOLD_TIME_MS 2000
-#define BUTTON_SEQUENCE_TIMEOUT_MS 1500 // Time window for arm/disarm sequence
+#define BUTTON_SEQUENCE_TIMEOUT_MS 1500  // Time window for arm/disarm sequence
 #define PERFORMANCE_MODE_HOLD_MS 3000   // Longer hold time for performance mode
 
 // Throttle control constants
@@ -910,7 +910,6 @@ void handleArmedThrottle(int potLvl, int& prevPotLvl) {
  * - ARMED: Normal throttle control with ramping and performance mode limits
  */
 void handleThrottle() {
-  static int maxPWM = ESC_MAX_PWM;
   static uint16_t currentCruiseThrottlePWM = ESC_MIN_PWM;
   static int prevPotLvl = 0;  // Local static variable for throttle smoothing
   uint16_t newPWM;
