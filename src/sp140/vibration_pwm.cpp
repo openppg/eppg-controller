@@ -15,24 +15,64 @@ const int VIBE_PWM_CHANNEL = 0;
 bool vibeMotorInitialized = false;
 
 /**
+ * Vibration task - processes vibration requests from queue
+ */
+void vibeTask(void* parameter) {
+  VibeRequest request;
+  
+  for (;;) {
+    if (xQueueReceive(vibeQueue, &request, portMAX_DELAY) == pdTRUE) {
+      if (vibeMotorInitialized && ENABLE_VIBE) {
+        // Turn on vibration with specified intensity
+        ledcWrite(VIBE_PWM_CHANNEL, request.intensity);
+        
+        // Wait for specified duration
+        vTaskDelay(pdMS_TO_TICKS(request.duration_ms));
+        
+        // Turn off vibration
+        ledcWrite(VIBE_PWM_CHANNEL, 0);
+      }
+    }
+  }
+}
+
+/**
  * Initialize the vibration motor pin for output using LEDC
  * @return Returns true if initialization was successful, false otherwise
  */
 bool initVibeMotor() {
   ledcSetup(VIBE_PWM_CHANNEL, VIBE_PWM_FREQ, VIBE_PWM_RESOLUTION);
   ledcAttachPin(VIBE_PWM_PIN, VIBE_PWM_CHANNEL);
+  
+  // Create vibration queue
+  vibeQueue = xQueueCreate(5, sizeof(VibeRequest));
+  if (vibeQueue == NULL) {
+    return false;
+  }
+  
+  // Create vibration task - pin to core 1 to keep it away from throttle task
+  xTaskCreatePinnedToCore(vibeTask, "Vibration", 2048, NULL, 2, &vibeTaskHandle, 1);
+  if (vibeTaskHandle == NULL) {
+    return false;
+  }
+  
   vibeMotorInitialized = true;
   return true;
 }
 
 /**
- * Pulse the vibration motor with a single 400ms pulse
+ * Pulse the vibration motor with a single 400ms pulse (non-blocking)
  */
 void pulseVibeMotor() {
-  if (!vibeMotorInitialized || !ENABLE_VIBE) return;
-  ledcWrite(VIBE_PWM_CHANNEL, 255);
-  vTaskDelay(pdMS_TO_TICKS(400));
-  ledcWrite(VIBE_PWM_CHANNEL, 0);
+  if (!vibeMotorInitialized || !ENABLE_VIBE || vibeQueue == NULL) return;
+  
+  VibeRequest request = {
+    .duration_ms = 400,
+    .intensity = 255
+  };
+  
+  // Send request to queue (non-blocking)
+  xQueueSend(vibeQueue, &request, 0);  // Don't wait if queue is full
 }
 
 /**
