@@ -752,9 +752,8 @@ void resumeLEDTask() {
 
 void runDisarmAlert() {
   u_int16_t disarm_melody[] = { 2637, 2093 };
-  // const unsigned int disarm_vibes[] = { 78, 49 };
-  pulseVibeMotor();  // Ensure this is the active call
   playMelody(disarm_melody, 2);
+  pulseVibeMotor();
 }
 
 void updateArmedTime() {
