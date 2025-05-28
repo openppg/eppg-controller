@@ -24,7 +24,8 @@
 #define ESC_MIN_PWM           1035  // ESC min
 #define ESC_MAX_PWM           1950  // ESC max 1900
 
-#define ENABLE_BUZ            true    // enable buzzer
+#define ENABLE_BUZZ           true    // enable buzzer
+#define ENABLE_VIBE           true    // enable vibration motor
 #define ENABLE_VIB_LOW_BAT    false   // vibrate if armed and battery voltage sags below min volts. Gets pilot's attention.
 #define POT_MIN_VALUE         0       // 12 bit ADC //TODO: use calibration and store in EEPROM
 #define POT_MAX_VALUE         4095    // 12 bit ADC //TODO: use calibration and store in EEPROM

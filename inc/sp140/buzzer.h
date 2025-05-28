@@ -6,8 +6,9 @@
 
 /**
  * Initialize the buzzer pin for output using LEDC
+ * @return Returns true if initialization was successful, false otherwise
  */
-void initBuzz();
+bool initBuzz();
 
 /**
  * Start playing a tone at the specified frequency

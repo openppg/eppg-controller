@@ -607,14 +607,14 @@ void setupTasks() {
 }
 
 void setup140() {
-  // TODO: write to CAN bus
-
-  initBuzz();
+  if (ENABLE_BUZZ) {
+    initBuzz();
+  }
   const int SDA_PIN = 44;
   const int SCL_PIN = 41;
   Wire.setPins(SDA_PIN, SCL_PIN);
   setupAltimeter(board_config.alt_wire);
-  if (board_config.enable_vib) {
+  if (ENABLE_VIBE) {
     initVibeMotor();
   }
 }
@@ -993,7 +993,7 @@ void afterCruiseEnd() {
 }
 
 void playCruiseSound() {
-  if (ENABLE_BUZ) {
+  if (ENABLE_BUZZ) {
     uint16_t notify_melody[] = { 1976 };
     playMelody(notify_melody, 1);
   }
@@ -1004,7 +1004,7 @@ void audioTask(void* parameter) {
 
   for (;;) {
     if (xQueueReceive(melodyQueue, &request, portMAX_DELAY) == pdTRUE) {
-      if (!ENABLE_BUZ) continue;
+      if (!ENABLE_BUZZ) continue;
 
       TickType_t nextWakeTime = xTaskGetTickCount();
       for (int i = 0; i < request.size; i++) {

@@ -28,19 +28,21 @@ static bool buzzerInitialized = false;
 
 /**
  * Initialize the buzzer pin for output using LEDC
+ * @return Returns true if initialization was successful, false otherwise
  */
-void initBuzz() {
+bool initBuzz() {
   // Setup LEDC channel for buzzer
   ledcSetup(BUZZER_PWM_CHANNEL, BUZZER_PWM_FREQUENCY, BUZZER_PWM_RESOLUTION);
   ledcAttachPin(board_config.buzzer_pin, BUZZER_PWM_CHANNEL);
   buzzerInitialized = true;
+  return true;
 }
 
 /**
  * Start playing a tone at the specified frequency
  */
 void startTone(uint16_t frequency) {
-  if (!buzzerInitialized || !ENABLE_BUZ) return;
+  if (!buzzerInitialized || !ENABLE_BUZZ) return;
 
   // Change the frequency for this channel
   ledcChangeFrequency(BUZZER_PWM_CHANNEL, frequency, BUZZER_PWM_RESOLUTION);
@@ -66,7 +68,7 @@ void stopTone() {
  * @return Returns true if the melody was queued successfully, false otherwise
  */
 bool playMelody(uint16_t melody[], int siz) {
-  if (!ENABLE_BUZ) return false;
+  if (!ENABLE_BUZZ) return false;
 
   // Create a static buffer for the melody
   static uint16_t melodyBuffer[32];  // Adjust size as needed
