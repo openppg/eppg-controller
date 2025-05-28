@@ -817,6 +817,7 @@ void toggleCruise() {
         } else {
           // Throttle is engaged and not too high, activate cruise
           changeDeviceState(ARMED_CRUISING);
+          pulseVibeMotor();
         }
       } else {
          // Throttle not engaged enough to set level, flash the icon
@@ -826,6 +827,7 @@ void toggleCruise() {
       break;
     case ARMED_CRUISING:
       changeDeviceState(ARMED);  // Disengage cruise
+      pulseVibeMotor();
       break;
     case DISARMED:
       // Do nothing
@@ -833,19 +835,87 @@ void toggleCruise() {
   }
 }
 
-
 bool throttleSafe(int threshold = POT_ENGAGEMENT_LEVEL) {
   pot->update();
   return pot->getRawValue() < threshold;
 }
 
+/**
+ * Checks if cruise control should be disengaged based on potentiometer override
+ * @param potVal Current raw potentiometer value
+ * @return true if cruise should be disengaged, false otherwise
+ */
+bool shouldDisengageCruise(int potVal) {
+  unsigned long timeSinceCruiseStart = millis() - cruisedAtMillis;
+
+  // Only check for disengagement *after* the grace period has passed
+  if (timeSinceCruiseStart > CRUISE_DISENGAGE_GRACE_PERIOD_MS) {
+    // Calculate the disengagement threshold based on the *raw potentiometer value* when cruise was engaged
+    int disengageThresholdPotVal = (int)(cruisedPotVal * CRUISE_DISENGAGE_POT_THRESHOLD_PERCENTAGE);
+
+    // If the *current raw potentiometer value* is greater than or equal to the threshold
+    if (potVal >= disengageThresholdPotVal) {
+      USBSerial.print("Cruise override: potVal ");
+      USBSerial.print(potVal);
+      USBSerial.print(" >= threshold ");
+      USBSerial.println(disengageThresholdPotVal);
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Handles throttle control when in ARMED_CRUISING state
+ * @param currentCruiseThrottlePWM Reference to the cruise PWM value
+ * @param potVal Current raw potentiometer value
+ */
+void handleCruisingThrottle(uint16_t& currentCruiseThrottlePWM, int potVal) {
+  // Set the ESC throttle to the determined (and potentially capped) cruise PWM
+  setESCThrottle(currentCruiseThrottlePWM);
+
+  // Check for cruise disengagement via potentiometer override
+  if (shouldDisengageCruise(potVal)) {
+    changeDeviceState(ARMED);  // Transition back to normal ARMED state
+    pulseVibeMotor();
+  }
+}
+
+/**
+ * Handles throttle control when in normal ARMED state (non-cruise)
+ * @param potLvl Smoothed potentiometer value
+ * @param prevPotLvl Reference to previous potentiometer level for ramping
+ */
+void handleArmedThrottle(int potLvl, int& prevPotLvl) {
+  // Apply throttle limits based on performance mode
+  int rampRate = deviceData.performance_mode == 0 ? CHILL_MODE_RAMP_RATE : SPORT_MODE_RAMP_RATE;
+  int maxPWM = deviceData.performance_mode == 0 ? CHILL_MODE_MAX_PWM : ESC_MAX_PWM;
+
+  // Apply throttle ramping limits using the smoothed value
+  potLvl = limitedThrottle(potLvl, prevPotLvl, rampRate);
+
+  // Map throttle value to PWM range using the smoothed value
+  int localThrottlePWM = map(potLvl, 0, 4095, ESC_MIN_PWM, maxPWM);
+  setESCThrottle(localThrottlePWM);
+  prevPotLvl = potLvl;  // Store smoothed value locally for next iteration
+}
+
+/**
+ * Main throttle handling function - processes potentiometer input and controls ESC based on device state
+ * Called every 20ms from throttleTask
+ *
+ * States handled:
+ * - DISARMED: ESC off, reset smoothing buffers
+ * - ARMED_CRUISING: Maintain cruise speed, check for potentiometer override
+ * - ARMED: Normal throttle control with ramping and performance mode limits
+ */
 void handleThrottle() {
   static int maxPWM = ESC_MAX_PWM;
   static uint16_t currentCruiseThrottlePWM = ESC_MIN_PWM;
   static int prevPotLvl = 0;  // Local static variable for throttle smoothing
   uint16_t newPWM;
 
-  // Check for throttle updates, potentially from afterCruiseStart setting the initial capped value
+  // Check for throttle updates from cruise activation
   if (xQueueReceive(throttleUpdateQueue, &newPWM, 0) == pdTRUE) {
     if (currentState == ARMED_CRUISING) {
       currentCruiseThrottlePWM = newPWM;
@@ -854,56 +924,27 @@ void handleThrottle() {
     }
   }
 
+  // Read and buffer potentiometer values
   pot->update();
-  int potVal = pot->getValue();  // Raw potentiometer value (0-4095)
-  potBuffer.push(potVal);        // Add raw value to buffer
+  int potVal = pot->getValue();     // Raw potentiometer value (0-4095)
+  potBuffer.push(potVal);           // Add raw value to buffer
   int potLvl = averagePotBuffer();  // Calculate smoothed value
 
-  // Handle throttle based on current state and update BLE accordingly
-  if (currentState == DISARMED) {
-    setESCThrottle(ESC_DISARMED_PWM);
-    prevPotLvl = 0;  // Reset throttle memory when disarmed
-    potBuffer.clear();  // Clear the buffer when disarmed
-  } else if (currentState == ARMED_CRUISING) {
-    // Set the ESC throttle to the determined (and potentially capped) cruise PWM
-    setESCThrottle(currentCruiseThrottlePWM);
+  // Handle throttle based on current device state
+  switch (currentState) {
+    case DISARMED:
+      setESCThrottle(ESC_DISARMED_PWM);
+      prevPotLvl = 0;     // Reset throttle memory when disarmed
+      potBuffer.clear();  // Clear the buffer when disarmed
+      break;
 
-    // Map PWM back to a representative throttle value for BLE display
-    // int mappedThrottleForBLE = map(currentCruiseThrottlePWM, ESC_MIN_PWM, ESC_MAX_PWM, 0, 4095);
-    // updateThrottleBLE(mappedThrottleForBLE);
-    // Don't update prevPotLvl in cruise mode to prevent drift
+    case ARMED_CRUISING:
+      handleCruisingThrottle(currentCruiseThrottlePWM, potVal);
+      break;
 
-    // --- Check for Cruise Disengagement via Potentiometer ---
-    unsigned long timeSinceCruiseStart = millis() - cruisedAtMillis;
-
-    // Only check for disengagement *after* the grace period has passed
-    if (timeSinceCruiseStart > CRUISE_DISENGAGE_GRACE_PERIOD_MS) {
-      // Calculate the disengagement threshold based on the *raw potentiometer value* when cruise was engaged
-      int disengageThresholdPotVal = (int)(cruisedPotVal * CRUISE_DISENGAGE_POT_THRESHOLD_PERCENTAGE);
-
-      // If the *current raw potentiometer value* is greater than or equal to the threshold
-      if (potVal >= disengageThresholdPotVal) {  // Use raw potVal for immediate disengage check
-        USBSerial.print("Cruise override: potVal ");
-        USBSerial.print(potVal);
-        USBSerial.print(" >= threshold ");
-        USBSerial.println(disengageThresholdPotVal);
-        changeDeviceState(ARMED);  // Transition back to normal ARMED state
-        return;  // Exit early as state has changed
-      }
-    }
-  } else if (currentState == ARMED) {  // Normal armed, non-cruise operation
-    // Apply throttle limits based on performance mode
-    int rampRate = deviceData.performance_mode == 0 ? CHILL_MODE_RAMP_RATE : SPORT_MODE_RAMP_RATE;
-    maxPWM = deviceData.performance_mode == 0 ? CHILL_MODE_MAX_PWM : ESC_MAX_PWM;
-
-    // Apply throttle ramping limits using the smoothed value
-    potLvl = limitedThrottle(potLvl, prevPotLvl, rampRate);
-
-    // Map throttle value to PWM range using the smoothed value
-    int localThrottlePWM = map(potLvl, 0, 4095, ESC_MIN_PWM, maxPWM);
-    setESCThrottle(localThrottlePWM);
-    prevPotLvl = potLvl;  // Store smoothed value locally for next iteration
-    // updateThrottleBLE(potLvl);  // Send actual (ramped) throttle value
+    case ARMED:
+      handleArmedThrottle(potLvl, prevPotLvl);
+      break;
   }
 
   // Read/Sync ESC Telemetry (runs in all armed states)
