@@ -751,10 +751,10 @@ void resumeLEDTask() {
 }
 
 void runDisarmAlert() {
-  u_int16_t disarm_melody[] = { 2093, 1976, 880 };
+  u_int16_t disarm_melody[] = { 2637, 2093 };
   // const unsigned int disarm_vibes[] = { 78, 49 };
   pulseVibeMotor();  // Ensure this is the active call
-  playMelody(disarm_melody, 3);
+  playMelody(disarm_melody, 2);
 }
 
 void updateArmedTime() {
@@ -947,7 +947,7 @@ int averagePotBuffer() {
 
 // get the PPG ready to fly
 bool armSystem() {
-  uint16_t arm_melody[] = { 1760, 1976, 2093 };
+  uint16_t arm_melody[] = { 2093, 2637 };
   // const unsigned int arm_vibes[] = { 1, 85, 1, 85, 1, 85, 1 };
   setESCThrottle(ESC_DISARMED_PWM);  // initialize the signal to low
 
@@ -956,7 +956,7 @@ bool armSystem() {
 
   vTaskSuspend(blinkLEDTaskHandle);
   setLEDs(HIGH);  // solid LED while armed
-  playMelody(arm_melody, 3);
+  playMelody(arm_melody, 2);
   // runVibePattern(arm_vibes, 7);
   pulseVibeMotor();  // Ensure this is the active call
   return true;
@@ -994,8 +994,8 @@ void afterCruiseEnd() {
 
 void playCruiseSound() {
   if (ENABLE_BUZ) {
-    uint16_t notify_melody[] = { 900, 900 };
-    playMelody(notify_melody, 2);
+    uint16_t notify_melody[] = { 1976 };
+    playMelody(notify_melody, 1);
   }
 }
 

@@ -43,7 +43,7 @@ bool playMelody(uint16_t melody[], int siz) {
   MelodyRequest request = {
     .notes = melodyBuffer,
     .size = (uint8_t)std::min(siz, 32),
-    .duration = 125  // Default duration
+    .duration = 100  // Default duration
   };
 
   // Send to queue with timeout
@@ -59,6 +59,6 @@ bool playMelody(uint16_t melody[], int siz) {
  * Plays a melody to indicate arm failure
  */
 void handleArmFailMelody() {
-  uint16_t arm_fail_melody[] = { 820, 640 };
-  playMelody(arm_fail_melody, 2);
+  uint16_t arm_fail_melody[] = { 1760 };
+  playMelody(arm_fail_melody, 1);
 }
