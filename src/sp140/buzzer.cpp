@@ -12,9 +12,13 @@
 #define DEBUG_SERIAL USBSerial
 
 // Buzzer PWM configuration - use different channel than vibration motor
-#define BUZZER_PWM_CHANNEL 1  // Different from vibration motor (channel 0)
-#define BUZZER_PWM_RESOLUTION 8
-#define BUZZER_PWM_FREQUENCY 1000  // Base frequency, will be changed for notes
+// PWM Channel allocation:
+// Channel 0: Vibration motor (vibration_pwm.cpp)
+// Channel 1: Buzzer (this file)
+// Channels 2-7: Available for future use
+const int BUZZER_PWM_CHANNEL = 1;
+const int BUZZER_PWM_RESOLUTION = 8;
+const int BUZZER_PWM_FREQUENCY = 1000;  // Base frequency, will be changed for notes
 
 // External global variables needed
 extern HardwareConfig board_config;
