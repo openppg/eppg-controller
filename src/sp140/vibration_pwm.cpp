@@ -4,6 +4,11 @@
 const int PWM_PIN = 46;  // TODO: move to config
 const int PWM_FREQ = 1000;  // Adjust as needed
 const int PWM_RESOLUTION = 8;  // 8-bit resolution
+
+// PWM Channel allocation:
+// Channel 0: Vibration motor (this file)
+// Channel 1: Buzzer (buzzer.cpp)
+// Channels 2-7: Available for future use
 const int PWM_CHANNEL = 0;
 
 bool vibeMotorInitialized = false;

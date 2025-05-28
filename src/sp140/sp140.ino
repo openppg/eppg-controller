@@ -782,6 +782,7 @@ void disarmSystem() {
 void handleArmFail() {
   startArmFailIconFlash();
   handleArmFailMelody();
+  pulseVibeMotor();
 }
 
 void toggleArm() {
@@ -1007,12 +1008,12 @@ void audioTask(void* parameter) {
 
       TickType_t nextWakeTime = xTaskGetTickCount();
       for (int i = 0; i < request.size; i++) {
-        tone(board_config.buzzer_pin, request.notes[i]);
+        startTone(request.notes[i]);
         TickType_t delayTicks = pdMS_TO_TICKS(request.duration);
         if (delayTicks == 0) { delayTicks = 1; }  // Ensure non-zero delay
         vTaskDelayUntil(&nextWakeTime, delayTicks);
       }
-      noTone(board_config.buzzer_pin);
+      stopTone();
     }
   }
 }

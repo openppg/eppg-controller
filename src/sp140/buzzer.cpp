@@ -11,15 +11,47 @@
 
 #define DEBUG_SERIAL USBSerial
 
+// Buzzer PWM configuration - use different channel than vibration motor
+#define BUZZER_PWM_CHANNEL 1  // Different from vibration motor (channel 0)
+#define BUZZER_PWM_RESOLUTION 8
+#define BUZZER_PWM_FREQUENCY 1000  // Base frequency, will be changed for notes
+
 // External global variables needed
 extern HardwareConfig board_config;
 extern QueueHandle_t melodyQueue;
 
+static bool buzzerInitialized = false;
+
 /**
- * Initialize the buzzer pin for output
+ * Initialize the buzzer pin for output using LEDC
  */
 void initBuzz() {
-  pinMode(board_config.buzzer_pin, OUTPUT);
+  // Setup LEDC channel for buzzer
+  ledcSetup(BUZZER_PWM_CHANNEL, BUZZER_PWM_FREQUENCY, BUZZER_PWM_RESOLUTION);
+  ledcAttachPin(board_config.buzzer_pin, BUZZER_PWM_CHANNEL);
+  buzzerInitialized = true;
+}
+
+/**
+ * Start playing a tone at the specified frequency
+ */
+void startTone(uint16_t frequency) {
+  if (!buzzerInitialized || !ENABLE_BUZ) return;
+
+  // Change the frequency for this channel
+  ledcChangeFrequency(BUZZER_PWM_CHANNEL, frequency, BUZZER_PWM_RESOLUTION);
+  // Set 50% duty cycle (square wave)
+  ledcWrite(BUZZER_PWM_CHANNEL, 128);
+}
+
+/**
+ * Stop playing the tone
+ */
+void stopTone() {
+  if (!buzzerInitialized) return;
+
+  // Set duty cycle to 0 to stop the tone
+  ledcWrite(BUZZER_PWM_CHANNEL, 0);
 }
 
 /**

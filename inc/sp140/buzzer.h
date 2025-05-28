@@ -5,9 +5,19 @@
 #include "sp140/structs.h"
 
 /**
- * Initialize the buzzer pin for output
+ * Initialize the buzzer pin for output using LEDC
  */
 void initBuzz();
+
+/**
+ * Start playing a tone at the specified frequency
+ */
+void startTone(uint16_t frequency);
+
+/**
+ * Stop playing the tone
+ */
+void stopTone();
 
 /**
  * Plays a melody using the piezo buzzer
