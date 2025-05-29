@@ -49,7 +49,7 @@ int8_t bmsCS = MCP_CS;
 #define FIRST_CLICK_MAX_HOLD_MS 500    // Maximum time for first click to be considered a click
 #define SECOND_HOLD_TIME_MS 2000       // How long to hold on second press to arm
 #define CRUISE_HOLD_TIME_MS 2000
-#define BUTTON_SEQUENCE_TIMEOUT_MS 1500 // Time window for arm/disarm sequence
+#define BUTTON_SEQUENCE_TIMEOUT_MS 1500  // Time window for arm/disarm sequence
 #define PERFORMANCE_MODE_HOLD_MS 3000   // Longer hold time for performance mode
 
 // Throttle control constants
@@ -225,6 +225,7 @@ TaskHandle_t blinkLEDTaskHandle = NULL;
 TaskHandle_t throttleTaskHandle = NULL;
 TaskHandle_t watchdogTaskHandle = NULL;
 TaskHandle_t spiCommTaskHandle = NULL;
+TaskHandle_t vibeTaskHandle = NULL;  // Vibration motor task
 
 QueueHandle_t melodyQueue = NULL;
 TaskHandle_t audioTaskHandle = NULL;
@@ -232,6 +233,7 @@ TaskHandle_t audioTaskHandle = NULL;
 QueueHandle_t bmsTelemetryQueue = NULL;
 QueueHandle_t throttleUpdateQueue = NULL;
 QueueHandle_t escTelemetryQueue = NULL;
+QueueHandle_t vibeQueue = NULL;  // Vibration motor queue
 
 unsigned long lastDisarmTime = 0;
 const unsigned long DISARM_COOLDOWN = 500;  // 500ms cooldown
@@ -607,14 +609,14 @@ void setupTasks() {
 }
 
 void setup140() {
-  // TODO: write to CAN bus
-
-  initBuzz();
+  if (ENABLE_BUZZ) {
+    initBuzz();
+  }
   const int SDA_PIN = 44;
   const int SCL_PIN = 41;
   Wire.setPins(SDA_PIN, SCL_PIN);
   setupAltimeter(board_config.alt_wire);
-  if (board_config.enable_vib) {
+  if (ENABLE_VIBE) {
     initVibeMotor();
   }
 }
@@ -706,9 +708,9 @@ void buttonHandlerTask(void* parameter) {
           buttonPressed = false;
           buttonPressStartTime = currentTime;
         }
-        // Handle cruise control (only when armed and held long enough)
-        else if (currentState == ARMED && currentHoldTime >= CRUISE_HOLD_TIME_MS) {
-          USBSerial.println("Cruise control activated");
+        // Handle cruise control (when armed or cruising and held long enough)
+        else if ((currentState == ARMED || currentState == ARMED_CRUISING) && currentHoldTime >= CRUISE_HOLD_TIME_MS) {
+          USBSerial.println("Cruise control button activated");
           toggleCruise();
           buttonPressed = false;
           buttonPressStartTime = currentTime;
@@ -751,10 +753,9 @@ void resumeLEDTask() {
 }
 
 void runDisarmAlert() {
-  u_int16_t disarm_melody[] = { 2093, 1976, 880 };
-  // const unsigned int disarm_vibes[] = { 78, 49 };
-  pulseVibeMotor();  // Ensure this is the active call
-  playMelody(disarm_melody, 3);
+  u_int16_t disarm_melody[] = { 2637, 2093 };
+  playMelody(disarm_melody, 2);
+  pulseVibeMotor();
 }
 
 void updateArmedTime() {
@@ -783,6 +784,7 @@ void disarmSystem() {
 void handleArmFail() {
   startArmFailIconFlash();
   handleArmFailMelody();
+  pulseVibeMotor();
 }
 
 void toggleArm() {
@@ -817,6 +819,7 @@ void toggleCruise() {
         } else {
           // Throttle is engaged and not too high, activate cruise
           changeDeviceState(ARMED_CRUISING);
+          pulseVibeMotor();
         }
       } else {
          // Throttle not engaged enough to set level, flash the icon
@@ -826,6 +829,7 @@ void toggleCruise() {
       break;
     case ARMED_CRUISING:
       changeDeviceState(ARMED);  // Disengage cruise
+      pulseVibeMotor();
       break;
     case DISARMED:
       // Do nothing
@@ -833,19 +837,86 @@ void toggleCruise() {
   }
 }
 
-
 bool throttleSafe(int threshold = POT_ENGAGEMENT_LEVEL) {
   pot->update();
   return pot->getRawValue() < threshold;
 }
 
+/**
+ * Checks if cruise control should be disengaged based on potentiometer override
+ * @param potVal Current raw potentiometer value
+ * @return true if cruise should be disengaged, false otherwise
+ */
+bool shouldDisengageCruise(int potVal) {
+  unsigned long timeSinceCruiseStart = millis() - cruisedAtMillis;
+
+  // Only check for disengagement *after* the grace period has passed
+  if (timeSinceCruiseStart > CRUISE_DISENGAGE_GRACE_PERIOD_MS) {
+    // Calculate the disengagement threshold based on the *raw potentiometer value* when cruise was engaged
+    int disengageThresholdPotVal = (int)(cruisedPotVal * CRUISE_DISENGAGE_POT_THRESHOLD_PERCENTAGE);
+
+    // If the *current raw potentiometer value* is greater than or equal to the threshold
+    if (potVal >= disengageThresholdPotVal) {
+      USBSerial.print("Cruise override: potVal ");
+      USBSerial.print(potVal);
+      USBSerial.print(" >= threshold ");
+      USBSerial.println(disengageThresholdPotVal);
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Handles throttle control when in ARMED_CRUISING state
+ * @param currentCruiseThrottlePWM Reference to the cruise PWM value
+ * @param potVal Current raw potentiometer value
+ */
+void handleCruisingThrottle(uint16_t& currentCruiseThrottlePWM, int potVal) {
+  // Set the ESC throttle to the determined (and potentially capped) cruise PWM
+  setESCThrottle(currentCruiseThrottlePWM);
+
+  // Check for cruise disengagement via potentiometer override
+  if (shouldDisengageCruise(potVal)) {
+    changeDeviceState(ARMED);  // Transition back to normal ARMED state
+    pulseVibeMotor();
+  }
+}
+
+/**
+ * Handles throttle control when in normal ARMED state (non-cruise)
+ * @param potLvl Smoothed potentiometer value
+ * @param prevPotLvl Reference to previous potentiometer level for ramping
+ */
+void handleArmedThrottle(int potLvl, int& prevPotLvl) {
+  // Apply throttle limits based on performance mode
+  int rampRate = deviceData.performance_mode == 0 ? CHILL_MODE_RAMP_RATE : SPORT_MODE_RAMP_RATE;
+  int maxPWM = deviceData.performance_mode == 0 ? CHILL_MODE_MAX_PWM : ESC_MAX_PWM;
+
+  // Apply throttle ramping limits using the smoothed value
+  potLvl = limitedThrottle(potLvl, prevPotLvl, rampRate);
+
+  // Map throttle value to PWM range using the smoothed value
+  int localThrottlePWM = map(potLvl, 0, 4095, ESC_MIN_PWM, maxPWM);
+  setESCThrottle(localThrottlePWM);
+  prevPotLvl = potLvl;  // Store smoothed value locally for next iteration
+}
+
+/**
+ * Main throttle handling function - processes potentiometer input and controls ESC based on device state
+ * Called every 20ms from throttleTask
+ *
+ * States handled:
+ * - DISARMED: ESC off, reset smoothing buffers
+ * - ARMED_CRUISING: Maintain cruise speed, check for potentiometer override
+ * - ARMED: Normal throttle control with ramping and performance mode limits
+ */
 void handleThrottle() {
-  static int maxPWM = ESC_MAX_PWM;
   static uint16_t currentCruiseThrottlePWM = ESC_MIN_PWM;
   static int prevPotLvl = 0;  // Local static variable for throttle smoothing
   uint16_t newPWM;
 
-  // Check for throttle updates, potentially from afterCruiseStart setting the initial capped value
+  // Check for throttle updates from cruise activation
   if (xQueueReceive(throttleUpdateQueue, &newPWM, 0) == pdTRUE) {
     if (currentState == ARMED_CRUISING) {
       currentCruiseThrottlePWM = newPWM;
@@ -854,56 +925,27 @@ void handleThrottle() {
     }
   }
 
+  // Read and buffer potentiometer values
   pot->update();
-  int potVal = pot->getValue();  // Raw potentiometer value (0-4095)
-  potBuffer.push(potVal);        // Add raw value to buffer
+  int potVal = pot->getValue();     // Raw potentiometer value (0-4095)
+  potBuffer.push(potVal);           // Add raw value to buffer
   int potLvl = averagePotBuffer();  // Calculate smoothed value
 
-  // Handle throttle based on current state and update BLE accordingly
-  if (currentState == DISARMED) {
-    setESCThrottle(ESC_DISARMED_PWM);
-    prevPotLvl = 0;  // Reset throttle memory when disarmed
-    potBuffer.clear();  // Clear the buffer when disarmed
-  } else if (currentState == ARMED_CRUISING) {
-    // Set the ESC throttle to the determined (and potentially capped) cruise PWM
-    setESCThrottle(currentCruiseThrottlePWM);
+  // Handle throttle based on current device state
+  switch (currentState) {
+    case DISARMED:
+      setESCThrottle(ESC_DISARMED_PWM);
+      prevPotLvl = 0;     // Reset throttle memory when disarmed
+      potBuffer.clear();  // Clear the buffer when disarmed
+      break;
 
-    // Map PWM back to a representative throttle value for BLE display
-    // int mappedThrottleForBLE = map(currentCruiseThrottlePWM, ESC_MIN_PWM, ESC_MAX_PWM, 0, 4095);
-    // updateThrottleBLE(mappedThrottleForBLE);
-    // Don't update prevPotLvl in cruise mode to prevent drift
+    case ARMED_CRUISING:
+      handleCruisingThrottle(currentCruiseThrottlePWM, potVal);
+      break;
 
-    // --- Check for Cruise Disengagement via Potentiometer ---
-    unsigned long timeSinceCruiseStart = millis() - cruisedAtMillis;
-
-    // Only check for disengagement *after* the grace period has passed
-    if (timeSinceCruiseStart > CRUISE_DISENGAGE_GRACE_PERIOD_MS) {
-      // Calculate the disengagement threshold based on the *raw potentiometer value* when cruise was engaged
-      int disengageThresholdPotVal = (int)(cruisedPotVal * CRUISE_DISENGAGE_POT_THRESHOLD_PERCENTAGE);
-
-      // If the *current raw potentiometer value* is greater than or equal to the threshold
-      if (potVal >= disengageThresholdPotVal) {  // Use raw potVal for immediate disengage check
-        USBSerial.print("Cruise override: potVal ");
-        USBSerial.print(potVal);
-        USBSerial.print(" >= threshold ");
-        USBSerial.println(disengageThresholdPotVal);
-        changeDeviceState(ARMED);  // Transition back to normal ARMED state
-        return;  // Exit early as state has changed
-      }
-    }
-  } else if (currentState == ARMED) {  // Normal armed, non-cruise operation
-    // Apply throttle limits based on performance mode
-    int rampRate = deviceData.performance_mode == 0 ? CHILL_MODE_RAMP_RATE : SPORT_MODE_RAMP_RATE;
-    maxPWM = deviceData.performance_mode == 0 ? CHILL_MODE_MAX_PWM : ESC_MAX_PWM;
-
-    // Apply throttle ramping limits using the smoothed value
-    potLvl = limitedThrottle(potLvl, prevPotLvl, rampRate);
-
-    // Map throttle value to PWM range using the smoothed value
-    int localThrottlePWM = map(potLvl, 0, 4095, ESC_MIN_PWM, maxPWM);
-    setESCThrottle(localThrottlePWM);
-    prevPotLvl = potLvl;  // Store smoothed value locally for next iteration
-    // updateThrottleBLE(potLvl);  // Send actual (ramped) throttle value
+    case ARMED:
+      handleArmedThrottle(potLvl, prevPotLvl);
+      break;
   }
 
   // Read/Sync ESC Telemetry (runs in all armed states)
@@ -947,7 +989,7 @@ int averagePotBuffer() {
 
 // get the PPG ready to fly
 bool armSystem() {
-  uint16_t arm_melody[] = { 1760, 1976, 2093 };
+  uint16_t arm_melody[] = { 2093, 2637 };
   // const unsigned int arm_vibes[] = { 1, 85, 1, 85, 1, 85, 1 };
   setESCThrottle(ESC_DISARMED_PWM);  // initialize the signal to low
 
@@ -956,7 +998,7 @@ bool armSystem() {
 
   vTaskSuspend(blinkLEDTaskHandle);
   setLEDs(HIGH);  // solid LED while armed
-  playMelody(arm_melody, 3);
+  playMelody(arm_melody, 2);
   // runVibePattern(arm_vibes, 7);
   pulseVibeMotor();  // Ensure this is the active call
   return true;
@@ -987,15 +1029,25 @@ void afterCruiseStart() {
 }
 
 void afterCruiseEnd() {
+  // Instead of clearing the buffer which causes throttle to drop to 0,
+  // pre-populate it with the current throttle position to ensure smooth transition
+  pot->update();
+  int currentPotVal = pot->getValue();
+  
+  // Pre-fill the buffer with current pot value for smooth transition
+  potBuffer.clear();  // Clear first
+  for (int i = 0; i < 8; i++) {  // Buffer size is 8
+    potBuffer.push(currentPotVal);
+  }
+  
   cruisedPotVal = 0;
   //pulseVibeMotor();
-  resetSmoothing();  // Clear the pot buffer to reset ramp baseline
 }
 
 void playCruiseSound() {
-  if (ENABLE_BUZ) {
-    uint16_t notify_melody[] = { 900, 900 };
-    playMelody(notify_melody, 2);
+  if (ENABLE_BUZZ) {
+    uint16_t notify_melody[] = { 1976 };
+    playMelody(notify_melody, 1);
   }
 }
 
@@ -1004,16 +1056,16 @@ void audioTask(void* parameter) {
 
   for (;;) {
     if (xQueueReceive(melodyQueue, &request, portMAX_DELAY) == pdTRUE) {
-      if (!ENABLE_BUZ) continue;
+      if (!ENABLE_BUZZ) continue;
 
       TickType_t nextWakeTime = xTaskGetTickCount();
       for (int i = 0; i < request.size; i++) {
-        tone(board_config.buzzer_pin, request.notes[i]);
+        startTone(request.notes[i]);
         TickType_t delayTicks = pdMS_TO_TICKS(request.duration);
         if (delayTicks == 0) { delayTicks = 1; }  // Ensure non-zero delay
         vTaskDelayUntil(&nextWakeTime, delayTicks);
       }
-      noTone(board_config.buzzer_pin);
+      stopTone();
     }
   }
 }

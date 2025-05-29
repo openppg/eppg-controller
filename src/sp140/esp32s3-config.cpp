@@ -2,8 +2,8 @@
 
 #include "../../inc/sp140/esp32s3-config.h"
 
+#define LED_BUILTIN  21  // m5 stamp
 
-#define LED_BUILTIN  21  // m5 stack
 // V1 configuration
 HardwareConfig s3_config = {
   .button_top = 1,

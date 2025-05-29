@@ -447,7 +447,10 @@ void setupBLE() {
   BLECharacteristic *pFirmwareVersion = pConfigService->createCharacteristic(
                                         BLEUUID(FW_VERSION_UUID),
                                         BLECharacteristic::PROPERTY_READ);
-  pFirmwareVersion->setValue(VERSION_STRING);
+
+  // Use 2-byte format: [major, minor] instead of string
+  uint8_t versionBytes[2] = {VERSION_MAJOR, VERSION_MINOR};
+  pFirmwareVersion->setValue(versionBytes, sizeof(versionBytes));
 
   BLECharacteristic *pHardwareRevision = pConfigService->createCharacteristic(
                                          BLEUUID(HW_REVISION_UUID),

@@ -21,6 +21,11 @@ STR_ESC_TELEMETRY_140 escTelemetryData = {
   .escState = TelemetryState::NOT_CONNECTED
 };
 
+/**
+ * Initialize the ESC communication system
+ * Sets up the CAN bus (TWAI) interface and configures the ESC with default settings
+ * Must be called before any other ESC functions
+ */
 void initESC() {
   escTwaiInitialized = setupTWAI();
   if (!escTwaiInitialized) {
@@ -39,6 +44,12 @@ void initESC() {
   delay(20);  // Wait for ESC to process the command
 }
 
+/**
+ * Set the ESC throttle value
+ * @param throttlePWM Throttle value in microseconds (1000-2000)
+ *                    1000 = minimum throttle, 2000 = maximum throttle
+ * Note: The ESC requires messages at least every 300ms or it will reset
+ */
 void setESCThrottle(int throttlePWM) {
   // Input validation
   if (throttlePWM < 1000 || throttlePWM > 2000) {
@@ -50,6 +61,12 @@ void setESCThrottle(int throttlePWM) {
   esc.setThrottleSettings2(scaledThrottle);
 }
 
+/**
+ * Read telemetry data from the ESC
+ * Updates the global escTelemetryData structure with current values
+ * Should be called regularly (every 20-50ms) to maintain connection
+ * Also monitors connection state and sets NOT_CONNECTED if timeout occurs
+ */
 void readESCTelemetry() {
   // Only proceed if TWAI is initialized
   if (!escTwaiInitialized) { return; }  // NOLINT(whitespace/newline)
@@ -120,7 +137,11 @@ void readESCTelemetry() {
   adapter.processTxRxOnce();  // Process CAN messages
 }
 
-// CAN specific setup
+/**
+ * Setup the ESP32 TWAI (Two-Wire Automotive Interface) for CAN communication
+ * Configures the CAN bus at 1Mbps for communication with the ESC
+ * @return true if setup was successful, false otherwise
+ */
 bool setupTWAI() {
   // Check if already installed by checking status
   twai_status_info_t status_info;
@@ -181,6 +202,10 @@ bool setupTWAI() {
   return true;
 }
 
+/**
+ * Debug function to dump ESC throttle response data to serial
+ * @param res Pointer to the throttle response structure from ESC
+ */
 void dumpThrottleResponse(const sine_esc_SetThrottleSettings2Response *res) {
   USBSerial.println("Got SetThrottleSettings2 response");
 
@@ -227,6 +252,10 @@ void dumpThrottleResponse(const sine_esc_SetThrottleSettings2Response *res) {
   USBSerial.println(res->time_10ms);
 }
 
+/**
+ * Debug function to dump all available ESC messages to serial
+ * Displays hardware info, throttle response, and rotation speed settings if available
+ */
 void dumpESCMessages(void) {
   const SineEscModel &model = esc.getModel();
 
@@ -251,14 +280,34 @@ void dumpESCMessages(void) {
   }
 }
 
+/**
+ * Map a double value from one range to another
+ * @param x Input value to map
+ * @param in_min Minimum of input range
+ * @param in_max Maximum of input range
+ * @param out_min Minimum of output range
+ * @param out_max Maximum of output range
+ * @return Mapped value in output range
+ */
 double mapDouble(double x, double in_min, double in_max, double out_min, double out_max) {
   return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
+/**
+ * Get the highest temperature reading from all ESC sensors
+ * @param telemetry ESC telemetry data structure
+ * @return The highest temperature value among motor, MOSFET, and capacitor temps
+ */
 float getHighestTemp(const STR_ESC_TELEMETRY_140& telemetry) {
   return max(telemetry.motor_temp, max(telemetry.mos_temp, telemetry.cap_temp));
 }
 
+/**
+ * Check temperature state for a specific component
+ * @param temp Temperature value to check
+ * @param component Component type (ESC_MOS, ESC_MCU, ESC_CAP, or MOTOR)
+ * @return Temperature state (NORMAL, WARNING, CRITICAL, or INVALID)
+ */
 TempState checkTempState(float temp, TempComponent component) {
   // Check for invalid temperature readings
   if (temp < -50 || temp > 200) {

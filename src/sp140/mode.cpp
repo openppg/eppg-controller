@@ -30,6 +30,6 @@ void perfModeSwitch() {
     writeDeviceData();
   }
 
-  uint16_t notify_melody[] = { 900, 1976 };
-  playMelody(notify_melody, 2);
+  uint16_t notify_melody[] = { 1976 };
+  playMelody(notify_melody, 1);
 }
