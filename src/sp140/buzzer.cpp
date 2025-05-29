@@ -2,8 +2,6 @@
 
 #include <Arduino.h>
 
-#include <algorithm>
-
 #include "sp140/shared-config.h"
 #include "sp140/esp32s3-config.h"
 #include <FreeRTOS.h>

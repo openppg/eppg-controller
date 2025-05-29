@@ -225,6 +225,7 @@ TaskHandle_t blinkLEDTaskHandle = NULL;
 TaskHandle_t throttleTaskHandle = NULL;
 TaskHandle_t watchdogTaskHandle = NULL;
 TaskHandle_t spiCommTaskHandle = NULL;
+TaskHandle_t vibeTaskHandle = NULL;  // Vibration motor task
 
 QueueHandle_t melodyQueue = NULL;
 TaskHandle_t audioTaskHandle = NULL;
@@ -232,6 +233,7 @@ TaskHandle_t audioTaskHandle = NULL;
 QueueHandle_t bmsTelemetryQueue = NULL;
 QueueHandle_t throttleUpdateQueue = NULL;
 QueueHandle_t escTelemetryQueue = NULL;
+QueueHandle_t vibeQueue = NULL;  // Vibration motor queue
 
 unsigned long lastDisarmTime = 0;
 const unsigned long DISARM_COOLDOWN = 500;  // 500ms cooldown
@@ -1027,9 +1029,19 @@ void afterCruiseStart() {
 }
 
 void afterCruiseEnd() {
+  // Instead of clearing the buffer which causes throttle to drop to 0,
+  // pre-populate it with the current throttle position to ensure smooth transition
+  pot->update();
+  int currentPotVal = pot->getValue();
+  
+  // Pre-fill the buffer with current pot value for smooth transition
+  potBuffer.clear();  // Clear first
+  for (int i = 0; i < 8; i++) {  // Buffer size is 8
+    potBuffer.push(currentPotVal);
+  }
+  
   cruisedPotVal = 0;
   //pulseVibeMotor();
-  resetSmoothing();  // Clear the pot buffer to reset ramp baseline
 }
 
 void playCruiseSound() {

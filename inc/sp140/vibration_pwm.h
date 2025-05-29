@@ -14,6 +14,16 @@ enum VibePattern {
   VIBE_WAVE
 };
 
+// Vibration request structure for queue
+struct VibeRequest {
+  uint16_t duration_ms;
+  uint8_t intensity;
+};
+
+// Task and queue handles
+extern TaskHandle_t vibeTaskHandle;
+extern QueueHandle_t vibeQueue;
+
 /**
  * Initialize the vibration motor pin for output using LEDC
  * @return Returns true if initialization was successful, false otherwise
