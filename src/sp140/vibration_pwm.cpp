@@ -28,7 +28,7 @@ void vibeTask(void* parameter) {
 
         // Wait for specified duration
         vTaskDelay(pdMS_TO_TICKS(request.duration_ms));
-        
+
         // Turn off vibration
         ledcWrite(VIBE_PWM_CHANNEL, 0);
       }
