@@ -4,14 +4,6 @@
 #ifndef INC_SP140_SHARED_CONFIG_H_
 #define INC_SP140_SHARED_CONFIG_H_
 
-// Batt setting now configurable by user. Read from device data
-#define BATT_MIN_V 60.0  // 24 * 2.5V per cell
-
-// Calibration
-#define MAMP_OFFSET 200
-#define VOLT_OFFSET 1.5
-
-
 #define CRUISE_GRACE 1.5  // 1.5 sec period to get off throttle
 #define POT_ENGAGEMENT_LEVEL 0.05 * POT_MAX_VALUE  // 5% or less // TODO calibrate for each device
 
