@@ -168,15 +168,15 @@
  * Enable built-in fonts - only enable a minimal set
  */
 #define LV_FONT_MONTSERRAT_8  0
-#define LV_FONT_MONTSERRAT_10 1  /* For small text like voltage */
+#define LV_FONT_MONTSERRAT_10 0
 #define LV_FONT_MONTSERRAT_12 1  /* For medium text, temperatures, and voltage labels */
 #define LV_FONT_MONTSERRAT_14 1  /* Used as default font */
 #define LV_FONT_MONTSERRAT_16 1  /* For battery percentage and power */
 #define LV_FONT_MONTSERRAT_18 0
-#define LV_FONT_MONTSERRAT_20 1  /* For status text */
+#define LV_FONT_MONTSERRAT_20 0
 #define LV_FONT_MONTSERRAT_22 0
-#define LV_FONT_MONTSERRAT_24 1  /* For altitude */
-#define LV_FONT_MONTSERRAT_26 1
+#define LV_FONT_MONTSERRAT_24 1
+#define LV_FONT_MONTSERRAT_26 0
 #define LV_FONT_MONTSERRAT_28 1
 #define LV_FONT_MONTSERRAT_30 0
 #define LV_FONT_MONTSERRAT_32 0
@@ -253,9 +253,9 @@ Documentation of the widgets: https://docs.lvgl.io/latest/en/html/widgets/index.
 
 #define LV_USE_LINE       1
 
-#define LV_USE_ROLLER     1  /* Don't need roller */
+#define LV_USE_ROLLER     0  /* Don't need roller */
 
-#define LV_USE_SLIDER     1  /* Don't need slider */
+#define LV_USE_SLIDER     0  /* Don't need slider */
 
 #define LV_USE_SPAN       1
 #if LV_USE_SPAN
@@ -267,10 +267,9 @@ Documentation of the widgets: https://docs.lvgl.io/latest/en/html/widgets/index.
 
 #define LV_USE_TEXTAREA   1  /* Required by other components */
 
-/* Add spinner widget */
 #define LV_USE_SPINNER    1
 
-/* Add keyboard widget (set to 0 since we don't use it but dependency might exist) */
+/* keyboard widget (set to 0 since we don't use it) */
 #define LV_USE_KEYBOARD   0
 
 /*==================
@@ -285,7 +284,7 @@ Documentation of the widgets: https://docs.lvgl.io/latest/en/html/widgets/index.
     #define LV_THEME_DEFAULT_DARK 0
 
     /*1: Enable grow on press*/
-    #define LV_THEME_DEFAULT_GROW 1
+    #define LV_THEME_DEFAULT_GROW 0
 
     /*Default transition time in [ms]*/
     #define LV_THEME_DEFAULT_TRANSITION_TIME 80
