@@ -83,7 +83,7 @@ static lv_obj_t* power_label = NULL;
 static lv_obj_t* power_bar = NULL;
 static lv_obj_t* perf_mode_label = NULL;
 static lv_obj_t* armed_time_label = NULL;
-static lv_obj_t* altitude_label = NULL;
+static lv_obj_t* altitude_char_labels[7] = {NULL};  // Individual character position labels
 static lv_obj_t* batt_temp_label = NULL;
 static lv_obj_t* esc_temp_label = NULL;
 static lv_obj_t* motor_temp_label = NULL;
@@ -393,16 +393,67 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_style_text_align(armed_time_label, LV_TEXT_ALIGN_RIGHT, 0);
 
   // Bottom section - altitude and temperatures
-  altitude_label = lv_label_create(main_screen);
-  // Use monospace font for altitude
-  lv_obj_set_style_text_font(altitude_label, &roboto_mono_16, 0);  // Use monospace font for altitude
-  lv_obj_set_style_text_color(altitude_label,
-                             darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
-  // Right-align text so numbers grow from right to left
-  lv_obj_set_style_text_align(altitude_label, LV_TEXT_ALIGN_RIGHT, 0);
-  // Position for right-aligned altitude display - M moved to fill the gap
-  lv_obj_set_size(altitude_label, 95, LV_SIZE_CONTENT);  // Keep same width
-  lv_obj_align(altitude_label, LV_ALIGN_BOTTOM_LEFT, 25, -5);  // Moved further right to close the gap
+  // Create individual character position labels for fixed positioning
+  // Layout: [thousands][hundreds][tens][ones][.][tenths][m]  (7 positions total)
+    int char_width = 19;      // Slightly tighter character width spacing
+  int decimal_width = 8;    // Slightly wider decimal point for proportional spacing
+  int char_height = 24;     // Larger character height
+  int unit_width = 12;      // Narrower width for unit character to reduce buffer
+
+  // Calculate total width needed and position from the right
+  int total_width = 5 * char_width + decimal_width + unit_width;  // 5 full chars + decimal + narrower unit
+  int start_x = 120 - total_width - 2;  // Start only 2px from right edge (closer to border)
+  int start_y = 128 - 5 - char_height;  // Y position
+
+  // Position array for each character (X offsets)
+  int char_positions[7] = {
+    start_x + 0 * char_width,           // Position 0: thousands digit
+    start_x + 1 * char_width,           // Position 1: hundreds digit
+    start_x + 2 * char_width,           // Position 2: tens digit
+    start_x + 3 * char_width,           // Position 3: ones digit
+    start_x + 4 * char_width,           // Position 4: decimal point (will adjust width)
+    start_x + 4 * char_width + decimal_width,  // Position 5: tenths digit
+    start_x + 5 * char_width + decimal_width       // Position 6: unit letter (moved 5px right total)
+  };
+
+      for (int i = 0; i < 7; i++) {
+    altitude_char_labels[i] = lv_label_create(main_screen);
+
+    // Use smaller font for unit character (position 6), larger font for others
+    if (i == 6) {
+      lv_obj_set_style_text_font(altitude_char_labels[i], &lv_font_montserrat_14, 0);  // Smaller font for unit character
+    } else {
+      lv_obj_set_style_text_font(altitude_char_labels[i], &lv_font_montserrat_28, 0);  // Two font sizes larger for numbers
+    }
+
+    lv_obj_set_style_text_color(altitude_char_labels[i], darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+    lv_obj_set_style_text_align(altitude_char_labels[i], LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_pad_all(altitude_char_labels[i], 0, 0);  // No padding
+
+    // Set width based on position and display mode
+    int width = char_width;  // Default to normal width
+    if (i == 4) {
+      // Position 4 gets narrow width only when displaying meters (with decimal point)
+      // For feet, position 4 should get normal width since it holds a digit
+      width = decimal_width;  // This will be overridden dynamically during updates
+    } else if (i == 6) {
+      // Position 6 (unit character) gets narrower width to reduce buffer
+      width = unit_width;
+    }
+    lv_obj_set_size(altitude_char_labels[i], width, char_height);
+
+    // Adjust Y position for unit character to align with baseline
+    int y_pos = start_y;
+    if (i == 6) {
+      y_pos += 11;  // Move smaller unit character down 11 pixels to align with baseline of 28pt font
+    }
+    lv_obj_set_pos(altitude_char_labels[i], char_positions[i], y_pos);
+
+    // Initialize with empty text
+    lv_label_set_text(altitude_char_labels[i], "");
+  }
+
+
 
   // Warning/Error message label
   /* // REMOVED
@@ -962,27 +1013,137 @@ void updateLvglMainScreen(
     lv_label_set_text(armed_time_label, timeBuffer);
   }
 
-  // Update altitude
-  char altBuffer[15];
+        // Update altitude - populate individual character positions
   if (altitude == __FLT_MIN__) {
-    lv_label_set_text(altitude_label, "ERR");
-    lv_obj_set_style_text_color(altitude_label, LVGL_RED, 0);
+    // Show error in first few positions
+    lv_label_set_text(altitude_char_labels[0], "E");
+    lv_label_set_text(altitude_char_labels[1], "R");
+    lv_label_set_text(altitude_char_labels[2], "R");
+    lv_label_set_text(altitude_char_labels[3], "");
+    lv_label_set_text(altitude_char_labels[4], "");
+    lv_label_set_text(altitude_char_labels[5], "");
+    lv_label_set_text(altitude_char_labels[6], "");
   } else {
-    if (deviceData.metric_alt) {
+    if (false) {  // Force feet display for testing
       // Explicitly handle small negative values to avoid "-0.0"
       float display_altitude = altitude;
       if (display_altitude > -0.05f && display_altitude < 0.0f) {
           display_altitude = 0.0f;
       }
-      snprintf(altBuffer, sizeof(altBuffer), "%.1fm", display_altitude);  // Normal spacing
-      lv_label_set_text(altitude_label, altBuffer);
-    } else {
-      snprintf(altBuffer, sizeof(altBuffer), "%df", static_cast<int>(round(altitude * 3.28084)));  // Normal spacing
-      lv_label_set_text(altitude_label, altBuffer);
+
+      // Convert to integer parts for individual digit extraction
+      int whole_part = static_cast<int>(display_altitude);
+      int decimal_part = static_cast<int>(round((display_altitude - whole_part) * 10));
+
+      // Extract individual digits
+      int thousands = whole_part / 1000;
+      int hundreds = (whole_part / 100) % 10;
+      int tens = (whole_part / 10) % 10;
+      int ones = whole_part % 10;
+
+                  // Populate each character position using static character buffers
+      static char digit_buffers[7][2];  // Static buffers for single digits
+
+      // Thousands digit
+      if (thousands > 0) {
+        snprintf(digit_buffers[0], 2, "%d", thousands);
+        lv_label_set_text(altitude_char_labels[0], digit_buffers[0]);
+      } else {
+        lv_label_set_text(altitude_char_labels[0], "");
+      }
+
+      // Hundreds digit
+      if (thousands > 0 || hundreds > 0) {
+        snprintf(digit_buffers[1], 2, "%d", hundreds);
+        lv_label_set_text(altitude_char_labels[1], digit_buffers[1]);
+      } else {
+        lv_label_set_text(altitude_char_labels[1], "");
+      }
+
+      // Tens digit
+      if (whole_part >= 10) {
+        snprintf(digit_buffers[2], 2, "%d", tens);
+        lv_label_set_text(altitude_char_labels[2], digit_buffers[2]);
+      } else {
+        lv_label_set_text(altitude_char_labels[2], "");
+      }
+
+      // Ones digit (always show)
+      snprintf(digit_buffers[3], 2, "%d", ones);
+      lv_label_set_text(altitude_char_labels[3], digit_buffers[3]);
+
+      // Decimal point
+      lv_label_set_text(altitude_char_labels[4], ".");
+
+      // Tenths digit
+      snprintf(digit_buffers[5], 2, "%d", decimal_part);
+      lv_label_set_text(altitude_char_labels[5], digit_buffers[5]);
+
+      // Adjust width of position 4 back to narrow for meters (decimal point)
+      lv_obj_set_size(altitude_char_labels[4], 8, 24);  // decimal_width=8, char_height=24
+
+      // Unit
+      lv_label_set_text(altitude_char_labels[6], "m");
+        } else {
+            // For feet - no decimal point needed
+      int feet = static_cast<int>(round(altitude * 3.28084));
+
+      // Extract individual digits for up to 99,999 feet
+      int ten_thousands = feet / 10000;
+      int thousands = (feet / 1000) % 10;
+      int hundreds = (feet / 100) % 10;
+      int tens = (feet / 10) % 10;
+      int ones = feet % 10;
+
+      static char digit_buffers_ft[7][2];  // Static buffers for feet
+
+                  // Adjust width of position 4 for feet (should be normal width, not narrow)
+      lv_obj_set_size(altitude_char_labels[4], 17, 24);  // char_width=19, char_height=24
+
+      // Layout: [10k][1k][100][10][1][empty][f] - back to original positions
+
+      // Ten-thousands digit in position 0
+      if (ten_thousands > 0) {
+        snprintf(digit_buffers_ft[0], 2, "%d", ten_thousands);
+        lv_label_set_text(altitude_char_labels[0], digit_buffers_ft[0]);
+      } else {
+        lv_label_set_text(altitude_char_labels[0], "");
+      }
+
+      // Thousands digit in position 1
+      if (ten_thousands > 0 || thousands > 0) {
+        snprintf(digit_buffers_ft[1], 2, "%d", thousands);
+        lv_label_set_text(altitude_char_labels[1], digit_buffers_ft[1]);
+      } else {
+        lv_label_set_text(altitude_char_labels[1], "");
+      }
+
+      // Hundreds digit in position 2
+      if (ten_thousands > 0 || thousands > 0 || hundreds > 0) {
+        snprintf(digit_buffers_ft[2], 2, "%d", hundreds);
+        lv_label_set_text(altitude_char_labels[2], digit_buffers_ft[2]);
+      } else {
+        lv_label_set_text(altitude_char_labels[2], "");
+      }
+
+      // Tens digit in position 3
+      if (feet >= 10) {
+        snprintf(digit_buffers_ft[3], 2, "%d", tens);
+        lv_label_set_text(altitude_char_labels[3], digit_buffers_ft[3]);
+      } else {
+        lv_label_set_text(altitude_char_labels[3], "");
+      }
+
+                  // Ones digit in position 4 (always show) - now has normal width
+      snprintf(digit_buffers_ft[4], 2, "%d", ones);
+      lv_label_set_text(altitude_char_labels[4], digit_buffers_ft[4]);
+
+      // Clear position 5 (provides spacing between ones digit and unit)
+      lv_label_set_text(altitude_char_labels[5], "");
+
+      // Feet unit in position 6 (same as meters, with proper spacing)
+      lv_label_set_text(altitude_char_labels[6], "f");
     }
-    // Set color for the combined label
-    lv_obj_set_style_text_color(altitude_label,
-                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   }
 
   // Update temperature labels
