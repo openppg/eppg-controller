@@ -11,6 +11,10 @@
 #include "../../assets/img/cruise-control-340255-30.c"  // Cruise control icon  // NOLINT(build/include)
 #include "../../assets/img/energy-539741-26.c"  // Charging icon  // NOLINT(build/include)
 #include "../../assets/img/warning_2135850_30.c"  // Warning icon  // NOLINT(build/include)
+#include "../../assets/fonts/roboto_mono_16.c"  // Monospace font for numbers  // NOLINT(build/include)
+
+// External font declaration
+extern const lv_font_t roboto_mono_16;
 
 // Display dimensions
 #define SCREEN_WIDTH 160
@@ -338,29 +342,36 @@ void setupMainScreen(bool darkMode) {
   // Battery percentage label
   battery_label = lv_label_create(main_screen);
   lv_obj_align(battery_label, LV_ALIGN_TOP_MID, 0, 5);
-  lv_obj_set_style_text_font(battery_label, &lv_font_montserrat_24, 0);
+  lv_obj_set_style_text_font(battery_label, &roboto_mono_16, 0);  // Use monospace font for percentage
   lv_obj_set_style_text_color(battery_label, LVGL_BLACK, 0);
+  // Center-align battery percentage since it's in the middle
+  lv_obj_set_style_text_align(battery_label, LV_TEXT_ALIGN_CENTER, 0);
 
   // Left voltage label
   voltage_left_label = lv_label_create(main_screen);
   lv_obj_align(voltage_left_label, LV_ALIGN_TOP_LEFT, 3, 10);
-  lv_obj_set_style_text_font(voltage_left_label, &lv_font_montserrat_12, 0);
+  lv_obj_set_style_text_font(voltage_left_label, &roboto_mono_16, 0);  // Use monospace font for voltage
   lv_obj_set_style_text_color(voltage_left_label,
                             darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
 
   // Right voltage label
   voltage_right_label = lv_label_create(main_screen);
   lv_obj_align(voltage_right_label, LV_ALIGN_TOP_RIGHT, -3, 10);
-  lv_obj_set_style_text_font(voltage_right_label, &lv_font_montserrat_12, 0);
+  lv_obj_set_style_text_font(voltage_right_label, &roboto_mono_16, 0);  // Use monospace font for voltage
   lv_obj_set_style_text_color(voltage_right_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+  // Right-align right voltage so numbers grow from right to left
+  lv_obj_set_style_text_align(voltage_right_label, LV_TEXT_ALIGN_RIGHT, 0);
 
   // Middle section - power display
   power_label = lv_label_create(main_screen);
   lv_obj_align(power_label, LV_ALIGN_LEFT_MID, 5, -10);
-  lv_obj_set_style_text_font(power_label, &lv_font_montserrat_16, 0);
+  lv_obj_set_style_text_font(power_label, &roboto_mono_16, 0);  // Use monospace font for power
   lv_obj_set_style_text_color(power_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+  // Set width and right-align so power numbers grow from right to left
+  lv_obj_set_size(power_label, 95, LV_SIZE_CONTENT);  // Set width for right alignment
+  lv_obj_set_style_text_align(power_label, LV_TEXT_ALIGN_RIGHT, 0);
 
 
   // Performance mode label
@@ -375,18 +386,23 @@ void setupMainScreen(bool darkMode) {
   // Armed time label - adjust position now that there's no bluetooth icon
   armed_time_label = lv_label_create(main_screen);
   lv_obj_align(armed_time_label, LV_ALIGN_RIGHT_MID, -6, -3);
-  lv_obj_set_style_text_font(armed_time_label, &lv_font_montserrat_14, 0);
+  lv_obj_set_style_text_font(armed_time_label, &lv_font_montserrat_14, 0);  // Use Montserrat font (has colon)
   lv_obj_set_style_text_color(armed_time_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+  // Right-align time so numbers grow from right to left
+  lv_obj_set_style_text_align(armed_time_label, LV_TEXT_ALIGN_RIGHT, 0);
 
   // Bottom section - altitude and temperatures
   altitude_label = lv_label_create(main_screen);
-  // Use a larger font for altitude
-  lv_obj_set_style_text_font(altitude_label, &lv_font_montserrat_24, 0);
+  // Use monospace font for altitude
+  lv_obj_set_style_text_font(altitude_label, &roboto_mono_16, 0);  // Use monospace font for altitude
   lv_obj_set_style_text_color(altitude_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
-  // Align altitude label to the bottom-right corner of its section (left of vertical line)
-  lv_obj_align(altitude_label, LV_ALIGN_BOTTOM_LEFT, 5, -5);  // Position slightly from bottom-left
+  // Right-align text so numbers grow from right to left
+  lv_obj_set_style_text_align(altitude_label, LV_TEXT_ALIGN_RIGHT, 0);
+  // Position for right-aligned altitude display - M moved to fill the gap
+  lv_obj_set_size(altitude_label, 95, LV_SIZE_CONTENT);  // Keep same width
+  lv_obj_align(altitude_label, LV_ALIGN_BOTTOM_LEFT, 25, -5);  // Moved further right to close the gap
 
   // Warning/Error message label
   /* // REMOVED
@@ -405,7 +421,7 @@ void setupMainScreen(bool darkMode) {
   batt_temp_label = lv_label_create(main_screen);
   // Align bottom-right, adjust Y offset for spacing
   lv_obj_align(batt_temp_label, LV_ALIGN_BOTTOM_RIGHT, -1, -39);
-  lv_obj_set_style_text_font(batt_temp_label, &lv_font_montserrat_12, 0);
+  lv_obj_set_style_text_font(batt_temp_label, &roboto_mono_16, 0);  // Use monospace font for temperature
   lv_obj_set_style_text_color(batt_temp_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   lv_obj_set_style_bg_opa(batt_temp_label, LV_OPA_0, 0);  // Initially transparent
@@ -958,10 +974,10 @@ void updateLvglMainScreen(
       if (display_altitude > -0.05f && display_altitude < 0.0f) {
           display_altitude = 0.0f;
       }
-      snprintf(altBuffer, sizeof(altBuffer), "%.1f m", display_altitude);  // Use corrected value
+      snprintf(altBuffer, sizeof(altBuffer), "%.1fm", display_altitude);  // Normal spacing
       lv_label_set_text(altitude_label, altBuffer);
     } else {
-      snprintf(altBuffer, sizeof(altBuffer), "%d f", static_cast<int>(round(altitude * 3.28084)));  // Format number with unit
+      snprintf(altBuffer, sizeof(altBuffer), "%df", static_cast<int>(round(altitude * 3.28084)));  // Normal spacing
       lv_label_set_text(altitude_label, altBuffer);
     }
     // Set color for the combined label
