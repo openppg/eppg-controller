@@ -58,6 +58,9 @@ void updateLvglMainScreen(
   unsigned int armedStartMillis
 );
 
+// Test function with simulated data for development/testing
+void updateLvglMainScreenWithTestData(const STR_DEVICE_DATA_140_V1& deviceData);
+
 // Functions to control the loading overlay
 void showLoadingOverlay();
 void hideLoadingOverlay();

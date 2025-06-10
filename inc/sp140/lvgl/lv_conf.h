@@ -168,14 +168,14 @@
  * Enable built-in fonts - only enable a minimal set
  */
 #define LV_FONT_MONTSERRAT_8  0
-#define LV_FONT_MONTSERRAT_10 0
+#define LV_FONT_MONTSERRAT_10 1  /* For smaller kW unit label */
 #define LV_FONT_MONTSERRAT_12 1  /* For medium text, temperatures, and voltage labels */
 #define LV_FONT_MONTSERRAT_14 1  /* Used as default font */
 #define LV_FONT_MONTSERRAT_16 1  /* For battery percentage and power */
 #define LV_FONT_MONTSERRAT_18 0
-#define LV_FONT_MONTSERRAT_20 0
+#define LV_FONT_MONTSERRAT_20 1  /* For larger power display numbers */
 #define LV_FONT_MONTSERRAT_22 0
-#define LV_FONT_MONTSERRAT_24 1
+#define LV_FONT_MONTSERRAT_24 1  /* For larger power display numbers */
 #define LV_FONT_MONTSERRAT_26 0
 #define LV_FONT_MONTSERRAT_28 1
 #define LV_FONT_MONTSERRAT_30 0
