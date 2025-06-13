@@ -166,7 +166,7 @@ bool setupTWAI() {
                                       (gpio_num_t)ESC_TX_PIN,
                                       (gpio_num_t)ESC_RX_PIN,
                                       TWAI_MODE_NORMAL);
-  twai_timing_config_t t_config = TWAI_TIMING_CONFIG_1MBITS();
+  twai_timing_config_t t_config = TWAI_TIMING_CONFIG_250KBITS();
   twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
   esp_err_t install_err = twai_driver_install(&g_config, &t_config, &f_config);
