@@ -43,7 +43,6 @@ SPIClass* hardwareSPI = nullptr;
 
 // Store CS pins as globals to avoid accessing protected members
 int8_t displayCS = -1;
-int8_t bmsCS = MCP_CS;
 
 #define BUTTON_DEBOUNCE_TIME_MS 50
 #define FIRST_CLICK_MAX_HOLD_MS 500    // Maximum time for first click to be considered a click
@@ -74,7 +73,7 @@ UBaseType_t uxCoreAffinityMask0 = (1 << 0);  // Core 0
 UBaseType_t uxCoreAffinityMask1 = (1 << 1);  // Core 1
 
 HardwareConfig board_config;
-bool bmsCanInitialized = false;
+bool bmsTwaiInitialized = false;
 bool escTwaiInitialized = false;
 
 ResponsiveAnalogRead* pot;
@@ -246,16 +245,12 @@ void setupSPI(const HardwareConfig& board_config) {
 
   // Store CS pins
   displayCS = board_config.tft_cs;
-  bmsCS = MCP_CS;
 
-  // Configure both CS pins as outputs and set HIGH (deselected)
+  // Configure display CS pin as output and set HIGH (deselected)
   pinMode(displayCS, OUTPUT);
   digitalWrite(displayCS, HIGH);
 
-  pinMode(bmsCS, OUTPUT);
-  digitalWrite(bmsCS, HIGH);
-
-  // Initialize hardware SPI for use by both display and BMS
+  // Initialize hardware SPI for display only (BMS now uses TWAI)
   hardwareSPI = new SPIClass(HSPI);
   // Use the board_config pins instead of the defines
   hardwareSPI->begin(board_config.spi_sclk, board_config.spi_miso, board_config.spi_mosi, -1);
@@ -370,14 +365,9 @@ void spiCommTask(void *pvParameters) {
         xQueueOverwrite(escTelemetryQueue, &escTelemetryData);  // Always latest data
         refreshDisplay();
       #else
-        // 1. Check if CAN transceiver is initialized
-        if (bmsCanInitialized) {
-          updateBMSData();  // This function handles its own CS pins
-          if (bms_can->isConnected()) {
-            bmsTelemetryData.bmsState = TelemetryState::CONNECTED;
-          } else {
-            bmsTelemetryData.bmsState = TelemetryState::NOT_CONNECTED;
-          }
+        // 1. Update BMS data if TWAI is initialized
+        if (bmsTwaiInitialized) {
+          updateBMSData();  // This function handles TWAI message processing
         }
 
         // 2. Use BMS data if connected, otherwise use ESC data
@@ -495,12 +485,12 @@ void setup() {
   // Pass hardcoded pin values for DC and RST
   setupLvglDisplay(deviceData, board_config.tft_dc, board_config.tft_rst, hardwareSPI);
 
-  #ifndef SCREEN_DEBUG
-    // Pass the hardware SPI instance to the BMS_CAN initialization
-    initBMSCAN(hardwareSPI);
-  #endif
-
   initESC();
+
+  #ifndef SCREEN_DEBUG
+    // Initialize BMS on shared TWAI bus (must be after ESC init)
+    initBMS();
+  #endif
   eepromSemaphore = xSemaphoreCreateBinary();
   xSemaphoreGive(eepromSemaphore);
   stateMutex = xSemaphoreCreateMutex();
@@ -1033,13 +1023,13 @@ void afterCruiseEnd() {
   // pre-populate it with the current throttle position to ensure smooth transition
   pot->update();
   int currentPotVal = pot->getValue();
-  
+
   // Pre-fill the buffer with current pot value for smooth transition
   potBuffer.clear();  // Clear first
   for (int i = 0; i < 8; i++) {  // Buffer size is 8
     potBuffer.push(currentPotVal);
   }
-  
+
   cruisedPotVal = 0;
   //pulseVibeMotor();
 }
@@ -1092,24 +1082,7 @@ void updateESCBLETask(void *pvParameters) {
   }
 }
 
-bool initBMSCAN(SPIClass* spi) {
-  USBSerial.println("Initializing BMS CAN...");
 
-  // Ensure Display CS is HIGH (deselected) before working with BMS
-  digitalWrite(displayCS, HIGH);
-
-  // Create the BMS_CAN instance with the provided SPI
-  bms_can = new BMS_CAN(bmsCS, MCP_BAUDRATE, spi);
-
-  if (!bms_can->begin()) {
-    USBSerial.println("Error initializing BMS_CAN");
-    bmsCanInitialized = false;  // BMS initialization failed
-    return false;
-  }
-  USBSerial.println("BMS CAN initialized successfully");
-  bmsCanInitialized = true;  // BMS successfully initialized
-  return true;
-}
 
 // WebSerial command handling task
 void webSerialTask(void *pvParameters) {
