@@ -24,6 +24,7 @@ extern bool bmsTwaiInitialized;
 // BMS functions
 void initBMS();
 void updateBMSData();
+bool isBMSMessage(uint32_t id);
 void parseBMSPacket(const twai_message_t* message);
 bool isBMSConnected();
 void printBMSData();

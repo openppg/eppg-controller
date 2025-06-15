@@ -20,6 +20,8 @@
 void initESC();
 void setESCThrottle(int throttlePWM);
 void readESCTelemetry();
+void processESCMessage(const twai_message_t& message);
+void processESCTasks();
 bool setupTWAI();
 
 // Get the highest temperature from all ESC sensors

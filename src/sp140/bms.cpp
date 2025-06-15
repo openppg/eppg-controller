@@ -70,6 +70,17 @@ void initBMS() {
 }
 
 /**
+ * Check if this is a BMS message ID
+ */
+bool isBMSMessage(uint32_t id) {
+  return (id == BMS_BASIC_INFO_1 || id == BMS_BASIC_INFO_2 || id == BMS_CYCLE_INFO ||
+          id == BMS_TEMPERATURE ||
+          (id >= BMS_BATTERY_ID_BASE && id <= (BMS_BATTERY_ID_BASE + 2)) ||
+          ((id >> 24) == 0x18 && ((id >> 8) & 0xFF) == 0x28 &&
+           ((id >> 16) & 0xFF) >= 0xC8 && ((id >> 16) & 0xFF) < (0xC8 + BMS_MAX_CELLS/4)));
+}
+
+/**
  * Parse BMS CAN packet and update internal data
  */
 void parseBMSPacket(const twai_message_t* message) {
@@ -173,36 +184,12 @@ bool isBMSConnected() {
 }
 
 /**
- * Update BMS data by reading from TWAI and processing messages
- * This function should be called regularly to check for new BMS messages
- * Processes only a limited number of messages per call to avoid blocking
+ * Update BMS telemetry structure with latest parsed data
+ * Called by unified CAN bus after BMS messages are processed
  */
 void updateBMSData() {
   if (!bmsTwaiInitialized) {
     return;
-  }
-
-  // Process only a few messages per call to avoid blocking the ESC
-  int messagesProcessed = 0;
-  const int maxMessagesPerCall = 10;
-
-  twai_message_t message;
-  while (messagesProcessed < maxMessagesPerCall && twai_receive(&message, 0) == ESP_OK) {
-    messagesProcessed++;
-
-    // Only process messages that could be from BMS
-    uint32_t id = message.identifier;
-
-    // Check if this is a BMS message ID
-    if (id == BMS_BASIC_INFO_1 || id == BMS_BASIC_INFO_2 || id == BMS_CYCLE_INFO ||
-        id == BMS_TEMPERATURE ||
-        (id >= BMS_BATTERY_ID_BASE && id <= (BMS_BATTERY_ID_BASE + 2)) ||
-        ((id >> 24) == 0x18 && ((id >> 8) & 0xFF) == 0x28 &&
-         ((id >> 16) & 0xFF) >= 0xC8 && ((id >> 16) & 0xFF) < (0xC8 + BMS_MAX_CELLS/4))) {
-
-      parseBMSPacket(&message);
-    }
-    // Other messages are ignored and will be available for ESC processing
   }
 
   // Update connection status

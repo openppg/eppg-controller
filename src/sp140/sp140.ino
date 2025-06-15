@@ -28,6 +28,7 @@
 #include "../../inc/sp140/esc.h"
 #include "../../inc/sp140/lvgl/lvgl_display.h"
 #include "../../inc/sp140/bms.h"
+#include "../../inc/sp140/can_bus.h"
 #include "../../inc/sp140/altimeter.h"
 #include "../../inc/sp140/debug.h"
 
@@ -365,9 +366,9 @@ void spiCommTask(void *pvParameters) {
         xQueueOverwrite(escTelemetryQueue, &escTelemetryData);  // Always latest data
         refreshDisplay();
       #else
-        // 1. Update BMS data if TWAI is initialized
+        // 1. Update BMS telemetry structure (CAN messages processed by unified CAN bus)
         if (bmsTwaiInitialized) {
-          updateBMSData();  // This function handles TWAI message processing
+          updateBMSData();  // This function updates telemetry structure only
         }
 
         // 2. Use BMS data if connected, otherwise use ESC data
@@ -490,6 +491,9 @@ void setup() {
   #ifndef SCREEN_DEBUG
     // Initialize BMS on shared TWAI bus (must be after ESC init)
     initBMS();
+
+    // Initialize unified CAN bus management (must be after both ESC and BMS init)
+    initUnifiedCANBus();
   #endif
   eepromSemaphore = xSemaphoreCreateBinary();
   xSemaphoreGive(eepromSemaphore);

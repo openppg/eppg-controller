@@ -134,7 +134,7 @@ void readESCTelemetry() {
     }
   }
 
-  adapter.processTxRxOnce();  // Process CAN messages
+  // Note: CAN message processing is now handled by unified CAN bus task
 }
 
 /**
@@ -200,6 +200,22 @@ bool setupTWAI() {
   }
 
   return true;
+}
+
+/**
+ * Process a single ESC message from the unified CAN bus
+ */
+void processESCMessage(const twai_message_t& message) {
+  adapter.processRxMessage(message);
+}
+
+/**
+ * Process ESC tasks (alerts, transmission, stale transfers)
+ */
+void processESCTasks() {
+  adapter.processAlerts();
+  adapter.processTx();
+  adapter.processStaleTransfers();
 }
 
 /**
