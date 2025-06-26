@@ -30,6 +30,7 @@
 #include "../../inc/sp140/bms.h"
 #include "../../inc/sp140/altimeter.h"
 #include "../../inc/sp140/debug.h"
+#include "../../inc/sp140/alert_system.h"
 
 #include "../../inc/sp140/buzzer.h"
 #include "../../inc/sp140/device_state.h"
@@ -388,6 +389,9 @@ void spiCommTask(void *pvParameters) {
           unifiedBatteryData.soc = bmsTelemetryData.soc;
           unifiedBatteryData.power = bmsTelemetryData.power;
           xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);
+
+          // Check BMS telemetry for alerts
+          checkBMSTelemetry();
         } else if (escTelemetryData.escState == TelemetryState::CONNECTED) {
           // BMS is either not initialized OR not currently connected
 
@@ -408,6 +412,10 @@ void spiCommTask(void *pvParameters) {
         refreshDisplay();
 
       #endif
+
+      // Update alert system
+      alertSystem.update();
+
       vTaskDelay(pdMS_TO_TICKS(40));  // ~25fps
   }
 }
@@ -534,6 +542,10 @@ void setup() {
   }
 
   setupBLE();
+
+  // Initialize the alert system
+  initAlertSystem();
+
   setupTasks();  // Create all tasks after queues and BLE are initialized
 
   pulseVibeMotor();
@@ -950,6 +962,10 @@ void handleThrottle() {
 
   // Read/Sync ESC Telemetry (runs in all armed states)
   readESCTelemetry();
+
+  // Check ESC telemetry for alerts
+  checkESCTelemetry();
+
   syncESCTelemetry();
 }
 
@@ -1033,13 +1049,13 @@ void afterCruiseEnd() {
   // pre-populate it with the current throttle position to ensure smooth transition
   pot->update();
   int currentPotVal = pot->getValue();
-  
+
   // Pre-fill the buffer with current pot value for smooth transition
   potBuffer.clear();  // Clear first
   for (int i = 0; i < 8; i++) {  // Buffer size is 8
     potBuffer.push(currentPotVal);
   }
-  
+
   cruisedPotVal = 0;
   //pulseVibeMotor();
 }
