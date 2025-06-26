@@ -64,5 +64,6 @@ extern SerialLogger serialLogger;
 void initSimpleMonitor();
 void checkAllSensors();
 void addESCMonitors();
+void addBMSMonitors();
 
 #endif  // INC_SP140_SIMPLE_MONITOR_H_

@@ -58,6 +58,12 @@ void updateBMSData() {
     bmsTelemetryData.cell_voltages[i] = bms_can->getCellVoltage(i);
   }
 
+  // Populate individual temperature sensors
+  bmsTelemetryData.t1_temperature = bms_can->getTemperature(0);
+  bmsTelemetryData.t2_temperature = bms_can->getTemperature(1);
+  bmsTelemetryData.t3_temperature = bms_can->getTemperature(2);
+  bmsTelemetryData.t4_temperature = bms_can->getTemperature(3);
+
   bmsTelemetryData.lastUpdateMs = millis();
   // printBMSData();
 

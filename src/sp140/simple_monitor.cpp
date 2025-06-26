@@ -9,6 +9,7 @@ void initSimpleMonitor() {
   USBSerial.println("Initializing Simple Monitor System");
   sensors.clear();
   addESCMonitors();
+  addBMSMonitors();
   USBSerial.printf("Monitoring %d sensors\n", sensors.size());
 }
 
@@ -52,12 +53,47 @@ void addESCMonitors() {
   sensors.push_back(escCapTemp);
 
   // Motor Temperature Monitor
-  // Using same thresholds as MOS for now
+  // Min: -20°C, Warning: 90°C, Critical: 110°C
   static SensorMonitor* motorTemp = new SensorMonitor(
     "Motor_Temp",
-    {.warnLow = -10, .warnHigh = 90, .critLow = -20, .critHigh = 110},
+    {.warnLow = -20, .warnHigh = 90, .critLow = -25, .critHigh = 110},
     []() { return escTelemetryData.motor_temp; },
     &serialLogger
   );
   sensors.push_back(motorTemp);
+}
+
+void addBMSMonitors() {
+  // T1-T4 Cell Temperature Sensors (Warning: 50°C, Critical: 56°C)
+  static SensorMonitor* bmsT1Temp = new SensorMonitor(
+    "BMS_T1_Temp",
+    {.warnLow = -10, .warnHigh = 50, .critLow = -15, .critHigh = 56},
+    []() { return bmsTelemetryData.t1_temperature; },
+    &serialLogger
+  );
+  sensors.push_back(bmsT1Temp);
+
+  static SensorMonitor* bmsT2Temp = new SensorMonitor(
+    "BMS_T2_Temp",
+    {.warnLow = -10, .warnHigh = 50, .critLow = -15, .critHigh = 56},
+    []() { return bmsTelemetryData.t2_temperature; },
+    &serialLogger
+  );
+  sensors.push_back(bmsT2Temp);
+
+  static SensorMonitor* bmsT3Temp = new SensorMonitor(
+    "BMS_T3_Temp",
+    {.warnLow = -10, .warnHigh = 50, .critLow = -15, .critHigh = 56},
+    []() { return bmsTelemetryData.t3_temperature; },
+    &serialLogger
+  );
+  sensors.push_back(bmsT3Temp);
+
+  static SensorMonitor* bmsT4Temp = new SensorMonitor(
+    "BMS_T4_Temp",
+    {.warnLow = -10, .warnHigh = 50, .critLow = -15, .critHigh = 56},
+    []() { return bmsTelemetryData.t4_temperature; },
+    &serialLogger
+  );
+  sensors.push_back(bmsT4Temp);
 }
