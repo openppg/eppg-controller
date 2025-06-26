@@ -30,7 +30,7 @@
 #include "../../inc/sp140/bms.h"
 #include "../../inc/sp140/altimeter.h"
 #include "../../inc/sp140/debug.h"
-#include "../../inc/sp140/alert_system.h"
+#include "../../inc/sp140/simple_monitor.h"
 
 #include "../../inc/sp140/buzzer.h"
 #include "../../inc/sp140/device_state.h"
@@ -388,10 +388,7 @@ void spiCommTask(void *pvParameters) {
           unifiedBatteryData.amps = bmsTelemetryData.battery_current;
           unifiedBatteryData.soc = bmsTelemetryData.soc;
           unifiedBatteryData.power = bmsTelemetryData.power;
-          xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);
-
-          // Check BMS telemetry for alerts
-          checkBMSTelemetry();
+                    xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);
         } else if (escTelemetryData.escState == TelemetryState::CONNECTED) {
           // BMS is either not initialized OR not currently connected
 
@@ -408,13 +405,13 @@ void spiCommTask(void *pvParameters) {
           unifiedBatteryData.soc = 0.0;
         }
 
-        // Update display - CS pin management is handled inside refreshDisplay via LVGL mutex
+                // Update display - CS pin management is handled inside refreshDisplay via LVGL mutex
         refreshDisplay();
 
       #endif
 
-      // Update alert system
-      alertSystem.update();
+      // Check all sensor monitors
+      checkAllSensors();
 
       vTaskDelay(pdMS_TO_TICKS(40));  // ~25fps
   }
@@ -541,10 +538,10 @@ void setup() {
     USBSerial.println("Error creating device state queue");
   }
 
-  setupBLE();
+    setupBLE();
 
-  // Initialize the alert system
-  initAlertSystem();
+  // Initialize the simple monitoring system
+  initSimpleMonitor();
 
   setupTasks();  // Create all tasks after queues and BLE are initialized
 
@@ -960,12 +957,8 @@ void handleThrottle() {
       break;
   }
 
-  // Read/Sync ESC Telemetry (runs in all armed states)
+    // Read/Sync ESC Telemetry (runs in all armed states)
   readESCTelemetry();
-
-  // Check ESC telemetry for alerts
-  checkESCTelemetry();
-
   syncESCTelemetry();
 }
 
