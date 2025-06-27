@@ -64,6 +64,24 @@ void addESCMonitors() {
 }
 
 void addBMSMonitors() {
+  // BMS MOSFET Temperature (Warning: 50°C, Critical: 60°C)
+  static SensorMonitor* bmsMosTemp = new SensorMonitor(
+    "BMS_MOS_Temp",
+    {.warnLow = -10, .warnHigh = 50, .critLow = -15, .critHigh = 60},
+    []() { return bmsTelemetryData.mos_temperature; },
+    &serialLogger
+  );
+  sensors.push_back(bmsMosTemp);
+
+  // BMS Balance Resistor Temperature (Warning: 50°C, Critical: 60°C)
+  static SensorMonitor* bmsBalanceTemp = new SensorMonitor(
+    "BMS_Balance_Temp",
+    {.warnLow = -10, .warnHigh = 50, .critLow = -15, .critHigh = 60},
+    []() { return bmsTelemetryData.balance_temperature; },
+    &serialLogger
+  );
+  sensors.push_back(bmsBalanceTemp);
+
   // T1-T4 Cell Temperature Sensors (Warning: 50°C, Critical: 56°C)
   static SensorMonitor* bmsT1Temp = new SensorMonitor(
     "BMS_T1_Temp",

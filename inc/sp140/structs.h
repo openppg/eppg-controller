@@ -103,11 +103,13 @@ typedef struct {
   TelemetryState bmsState;        // Current connection state
   float cell_voltages[BMS_CELLS_NUM];  // Individual cell voltages
 
-  // Individual temperature sensors (T1-T4 cell temperatures)
-  float t1_temperature;         // T1 cell temperature sensor (°C)
-  float t2_temperature;         // T2 cell temperature sensor (°C)
-  float t3_temperature;         // T3 cell temperature sensor (°C)
-  float t4_temperature;         // T4 cell temperature sensor (°C)
+  // Individual temperature sensors
+  float mos_temperature;        // BMS MOSFET temperature (°C) - index 0
+  float balance_temperature;    // BMS balance resistor temperature (°C) - index 1
+  float t1_temperature;         // T1 cell temperature sensor (°C) - index 2
+  float t2_temperature;         // T2 cell temperature sensor (°C) - index 3
+  float t3_temperature;         // T3 cell temperature sensor (°C) - index 4
+  float t4_temperature;         // T4 cell temperature sensor (°C) - index 5
 } STR_BMS_TELEMETRY_140;
 #pragma pack(pop)
 

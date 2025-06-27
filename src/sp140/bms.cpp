@@ -59,10 +59,12 @@ void updateBMSData() {
   }
 
   // Populate individual temperature sensors
-  bmsTelemetryData.t1_temperature = bms_can->getTemperature(0);
-  bmsTelemetryData.t2_temperature = bms_can->getTemperature(1);
-  bmsTelemetryData.t3_temperature = bms_can->getTemperature(2);
-  bmsTelemetryData.t4_temperature = bms_can->getTemperature(3);
+  bmsTelemetryData.mos_temperature = bms_can->getTemperature(0);      // BMS MOSFET
+  bmsTelemetryData.balance_temperature = bms_can->getTemperature(1);  // BMS Balance resistors
+  bmsTelemetryData.t1_temperature = bms_can->getTemperature(2);       // Cell probe 1
+  bmsTelemetryData.t2_temperature = bms_can->getTemperature(3);       // Cell probe 2
+  bmsTelemetryData.t3_temperature = bms_can->getTemperature(4);       // Cell probe 3
+  bmsTelemetryData.t4_temperature = bms_can->getTemperature(5);       // Cell probe 4
 
   bmsTelemetryData.lastUpdateMs = millis();
   // printBMSData();
