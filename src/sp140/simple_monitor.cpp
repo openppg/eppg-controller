@@ -1,5 +1,6 @@
 #include "sp140/simple_monitor.h"
 #include "sp140/globals.h"
+#include "sp140/altimeter.h"
 
 // Global instances
 std::vector<SensorMonitor*> sensors;
@@ -10,6 +11,7 @@ void initSimpleMonitor() {
   sensors.clear();
   addESCMonitors();
   addBMSMonitors();
+  addAltimeterMonitors();
   USBSerial.printf("Monitoring %d sensors\n", sensors.size());
 }
 
@@ -28,8 +30,7 @@ void addESCMonitors() {
     "ESC_MOS_Temp",
     {.warnLow = -10, .warnHigh = 90, .critLow = -20, .critHigh = 110},
     []() { return escTelemetryData.mos_temp; },
-    &serialLogger
-  );
+    &serialLogger);
   sensors.push_back(escMosTemp);
 
   // ESC MCU Temperature Monitor
@@ -38,8 +39,7 @@ void addESCMonitors() {
     "ESC_MCU_Temp",
     {.warnLow = -10, .warnHigh = 80, .critLow = -20, .critHigh = 95},
     []() { return escTelemetryData.mcu_temp; },
-    &serialLogger
-  );
+    &serialLogger);
   sensors.push_back(escMcuTemp);
 
   // ESC Capacitor Temperature Monitor
@@ -48,8 +48,7 @@ void addESCMonitors() {
     "ESC_CAP_Temp",
     {.warnLow = -10, .warnHigh = 85, .critLow = -20, .critHigh = 100},
     []() { return escTelemetryData.cap_temp; },
-    &serialLogger
-  );
+    &serialLogger);
   sensors.push_back(escCapTemp);
 
   // Motor Temperature Monitor
@@ -58,8 +57,7 @@ void addESCMonitors() {
     "Motor_Temp",
     {.warnLow = -20, .warnHigh = 90, .critLow = -25, .critHigh = 110},
     []() { return escTelemetryData.motor_temp; },
-    &serialLogger
-  );
+    &serialLogger);
   sensors.push_back(motorTemp);
 }
 
@@ -69,8 +67,7 @@ void addBMSMonitors() {
     "BMS_MOS_Temp",
     {.warnLow = -10, .warnHigh = 50, .critLow = -15, .critHigh = 60},
     []() { return bmsTelemetryData.mos_temperature; },
-    &serialLogger
-  );
+    &serialLogger);
   sensors.push_back(bmsMosTemp);
 
   // BMS Balance Resistor Temperature (Warning: 50°C, Critical: 60°C)
@@ -78,40 +75,49 @@ void addBMSMonitors() {
     "BMS_Balance_Temp",
     {.warnLow = -10, .warnHigh = 50, .critLow = -15, .critHigh = 60},
     []() { return bmsTelemetryData.balance_temperature; },
-    &serialLogger
-  );
+    &serialLogger);
   sensors.push_back(bmsBalanceTemp);
 
   // T1-T4 Cell Temperature Sensors (Warning: 50°C, Critical: 56°C)
+  static const Thresholds bmsCellTempThresholds = {
+    .warnLow = -10, .warnHigh = 50, .critLow = -15, .critHigh = 56
+  };
+
   static SensorMonitor* bmsT1Temp = new SensorMonitor(
     "BMS_T1_Temp",
-    {.warnLow = -10, .warnHigh = 50, .critLow = -15, .critHigh = 56},
+    bmsCellTempThresholds,
     []() { return bmsTelemetryData.t1_temperature; },
-    &serialLogger
-  );
+    &serialLogger);
   sensors.push_back(bmsT1Temp);
 
   static SensorMonitor* bmsT2Temp = new SensorMonitor(
     "BMS_T2_Temp",
-    {.warnLow = -10, .warnHigh = 50, .critLow = -15, .critHigh = 56},
+    bmsCellTempThresholds,
     []() { return bmsTelemetryData.t2_temperature; },
-    &serialLogger
-  );
+    &serialLogger);
   sensors.push_back(bmsT2Temp);
 
   static SensorMonitor* bmsT3Temp = new SensorMonitor(
     "BMS_T3_Temp",
-    {.warnLow = -10, .warnHigh = 50, .critLow = -15, .critHigh = 56},
+    bmsCellTempThresholds,
     []() { return bmsTelemetryData.t3_temperature; },
-    &serialLogger
-  );
+    &serialLogger);
   sensors.push_back(bmsT3Temp);
 
   static SensorMonitor* bmsT4Temp = new SensorMonitor(
     "BMS_T4_Temp",
-    {.warnLow = -10, .warnHigh = 50, .critLow = -15, .critHigh = 56},
+    bmsCellTempThresholds,
     []() { return bmsTelemetryData.t4_temperature; },
-    &serialLogger
-  );
+    &serialLogger);
   sensors.push_back(bmsT4Temp);
+}
+
+void addAltimeterMonitors() {
+  // Barometer Temperature (Warning: 50°C, Critical: 80°C)
+  static SensorMonitor* baroTemp = new SensorMonitor(
+    "Baro_Temp",
+    {.warnLow = -1, .warnHigh = 50, .critLow = -10, .critHigh = 80},
+    []() { return getBaroTemperature(); },
+    &serialLogger);
+  sensors.push_back(baroTemp);
 }
