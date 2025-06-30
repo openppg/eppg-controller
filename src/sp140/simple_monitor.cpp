@@ -1,6 +1,7 @@
 #include "sp140/simple_monitor.h"
 #include "sp140/globals.h"
 #include "sp140/altimeter.h"
+#include "sp140/utilities.h"
 
 // Global instances
 std::vector<SensorMonitor*> sensors;
@@ -12,6 +13,7 @@ void initSimpleMonitor() {
   addESCMonitors();
   addBMSMonitors();
   addAltimeterMonitors();
+  addInternalMonitors();
   USBSerial.printf("Monitoring %d sensors\n", sensors.size());
 }
 
@@ -116,8 +118,18 @@ void addAltimeterMonitors() {
   // Barometer Temperature (Warning: 50°C, Critical: 80°C)
   static SensorMonitor* baroTemp = new SensorMonitor(
     "Baro_Temp",
-    {.warnLow = -1, .warnHigh = 50, .critLow = -10, .critHigh = 80},
+    {.warnLow = 0, .warnHigh = 50, .critLow = -10, .critHigh = 80},
     []() { return getBaroTemperature(); },
     &serialLogger);
   sensors.push_back(baroTemp);
+}
+
+void addInternalMonitors() {
+  // ESP32-S3 CPU Temperature (Warning: 50°C, Critical: 80°C)
+  static SensorMonitor* cpuTemp = new SensorMonitor(
+    "CPU_Temp",
+    {.warnLow = 0, .warnHigh = 50, .critLow = -10, .critHigh = 80},
+    []() { return temperatureRead(); },
+    &serialLogger);
+  sensors.push_back(cpuTemp);
 }

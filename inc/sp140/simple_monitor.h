@@ -66,5 +66,6 @@ void checkAllSensors();
 void addESCMonitors();
 void addBMSMonitors();
 void addAltimeterMonitors();
+void addInternalMonitors();
 
 #endif  // INC_SP140_SIMPLE_MONITOR_H_
