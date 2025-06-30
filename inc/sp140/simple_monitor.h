@@ -5,6 +5,29 @@
 #include <functional>
 #include <Arduino.h>
 
+// Unique identifiers for each sensor
+enum class SensorID {
+  // ESC
+  ESC_MOS_Temp,
+  ESC_MCU_Temp,
+  ESC_CAP_Temp,
+  Motor_Temp,
+
+  // BMS
+  BMS_MOS_Temp,
+  BMS_Balance_Temp,
+  BMS_T1_Temp,
+  BMS_T2_Temp,
+  BMS_T3_Temp,
+  BMS_T4_Temp,
+
+  // Altimeter
+  Baro_Temp,
+
+  // Internal
+  CPU_Temp
+};
+
 // Alert levels
 enum class AlertLevel { OK, WARN_LOW, WARN_HIGH, CRIT_LOW, CRIT_HIGH };
 
@@ -16,29 +39,26 @@ struct Thresholds {
 
 // Logger interface
 struct ILogger {
-  virtual void log(const char* name, AlertLevel lvl, float val) = 0;
+  virtual void log(SensorID id, AlertLevel lvl, float val) = 0;
   virtual ~ILogger() = default;
 };
 
 // Serial logger implementation
 struct SerialLogger : ILogger {
-  void log(const char* name, AlertLevel lvl, float v) override {
-    const char* levelNames[] = {"OK", "WARN_LOW", "WARN_HIGH", "CRIT_LOW", "CRIT_HIGH"};
-    USBSerial.printf("[%lu] [%s] %s = %.2f\n", millis(), levelNames[(int)lvl], name, v);
-  }
+  void log(SensorID id, AlertLevel lvl, float v) override;
 };
 
 // Sensor monitor
 struct SensorMonitor {
-  const char* name;
+  SensorID id;
   Thresholds thr;
   std::function<float()> read;
   AlertLevel last;
   ILogger* logger;
 
   // Constructor
-  SensorMonitor(const char* n, Thresholds t, std::function<float()> r, ILogger* l)
-    : name(n), thr(t), read(r), last(AlertLevel::OK), logger(l) {}
+  SensorMonitor(SensorID i, Thresholds t, std::function<float()> r, ILogger* l)
+    : id(i), thr(t), read(r), last(AlertLevel::OK), logger(l) {}
 
   void check() {
     float v = read();
@@ -50,7 +70,7 @@ struct SensorMonitor {
     else if (v >= thr.warnHigh) now = AlertLevel::WARN_HIGH;
 
     if (now != last) {
-      logger->log(name, now, v);
+      logger->log(id, now, v);
       last = now;
     }
   }
@@ -61,6 +81,7 @@ extern std::vector<SensorMonitor*> sensors;
 extern SerialLogger serialLogger;
 
 // Functions
+const char* sensorIDToString(SensorID id);
 void initSimpleMonitor();
 void checkAllSensors();
 void addESCMonitors();
