@@ -20,6 +20,8 @@ enum class SensorID {
   BMS_T2_Temp,
   BMS_T3_Temp,
   BMS_T4_Temp,
+  BMS_High_Cell_Voltage,
+  BMS_Low_Cell_Voltage,
 
   // Altimeter
   Baro_Temp,

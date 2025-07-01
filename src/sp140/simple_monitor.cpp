@@ -27,6 +27,8 @@ const char* sensorIDToString(SensorID id) {
     case SensorID::BMS_T2_Temp: return "BMS_T2_Temp";
     case SensorID::BMS_T3_Temp: return "BMS_T3_Temp";
     case SensorID::BMS_T4_Temp: return "BMS_T4_Temp";
+    case SensorID::BMS_High_Cell_Voltage: return "BMS_High_Cell_Voltage";
+    case SensorID::BMS_Low_Cell_Voltage: return "BMS_Low_Cell_Voltage";
 
     // Altimeter
     case SensorID::Baro_Temp: return "Baro_Temp";
@@ -143,6 +145,22 @@ void addBMSMonitors() {
     []() { return bmsTelemetryData.t4_temperature; },
     &serialLogger);
   sensors.push_back(bmsT4Temp);
+
+  // High Cell Voltage (Warn: 4.1V, Crit: 4.2V)
+  static SensorMonitor* bmsHighCellVoltage = new SensorMonitor(
+    SensorID::BMS_High_Cell_Voltage,
+    {.warnLow = 0.0, .warnHigh = 4.1, .critLow = 0.0, .critHigh = 4.2},
+    []() { return bmsTelemetryData.highest_cell_voltage; },
+    &serialLogger);
+  sensors.push_back(bmsHighCellVoltage);
+
+  // Low Cell Voltage (Warn: 3.2V, Crit: 3.0V)
+  static SensorMonitor* bmsLowCellVoltage = new SensorMonitor(
+    SensorID::BMS_Low_Cell_Voltage,
+    {.warnLow = 3.2, .warnHigh = 5.0, .critLow = 3.0, .critHigh = 5.0},
+    []() { return bmsTelemetryData.lowest_cell_voltage; },
+    &serialLogger);
+  sensors.push_back(bmsLowCellVoltage);
 }
 
 void addAltimeterMonitors() {
