@@ -29,6 +29,9 @@ const char* sensorIDToString(SensorID id) {
     case SensorID::BMS_T4_Temp: return "BMS_T4_Temp";
     case SensorID::BMS_High_Cell_Voltage: return "BMS_High_Cell_Voltage";
     case SensorID::BMS_Low_Cell_Voltage: return "BMS_Low_Cell_Voltage";
+    case SensorID::BMS_SOC: return "BMS_SOC";
+    case SensorID::BMS_Total_Voltage: return "BMS_Total_Voltage";
+    case SensorID::BMS_Voltage_Differential: return "BMS_Voltage_Differential";
 
     // Altimeter
     case SensorID::Baro_Temp: return "Baro_Temp";
@@ -161,6 +164,30 @@ void addBMSMonitors() {
     []() { return bmsTelemetryData.lowest_cell_voltage; },
     &serialLogger);
   sensors.push_back(bmsLowCellVoltage);
+
+  // State of Charge (Warn: 15%, Crit: 5%)
+  static SensorMonitor* bmsSoc = new SensorMonitor(
+    SensorID::BMS_SOC,
+    {.warnLow = 15.0, .warnHigh = 101.0, .critLow = 5.0, .critHigh = 110.0},
+    []() { return bmsTelemetryData.soc; },
+    &serialLogger);
+  sensors.push_back(bmsSoc);
+
+  // Total Voltage High (Warn: 100.4V, Crit: 100.8V)
+  static SensorMonitor* bmsTotalVoltage = new SensorMonitor(
+    SensorID::BMS_Total_Voltage,
+    {.warnLow = 0.0, .warnHigh = 100.4, .critLow = 0.0, .critHigh = 100.8},
+    []() { return bmsTelemetryData.battery_voltage; },
+    &serialLogger);
+  sensors.push_back(bmsTotalVoltage);
+
+  // Voltage Differential (Warn: 0.20V, Crit: 0.40V)
+  static SensorMonitor* bmsVoltageDifferential = new SensorMonitor(
+    SensorID::BMS_Voltage_Differential,
+    {.warnLow = 0.0, .warnHigh = 0.2, .critLow = 0.0, .critHigh = 0.4},
+    []() { return bmsTelemetryData.voltage_differential; },
+    &serialLogger);
+  sensors.push_back(bmsVoltageDifferential);
 }
 
 void addAltimeterMonitors() {
