@@ -1,0 +1,38 @@
+#pragma once
+#include <stdint.h>
+#include <chrono>
+#include <cstdio>
+#include <thread>
+
+// Basic Arduino types and helpers for native unit tests
+using std::chrono::steady_clock;
+using std::chrono::milliseconds;
+
+inline unsigned long millis() {
+  static auto start = steady_clock::now();
+  return (unsigned long)std::chrono::duration_cast<milliseconds>(steady_clock::now() - start).count();
+}
+
+// Dummy Serial replacement
+struct DummySerial {
+  template <typename... Args>
+  void printf(const char*, Args...) {}
+  template <typename T>
+  void print(const T&) {}
+  template <typename T>
+  void println(const T&) {}
+  inline void begin(unsigned long) {}
+};
+
+static DummySerial USBSerial;
+static DummySerial Serial;
+
+// Arduino word type
+typedef uint16_t word;
+
+// FreeRTOS queue stub for unit tests
+typedef void* QueueHandle_t;
+
+inline void delay(unsigned long ms) {
+  std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+}
