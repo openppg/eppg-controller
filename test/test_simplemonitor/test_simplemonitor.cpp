@@ -217,55 +217,140 @@ TEST(SimpleMonitor, ESCTemperatureAlerts) {
     FakeLogger logger;
     float fakeTemp;
 
-    // -- MOS Temp --
+    // -- MOS Temp High --
     fakeTemp = 80.0f;
     SensorMonitor mosTempMon(SensorID::ESC_MOS_Temp, escMosTempThresholds, [&]() { return fakeTemp; }, &logger);
     mosTempMon.check();
     EXPECT_TRUE(logger.entries.empty());
 
-    fakeTemp = 95.0f; // Warn
+    fakeTemp = 95.0f; // Warn High
     mosTempMon.check();
     ASSERT_EQ(logger.entries.size(), 1u);
     EXPECT_EQ(logger.entries.back().lvl, AlertLevel::WARN_HIGH);
 
-    fakeTemp = 115.0f; // Crit
+    fakeTemp = 115.0f; // Crit High
     mosTempMon.check();
     ASSERT_EQ(logger.entries.size(), 2u);
     EXPECT_EQ(logger.entries.back().lvl, AlertLevel::CRIT_HIGH);
 
-    // -- MCU Temp --
+    // -- MOS Temp Low --
+    logger.entries.clear();
+    fakeTemp = 0.0f;
+    SensorMonitor mosTempLowMon(SensorID::ESC_MOS_Temp, escMosTempThresholds, [&]() { return fakeTemp; }, &logger);
+    mosTempLowMon.check();
+    EXPECT_TRUE(logger.entries.empty());
+
+    fakeTemp = -15.0f; // Warn Low
+    mosTempLowMon.check();
+    ASSERT_EQ(logger.entries.size(), 1u);
+    EXPECT_EQ(logger.entries.back().lvl, AlertLevel::WARN_LOW);
+
+    fakeTemp = -25.0f; // Crit Low
+    mosTempLowMon.check();
+    ASSERT_EQ(logger.entries.size(), 2u);
+    EXPECT_EQ(logger.entries.back().lvl, AlertLevel::CRIT_LOW);
+
+    // -- MCU Temp High --
     logger.entries.clear();
     fakeTemp = 75.0f;
     SensorMonitor mcuTempMon(SensorID::ESC_MCU_Temp, escMcuTempThresholds, [&]() { return fakeTemp; }, &logger);
     mcuTempMon.check();
     EXPECT_TRUE(logger.entries.empty());
 
-    fakeTemp = 85.0f; // Warn
+    fakeTemp = 85.0f; // Warn High
     mcuTempMon.check();
     ASSERT_EQ(logger.entries.size(), 1u);
     EXPECT_EQ(logger.entries.back().lvl, AlertLevel::WARN_HIGH);
 
-    fakeTemp = 100.0f; // Crit
+    fakeTemp = 100.0f; // Crit High
     mcuTempMon.check();
     ASSERT_EQ(logger.entries.size(), 2u);
     EXPECT_EQ(logger.entries.back().lvl, AlertLevel::CRIT_HIGH);
 
-    // -- Cap Temp --
+    // -- MCU Temp Low --
+    logger.entries.clear();
+    fakeTemp = 0.0f;
+    SensorMonitor mcuTempLowMon(SensorID::ESC_MCU_Temp, escMcuTempThresholds, [&]() { return fakeTemp; }, &logger);
+    mcuTempLowMon.check();
+    EXPECT_TRUE(logger.entries.empty());
+
+    fakeTemp = -15.0f; // Warn Low
+    mcuTempLowMon.check();
+    ASSERT_EQ(logger.entries.size(), 1u);
+    EXPECT_EQ(logger.entries.back().lvl, AlertLevel::WARN_LOW);
+
+    fakeTemp = -25.0f; // Crit Low
+    mcuTempLowMon.check();
+    ASSERT_EQ(logger.entries.size(), 2u);
+    EXPECT_EQ(logger.entries.back().lvl, AlertLevel::CRIT_LOW);
+
+    // -- Cap Temp High --
     logger.entries.clear();
     fakeTemp = 80.0f;
     SensorMonitor capTempMon(SensorID::ESC_CAP_Temp, escCapTempThresholds, [&]() { return fakeTemp; }, &logger);
     capTempMon.check();
     EXPECT_TRUE(logger.entries.empty());
 
-    fakeTemp = 90.0f; // Warn
+    fakeTemp = 90.0f; // Warn High
     capTempMon.check();
     ASSERT_EQ(logger.entries.size(), 1u);
     EXPECT_EQ(logger.entries.back().lvl, AlertLevel::WARN_HIGH);
 
-    fakeTemp = 105.0f; // Crit
+    fakeTemp = 105.0f; // Crit High
     capTempMon.check();
     ASSERT_EQ(logger.entries.size(), 2u);
     EXPECT_EQ(logger.entries.back().lvl, AlertLevel::CRIT_HIGH);
+
+    // -- Cap Temp Low --
+    logger.entries.clear();
+    fakeTemp = 0.0f;
+    SensorMonitor capTempLowMon(SensorID::ESC_CAP_Temp, escCapTempThresholds, [&]() { return fakeTemp; }, &logger);
+    capTempLowMon.check();
+    EXPECT_TRUE(logger.entries.empty());
+
+    fakeTemp = -15.0f; // Warn Low
+    capTempLowMon.check();
+    ASSERT_EQ(logger.entries.size(), 1u);
+    EXPECT_EQ(logger.entries.back().lvl, AlertLevel::WARN_LOW);
+
+    fakeTemp = -25.0f; // Crit Low
+    capTempLowMon.check();
+    ASSERT_EQ(logger.entries.size(), 2u);
+    EXPECT_EQ(logger.entries.back().lvl, AlertLevel::CRIT_LOW);
+
+    // -- Motor Temp High --
+    logger.entries.clear();
+    fakeTemp = 85.0f;
+    SensorMonitor motorTempMon(SensorID::Motor_Temp, motorTempThresholds, [&]() { return fakeTemp; }, &logger);
+    motorTempMon.check();
+    EXPECT_TRUE(logger.entries.empty());
+
+    fakeTemp = 95.0f; // Warn High
+    motorTempMon.check();
+    ASSERT_EQ(logger.entries.size(), 1u);
+    EXPECT_EQ(logger.entries.back().lvl, AlertLevel::WARN_HIGH);
+
+    fakeTemp = 115.0f; // Crit High
+    motorTempMon.check();
+    ASSERT_EQ(logger.entries.size(), 2u);
+    EXPECT_EQ(logger.entries.back().lvl, AlertLevel::CRIT_HIGH);
+
+    // -- Motor Temp Low --
+    logger.entries.clear();
+    fakeTemp = -10.0f;
+    SensorMonitor motorTempLowMon(SensorID::Motor_Temp, motorTempThresholds, [&]() { return fakeTemp; }, &logger);
+    motorTempLowMon.check();
+    EXPECT_TRUE(logger.entries.empty());
+
+    fakeTemp = -22.0f; // Warn Low
+    motorTempLowMon.check();
+    ASSERT_EQ(logger.entries.size(), 1u);
+    EXPECT_EQ(logger.entries.back().lvl, AlertLevel::WARN_LOW);
+
+    fakeTemp = -30.0f; // Crit Low
+    motorTempLowMon.check();
+    ASSERT_EQ(logger.entries.size(), 2u);
+    EXPECT_EQ(logger.entries.back().lvl, AlertLevel::CRIT_LOW);
 }
 
 int main(int argc, char **argv) {
