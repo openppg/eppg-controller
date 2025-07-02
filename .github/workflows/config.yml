@@ -18,6 +18,31 @@ jobs:
           python-version: 3.x
       - run: pip install cpplint
       - run: cpplint --linelength 140 --filter=-legal/copyright,-runtime/int,-build/include_subdir,-readability/casting,-readability/todo,-build/include_order,-build/include_what_you_use --recursive ./inc/ ./lib/ ./src/
+
+  pio-test:
+    name: PlatformIO Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_TOKEN }}
+          persist-credentials: true
+          show-progress: false
+      - name: Setup Git Credentials
+        run: |
+          git config --global credential.helper store
+          echo "https://oauth2:${{ secrets.GH_TOKEN }}@github.com" > ~/.git-credentials
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+      - name: Install Platform IO
+        run: |
+          python -m pip install --upgrade pip
+          pip install -U platformio
+      - name: Run Unit Tests
+        run: platformio test -e native-test
+
   pio-build:
     name: PlatformIO Build
     runs-on: ubuntu-latest
