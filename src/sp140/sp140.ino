@@ -540,10 +540,12 @@ void setup() {
 
     setupBLE();
 
-  // Initialize the simple monitoring system
-  initSimpleMonitor();
-
   setupTasks();  // Create all tasks after queues and BLE are initialized
+
+  // Initialize the simple monitoring system after tasks are running
+  // This gives BMS/ESC time to initialize and start providing data
+  //delay(1000);  // Give systems time to stabilize
+  initSimpleMonitor();
 
   pulseVibeMotor();
   if (digitalRead(board_config.button_top) == LOW) {  // LOW means pressed since it's INPUT_PULLUP

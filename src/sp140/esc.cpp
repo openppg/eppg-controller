@@ -160,8 +160,6 @@ bool setupTWAI() {
   }
   // If status_result was ESP_ERR_INVALID_STATE, proceed with installation
 
-  USBSerial.println("TWAI driver not installed. Proceeding with installation...");
-
   twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(
                                       (gpio_num_t)ESC_TX_PIN,
                                       (gpio_num_t)ESC_RX_PIN,

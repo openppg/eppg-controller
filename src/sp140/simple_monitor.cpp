@@ -189,9 +189,10 @@ void addBMSMonitors() {
   monitors.push_back(bmsTotalVoltage);
 
   // Voltage Differential (Warn: 0.20V, Crit: 0.40V)
+  // 0.0V is ideal (perfectly balanced), only alert on HIGH values
   static SensorMonitor* bmsVoltageDifferential = new SensorMonitor(
     SensorID::BMS_Voltage_Differential,
-    {.warnLow = 0.0, .warnHigh = 0.2, .critLow = 0.0, .critHigh = 0.4},
+    {.warnLow = -1.0, .warnHigh = 0.2, .critLow = -2.0, .critHigh = 0.4},
     []() { return bmsTelemetryData.voltage_differential; },
     &serialLogger);
   monitors.push_back(bmsVoltageDifferential);
