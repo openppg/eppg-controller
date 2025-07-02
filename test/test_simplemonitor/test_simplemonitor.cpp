@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include "sp140/simple_monitor.h"
+#include "sp140/monitor_config.h"
 
 // Fake logger to capture log calls
 class FakeLogger : public ILogger {
@@ -73,6 +74,198 @@ TEST(SimpleMonitor, BooleanMonitorTransitions) {
   mon.check();
   ASSERT_EQ(logger.entries.size(), 2u);
   EXPECT_EQ(logger.entries.back().lvl, AlertLevel::OK);
+}
+
+TEST(SimpleMonitor, BMSSOCAlerts) {
+  FakeLogger logger;
+
+  // Use the single source of truth for thresholds
+  float fakeSOC = 50.0f; // Start with a healthy SOC
+  SensorMonitor socMonitor(SensorID::BMS_SOC, bmsSOCThresholds, [&]() { return fakeSOC; }, &logger);
+
+  // 1. Initial check, should be OK, no log
+  socMonitor.check();
+  EXPECT_TRUE(logger.entries.empty());
+
+  // 2. Drop to warning level
+  fakeSOC = 14.0f;
+  socMonitor.check();
+  ASSERT_EQ(logger.entries.size(), 1u);
+  EXPECT_EQ(logger.entries.back().lvl, AlertLevel::WARN_LOW);
+  EXPECT_EQ(logger.entries.back().fval, 14.0f);
+
+  // 3. Drop to critical level
+  fakeSOC = 4.0f;
+  socMonitor.check();
+  ASSERT_EQ(logger.entries.size(), 2u);
+  EXPECT_EQ(logger.entries.back().lvl, AlertLevel::CRIT_LOW);
+  EXPECT_EQ(logger.entries.back().fval, 4.0f);
+
+  // 4. Check again at critical, should not log again as state hasn't changed
+  socMonitor.check();
+  ASSERT_EQ(logger.entries.size(), 2u);
+
+  // 5. Rise back to warning level
+  fakeSOC = 12.0f;
+  socMonitor.check();
+  ASSERT_EQ(logger.entries.size(), 3u);
+  EXPECT_EQ(logger.entries.back().lvl, AlertLevel::WARN_LOW);
+  EXPECT_EQ(logger.entries.back().fval, 12.0f);
+
+  // 6. Rise back to OK
+  fakeSOC = 50.0f;
+  socMonitor.check();
+  ASSERT_EQ(logger.entries.size(), 4u);
+  EXPECT_EQ(logger.entries.back().lvl, AlertLevel::OK);
+  EXPECT_EQ(logger.entries.back().fval, 50.0f);
+}
+
+TEST(SimpleMonitor, BMSVoltageAlerts) {
+  FakeLogger logger;
+  float fakeVoltage;
+
+  // -- High Cell Voltage --
+  fakeVoltage = 4.0f;
+  SensorMonitor highCellMon(SensorID::BMS_High_Cell_Voltage, bmsHighCellVoltageThresholds, [&]() { return fakeVoltage; }, &logger);
+  highCellMon.check(); // OK
+  EXPECT_TRUE(logger.entries.empty());
+
+  fakeVoltage = 4.15f; // Warn
+  highCellMon.check();
+  ASSERT_EQ(logger.entries.size(), 1u);
+  EXPECT_EQ(logger.entries.back().lvl, AlertLevel::WARN_HIGH);
+
+  fakeVoltage = 4.25f; // Crit
+  highCellMon.check();
+  ASSERT_EQ(logger.entries.size(), 2u);
+  EXPECT_EQ(logger.entries.back().lvl, AlertLevel::CRIT_HIGH);
+
+  // -- Low Cell Voltage --
+  logger.entries.clear();
+  fakeVoltage = 3.5f;
+  SensorMonitor lowCellMon(SensorID::BMS_Low_Cell_Voltage, bmsLowCellVoltageThresholds, [&]() { return fakeVoltage; }, &logger);
+  lowCellMon.check(); // OK
+  EXPECT_TRUE(logger.entries.empty());
+
+  fakeVoltage = 3.1f; // Warn
+  lowCellMon.check();
+  ASSERT_EQ(logger.entries.size(), 1u);
+  EXPECT_EQ(logger.entries.back().lvl, AlertLevel::WARN_LOW);
+
+  fakeVoltage = 2.9f; // Crit
+  lowCellMon.check();
+  ASSERT_EQ(logger.entries.size(), 2u);
+  EXPECT_EQ(logger.entries.back().lvl, AlertLevel::CRIT_LOW);
+
+  // -- Total Voltage --
+  logger.entries.clear();
+  fakeVoltage = 98.0f;
+  SensorMonitor totalVoltsMon(SensorID::BMS_Total_Voltage, bmsTotalVoltageHighThresholds, [&]() { return fakeVoltage; }, &logger);
+  totalVoltsMon.check(); // OK
+  EXPECT_TRUE(logger.entries.empty());
+
+  fakeVoltage = 100.5f; // Warn
+  totalVoltsMon.check();
+  ASSERT_EQ(logger.entries.size(), 1u);
+  EXPECT_EQ(logger.entries.back().lvl, AlertLevel::WARN_HIGH);
+
+  fakeVoltage = 101.0f; // Crit
+  totalVoltsMon.check();
+  ASSERT_EQ(logger.entries.size(), 2u);
+  EXPECT_EQ(logger.entries.back().lvl, AlertLevel::CRIT_HIGH);
+
+  // -- Voltage Differential --
+  logger.entries.clear();
+  fakeVoltage = 0.1f;
+  SensorMonitor diffMon(SensorID::BMS_Voltage_Differential, bmsVoltageDifferentialThresholds, [&]() { return fakeVoltage; }, &logger);
+  diffMon.check(); // OK
+  EXPECT_TRUE(logger.entries.empty());
+
+  fakeVoltage = 0.3f; // Warn
+  diffMon.check();
+  ASSERT_EQ(logger.entries.size(), 1u);
+  EXPECT_EQ(logger.entries.back().lvl, AlertLevel::WARN_HIGH);
+
+  fakeVoltage = 0.5f; // Crit
+  diffMon.check();
+  ASSERT_EQ(logger.entries.size(), 2u);
+  EXPECT_EQ(logger.entries.back().lvl, AlertLevel::CRIT_HIGH);
+}
+
+TEST(SimpleMonitor, BMSTemperatureAlerts) {
+    FakeLogger logger;
+    float fakeTemp = 30.0f;
+
+    // We can use BMS_MOS_Temp as a representative sensor for bmsTempThresholds
+    SensorMonitor tempMon(SensorID::BMS_MOS_Temp, bmsTempThresholds, [&]() { return fakeTemp; }, &logger);
+
+    tempMon.check(); // OK
+    EXPECT_TRUE(logger.entries.empty());
+
+    fakeTemp = 55.0f; // Warn High
+    tempMon.check();
+    ASSERT_EQ(logger.entries.size(), 1u);
+    EXPECT_EQ(logger.entries.back().lvl, AlertLevel::WARN_HIGH);
+
+    fakeTemp = 65.0f; // Crit High
+    tempMon.check();
+    ASSERT_EQ(logger.entries.size(), 2u);
+    EXPECT_EQ(logger.entries.back().lvl, AlertLevel::CRIT_HIGH);
+}
+
+TEST(SimpleMonitor, ESCTemperatureAlerts) {
+    FakeLogger logger;
+    float fakeTemp;
+
+    // -- MOS Temp --
+    fakeTemp = 80.0f;
+    SensorMonitor mosTempMon(SensorID::ESC_MOS_Temp, escMosTempThresholds, [&]() { return fakeTemp; }, &logger);
+    mosTempMon.check();
+    EXPECT_TRUE(logger.entries.empty());
+
+    fakeTemp = 95.0f; // Warn
+    mosTempMon.check();
+    ASSERT_EQ(logger.entries.size(), 1u);
+    EXPECT_EQ(logger.entries.back().lvl, AlertLevel::WARN_HIGH);
+
+    fakeTemp = 115.0f; // Crit
+    mosTempMon.check();
+    ASSERT_EQ(logger.entries.size(), 2u);
+    EXPECT_EQ(logger.entries.back().lvl, AlertLevel::CRIT_HIGH);
+
+    // -- MCU Temp --
+    logger.entries.clear();
+    fakeTemp = 75.0f;
+    SensorMonitor mcuTempMon(SensorID::ESC_MCU_Temp, escMcuTempThresholds, [&]() { return fakeTemp; }, &logger);
+    mcuTempMon.check();
+    EXPECT_TRUE(logger.entries.empty());
+
+    fakeTemp = 85.0f; // Warn
+    mcuTempMon.check();
+    ASSERT_EQ(logger.entries.size(), 1u);
+    EXPECT_EQ(logger.entries.back().lvl, AlertLevel::WARN_HIGH);
+
+    fakeTemp = 100.0f; // Crit
+    mcuTempMon.check();
+    ASSERT_EQ(logger.entries.size(), 2u);
+    EXPECT_EQ(logger.entries.back().lvl, AlertLevel::CRIT_HIGH);
+
+    // -- Cap Temp --
+    logger.entries.clear();
+    fakeTemp = 80.0f;
+    SensorMonitor capTempMon(SensorID::ESC_CAP_Temp, escCapTempThresholds, [&]() { return fakeTemp; }, &logger);
+    capTempMon.check();
+    EXPECT_TRUE(logger.entries.empty());
+
+    fakeTemp = 90.0f; // Warn
+    capTempMon.check();
+    ASSERT_EQ(logger.entries.size(), 1u);
+    EXPECT_EQ(logger.entries.back().lvl, AlertLevel::WARN_HIGH);
+
+    fakeTemp = 105.0f; // Crit
+    capTempMon.check();
+    ASSERT_EQ(logger.entries.size(), 2u);
+    EXPECT_EQ(logger.entries.back().lvl, AlertLevel::CRIT_HIGH);
 }
 
 int main(int argc, char **argv) {
