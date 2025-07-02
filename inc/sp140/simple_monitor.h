@@ -4,6 +4,7 @@
 #include <vector>
 #include <functional>
 #include <Arduino.h>
+#include "sp140/structs.h"
 
 // Unique identifiers for each sensor
 enum class SensorID {
@@ -50,6 +51,14 @@ struct ILogger {
   virtual void log(SensorID id, AlertLevel lvl, bool val) = 0;
   virtual ~ILogger() = default;
 };
+
+// Telemetry snapshot for thread-safe handoff
+struct TelemetrySnapshot {
+  STR_ESC_TELEMETRY_140 esc;
+  STR_BMS_TELEMETRY_140 bms;
+};
+
+extern QueueHandle_t telemetrySnapshotQueue;
 
 // Serial logger implementation
 struct SerialLogger : ILogger {
@@ -126,6 +135,7 @@ extern bool monitoringEnabled;  // Flag to control monitoring state
 const char* sensorIDToString(SensorID id);
 void initSimpleMonitor();
 void checkAllSensors();
+void checkAllSensorsWithData(const STR_ESC_TELEMETRY_140& escData, const STR_BMS_TELEMETRY_140& bmsData);
 void addESCMonitors();
 void addBMSMonitors();
 void addAltimeterMonitors();

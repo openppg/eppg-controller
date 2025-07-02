@@ -237,6 +237,9 @@ QueueHandle_t throttleUpdateQueue = NULL;
 QueueHandle_t escTelemetryQueue = NULL;
 QueueHandle_t vibeQueue = NULL;  // Vibration motor queue
 
+// Snapshot queue for sensor monitoring
+QueueHandle_t telemetrySnapshotQueue = NULL;
+
 unsigned long lastDisarmTime = 0;
 const unsigned long DISARM_COOLDOWN = 500;  // 500ms cooldown
 
@@ -287,6 +290,7 @@ void throttleTask(void *pvParameters) {
 
   for (;;) {  // infinite loop
     handleThrottle();  //
+    pushTelemetrySnapshot();
     delay(20);  // wait for 20ms
   }
   vTaskDelete(NULL);  // should never reach this
@@ -364,9 +368,14 @@ void refreshDisplay() {
 }
 
 void monitoringTask(void *pvParameters) {
+  TelemetrySnapshot snap;
   for (;;) {
-    checkAllSensors();
-    vTaskDelay(pdMS_TO_TICKS(100));  // Check every 100ms
+    if (xQueueReceive(telemetrySnapshotQueue, &snap, pdMS_TO_TICKS(100)) == pdTRUE) {
+      // Run monitors using the fresh snapshot
+      if (monitoringEnabled) {
+        checkAllSensorsWithData(snap.esc, snap.bms);
+      }
+    }
   }
 }
 
@@ -378,6 +387,7 @@ void spiCommTask(void *pvParameters) {
         xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);  // Always latest data
         xQueueOverwrite(escTelemetryQueue, &escTelemetryData);  // Always latest data
         refreshDisplay();
+        pushTelemetrySnapshot();
       #else
         // 1. Check if CAN transceiver is initialized
         if (bmsCanInitialized) {
@@ -415,6 +425,9 @@ void spiCommTask(void *pvParameters) {
 
                 // Update display - CS pin management is handled inside refreshDisplay via LVGL mutex
         refreshDisplay();
+
+        // Publish latest telemetry snapshot for monitoring
+        pushTelemetrySnapshot();
 
       #endif
 
@@ -543,6 +556,12 @@ void setup() {
     USBSerial.println("Error creating device state queue");
   }
 
+  // Snapshot queue for monitoring (size 1)
+  telemetrySnapshotQueue = xQueueCreate(1, sizeof(TelemetrySnapshot));
+  if (telemetrySnapshotQueue == NULL) {
+    USBSerial.println("Error creating telemetry snapshot queue");
+  }
+
     setupBLE();
 
   // Initialize the simple monitoring system (but keep it disabled initially)
@@ -626,7 +645,7 @@ void setupTasks() {
     &webSerialTaskHandle);
 
   // Create monitoring task
-  xTaskCreate(monitoringTask, "Monitoring", 2048, NULL, 1, &monitoringTaskHandle);
+  xTaskCreate(monitoringTask, "Monitoring", 4096, NULL, 1, &monitoringTaskHandle);
 }
 
 void setup140() {
@@ -1148,4 +1167,14 @@ void webSerialTask(void *pvParameters) {
     }
     vTaskDelay(pdMS_TO_TICKS(100));  // Check every 100ms
   }
+}
+
+// Helper to push latest telemetry snapshot to queue (size 1, overwrite)
+void pushTelemetrySnapshot() {
+  if (telemetrySnapshotQueue == NULL) return;
+
+  TelemetrySnapshot snap;
+  snap.esc = escTelemetryData;
+  snap.bms = bmsTelemetryData;
+  xQueueOverwrite(telemetrySnapshotQueue, &snap);
 }
