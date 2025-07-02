@@ -540,12 +540,10 @@ void setup() {
 
     setupBLE();
 
-  setupTasks();  // Create all tasks after queues and BLE are initialized
-
-  // Initialize the simple monitoring system after tasks are running
-  // This gives BMS/ESC time to initialize and start providing data
-  //delay(1000);  // Give systems time to stabilize
+  // Initialize the simple monitoring system (but keep it disabled initially)
   initSimpleMonitor();
+
+  setupTasks();  // Create all tasks after queues and BLE are initialized
 
   pulseVibeMotor();
   if (digitalRead(board_config.button_top) == LOW) {  // LOW means pressed since it's INPUT_PULLUP
@@ -586,6 +584,10 @@ void setup() {
   send_device_data();
   // Signal that the UI is ready for updates from tasks
   uiReady = true;
+
+  // Enable sensor monitoring after splash screen and UI setup
+  // This gives BMS/ESC time to initialize and start providing valid data
+  enableMonitoring();
 }
 
 // set up all the main threads/tasks with core 0 affinity

@@ -120,6 +120,7 @@ struct BooleanMonitor : public IMonitor {
 // Global monitor registry
 extern std::vector<IMonitor*> monitors;
 extern SerialLogger serialLogger;
+extern bool monitoringEnabled;  // Flag to control monitoring state
 
 // Functions
 const char* sensorIDToString(SensorID id);
@@ -129,5 +130,6 @@ void addESCMonitors();
 void addBMSMonitors();
 void addAltimeterMonitors();
 void addInternalMonitors();
+void enableMonitoring();
 
 #endif  // INC_SP140_SIMPLE_MONITOR_H_

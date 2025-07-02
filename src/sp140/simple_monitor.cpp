@@ -6,6 +6,7 @@
 // Global instances
 std::vector<IMonitor*> monitors;
 SerialLogger serialLogger;
+bool monitoringEnabled = false;  // Start with monitoring disabled
 
 void SerialLogger::log(SensorID id, AlertLevel lvl, float v) {
   const char* levelNames[] = {"OK", "WARN_LOW", "WARN_HIGH", "CRIT_LOW", "CRIT_HIGH", "INFO"};
@@ -61,6 +62,8 @@ void initSimpleMonitor() {
 }
 
 void checkAllSensors() {
+  if (!monitoringEnabled) return;  // Skip if monitoring is disabled
+
   for (auto* monitor : monitors) {
     if (monitor) {
       monitor->check();
@@ -234,4 +237,9 @@ void addInternalMonitors() {
     []() { return temperatureRead(); },
     &serialLogger);
   monitors.push_back(cpuTemp);
+}
+
+void enableMonitoring() {
+  monitoringEnabled = true;
+  USBSerial.println("Sensor monitoring enabled");
 }
