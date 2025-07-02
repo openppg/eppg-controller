@@ -52,6 +52,8 @@ void updateBMSData() {
 
   // Battery status
   bmsTelemetryData.is_charging = bms_can->isBatteryCharging();
+  bmsTelemetryData.is_charge_mos = bms_can->isChargeMOSStatus();
+  bmsTelemetryData.is_discharge_mos = bms_can->isDischargeMOSStatus();
 
   // Populate individual cell voltages
   for (uint8_t i = 0; i < BMS_CELLS_NUM; i++) {
