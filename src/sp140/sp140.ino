@@ -227,6 +227,7 @@ TaskHandle_t throttleTaskHandle = NULL;
 TaskHandle_t watchdogTaskHandle = NULL;
 TaskHandle_t spiCommTaskHandle = NULL;
 TaskHandle_t vibeTaskHandle = NULL;  // Vibration motor task
+TaskHandle_t monitoringTaskHandle = NULL;  // Sensor monitoring task
 
 QueueHandle_t melodyQueue = NULL;
 TaskHandle_t audioTaskHandle = NULL;
@@ -362,6 +363,13 @@ void refreshDisplay() {
   }
 }
 
+void monitoringTask(void *pvParameters) {
+  for (;;) {
+    checkAllSensors();
+    vTaskDelay(pdMS_TO_TICKS(100));  // Check every 100ms
+  }
+}
+
 void spiCommTask(void *pvParameters) {
   for (;;) {
       #ifdef SCREEN_DEBUG
@@ -409,9 +417,6 @@ void spiCommTask(void *pvParameters) {
         refreshDisplay();
 
       #endif
-
-      // Check all sensor monitors
-      checkAllSensors();
 
       vTaskDelay(pdMS_TO_TICKS(40));  // ~25fps
   }
@@ -619,6 +624,9 @@ void setupTasks() {
     NULL,
     1,
     &webSerialTaskHandle);
+
+  // Create monitoring task
+  xTaskCreate(monitoringTask, "Monitoring", 2048, NULL, 1, &monitoringTaskHandle);
 }
 
 void setup140() {
