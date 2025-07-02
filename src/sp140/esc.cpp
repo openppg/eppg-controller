@@ -48,7 +48,8 @@ void initESC() {
  * Set the ESC throttle value
  * @param throttlePWM Throttle value in microseconds (1000-2000)
  *                    1000 = minimum throttle, 2000 = maximum throttle
- * Note: The ESC requires messages at least every 300ms or it will reset
+ *
+ * Important: The ESC requires messages at least every 300ms or it will reset
  */
 void setESCThrottle(int throttlePWM) {
   // Input validation
