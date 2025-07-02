@@ -4,12 +4,17 @@
 #include "sp140/utilities.h"
 
 // Global instances
-std::vector<SensorMonitor*> sensors;
+std::vector<IMonitor*> monitors;
 SerialLogger serialLogger;
 
 void SerialLogger::log(SensorID id, AlertLevel lvl, float v) {
-  const char* levelNames[] = {"OK", "WARN_LOW", "WARN_HIGH", "CRIT_LOW", "CRIT_HIGH"};
+  const char* levelNames[] = {"OK", "WARN_LOW", "WARN_HIGH", "CRIT_LOW", "CRIT_HIGH", "INFO"};
   USBSerial.printf("[%lu] [%s] %s = %.2f\n", millis(), levelNames[(int)lvl], sensorIDToString(id), v);
+}
+
+void SerialLogger::log(SensorID id, AlertLevel lvl, bool v) {
+  const char* levelNames[] = {"OK", "WARN_LOW", "WARN_HIGH", "CRIT_LOW", "CRIT_HIGH", "INFO"};
+  USBSerial.printf("[%lu] [%s] %s = %s\n", millis(), levelNames[(int)lvl], sensorIDToString(id), v ? "ON" : "OFF");
 }
 
 const char* sensorIDToString(SensorID id) {
@@ -32,6 +37,8 @@ const char* sensorIDToString(SensorID id) {
     case SensorID::BMS_SOC: return "BMS_SOC";
     case SensorID::BMS_Total_Voltage: return "BMS_Total_Voltage";
     case SensorID::BMS_Voltage_Differential: return "BMS_Voltage_Differential";
+    case SensorID::BMS_Charge_MOS: return "BMS_Charge_MOS";
+    case SensorID::BMS_Discharge_MOS: return "BMS_Discharge_MOS";
 
     // Altimeter
     case SensorID::Baro_Temp: return "Baro_Temp";
@@ -45,18 +52,18 @@ const char* sensorIDToString(SensorID id) {
 
 void initSimpleMonitor() {
   USBSerial.println("Initializing Simple Monitor System");
-  sensors.clear();
+  monitors.clear();
   addESCMonitors();
   addBMSMonitors();
   addAltimeterMonitors();
   addInternalMonitors();
-  USBSerial.printf("Monitoring %d sensors\n", sensors.size());
+  USBSerial.printf("Monitoring %d sensors\n", monitors.size());
 }
 
 void checkAllSensors() {
-  for (auto* sensor : sensors) {
-    if (sensor) {
-      sensor->check();
+  for (auto* monitor : monitors) {
+    if (monitor) {
+      monitor->check();
     }
   }
 }
@@ -69,7 +76,7 @@ void addESCMonitors() {
     {.warnLow = -10, .warnHigh = 90, .critLow = -20, .critHigh = 110},
     []() { return escTelemetryData.mos_temp; },
     &serialLogger);
-  sensors.push_back(escMosTemp);
+  monitors.push_back(escMosTemp);
 
   // ESC MCU Temperature Monitor
   // Min: -10°C, Warning: 80°C, Critical: 95°C
@@ -78,7 +85,7 @@ void addESCMonitors() {
     {.warnLow = -10, .warnHigh = 80, .critLow = -20, .critHigh = 95},
     []() { return escTelemetryData.mcu_temp; },
     &serialLogger);
-  sensors.push_back(escMcuTemp);
+  monitors.push_back(escMcuTemp);
 
   // ESC Capacitor Temperature Monitor
   // Min: -10°C, Warning: 85°C, Critical: 100°C
@@ -87,7 +94,7 @@ void addESCMonitors() {
     {.warnLow = -10, .warnHigh = 85, .critLow = -20, .critHigh = 100},
     []() { return escTelemetryData.cap_temp; },
     &serialLogger);
-  sensors.push_back(escCapTemp);
+  monitors.push_back(escCapTemp);
 
   // Motor Temperature Monitor
   // Min: -20°C, Warning: 90°C, Critical: 110°C
@@ -96,7 +103,7 @@ void addESCMonitors() {
     {.warnLow = -20, .warnHigh = 90, .critLow = -25, .critHigh = 110},
     []() { return escTelemetryData.motor_temp; },
     &serialLogger);
-  sensors.push_back(motorTemp);
+  monitors.push_back(motorTemp);
 }
 
 void addBMSMonitors() {
@@ -106,7 +113,7 @@ void addBMSMonitors() {
     {.warnLow = -10, .warnHigh = 50, .critLow = -15, .critHigh = 60},
     []() { return bmsTelemetryData.mos_temperature; },
     &serialLogger);
-  sensors.push_back(bmsMosTemp);
+  monitors.push_back(bmsMosTemp);
 
   // BMS Balance Resistor Temperature (Warning: 50°C, Critical: 60°C)
   static SensorMonitor* bmsBalanceTemp = new SensorMonitor(
@@ -114,7 +121,7 @@ void addBMSMonitors() {
     {.warnLow = -10, .warnHigh = 50, .critLow = -15, .critHigh = 60},
     []() { return bmsTelemetryData.balance_temperature; },
     &serialLogger);
-  sensors.push_back(bmsBalanceTemp);
+  monitors.push_back(bmsBalanceTemp);
 
   // T1-T4 Cell Temperature Sensors (Warning: 50°C, Critical: 56°C)
   static const Thresholds bmsCellTempThresholds = {
@@ -126,28 +133,28 @@ void addBMSMonitors() {
     bmsCellTempThresholds,
     []() { return bmsTelemetryData.t1_temperature; },
     &serialLogger);
-  sensors.push_back(bmsT1Temp);
+  monitors.push_back(bmsT1Temp);
 
   static SensorMonitor* bmsT2Temp = new SensorMonitor(
     SensorID::BMS_T2_Temp,
     bmsCellTempThresholds,
     []() { return bmsTelemetryData.t2_temperature; },
     &serialLogger);
-  sensors.push_back(bmsT2Temp);
+  monitors.push_back(bmsT2Temp);
 
   static SensorMonitor* bmsT3Temp = new SensorMonitor(
     SensorID::BMS_T3_Temp,
     bmsCellTempThresholds,
     []() { return bmsTelemetryData.t3_temperature; },
     &serialLogger);
-  sensors.push_back(bmsT3Temp);
+  monitors.push_back(bmsT3Temp);
 
   static SensorMonitor* bmsT4Temp = new SensorMonitor(
     SensorID::BMS_T4_Temp,
     bmsCellTempThresholds,
     []() { return bmsTelemetryData.t4_temperature; },
     &serialLogger);
-  sensors.push_back(bmsT4Temp);
+  monitors.push_back(bmsT4Temp);
 
   // High Cell Voltage (Warn: 4.1V, Crit: 4.2V)
   static SensorMonitor* bmsHighCellVoltage = new SensorMonitor(
@@ -155,7 +162,7 @@ void addBMSMonitors() {
     {.warnLow = 0.0, .warnHigh = 4.1, .critLow = 0.0, .critHigh = 4.2},
     []() { return bmsTelemetryData.highest_cell_voltage; },
     &serialLogger);
-  sensors.push_back(bmsHighCellVoltage);
+  monitors.push_back(bmsHighCellVoltage);
 
   // Low Cell Voltage (Warn: 3.2V, Crit: 3.0V)
   static SensorMonitor* bmsLowCellVoltage = new SensorMonitor(
@@ -163,7 +170,7 @@ void addBMSMonitors() {
     {.warnLow = 3.2, .warnHigh = 5.0, .critLow = 3.0, .critHigh = 5.0},
     []() { return bmsTelemetryData.lowest_cell_voltage; },
     &serialLogger);
-  sensors.push_back(bmsLowCellVoltage);
+  monitors.push_back(bmsLowCellVoltage);
 
   // State of Charge (Warn: 15%, Crit: 5%)
   static SensorMonitor* bmsSoc = new SensorMonitor(
@@ -171,7 +178,7 @@ void addBMSMonitors() {
     {.warnLow = 15.0, .warnHigh = 101.0, .critLow = 5.0, .critHigh = 110.0},
     []() { return bmsTelemetryData.soc; },
     &serialLogger);
-  sensors.push_back(bmsSoc);
+  monitors.push_back(bmsSoc);
 
   // Total Voltage High (Warn: 100.4V, Crit: 100.8V)
   static SensorMonitor* bmsTotalVoltage = new SensorMonitor(
@@ -179,7 +186,7 @@ void addBMSMonitors() {
     {.warnLow = 0.0, .warnHigh = 100.4, .critLow = 0.0, .critHigh = 100.8},
     []() { return bmsTelemetryData.battery_voltage; },
     &serialLogger);
-  sensors.push_back(bmsTotalVoltage);
+  monitors.push_back(bmsTotalVoltage);
 
   // Voltage Differential (Warn: 0.20V, Crit: 0.40V)
   static SensorMonitor* bmsVoltageDifferential = new SensorMonitor(
@@ -187,7 +194,25 @@ void addBMSMonitors() {
     {.warnLow = 0.0, .warnHigh = 0.2, .critLow = 0.0, .critHigh = 0.4},
     []() { return bmsTelemetryData.voltage_differential; },
     &serialLogger);
-  sensors.push_back(bmsVoltageDifferential);
+  monitors.push_back(bmsVoltageDifferential);
+
+  // Charge MOS (Alert when OFF)
+  static BooleanMonitor* bmsChargeMos = new BooleanMonitor(
+    SensorID::BMS_Charge_MOS,
+    []() { return bmsTelemetryData.is_charge_mos; },
+    false,  // Alert when false
+    AlertLevel::CRIT_HIGH,
+    &serialLogger);
+  monitors.push_back(bmsChargeMos);
+
+  // Discharge MOS (Alert when OFF)
+  static BooleanMonitor* bmsDischargeMos = new BooleanMonitor(
+    SensorID::BMS_Discharge_MOS,
+    []() { return bmsTelemetryData.is_discharge_mos; },
+    false,  // Alert when false
+    AlertLevel::CRIT_HIGH,
+    &serialLogger);
+  monitors.push_back(bmsDischargeMos);
 }
 
 void addAltimeterMonitors() {
@@ -197,7 +222,7 @@ void addAltimeterMonitors() {
     {.warnLow = 0, .warnHigh = 50, .critLow = -10, .critHigh = 80},
     []() { return getBaroTemperature(); },
     &serialLogger);
-  sensors.push_back(baroTemp);
+  monitors.push_back(baroTemp);
 }
 
 void addInternalMonitors() {
@@ -207,5 +232,5 @@ void addInternalMonitors() {
     {.warnLow = 0, .warnHigh = 50, .critLow = -10, .critHigh = 80},
     []() { return temperatureRead(); },
     &serialLogger);
-  sensors.push_back(cpuTemp);
+  monitors.push_back(cpuTemp);
 }

@@ -25,6 +25,8 @@ enum class SensorID {
   BMS_SOC,
   BMS_Total_Voltage,
   BMS_Voltage_Differential,
+  BMS_Charge_MOS,
+  BMS_Discharge_MOS,
 
   // Altimeter
   Baro_Temp,
@@ -34,7 +36,7 @@ enum class SensorID {
 };
 
 // Alert levels
-enum class AlertLevel { OK, WARN_LOW, WARN_HIGH, CRIT_LOW, CRIT_HIGH };
+enum class AlertLevel { OK, WARN_LOW, WARN_HIGH, CRIT_LOW, CRIT_HIGH, INFO };
 
 // Threshold set
 struct Thresholds {
@@ -45,16 +47,24 @@ struct Thresholds {
 // Logger interface
 struct ILogger {
   virtual void log(SensorID id, AlertLevel lvl, float val) = 0;
+  virtual void log(SensorID id, AlertLevel lvl, bool val) = 0;
   virtual ~ILogger() = default;
 };
 
 // Serial logger implementation
 struct SerialLogger : ILogger {
   void log(SensorID id, AlertLevel lvl, float v) override;
+  void log(SensorID id, AlertLevel lvl, bool v) override;
 };
 
-// Sensor monitor
-struct SensorMonitor {
+// Base monitor interface
+struct IMonitor {
+  virtual ~IMonitor() = default;
+  virtual void check() = 0;
+};
+
+// Sensor monitor for analog values
+struct SensorMonitor : public IMonitor {
   SensorID id;
   Thresholds thr;
   std::function<float()> read;
@@ -65,7 +75,7 @@ struct SensorMonitor {
   SensorMonitor(SensorID i, Thresholds t, std::function<float()> r, ILogger* l)
     : id(i), thr(t), read(r), last(AlertLevel::OK), logger(l) {}
 
-  void check() {
+  void check() override {
     float v = read();
     AlertLevel now = AlertLevel::OK;
 
@@ -81,8 +91,34 @@ struct SensorMonitor {
   }
 };
 
+// New monitor for boolean conditions
+struct BooleanMonitor : public IMonitor {
+    SensorID id;
+    std::function<bool()> read;
+    bool alertOnTrue;  // true to alert on true, false for false
+    AlertLevel level;  // level to report when condition is met
+    bool lastState;
+    ILogger* logger;
+
+    // Constructor
+    BooleanMonitor(SensorID i, std::function<bool()> r, bool alertOn, AlertLevel alertLevel, ILogger* l)
+        : id(i), read(r), alertOnTrue(alertOn), level(alertLevel), lastState(!alertOn), logger(l) {}
+
+    void check() override {
+        bool currentState = read();
+        if (currentState != lastState) {
+            if (currentState == alertOnTrue) {
+                logger->log(id, level, currentState);
+            } else {
+                logger->log(id, AlertLevel::OK, currentState);
+            }
+            lastState = currentState;
+        }
+    }
+};
+
 // Global monitor registry
-extern std::vector<SensorMonitor*> sensors;
+extern std::vector<IMonitor*> monitors;
 extern SerialLogger serialLogger;
 
 // Functions
