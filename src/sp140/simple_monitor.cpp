@@ -195,10 +195,10 @@ void addBMSMonitors() {
     &serialLogger);
   monitors.push_back(bmsSoc);
 
-  // Total Voltage High (Warn: 100.4V, Crit: 100.8V)
+  // Total Voltage (Low - Warn: 79.2V, Crit: 69.6V | High - Warn: 100.4V, Crit: 100.8V)
   static SensorMonitor* bmsTotalVoltage = new SensorMonitor(
     SensorID::BMS_Total_Voltage,
-    bmsTotalVoltageHighThresholds,
+    bmsTotalVoltageThresholds,
     []() { return monitoringBmsData.battery_voltage; },
     &serialLogger);
   monitors.push_back(bmsTotalVoltage);

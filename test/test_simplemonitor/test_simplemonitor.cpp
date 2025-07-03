@@ -159,20 +159,44 @@ TEST(SimpleMonitor, BMSVoltageAlerts) {
 
   // -- Total Voltage --
   logger.entries.clear();
-  fakeVoltage = 98.0f;
-  SensorMonitor totalVoltsMon(SensorID::BMS_Total_Voltage, bmsTotalVoltageHighThresholds, [&]() { return fakeVoltage; }, &logger);
+  fakeVoltage = 85.0f;
+  SensorMonitor totalVoltsMon(SensorID::BMS_Total_Voltage, bmsTotalVoltageThresholds, [&]() { return fakeVoltage; }, &logger);
   totalVoltsMon.check(); // OK
   EXPECT_TRUE(logger.entries.empty());
 
-  fakeVoltage = 100.5f; // Warn
+  // Test Low Voltage Alerts
+  fakeVoltage = 78.0f; // Warn Low
   totalVoltsMon.check();
   ASSERT_EQ(logger.entries.size(), 1u);
-  EXPECT_EQ(logger.entries.back().lvl, AlertLevel::WARN_HIGH);
+  EXPECT_EQ(logger.entries.back().lvl, AlertLevel::WARN_LOW);
 
-  fakeVoltage = 101.0f; // Crit
+  fakeVoltage = 68.0f; // Crit Low
   totalVoltsMon.check();
   ASSERT_EQ(logger.entries.size(), 2u);
+  EXPECT_EQ(logger.entries.back().lvl, AlertLevel::CRIT_LOW);
+
+  // Return to OK
+  fakeVoltage = 85.0f;
+  totalVoltsMon.check();
+  ASSERT_EQ(logger.entries.size(), 3u);
+  EXPECT_EQ(logger.entries.back().lvl, AlertLevel::OK);
+
+  // Test High Voltage Alerts
+  fakeVoltage = 100.5f; // Warn High
+  totalVoltsMon.check();
+  ASSERT_EQ(logger.entries.size(), 4u);
+  EXPECT_EQ(logger.entries.back().lvl, AlertLevel::WARN_HIGH);
+
+  fakeVoltage = 101.0f; // Crit High
+  totalVoltsMon.check();
+  ASSERT_EQ(logger.entries.size(), 5u);
   EXPECT_EQ(logger.entries.back().lvl, AlertLevel::CRIT_HIGH);
+
+  // Return to OK
+  fakeVoltage = 85.0f;
+  totalVoltsMon.check();
+  ASSERT_EQ(logger.entries.size(), 6u);
+  EXPECT_EQ(logger.entries.back().lvl, AlertLevel::OK);
 
   // -- Voltage Differential --
   logger.entries.clear();
