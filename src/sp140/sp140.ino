@@ -444,6 +444,8 @@ void loadHardwareConfig() {
 void printBootMessage() {
   USBSerial.print(F("Booting up V"));
   USBSerial.print(VERSION_STRING);
+  USBSerial.print(F(" git:"));
+  USBSerial.println(GIT_REV);
 }
 
 void setupBarometer() {
