@@ -773,6 +773,13 @@ void disarmSystem() {
   resetSmoothing();
   resumeLEDTask();
   runDisarmAlert();
+
+  // Calculate elapsed armed time in seconds before updating hour meter
+  if (armedAtMillis > 0) {
+    unsigned long currentMillis = millis();
+    armedSecs = (currentMillis - armedAtMillis) / 1000;
+  }
+
   updateArmedTime();
   writeDeviceData();
 
@@ -994,6 +1001,7 @@ bool armSystem() {
   setESCThrottle(ESC_DISARMED_PWM);  // initialize the signal to low
 
   armedAtMillis = millis();
+  armedSecs = 0;  // Reset armed seconds for new session
   setGroundAltitude(deviceData);
 
   vTaskSuspend(blinkLEDTaskHandle);
@@ -1033,13 +1041,13 @@ void afterCruiseEnd() {
   // pre-populate it with the current throttle position to ensure smooth transition
   pot->update();
   int currentPotVal = pot->getValue();
-  
+
   // Pre-fill the buffer with current pot value for smooth transition
   potBuffer.clear();  // Clear first
   for (int i = 0; i < 8; i++) {  // Buffer size is 8
     potBuffer.push(currentPotVal);
   }
-  
+
   cruisedPotVal = 0;
   //pulseVibeMotor();
 }
