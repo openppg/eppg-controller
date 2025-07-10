@@ -938,7 +938,26 @@ void lv_showAlertText(SensorID id, bool critical) {
   if (alert_text_label == NULL) return;
   const char* txt = sensorIDToString(id);
   lv_label_set_text(alert_text_label, txt);
-  lv_obj_set_style_text_font(alert_text_label, &lv_font_montserrat_12, 0);
+  // Use larger font for critical alerts, smaller for warnings
+  if (critical) {
+    lv_obj_set_style_text_font(alert_text_label, &lv_font_montserrat_16, 0);
+    // Hide altitude while showing critical alert
+    if (altitude_label) {
+      lv_obj_add_flag(altitude_label, LV_OBJ_FLAG_HIDDEN);
+      // Move alert label to altitude position
+      lv_obj_set_pos(alert_text_label, lv_obj_get_x(altitude_label), lv_obj_get_y(altitude_label));
+    }
+  } else {
+    lv_obj_set_style_text_font(alert_text_label, &lv_font_montserrat_12, 0);
+    // Ensure altitude visible during warnings
+    if (altitude_label) {
+      lv_obj_clear_flag(altitude_label, LV_OBJ_FLAG_HIDDEN);
+    }
+    // Re-align warning text next to circles
+    if (critical_counter_circle) {
+      lv_obj_align_to(alert_text_label, critical_counter_circle, LV_ALIGN_OUT_RIGHT_MID, 4, 0);
+    }
+  }
   lv_obj_set_style_text_color(alert_text_label, critical ? lv_color_make(255,0,0) : lv_color_make(255,165,0), 0);
   lv_obj_clear_flag(alert_text_label, LV_OBJ_FLAG_HIDDEN);
 }
@@ -946,6 +965,8 @@ void lv_showAlertText(SensorID id, bool critical) {
 void lv_hideAlertText() {
   if (alert_text_label == NULL) return;
   lv_obj_add_flag(alert_text_label, LV_OBJ_FLAG_HIDDEN);
+  // Restore altitude visibility when no critical alert
+  if (altitude_label) lv_obj_clear_flag(altitude_label, LV_OBJ_FLAG_HIDDEN);
 }
 
 void updateLvglMainScreen(
