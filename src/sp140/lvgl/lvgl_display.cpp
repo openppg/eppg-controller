@@ -698,9 +698,11 @@ void setupAlertCounterUI(bool darkMode) {
     } else {
       lv_obj_align(warning_counter_circle, LV_ALIGN_TOP_LEFT, 5, 75);
     }
-    lv_obj_set_style_radius(warning_counter_circle, CIRCLE_SIZE / 2, LV_PART_MAIN);
+    lv_obj_set_style_radius(warning_counter_circle, LV_RADIUS_CIRCLE, LV_PART_MAIN);
     lv_obj_set_style_border_width(warning_counter_circle, 0, LV_PART_MAIN);
     lv_obj_set_style_bg_color(warning_counter_circle, LVGL_ORANGE, LV_PART_MAIN);
+    lv_obj_set_style_bg_grad_dir(warning_counter_circle, LV_GRAD_DIR_NONE, LV_PART_MAIN);
+    lv_obj_set_style_shadow_width(warning_counter_circle, 0, LV_PART_MAIN);
     lv_obj_add_flag(warning_counter_circle, LV_OBJ_FLAG_HIDDEN);
 
     warning_counter_label = lv_label_create(warning_counter_circle);
@@ -719,9 +721,11 @@ void setupAlertCounterUI(bool darkMode) {
     } else {
       lv_obj_align(critical_counter_circle, LV_ALIGN_TOP_LEFT, 35, 75);
     }
-    lv_obj_set_style_radius(critical_counter_circle, CIRCLE_SIZE / 2, LV_PART_MAIN);
+    lv_obj_set_style_radius(critical_counter_circle, LV_RADIUS_CIRCLE, LV_PART_MAIN);
     lv_obj_set_style_border_width(critical_counter_circle, 0, LV_PART_MAIN);
     lv_obj_set_style_bg_color(critical_counter_circle, LVGL_RED, LV_PART_MAIN);
+    lv_obj_set_style_bg_grad_dir(critical_counter_circle, LV_GRAD_DIR_NONE, LV_PART_MAIN);
+    lv_obj_set_style_shadow_width(critical_counter_circle, 0, LV_PART_MAIN);
     lv_obj_add_flag(critical_counter_circle, LV_OBJ_FLAG_HIDDEN);
 
     critical_counter_label = lv_label_create(critical_counter_circle);
@@ -954,11 +958,17 @@ void lv_showAlertText(SensorID id, bool critical) {
       lv_obj_clear_flag(altitude_label, LV_OBJ_FLAG_HIDDEN);
     }
     // Re-align warning text next to circles
-    if (critical_counter_circle) {
-      lv_obj_align_to(alert_text_label, critical_counter_circle, LV_ALIGN_OUT_RIGHT_MID, 4, 0);
+    if (warning_counter_circle) {
+      lv_obj_align_to(alert_text_label, warning_counter_circle, LV_ALIGN_OUT_RIGHT_MID, 4, 0);
     }
+    // Make warning text darker and slightly larger for readability
+    lv_obj_set_style_text_font(alert_text_label, &lv_font_montserrat_14, 0);
+    // Dark orange for better readability over light background
+    lv_obj_set_style_text_color(alert_text_label, lv_color_make(200,100,0), 0);
   }
-  lv_obj_set_style_text_color(alert_text_label, critical ? lv_color_make(255,0,0) : lv_color_make(255,165,0), 0);
+  if (critical) {
+    lv_obj_set_style_text_color(alert_text_label, lv_color_make(255,0,0), 0);
+  }
   lv_obj_clear_flag(alert_text_label, LV_OBJ_FLAG_HIDDEN);
 }
 
