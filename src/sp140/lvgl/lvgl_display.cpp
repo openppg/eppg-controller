@@ -665,17 +665,18 @@ void hideLoadingOverlay() {
 void setupAlertCounterUI(bool darkMode) {
   if (main_screen == NULL) return;
 
+  const int CIRCLE_SIZE = 18;  // smaller circle
   // Warning circle (orange)
   if (warning_counter_circle == NULL) {
     warning_counter_circle = lv_obj_create(main_screen);
-    lv_obj_set_size(warning_counter_circle, 24, 24);
+    lv_obj_set_size(warning_counter_circle, CIRCLE_SIZE, CIRCLE_SIZE);
     // Align relative to altitude label (created earlier)
     if (altitude_label) {
       lv_obj_align_to(warning_counter_circle, altitude_label, LV_ALIGN_OUT_TOP_LEFT, 0, -2);
     } else {
       lv_obj_align(warning_counter_circle, LV_ALIGN_TOP_LEFT, 5, 75);
     }
-    lv_obj_set_style_radius(warning_counter_circle, 12, LV_PART_MAIN);
+    lv_obj_set_style_radius(warning_counter_circle, CIRCLE_SIZE / 2, LV_PART_MAIN);
     lv_obj_set_style_border_width(warning_counter_circle, 0, LV_PART_MAIN);
     lv_obj_set_style_bg_color(warning_counter_circle, LVGL_ORANGE, LV_PART_MAIN);
     lv_obj_add_flag(warning_counter_circle, LV_OBJ_FLAG_HIDDEN);
@@ -690,13 +691,13 @@ void setupAlertCounterUI(bool darkMode) {
   // Critical circle (red)
   if (critical_counter_circle == NULL) {
     critical_counter_circle = lv_obj_create(main_screen);
-    lv_obj_set_size(critical_counter_circle, 24, 24);
+    lv_obj_set_size(critical_counter_circle, CIRCLE_SIZE, CIRCLE_SIZE);
     if (warning_counter_circle) {
       lv_obj_align_to(critical_counter_circle, warning_counter_circle, LV_ALIGN_OUT_RIGHT_MID, 4, 0);
     } else {
       lv_obj_align(critical_counter_circle, LV_ALIGN_TOP_LEFT, 35, 75);
     }
-    lv_obj_set_style_radius(critical_counter_circle, 12, LV_PART_MAIN);
+    lv_obj_set_style_radius(critical_counter_circle, CIRCLE_SIZE / 2, LV_PART_MAIN);
     lv_obj_set_style_border_width(critical_counter_circle, 0, LV_PART_MAIN);
     lv_obj_set_style_bg_color(critical_counter_circle, LVGL_RED, LV_PART_MAIN);
     lv_obj_add_flag(critical_counter_circle, LV_OBJ_FLAG_HIDDEN);
@@ -714,9 +715,9 @@ void updateAlertCounterDisplay(const AlertCounts& counts) {
 
   // Warning
   if (counts.warningCount > 0) {
-    char buf[5];
-    if (counts.warningCount > 99) {
-      strcpy(buf, "99+");
+    char buf[4];
+    if (counts.warningCount > 9) {
+      strcpy(buf, "9+");
     } else {
       snprintf(buf, sizeof(buf), "%u", counts.warningCount);
     }
@@ -728,9 +729,9 @@ void updateAlertCounterDisplay(const AlertCounts& counts) {
 
   // Critical
   if (counts.criticalCount > 0) {
-    char buf[5];
-    if (counts.criticalCount > 99) {
-      strcpy(buf, "99+");
+    char buf[4];
+    if (counts.criticalCount > 9) {
+      strcpy(buf, "9+");
     } else {
       snprintf(buf, sizeof(buf), "%u", counts.criticalCount);
     }
