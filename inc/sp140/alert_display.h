@@ -27,6 +27,17 @@ struct AlertEvent {
 extern QueueHandle_t alertEventQueue;   // depth ~10
 extern QueueHandle_t alertCountQueue;   // depth 1
 
+// Snapshot for carousel text
+#define MAX_ALERT_ITEMS 8
+struct AlertSnapshot {
+  uint32_t epoch;
+  uint8_t count;          // number of entries in ids[]
+  uint8_t criticalMode;   // 1 = displaying critical alerts, 0 = warnings
+  SensorID ids[MAX_ALERT_ITEMS];
+};
+
+extern QueueHandle_t alertCarouselQueue;  // depth 1, overwrite
+
 // Initialise alert aggregation + UI system (creates tasks/queues)
 void initAlertDisplay();
 

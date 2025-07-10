@@ -3,15 +3,18 @@
 #include <freertos/queue.h>
 #include "../../inc/sp140/lvgl/lvgl_display.h"
 #include <map>
+#include <algorithm>
 
 // ------------ Globals -------------
 QueueHandle_t alertEventQueue = NULL;
 QueueHandle_t alertCountQueue = NULL;
+QueueHandle_t alertCarouselQueue = NULL;
 TaskHandle_t alertAggregationTaskHandle = NULL;
 
 // Internal state: current alert levels per sensor
 static std::map<SensorID, AlertLevel> g_currentLevels;
 static AlertCounts g_currentCounts = {0, 0};
+static uint32_t g_epoch = 0;
 
 // Forward declarations
 static void alertAggregationTask(void* parameter);
@@ -22,8 +25,9 @@ void initAlertDisplay() {
   // Create queues – small, non-blocking
   alertEventQueue  = xQueueCreate(10, sizeof(AlertEvent));
   alertCountQueue  = xQueueCreate(1,  sizeof(AlertCounts));
+  alertCarouselQueue = xQueueCreate(1, sizeof(AlertSnapshot));
 
-  if (!alertEventQueue || !alertCountQueue) {
+  if (!alertEventQueue || !alertCountQueue || !alertCarouselQueue) {
     USBSerial.println("[AlertDisplay] Failed creating queues");
     return;
   }
@@ -58,14 +62,18 @@ static void alertAggregationTask(void* parameter) {
 
 static void recalcCountsAndPublish() {
   AlertCounts counts{0,0};
+  std::vector<SensorID> critList;
+  std::vector<SensorID> warnList;
   for (const auto& kv : g_currentLevels) {
     switch (kv.second) {
       case AlertLevel::WARN_LOW:
       case AlertLevel::WARN_HIGH:
+        warnList.push_back(kv.first);
         counts.warningCount++;
         break;
       case AlertLevel::CRIT_LOW:
       case AlertLevel::CRIT_HIGH:
+        critList.push_back(kv.first);
         counts.criticalCount++;
         break;
       default:
@@ -79,5 +87,19 @@ static void recalcCountsAndPublish() {
     if (alertCountQueue) {
       xQueueOverwrite(alertCountQueue, &g_currentCounts);
     }
+  }
+
+  // Build snapshot for carousel (critical preferred)
+  AlertSnapshot snap{};
+  snap.epoch = ++g_epoch;
+  snap.criticalMode = (!critList.empty()) ? 1 : 0;
+  const std::vector<SensorID>& srcList = (!critList.empty()) ? critList : warnList;
+  snap.count = (uint8_t)std::min<size_t>(srcList.size(), MAX_ALERT_ITEMS);
+  for (uint8_t i = 0; i < snap.count; ++i) {
+    snap.ids[i] = srcList[i];
+  }
+
+  if (alertCarouselQueue) {
+    xQueueOverwrite(alertCarouselQueue, &snap);
   }
 }

@@ -7,6 +7,7 @@
 #include <string>
 #include <map>
 #include <utility>
+#include "../../../inc/sp140/simple_monitor.h"  // for sensorIDToString
 #include "../../../inc/sp140/alert_display.h"
 
 // Forward declarations for alert counter UI
@@ -99,6 +100,10 @@ static lv_obj_t* warning_counter_circle = NULL;
 static lv_obj_t* warning_counter_label = NULL;
 static lv_obj_t* critical_counter_circle = NULL;
 static lv_obj_t* critical_counter_label = NULL;
+
+// Alert text carousel objects
+static lv_obj_t* alert_text_label = NULL;
+static lv_timer_t* alert_cycle_timer = NULL;
 // static lv_obj_t* warning_label = NULL;  // New label for warnings/errors // REMOVED
 lv_obj_t* cruise_icon_img = NULL;  // Cruise control icon image object
 static lv_obj_t* charging_icon_img = NULL;  // Charging icon image object
@@ -707,6 +712,46 @@ void setupAlertCounterUI(bool darkMode) {
     lv_obj_set_style_text_color(critical_counter_label, LVGL_WHITE, 0);
     lv_obj_align(critical_counter_label, LV_ALIGN_CENTER, 0, 0);
     lv_label_set_text(critical_counter_label, "0");
+  }
+
+  // Alert text label (to the right of circles)
+  if (alert_text_label == NULL) {
+    alert_text_label = lv_label_create(main_screen);
+    lv_obj_set_style_text_font(alert_text_label, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(alert_text_label, LVGL_ORANGE, 0);
+    if (critical_counter_circle) {
+      lv_obj_align_to(alert_text_label, critical_counter_circle, LV_ALIGN_OUT_RIGHT_MID, 4, 0);
+    } else {
+      lv_obj_align(alert_text_label, LV_ALIGN_TOP_LEFT, 60, 75);
+    }
+    lv_obj_add_flag(alert_text_label, LV_OBJ_FLAG_HIDDEN);
+  }
+
+  // Create carousel timer (2 s) once
+  if (alert_cycle_timer == NULL) {
+    alert_cycle_timer = lv_timer_create([](lv_timer_t* t){
+      static AlertSnapshot snap{};
+      static uint8_t idx = 0;
+
+      // Check for new snapshot (non-blocking)
+      AlertSnapshot newSnap;
+      if (alertCarouselQueue && xQueueReceive(alertCarouselQueue, &newSnap, 0) == pdTRUE) {
+        snap = newSnap;
+        idx = 0;
+      }
+
+      if (snap.count == 0 || alert_text_label == NULL) {
+        if (alert_text_label) lv_obj_add_flag(alert_text_label, LV_OBJ_FLAG_HIDDEN);
+        return;
+      }
+
+      const char* txt = sensorIDToString(static_cast<SensorID>(snap.ids[idx]));
+      lv_label_set_text(alert_text_label, txt);
+      lv_obj_set_style_text_color(alert_text_label, snap.criticalMode ? LVGL_RED : LVGL_ORANGE, 0);
+      lv_obj_clear_flag(alert_text_label, LV_OBJ_FLAG_HIDDEN);
+
+      idx = (idx + 1) % snap.count;
+    }, 2000, NULL);
   }
 }
 
