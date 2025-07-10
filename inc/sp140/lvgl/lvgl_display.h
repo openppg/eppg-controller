@@ -5,6 +5,7 @@
 #include <SPI.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>  // Include for SemaphoreHandle_t
+#include "../alert_display.h"  // For AlertCounts struct and display updater
 
 // Include current device structures
 #include "../../sp140/structs.h"
@@ -76,3 +77,6 @@ extern lv_obj_t *cruise_icon_img;  // Declaration for the image object
 // External declarations
 extern SPIClass* hardwareSPI;
 extern int8_t displayCS;
+
+// Alert counter UI update (defined in lvgl_display.cpp)
+void updateAlertCounterDisplay(const AlertCounts& counts);

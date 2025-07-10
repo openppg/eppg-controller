@@ -3,8 +3,11 @@
 #include "sp140/globals.h"
 #include "sp140/altimeter.h"
 #include "sp140/utilities.h"
+#include "sp140/alert_display.h"  // UI logger & event queue
 
 // Global instances
+MultiLogger multiLogger;  // Defined here, declared extern in header
+static AlertUILogger uiLogger;
 std::vector<IMonitor*> monitors;
 SerialLogger serialLogger;
 bool monitoringEnabled = false;  // Start with monitoring disabled
@@ -12,6 +15,15 @@ bool monitoringEnabled = false;  // Start with monitoring disabled
 // Thread-safe copies for monitoring (updated by checkAllSensorsWithData)
 static STR_ESC_TELEMETRY_140 monitoringEscData = {};
 static STR_BMS_TELEMETRY_140 monitoringBmsData = {};
+
+// Ensure the multiLogger has all sinks registered exactly once
+static void setupLoggerSinks() {
+  static bool sinksInit = false;
+  if (sinksInit) return;
+  multiLogger.addSink(&serialLogger); // Serial output for debug
+  multiLogger.addSink(&uiLogger);     // UI event sink
+  sinksInit = true;
+}
 
 void SerialLogger::log(SensorID id, AlertLevel lvl, float v) {
   const char* levelNames[] = {"OK", "WARN_LOW", "WARN_HIGH", "CRIT_LOW", "CRIT_HIGH", "INFO"};
@@ -58,6 +70,7 @@ const char* sensorIDToString(SensorID id) {
 
 void initSimpleMonitor() {
   USBSerial.println("Initializing Simple Monitor System");
+  setupLoggerSinks();
   monitors.clear();
   addESCMonitors();
   addBMSMonitors();
@@ -97,7 +110,7 @@ void addESCMonitors() {
     SensorID::ESC_MOS_Temp,
     escMosTempThresholds,
     []() { return monitoringEscData.mos_temp; },
-    &serialLogger);
+    &multiLogger);
   monitors.push_back(escMosTemp);
 
   // ESC MCU Temperature Monitor
@@ -105,7 +118,7 @@ void addESCMonitors() {
     SensorID::ESC_MCU_Temp,
     escMcuTempThresholds,
     []() { return monitoringEscData.mcu_temp; },
-    &serialLogger);
+    &multiLogger);
   monitors.push_back(escMcuTemp);
 
   // ESC Capacitor Temperature Monitor
@@ -113,7 +126,7 @@ void addESCMonitors() {
     SensorID::ESC_CAP_Temp,
     escCapTempThresholds,
     []() { return monitoringEscData.cap_temp; },
-    &serialLogger);
+    &multiLogger);
   monitors.push_back(escCapTemp);
 
   // Motor Temperature Monitor
@@ -121,7 +134,7 @@ void addESCMonitors() {
     SensorID::Motor_Temp,
     motorTempThresholds,
     []() { return monitoringEscData.motor_temp; },
-    &serialLogger);
+    &multiLogger);
   monitors.push_back(motorTemp);
 }
 
@@ -131,7 +144,7 @@ void addBMSMonitors() {
     SensorID::BMS_MOS_Temp,
     bmsTempThresholds,
     []() { return monitoringBmsData.mos_temperature; },
-    &serialLogger);
+    &multiLogger);
   monitors.push_back(bmsMosTemp);
 
   // BMS Balance Resistor Temperature (Warning: 50°C, Critical: 60°C)
@@ -139,7 +152,7 @@ void addBMSMonitors() {
     SensorID::BMS_Balance_Temp,
     bmsTempThresholds,
     []() { return monitoringBmsData.balance_temperature; },
-    &serialLogger);
+    &multiLogger);
   monitors.push_back(bmsBalanceTemp);
 
   // T1-T4 Cell Temperature Sensors (Warning: 50°C, Critical: 56°C)
@@ -147,28 +160,28 @@ void addBMSMonitors() {
     SensorID::BMS_T1_Temp,
     bmsCellTempThresholds,
     []() { return monitoringBmsData.t1_temperature; },
-    &serialLogger);
+    &multiLogger);
   monitors.push_back(bmsT1Temp);
 
   static SensorMonitor* bmsT2Temp = new SensorMonitor(
     SensorID::BMS_T2_Temp,
     bmsCellTempThresholds,
     []() { return monitoringBmsData.t2_temperature; },
-    &serialLogger);
+    &multiLogger);
   monitors.push_back(bmsT2Temp);
 
   static SensorMonitor* bmsT3Temp = new SensorMonitor(
     SensorID::BMS_T3_Temp,
     bmsCellTempThresholds,
     []() { return monitoringBmsData.t3_temperature; },
-    &serialLogger);
+    &multiLogger);
   monitors.push_back(bmsT3Temp);
 
   static SensorMonitor* bmsT4Temp = new SensorMonitor(
     SensorID::BMS_T4_Temp,
     bmsCellTempThresholds,
     []() { return monitoringBmsData.t4_temperature; },
-    &serialLogger);
+    &multiLogger);
   monitors.push_back(bmsT4Temp);
 
   // High Cell Voltage (Warn: 4.1V, Crit: 4.2V)
@@ -176,7 +189,7 @@ void addBMSMonitors() {
     SensorID::BMS_High_Cell_Voltage,
     bmsHighCellVoltageThresholds,
     []() { return monitoringBmsData.highest_cell_voltage; },
-    &serialLogger);
+    &multiLogger);
   monitors.push_back(bmsHighCellVoltage);
 
   // Low Cell Voltage (Warn: 3.2V, Crit: 3.0V)
@@ -184,7 +197,7 @@ void addBMSMonitors() {
     SensorID::BMS_Low_Cell_Voltage,
     bmsLowCellVoltageThresholds,
     []() { return monitoringBmsData.lowest_cell_voltage; },
-    &serialLogger);
+    &multiLogger);
   monitors.push_back(bmsLowCellVoltage);
 
   // State of Charge (Warn: 15%, Crit: 5%)
@@ -192,7 +205,7 @@ void addBMSMonitors() {
     SensorID::BMS_SOC,
     bmsSOCThresholds,
     []() { return monitoringBmsData.soc; },
-    &serialLogger);
+    &multiLogger);
   monitors.push_back(bmsSoc);
 
   // Total Voltage (Low - Warn: 79.2V, Crit: 69.6V | High - Warn: 100.4V, Crit: 100.8V)
@@ -200,7 +213,7 @@ void addBMSMonitors() {
     SensorID::BMS_Total_Voltage,
     bmsTotalVoltageThresholds,
     []() { return monitoringBmsData.battery_voltage; },
-    &serialLogger);
+    &multiLogger);
   monitors.push_back(bmsTotalVoltage);
 
   // Voltage Differential (Warn: 0.20V, Crit: 0.40V)
@@ -208,7 +221,7 @@ void addBMSMonitors() {
     SensorID::BMS_Voltage_Differential,
     bmsVoltageDifferentialThresholds,
     []() { return monitoringBmsData.voltage_differential; },
-    &serialLogger);
+    &multiLogger);
   monitors.push_back(bmsVoltageDifferential);
 
   // Charge MOS (Alert when OFF)
@@ -217,7 +230,7 @@ void addBMSMonitors() {
     []() { return monitoringBmsData.is_charge_mos; },
     false,  // Alert when false
     AlertLevel::CRIT_HIGH,
-    &serialLogger);
+    &multiLogger);
   monitors.push_back(bmsChargeMos);
 
   // Discharge MOS (Alert when OFF)
@@ -226,7 +239,7 @@ void addBMSMonitors() {
     []() { return monitoringBmsData.is_discharge_mos; },
     false,  // Alert when false
     AlertLevel::CRIT_HIGH,
-    &serialLogger);
+    &multiLogger);
   monitors.push_back(bmsDischargeMos);
 }
 
@@ -236,7 +249,7 @@ void addAltimeterMonitors() {
     SensorID::Baro_Temp,
     baroTempThresholds,
     []() { return getBaroTemperature(); },
-    &serialLogger);
+    &multiLogger);
   monitors.push_back(baroTemp);
 }
 
@@ -246,7 +259,7 @@ void addInternalMonitors() {
     SensorID::CPU_Temp,
     cpuTempThresholds,
     []() { return temperatureRead(); },
-    &serialLogger);
+    &multiLogger);
   monitors.push_back(cpuTemp);
 }
 

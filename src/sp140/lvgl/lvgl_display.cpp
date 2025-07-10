@@ -7,6 +7,11 @@
 #include <string>
 #include <map>
 #include <utility>
+#include "../../../inc/sp140/alert_display.h"
+
+// Forward declarations for alert counter UI
+void setupAlertCounterUI(bool darkMode);
+void updateAlertCounterDisplay(const AlertCounts& counts);
 
 #include "../../assets/img/cruise-control-340255-30.c"  // Cruise control icon  // NOLINT(build/include)
 #include "../../assets/img/energy-539741-26.c"  // Charging icon  // NOLINT(build/include)
@@ -89,6 +94,11 @@ static lv_obj_t* spinner_overlay = NULL;  // Overlay for the spinner
 static lv_obj_t* batt_letter_label = NULL;  // Letter label for Battery temp
 static lv_obj_t* esc_letter_label = NULL;  // Letter label for ESC temp
 static lv_obj_t* motor_letter_label = NULL;  // Letter label for Motor temp
+// Alert counter UI objects
+static lv_obj_t* warning_counter_circle = NULL;
+static lv_obj_t* warning_counter_label = NULL;
+static lv_obj_t* critical_counter_circle = NULL;
+static lv_obj_t* critical_counter_label = NULL;
 // static lv_obj_t* warning_label = NULL;  // New label for warnings/errors // REMOVED
 lv_obj_t* cruise_icon_img = NULL;  // Cruise control icon image object
 static lv_obj_t* charging_icon_img = NULL;  // Charging icon image object
@@ -632,6 +642,9 @@ void setupMainScreen(bool darkMode) {
 
   // Load the screen
   lv_scr_load(main_screen);
+
+  // Create alert counter UI elements
+  setupAlertCounterUI(darkMode);
 }
 
 // Function to show the loading overlay
@@ -645,6 +658,86 @@ void showLoadingOverlay() {
 void hideLoadingOverlay() {
   if (spinner_overlay != NULL) {
     lv_obj_add_flag(spinner_overlay, LV_OBJ_FLAG_HIDDEN);
+  }
+}
+
+// ----------------- Alert Counter UI -----------------
+void setupAlertCounterUI(bool darkMode) {
+  if (main_screen == NULL) return;
+
+  // Warning circle (orange)
+  if (warning_counter_circle == NULL) {
+    warning_counter_circle = lv_obj_create(main_screen);
+    lv_obj_set_size(warning_counter_circle, 24, 24);
+    // Align relative to altitude label (created earlier)
+    if (altitude_label) {
+      lv_obj_align_to(warning_counter_circle, altitude_label, LV_ALIGN_OUT_TOP_LEFT, 0, -2);
+    } else {
+      lv_obj_align(warning_counter_circle, LV_ALIGN_TOP_LEFT, 5, 75);
+    }
+    lv_obj_set_style_radius(warning_counter_circle, 12, LV_PART_MAIN);
+    lv_obj_set_style_border_width(warning_counter_circle, 0, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(warning_counter_circle, LVGL_ORANGE, LV_PART_MAIN);
+    lv_obj_add_flag(warning_counter_circle, LV_OBJ_FLAG_HIDDEN);
+
+    warning_counter_label = lv_label_create(warning_counter_circle);
+    lv_obj_set_style_text_font(warning_counter_label, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(warning_counter_label, LVGL_BLACK, 0);
+    lv_obj_align(warning_counter_label, LV_ALIGN_CENTER, 0, 0);
+    lv_label_set_text(warning_counter_label, "0");
+  }
+
+  // Critical circle (red)
+  if (critical_counter_circle == NULL) {
+    critical_counter_circle = lv_obj_create(main_screen);
+    lv_obj_set_size(critical_counter_circle, 24, 24);
+    if (warning_counter_circle) {
+      lv_obj_align_to(critical_counter_circle, warning_counter_circle, LV_ALIGN_OUT_RIGHT_MID, 4, 0);
+    } else {
+      lv_obj_align(critical_counter_circle, LV_ALIGN_TOP_LEFT, 35, 75);
+    }
+    lv_obj_set_style_radius(critical_counter_circle, 12, LV_PART_MAIN);
+    lv_obj_set_style_border_width(critical_counter_circle, 0, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(critical_counter_circle, LVGL_RED, LV_PART_MAIN);
+    lv_obj_add_flag(critical_counter_circle, LV_OBJ_FLAG_HIDDEN);
+
+    critical_counter_label = lv_label_create(critical_counter_circle);
+    lv_obj_set_style_text_font(critical_counter_label, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(critical_counter_label, LVGL_WHITE, 0);
+    lv_obj_align(critical_counter_label, LV_ALIGN_CENTER, 0, 0);
+    lv_label_set_text(critical_counter_label, "0");
+  }
+}
+
+void updateAlertCounterDisplay(const AlertCounts& counts) {
+  if (!warning_counter_circle || !critical_counter_circle) return;
+
+  // Warning
+  if (counts.warningCount > 0) {
+    char buf[5];
+    if (counts.warningCount > 99) {
+      strcpy(buf, "99+");
+    } else {
+      snprintf(buf, sizeof(buf), "%u", counts.warningCount);
+    }
+    lv_label_set_text(warning_counter_label, buf);
+    lv_obj_clear_flag(warning_counter_circle, LV_OBJ_FLAG_HIDDEN);
+  } else {
+    lv_obj_add_flag(warning_counter_circle, LV_OBJ_FLAG_HIDDEN);
+  }
+
+  // Critical
+  if (counts.criticalCount > 0) {
+    char buf[5];
+    if (counts.criticalCount > 99) {
+      strcpy(buf, "99+");
+    } else {
+      snprintf(buf, sizeof(buf), "%u", counts.criticalCount);
+    }
+    lv_label_set_text(critical_counter_label, buf);
+    lv_obj_clear_flag(critical_counter_circle, LV_OBJ_FLAG_HIDDEN);
+  } else {
+    lv_obj_add_flag(critical_counter_circle, LV_OBJ_FLAG_HIDDEN);
   }
 }
 

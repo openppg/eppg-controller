@@ -31,6 +31,7 @@
 #include "../../inc/sp140/altimeter.h"
 #include "../../inc/sp140/debug.h"
 #include "../../inc/sp140/simple_monitor.h"
+#include "../../inc/sp140/alert_display.h"
 
 #include "../../inc/sp140/buzzer.h"
 #include "../../inc/sp140/device_state.h"
@@ -358,6 +359,12 @@ void refreshDisplay() {
         break;
     }
 
+    // Handle alert counter updates, non-blocking
+    AlertCounts newCounts;
+    if (xQueueReceive(alertCountQueue, &newCounts, 0) == pdTRUE) {
+      updateAlertCounterDisplay(newCounts);
+    }
+
     // General LVGL update handler
     updateLvgl();
 
@@ -519,6 +526,9 @@ void setup() {
   // setupDisplay(deviceData, board_config, hardwareSPI);
   // Pass hardcoded pin values for DC and RST
   setupLvglDisplay(deviceData, board_config.tft_dc, board_config.tft_rst, hardwareSPI);
+
+  // Initialise alert display aggregation & UI
+  initAlertDisplay();
 
   #ifndef SCREEN_DEBUG
     // Pass the hardware SPI instance to the BMS_CAN initialization

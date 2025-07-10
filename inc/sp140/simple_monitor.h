@@ -66,6 +66,20 @@ struct SerialLogger : ILogger {
   void log(SensorID id, AlertLevel lvl, bool v) override;
 };
 
+// Multi-sink logger – forwards events to every registered ILogger sink
+struct MultiLogger : ILogger {
+  std::vector<ILogger*> sinks;
+  void addSink(ILogger* s) { if (s) sinks.push_back(s); }
+  void log(SensorID id, AlertLevel lvl, float v) override {
+    for (auto* s : sinks) { s->log(id, lvl, v); }
+  }
+  void log(SensorID id, AlertLevel lvl, bool v) override {
+    for (auto* s : sinks) { s->log(id, lvl, v); }
+  }
+};
+
+extern MultiLogger multiLogger;  // Global fan-out logger
+
 // Base monitor interface
 struct IMonitor {
   virtual ~IMonitor() = default;
