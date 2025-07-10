@@ -104,6 +104,23 @@ static lv_obj_t* critical_counter_label = NULL;
 // Alert text carousel objects
 static lv_obj_t* alert_text_label = NULL;
 static lv_timer_t* alert_cycle_timer = NULL;
+// Snapshot state shared between timer and external updater
+static AlertSnapshot currentSnap{};
+static uint8_t currentIdx = 0;
+
+void loadAlertSnapshot(const AlertSnapshot& snap) {
+  currentSnap = snap;
+  currentIdx = 0;
+  if (alert_text_label == NULL) return;
+  if (snap.count == 0) {
+    lv_obj_add_flag(alert_text_label, LV_OBJ_FLAG_HIDDEN);
+    return;
+  }
+  const char* txt = sensorIDToString(static_cast<SensorID>(snap.ids[0]));
+  lv_label_set_text(alert_text_label, txt);
+  lv_obj_set_style_text_color(alert_text_label, snap.criticalMode ? lv_color_make(255,0,0) : lv_color_make(255,165,0), 0);
+  lv_obj_clear_flag(alert_text_label, LV_OBJ_FLAG_HIDDEN);
+}
 // static lv_obj_t* warning_label = NULL;  // New label for warnings/errors // REMOVED
 lv_obj_t* cruise_icon_img = NULL;  // Cruise control icon image object
 static lv_obj_t* charging_icon_img = NULL;  // Charging icon image object
@@ -727,32 +744,7 @@ void setupAlertCounterUI(bool darkMode) {
     lv_obj_add_flag(alert_text_label, LV_OBJ_FLAG_HIDDEN);
   }
 
-  // Create carousel timer (2 s) once
-  if (alert_cycle_timer == NULL) {
-    alert_cycle_timer = lv_timer_create([](lv_timer_t* t){
-      static AlertSnapshot snap{};
-      static uint8_t idx = 0;
-
-      // Check for new snapshot (non-blocking)
-      AlertSnapshot newSnap;
-      if (alertCarouselQueue && xQueueReceive(alertCarouselQueue, &newSnap, 0) == pdTRUE) {
-        snap = newSnap;
-        idx = 0;
-      }
-
-      if (snap.count == 0 || alert_text_label == NULL) {
-        if (alert_text_label) lv_obj_add_flag(alert_text_label, LV_OBJ_FLAG_HIDDEN);
-        return;
-      }
-
-      const char* txt = sensorIDToString(static_cast<SensorID>(snap.ids[idx]));
-      lv_label_set_text(alert_text_label, txt);
-      lv_obj_set_style_text_color(alert_text_label, snap.criticalMode ? LVGL_RED : LVGL_ORANGE, 0);
-      lv_obj_clear_flag(alert_text_label, LV_OBJ_FLAG_HIDDEN);
-
-      idx = (idx + 1) % snap.count;
-    }, 2000, NULL);
-  }
+  // Timer removed; rotation is now driven by aggregator task via queue.
 }
 
 void updateAlertCounterDisplay(const AlertCounts& counts) {
@@ -940,6 +932,21 @@ void startArmFailIconFlash() {
   }
 }
 // --- End Arm Fail Icon Flashing Implementation ---
+
+// Public helpers to control alert text externally
+void lv_showAlertText(SensorID id, bool critical) {
+  if (alert_text_label == NULL) return;
+  const char* txt = sensorIDToString(id);
+  lv_label_set_text(alert_text_label, txt);
+  lv_obj_set_style_text_font(alert_text_label, &lv_font_montserrat_12, 0);
+  lv_obj_set_style_text_color(alert_text_label, critical ? lv_color_make(255,0,0) : lv_color_make(255,165,0), 0);
+  lv_obj_clear_flag(alert_text_label, LV_OBJ_FLAG_HIDDEN);
+}
+
+void lv_hideAlertText() {
+  if (alert_text_label == NULL) return;
+  lv_obj_add_flag(alert_text_label, LV_OBJ_FLAG_HIDDEN);
+}
 
 void updateLvglMainScreen(
   const STR_DEVICE_DATA_140_V1& deviceData,

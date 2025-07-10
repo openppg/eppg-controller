@@ -244,13 +244,21 @@ void addBMSMonitors() {
 }
 
 void addAltimeterMonitors() {
-  // Barometer Temperature (Warning: 50°C, Critical: 80°C)
-  static SensorMonitor* baroTemp = new SensorMonitor(
-    SensorID::Baro_Temp,
-    baroTempThresholds,
-    []() { return getBaroTemperature(); },
-    &multiLogger);
-  monitors.push_back(baroTemp);
+  // Barometer Temperature monitor disabled for now.
+  // TODO:
+  // The BMP barometer shares the I2C bus with other peripherals; without a
+  // global I2C mutex the `Wire` driver can log "Unfinished Repeated Start"
+  // errors when transactions from multiple tasks interleave.  Until we
+  // introduce a proper mutex (or move barometer access into a dedicated
+  // task), skip registering this monitor to avoid the noise and potential
+  // bus resets.
+  //
+  // static SensorMonitor* baroTemp = new SensorMonitor(
+  //   SensorID::Baro_Temp,
+  //   baroTempThresholds,
+  //   []() { return getBaroTemperature(); },
+  //   &multiLogger);
+  // monitors.push_back(baroTemp);
 }
 
 void addInternalMonitors() {

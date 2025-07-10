@@ -365,6 +365,16 @@ void refreshDisplay() {
       updateAlertCounterDisplay(newCounts);
     }
 
+    // Handle alert text message
+    AlertDisplayMsg dmsg;
+    if (xQueueReceive(alertDisplayQueue, &dmsg, 0) == pdTRUE) {
+      if (dmsg.show) {
+        lv_showAlertText(dmsg.id, dmsg.critical);
+      } else {
+        lv_hideAlertText();
+      }
+    }
+
     // General LVGL update handler
     updateLvgl();
 

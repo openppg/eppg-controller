@@ -26,6 +26,16 @@ struct AlertEvent {
 // Global queues
 extern QueueHandle_t alertEventQueue;   // depth ~10
 extern QueueHandle_t alertCountQueue;   // depth 1
+extern QueueHandle_t alertCarouselQueue;  // depth 1, overwrite
+
+// Message for UI to show a single alert text (or hide)
+struct AlertDisplayMsg {
+  SensorID id;       // Valid sensor when show == true
+  bool critical;     // true = critical colouring
+  bool show;         // false = hide label
+};
+
+extern QueueHandle_t alertDisplayQueue;   // depth 1, overwrite
 
 // Snapshot for carousel text
 #define MAX_ALERT_ITEMS 8
@@ -36,7 +46,6 @@ struct AlertSnapshot {
   SensorID ids[MAX_ALERT_ITEMS];
 };
 
-extern QueueHandle_t alertCarouselQueue;  // depth 1, overwrite
 
 // Initialise alert aggregation + UI system (creates tasks/queues)
 void initAlertDisplay();

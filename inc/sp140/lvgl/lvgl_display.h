@@ -80,3 +80,6 @@ extern int8_t displayCS;
 
 // Alert counter UI update (defined in lvgl_display.cpp)
 void updateAlertCounterDisplay(const AlertCounts& counts);
+void loadAlertSnapshot(const AlertSnapshot& snap);
+void lv_showAlertText(SensorID id, bool critical);
+void lv_hideAlertText();
