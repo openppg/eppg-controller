@@ -690,7 +690,7 @@ void setupAlertCounterUI(bool darkMode) {
   const int CIRCLE_SIZE = 18;  // smaller circle
   // Warning circle (orange)
   if (warning_counter_circle == NULL) {
-    warning_counter_circle = lv_obj_create(main_screen);
+    warning_counter_circle = lv_led_create(main_screen);
     lv_obj_set_size(warning_counter_circle, CIRCLE_SIZE, CIRCLE_SIZE);
     // Align relative to altitude label (created earlier)
     if (altitude_label) {
@@ -698,11 +698,12 @@ void setupAlertCounterUI(bool darkMode) {
     } else {
       lv_obj_align(warning_counter_circle, LV_ALIGN_TOP_LEFT, 5, 75);
     }
-    lv_obj_set_style_radius(warning_counter_circle, LV_RADIUS_CIRCLE, LV_PART_MAIN);
-    lv_obj_set_style_border_width(warning_counter_circle, 0, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(warning_counter_circle, LVGL_ORANGE, LV_PART_MAIN);
+    lv_led_set_color(warning_counter_circle, LVGL_ORANGE);
+    lv_led_on(warning_counter_circle);
+    // Remove bloom/glow effect - make it a solid flat circle
     lv_obj_set_style_bg_grad_dir(warning_counter_circle, LV_GRAD_DIR_NONE, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(warning_counter_circle, 0, LV_PART_MAIN);
+    lv_obj_set_style_shadow_opa(warning_counter_circle, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_add_flag(warning_counter_circle, LV_OBJ_FLAG_HIDDEN);
 
     warning_counter_label = lv_label_create(warning_counter_circle);
@@ -714,18 +715,19 @@ void setupAlertCounterUI(bool darkMode) {
 
   // Critical circle (red)
   if (critical_counter_circle == NULL) {
-    critical_counter_circle = lv_obj_create(main_screen);
+    critical_counter_circle = lv_led_create(main_screen);
     lv_obj_set_size(critical_counter_circle, CIRCLE_SIZE, CIRCLE_SIZE);
     if (warning_counter_circle) {
       lv_obj_align_to(critical_counter_circle, warning_counter_circle, LV_ALIGN_OUT_RIGHT_MID, 4, 0);
     } else {
       lv_obj_align(critical_counter_circle, LV_ALIGN_TOP_LEFT, 35, 75);
     }
-    lv_obj_set_style_radius(critical_counter_circle, LV_RADIUS_CIRCLE, LV_PART_MAIN);
-    lv_obj_set_style_border_width(critical_counter_circle, 0, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(critical_counter_circle, LVGL_RED, LV_PART_MAIN);
+    lv_led_set_color(critical_counter_circle, LVGL_RED);
+    lv_led_on(critical_counter_circle);
+    // Remove bloom/glow effect - make it a solid flat circle
     lv_obj_set_style_bg_grad_dir(critical_counter_circle, LV_GRAD_DIR_NONE, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(critical_counter_circle, 0, LV_PART_MAIN);
+    lv_obj_set_style_shadow_opa(critical_counter_circle, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_add_flag(critical_counter_circle, LV_OBJ_FLAG_HIDDEN);
 
     critical_counter_label = lv_label_create(critical_counter_circle);
