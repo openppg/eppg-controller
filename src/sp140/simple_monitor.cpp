@@ -68,6 +68,40 @@ const char* sensorIDToString(SensorID id) {
   }
 }
 
+// Compact abbreviations for UI strings
+const char* sensorIDToAbbreviation(SensorID id) {
+  switch (id) {
+    // ESC
+    case SensorID::ESC_MOS_Temp: return "ESC-M";   // MOSFET temp
+    case SensorID::ESC_MCU_Temp: return "ESC-C";   // Controller temp
+    case SensorID::ESC_CAP_Temp: return "ESC-P";   // Capacitor temp
+    case SensorID::Motor_Temp:    return "MTR-T";    // Motor temp
+
+    // BMS (Battery Management System)
+    case SensorID::BMS_MOS_Temp:            return "BMS-M";
+    case SensorID::BMS_Balance_Temp:        return "BMS-B";
+    case SensorID::BMS_T1_Temp:             return "BMS-T1";
+    case SensorID::BMS_T2_Temp:             return "BMS-T2";
+    case SensorID::BMS_T3_Temp:             return "BMS-T3";
+    case SensorID::BMS_T4_Temp:             return "BMS-T4";
+    case SensorID::BMS_High_Cell_Voltage:   return "BMS-CV-H";
+    case SensorID::BMS_Low_Cell_Voltage:    return "BMS-CV-L";
+    case SensorID::BMS_SOC:                 return "BMS-SOC";
+    case SensorID::BMS_Total_Voltage:       return "BMS-Vtot";
+    case SensorID::BMS_Voltage_Differential:return "BMS-dV";
+    case SensorID::BMS_Charge_MOS:          return "BMS-CHG";
+    case SensorID::BMS_Discharge_MOS:       return "BMS-DSG";
+
+    // Altimeter
+    case SensorID::Baro_Temp: return "BARO-T";
+
+    // Internal
+    case SensorID::CPU_Temp: return "CPU-T";
+
+    default: return "UNK-ERR";
+  }
+}
+
 void initSimpleMonitor() {
   USBSerial.println("Initializing Simple Monitor System");
   setupLoggerSinks();

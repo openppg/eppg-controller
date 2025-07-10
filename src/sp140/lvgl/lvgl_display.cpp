@@ -7,7 +7,7 @@
 #include <string>
 #include <map>
 #include <utility>
-#include "../../../inc/sp140/simple_monitor.h"  // for sensorIDToString
+#include "../../../inc/sp140/simple_monitor.h"  // for sensor ID helpers
 #include "../../../inc/sp140/alert_display.h"
 
 // Forward declarations for alert counter UI
@@ -116,7 +116,7 @@ void loadAlertSnapshot(const AlertSnapshot& snap) {
     lv_obj_add_flag(alert_text_label, LV_OBJ_FLAG_HIDDEN);
     return;
   }
-  const char* txt = sensorIDToString(static_cast<SensorID>(snap.ids[0]));
+  const char* txt = sensorIDToAbbreviation(static_cast<SensorID>(snap.ids[0]));
   lv_label_set_text(alert_text_label, txt);
   lv_obj_set_style_text_color(alert_text_label, snap.criticalMode ? lv_color_make(255,0,0) : lv_color_make(255,165,0), 0);
   lv_obj_clear_flag(alert_text_label, LV_OBJ_FLAG_HIDDEN);
@@ -936,7 +936,7 @@ void startArmFailIconFlash() {
 // Public helpers to control alert text externally
 void lv_showAlertText(SensorID id, bool critical) {
   if (alert_text_label == NULL) return;
-  const char* txt = sensorIDToString(id);
+  const char* txt = sensorIDToAbbreviation(id);
   lv_label_set_text(alert_text_label, txt);
   // Use larger font for critical alerts, smaller for warnings
   if (critical) {
