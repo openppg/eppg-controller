@@ -33,7 +33,34 @@ void SerialLogger::log(SensorID id, AlertLevel lvl, float v) {
 
 void SerialLogger::log(SensorID id, AlertLevel lvl, bool v) {
   const char* levelNames[] = {"OK", "WARN_LOW", "WARN_HIGH", "CRIT_LOW", "CRIT_HIGH", "INFO"};
-  USBSerial.printf("[%lu] [%s] %s = %s\n", millis(), levelNames[(int)lvl], sensorIDToString(id), v ? "ON" : "OFF");
+
+      // Enhanced logging for ESC errors - show decoded error details
+  if (id == SensorID::ESC_Running_Error) {
+    if (v) {
+      USBSerial.printf("[%lu] [%s] %s = %s (0x%04X: %s)\n",
+                       millis(), levelNames[(int)lvl], sensorIDToString(id),
+                       v ? "ON" : "OFF", monitoringEscData.running_error,
+                       decodeRunningError(monitoringEscData.running_error).c_str());
+    } else {
+      USBSerial.printf("[%lu] [%s] %s = %s (errors cleared)\n",
+                       millis(), levelNames[(int)lvl], sensorIDToString(id),
+                       v ? "ON" : "OFF");
+    }
+  } else if (id == SensorID::ESC_SelfCheck_Error) {
+    if (v) {
+      USBSerial.printf("[%lu] [%s] %s = %s (0x%04X: %s)\n",
+                       millis(), levelNames[(int)lvl], sensorIDToString(id),
+                       v ? "ON" : "OFF", monitoringEscData.selfcheck_error,
+                       decodeSelfCheckError(monitoringEscData.selfcheck_error).c_str());
+    } else {
+      USBSerial.printf("[%lu] [%s] %s = %s (errors cleared)\n",
+                       millis(), levelNames[(int)lvl], sensorIDToString(id),
+                       v ? "ON" : "OFF");
+    }
+  } else {
+    // Standard logging for all other sensors
+    USBSerial.printf("[%lu] [%s] %s = %s\n", millis(), levelNames[(int)lvl], sensorIDToString(id), v ? "ON" : "OFF");
+  }
 }
 
 const char* sensorIDToString(SensorID id) {
