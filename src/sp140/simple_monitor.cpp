@@ -6,6 +6,11 @@
 #include "sp140/alert_display.h"  // UI logger & event queue
 #include "sp140/esc.h"  // For ESC error checking functions
 
+// Include the split monitor files
+#include "sp140/esc_monitors.h"
+#include "sp140/bms_monitors.h"
+#include "sp140/system_monitors.h"
+
 // Global instances
 MultiLogger multiLogger;  // Defined here, declared extern in header
 static AlertUILogger uiLogger;
@@ -14,8 +19,8 @@ SerialLogger serialLogger;
 bool monitoringEnabled = false;  // Start with monitoring disabled
 
 // Thread-safe copies for monitoring (updated by checkAllSensorsWithData)
-static STR_ESC_TELEMETRY_140 monitoringEscData = {};
-static STR_BMS_TELEMETRY_140 monitoringBmsData = {};
+STR_ESC_TELEMETRY_140 monitoringEscData = {};
+STR_BMS_TELEMETRY_140 monitoringBmsData = {};
 
 // Ensure the multiLogger has all sinks registered exactly once
 static void setupLoggerSinks() {
@@ -34,7 +39,7 @@ void SerialLogger::log(SensorID id, AlertLevel lvl, float v) {
 void SerialLogger::log(SensorID id, AlertLevel lvl, bool v) {
   const char* levelNames[] = {"OK", "WARN_LOW", "WARN_HIGH", "CRIT_LOW", "CRIT_HIGH", "INFO"};
 
-            // Enhanced logging for ESC running errors - show decoded error details
+  // Enhanced logging for ESC running errors - show decoded error details
   if (id == SensorID::ESC_OverCurrent_Error || id == SensorID::ESC_LockedRotor_Error ||
       id == SensorID::ESC_OverTemp_Error || id == SensorID::ESC_OverVolt_Error ||
       id == SensorID::ESC_VoltageDrop_Error || id == SensorID::ESC_ThrottleSat_Warning) {
@@ -66,7 +71,7 @@ void SerialLogger::log(SensorID id, AlertLevel lvl, bool v) {
                        millis(), levelNames[(int)lvl], sensorIDToString(id),
                        v ? "ON" : "OFF");
     }
-    } else {
+  } else {
     // Standard logging for all other sensors
     USBSerial.printf("[%lu] [%s] %s = %s\n", millis(), levelNames[(int)lvl], sensorIDToString(id), v ? "ON" : "OFF");
   }
@@ -142,7 +147,7 @@ const char* sensorIDToAbbreviation(SensorID id) {
     case SensorID::ESC_OverTemp_Error: return "ESC-RE-2";     // Bit 2
     case SensorID::ESC_OverVolt_Error: return "ESC-RE-6";     // Bit 6
     case SensorID::ESC_VoltageDrop_Error: return "ESC-RE-7";  // Bit 7
-        // ESC Running Warnings - with bit numbers
+    // ESC Running Warnings - with bit numbers
     case SensorID::ESC_ThrottleSat_Warning: return "ESC-RW-5"; // Bit 5
     // ESC Self-Check Errors - with bit numbers
     case SensorID::ESC_MotorCurrentOut_Error: return "ESC-SE-0";  // Bit 0
@@ -219,296 +224,6 @@ void checkAllSensorsWithData(const STR_ESC_TELEMETRY_140& escData, const STR_BMS
       monitor->check();
     }
   }
-}
-
-void addESCMonitors() {
-  // ESC MOS Temperature Monitor
-  static SensorMonitor* escMosTemp = new SensorMonitor(
-    SensorID::ESC_MOS_Temp,
-    escMosTempThresholds,
-    []() { return monitoringEscData.mos_temp; },
-    &multiLogger);
-  monitors.push_back(escMosTemp);
-
-  // ESC MCU Temperature Monitor
-  static SensorMonitor* escMcuTemp = new SensorMonitor(
-    SensorID::ESC_MCU_Temp,
-    escMcuTempThresholds,
-    []() { return monitoringEscData.mcu_temp; },
-    &multiLogger);
-  monitors.push_back(escMcuTemp);
-
-  // ESC Capacitor Temperature Monitor
-  static SensorMonitor* escCapTemp = new SensorMonitor(
-    SensorID::ESC_CAP_Temp,
-    escCapTempThresholds,
-    []() { return monitoringEscData.cap_temp; },
-    &multiLogger);
-  monitors.push_back(escCapTemp);
-
-  // Motor Temperature Monitor
-  static SensorMonitor* motorTemp = new SensorMonitor(
-    SensorID::Motor_Temp,
-    motorTempThresholds,
-    []() { return monitoringEscData.motor_temp; },
-    &multiLogger);
-  monitors.push_back(motorTemp);
-
-  // Individual ESC Running Error Monitors (Critical)
-  static BooleanMonitor* escOverCurrentError = new BooleanMonitor(
-    SensorID::ESC_OverCurrent_Error,
-    []() { return hasOverCurrentError(monitoringEscData.running_error); },
-    true, AlertLevel::CRIT_HIGH, &multiLogger);
-  monitors.push_back(escOverCurrentError);
-
-  static BooleanMonitor* escLockedRotorError = new BooleanMonitor(
-    SensorID::ESC_LockedRotor_Error,
-    []() { return hasLockedRotorError(monitoringEscData.running_error); },
-    true, AlertLevel::CRIT_HIGH, &multiLogger);
-  monitors.push_back(escLockedRotorError);
-
-  static BooleanMonitor* escOverTempError = new BooleanMonitor(
-    SensorID::ESC_OverTemp_Error,
-    []() { return hasOverTempError(monitoringEscData.running_error); },
-    true, AlertLevel::CRIT_HIGH, &multiLogger);
-  monitors.push_back(escOverTempError);
-
-  static BooleanMonitor* escOverVoltError = new BooleanMonitor(
-    SensorID::ESC_OverVolt_Error,
-    []() { return hasOverVoltError(monitoringEscData.running_error); },
-    true, AlertLevel::CRIT_HIGH, &multiLogger);
-  monitors.push_back(escOverVoltError);
-
-  static BooleanMonitor* escVoltageDropError = new BooleanMonitor(
-    SensorID::ESC_VoltageDrop_Error,
-    []() { return hasVoltagDropError(monitoringEscData.running_error); },
-    true, AlertLevel::CRIT_HIGH, &multiLogger);
-  monitors.push_back(escVoltageDropError);
-
-  // Individual ESC Running Warning Monitors
-  static BooleanMonitor* escThrottleSatWarning = new BooleanMonitor(
-    SensorID::ESC_ThrottleSat_Warning,
-    []() { return hasThrottleSatWarning(monitoringEscData.running_error); },
-    true, AlertLevel::WARN_HIGH, &multiLogger);
-  monitors.push_back(escThrottleSatWarning);
-
-  // Individual ESC Self-Check Error Monitors (All Critical)
-  static BooleanMonitor* escMotorCurrentOutError = new BooleanMonitor(
-    SensorID::ESC_MotorCurrentOut_Error,
-    []() { return hasMotorCurrentOutError(monitoringEscData.selfcheck_error); },
-    true, AlertLevel::CRIT_HIGH, &multiLogger);
-  monitors.push_back(escMotorCurrentOutError);
-
-  static BooleanMonitor* escTotalCurrentOutError = new BooleanMonitor(
-    SensorID::ESC_TotalCurrentOut_Error,
-    []() { return hasTotalCurrentOutError(monitoringEscData.selfcheck_error); },
-    true, AlertLevel::CRIT_HIGH, &multiLogger);
-  monitors.push_back(escTotalCurrentOutError);
-
-  static BooleanMonitor* escMotorVoltageOutError = new BooleanMonitor(
-    SensorID::ESC_MotorVoltageOut_Error,
-    []() { return hasMotorVoltageOutError(monitoringEscData.selfcheck_error); },
-    true, AlertLevel::CRIT_HIGH, &multiLogger);
-  monitors.push_back(escMotorVoltageOutError);
-
-  static BooleanMonitor* escCapNTCError = new BooleanMonitor(
-    SensorID::ESC_CapNTC_Error,
-    []() { return hasCapNTCError(monitoringEscData.selfcheck_error); },
-    true, AlertLevel::CRIT_HIGH, &multiLogger);
-  monitors.push_back(escCapNTCError);
-
-  static BooleanMonitor* escMosNTCError = new BooleanMonitor(
-    SensorID::ESC_MosNTC_Error,
-    []() { return hasMosNTCError(monitoringEscData.selfcheck_error); },
-    true, AlertLevel::CRIT_HIGH, &multiLogger);
-  monitors.push_back(escMosNTCError);
-
-  static BooleanMonitor* escBusVoltRangeError = new BooleanMonitor(
-    SensorID::ESC_BusVoltRange_Error,
-    []() { return hasBusVoltRangeError(monitoringEscData.selfcheck_error); },
-    true, AlertLevel::CRIT_HIGH, &multiLogger);
-  monitors.push_back(escBusVoltRangeError);
-
-  static BooleanMonitor* escBusVoltSampleError = new BooleanMonitor(
-    SensorID::ESC_BusVoltSample_Error,
-    []() { return hasBusVoltSampleError(monitoringEscData.selfcheck_error); },
-    true, AlertLevel::CRIT_HIGH, &multiLogger);
-  monitors.push_back(escBusVoltSampleError);
-
-  static BooleanMonitor* escMotorZLowError = new BooleanMonitor(
-    SensorID::ESC_MotorZLow_Error,
-    []() { return hasMotorZLowError(monitoringEscData.selfcheck_error); },
-    true, AlertLevel::CRIT_HIGH, &multiLogger);
-  monitors.push_back(escMotorZLowError);
-
-  static BooleanMonitor* escMotorZHighError = new BooleanMonitor(
-    SensorID::ESC_MotorZHigh_Error,
-    []() { return hasMotorZHighError(monitoringEscData.selfcheck_error); },
-    true, AlertLevel::CRIT_HIGH, &multiLogger);
-  monitors.push_back(escMotorZHighError);
-
-  static BooleanMonitor* escMotorVDet1Error = new BooleanMonitor(
-    SensorID::ESC_MotorVDet1_Error,
-    []() { return hasMotorVDet1Error(monitoringEscData.selfcheck_error); },
-    true, AlertLevel::CRIT_HIGH, &multiLogger);
-  monitors.push_back(escMotorVDet1Error);
-
-  static BooleanMonitor* escMotorVDet2Error = new BooleanMonitor(
-    SensorID::ESC_MotorVDet2_Error,
-    []() { return hasMotorVDet2Error(monitoringEscData.selfcheck_error); },
-    true, AlertLevel::CRIT_HIGH, &multiLogger);
-  monitors.push_back(escMotorVDet2Error);
-
-  static BooleanMonitor* escMotorIDet2Error = new BooleanMonitor(
-    SensorID::ESC_MotorIDet2_Error,
-    []() { return hasMotorIDet2Error(monitoringEscData.selfcheck_error); },
-    true, AlertLevel::CRIT_HIGH, &multiLogger);
-  monitors.push_back(escMotorIDet2Error);
-
-  static BooleanMonitor* escSwHwIncompatError = new BooleanMonitor(
-    SensorID::ESC_SwHwIncompat_Error,
-    []() { return hasSwHwIncompatError(monitoringEscData.selfcheck_error); },
-    true, AlertLevel::CRIT_HIGH, &multiLogger);
-  monitors.push_back(escSwHwIncompatError);
-
-  static BooleanMonitor* escBootloaderBadError = new BooleanMonitor(
-    SensorID::ESC_BootloaderBad_Error,
-    []() { return hasBootloaderBadError(monitoringEscData.selfcheck_error); },
-    true, AlertLevel::CRIT_HIGH, &multiLogger);
-  monitors.push_back(escBootloaderBadError);
-}
-
-void addBMSMonitors() {
-  // BMS MOSFET Temperature (Warning: 50°C, Critical: 60°C)
-  static SensorMonitor* bmsMosTemp = new SensorMonitor(
-    SensorID::BMS_MOS_Temp,
-    bmsTempThresholds,
-    []() { return monitoringBmsData.mos_temperature; },
-    &multiLogger);
-  monitors.push_back(bmsMosTemp);
-
-  // BMS Balance Resistor Temperature (Warning: 50°C, Critical: 60°C)
-  static SensorMonitor* bmsBalanceTemp = new SensorMonitor(
-    SensorID::BMS_Balance_Temp,
-    bmsTempThresholds,
-    []() { return monitoringBmsData.balance_temperature; },
-    &multiLogger);
-  monitors.push_back(bmsBalanceTemp);
-
-  // T1-T4 Cell Temperature Sensors (Warning: 50°C, Critical: 56°C)
-  static SensorMonitor* bmsT1Temp = new SensorMonitor(
-    SensorID::BMS_T1_Temp,
-    bmsCellTempThresholds,
-    []() { return monitoringBmsData.t1_temperature; },
-    &multiLogger);
-  monitors.push_back(bmsT1Temp);
-
-  static SensorMonitor* bmsT2Temp = new SensorMonitor(
-    SensorID::BMS_T2_Temp,
-    bmsCellTempThresholds,
-    []() { return monitoringBmsData.t2_temperature; },
-    &multiLogger);
-  monitors.push_back(bmsT2Temp);
-
-  static SensorMonitor* bmsT3Temp = new SensorMonitor(
-    SensorID::BMS_T3_Temp,
-    bmsCellTempThresholds,
-    []() { return monitoringBmsData.t3_temperature; },
-    &multiLogger);
-  monitors.push_back(bmsT3Temp);
-
-  static SensorMonitor* bmsT4Temp = new SensorMonitor(
-    SensorID::BMS_T4_Temp,
-    bmsCellTempThresholds,
-    []() { return monitoringBmsData.t4_temperature; },
-    &multiLogger);
-  monitors.push_back(bmsT4Temp);
-
-  // High Cell Voltage (Warn: 4.1V, Crit: 4.2V)
-  static SensorMonitor* bmsHighCellVoltage = new SensorMonitor(
-    SensorID::BMS_High_Cell_Voltage,
-    bmsHighCellVoltageThresholds,
-    []() { return monitoringBmsData.highest_cell_voltage; },
-    &multiLogger);
-  monitors.push_back(bmsHighCellVoltage);
-
-  // Low Cell Voltage (Warn: 3.2V, Crit: 3.0V)
-  static SensorMonitor* bmsLowCellVoltage = new SensorMonitor(
-    SensorID::BMS_Low_Cell_Voltage,
-    bmsLowCellVoltageThresholds,
-    []() { return monitoringBmsData.lowest_cell_voltage; },
-    &multiLogger);
-  monitors.push_back(bmsLowCellVoltage);
-
-  // State of Charge (Warn: 15%, Crit: 5%)
-  static SensorMonitor* bmsSoc = new SensorMonitor(
-    SensorID::BMS_SOC,
-    bmsSOCThresholds,
-    []() { return monitoringBmsData.soc; },
-    &multiLogger);
-  monitors.push_back(bmsSoc);
-
-  // Total Voltage (Low - Warn: 79.2V, Crit: 69.6V | High - Warn: 100.4V, Crit: 100.8V)
-  static SensorMonitor* bmsTotalVoltage = new SensorMonitor(
-    SensorID::BMS_Total_Voltage,
-    bmsTotalVoltageThresholds,
-    []() { return monitoringBmsData.battery_voltage; },
-    &multiLogger);
-  monitors.push_back(bmsTotalVoltage);
-
-  // Voltage Differential (Warn: 0.20V, Crit: 0.40V)
-  static SensorMonitor* bmsVoltageDifferential = new SensorMonitor(
-    SensorID::BMS_Voltage_Differential,
-    bmsVoltageDifferentialThresholds,
-    []() { return monitoringBmsData.voltage_differential; },
-    &multiLogger);
-  monitors.push_back(bmsVoltageDifferential);
-
-  // Charge MOS (Alert when OFF)
-  static BooleanMonitor* bmsChargeMos = new BooleanMonitor(
-    SensorID::BMS_Charge_MOS,
-    []() { return monitoringBmsData.is_charge_mos; },
-    false,  // Alert when false
-    AlertLevel::CRIT_HIGH,
-    &multiLogger);
-  monitors.push_back(bmsChargeMos);
-
-  // Discharge MOS (Alert when OFF)
-  static BooleanMonitor* bmsDischargeMos = new BooleanMonitor(
-    SensorID::BMS_Discharge_MOS,
-    []() { return monitoringBmsData.is_discharge_mos; },
-    false,  // Alert when false
-    AlertLevel::CRIT_HIGH,
-    &multiLogger);
-  monitors.push_back(bmsDischargeMos);
-}
-
-void addAltimeterMonitors() {
-  // Barometer Temperature monitor disabled for now.
-  // TODO:
-  // The BMP barometer shares the I2C bus with other peripherals; without a
-  // global I2C mutex the `Wire` driver can log "Unfinished Repeated Start"
-  // errors when transactions from multiple tasks interleave.  Until we
-  // introduce a proper mutex (or move barometer access into a dedicated
-  // task), skip registering this monitor to avoid the noise and potential
-  // bus resets.
-  //
-  // static SensorMonitor* baroTemp = new SensorMonitor(
-  //   SensorID::Baro_Temp,
-  //   baroTempThresholds,
-  //   []() { return getBaroTemperature(); },
-  //   &multiLogger);
-  // monitors.push_back(baroTemp);
-}
-
-void addInternalMonitors() {
-  // ESP32-S3 CPU Temperature (Warning: 50°C, Critical: 80°C)
-  static SensorMonitor* cpuTemp = new SensorMonitor(
-    SensorID::CPU_Temp,
-    cpuTempThresholds,
-    []() { return temperatureRead(); },
-    &multiLogger);
-  monitors.push_back(cpuTemp);
 }
 
 void enableMonitoring() {
