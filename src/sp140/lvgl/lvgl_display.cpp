@@ -740,7 +740,7 @@ void setupAlertCounterUI(bool darkMode) {
   // Alert text label (to the right of circles)
   if (alert_text_label == NULL) {
     alert_text_label = lv_label_create(main_screen);
-    lv_obj_set_style_text_font(alert_text_label, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(alert_text_label, &lv_font_montserrat_14, 0);
     lv_obj_set_style_text_color(alert_text_label, LVGL_ORANGE, 0);
     if (critical_counter_circle) {
       lv_obj_align_to(alert_text_label, critical_counter_circle, LV_ALIGN_OUT_RIGHT_MID, 4, 0);
@@ -946,7 +946,7 @@ void lv_showAlertText(SensorID id, bool critical) {
   lv_label_set_text(alert_text_label, txt);
   // Use larger font for critical alerts, smaller for warnings
   if (critical) {
-    lv_obj_set_style_text_font(alert_text_label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_font(alert_text_label, &lv_font_montserrat_18, 0);
     // Hide altitude while showing critical alert
     if (altitude_label) {
       lv_obj_add_flag(altitude_label, LV_OBJ_FLAG_HIDDEN);
@@ -954,7 +954,7 @@ void lv_showAlertText(SensorID id, bool critical) {
       lv_obj_set_pos(alert_text_label, lv_obj_get_x(altitude_label), lv_obj_get_y(altitude_label));
     }
   } else {
-    lv_obj_set_style_text_font(alert_text_label, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(alert_text_label, &lv_font_montserrat_14, 0);
     // Ensure altitude visible during warnings
     if (altitude_label) {
       lv_obj_clear_flag(altitude_label, LV_OBJ_FLAG_HIDDEN);
@@ -964,7 +964,7 @@ void lv_showAlertText(SensorID id, bool critical) {
       lv_obj_align_to(alert_text_label, warning_counter_circle, LV_ALIGN_OUT_RIGHT_MID, 4, 0);
     }
     // Make warning text darker and slightly larger for readability
-    lv_obj_set_style_text_font(alert_text_label, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(alert_text_label, &lv_font_montserrat_16, 0);
     // Dark orange for better readability over light background
     lv_obj_set_style_text_color(alert_text_label, lv_color_make(200,100,0), 0);
   }
