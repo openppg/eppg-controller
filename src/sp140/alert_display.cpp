@@ -4,6 +4,7 @@
 #include <map>
 #include <algorithm>
 #include "../../inc/sp140/lvgl/lvgl_display.h"
+#include "../../inc/sp140/vibration_pwm.h"  // For alert vibrations
 
 // ------------ Globals -------------
 QueueHandle_t alertEventQueue = NULL;
@@ -15,6 +16,7 @@ TaskHandle_t alertAggregationTaskHandle = NULL;
 // Internal state: current alert levels per sensor
 static std::map<SensorID, AlertLevel> g_currentLevels;
 static AlertCounts g_currentCounts = {0, 0};
+static AlertCounts g_previousCounts = {0, 0};  // Track previous counts for transitions
 static uint32_t g_epoch = 0;
 
 // Rotation state for display
@@ -26,6 +28,7 @@ static unsigned long g_lastRotateMs = 0;
 // Forward declarations
 static void alertAggregationTask(void* parameter);
 static void recalcCountsAndPublish();
+static void handleAlertVibration(const AlertCounts& newCounts, const AlertCounts& previousCounts);
 
 // ------------ Public helpers -------------
 void initAlertDisplay() {
@@ -57,12 +60,13 @@ static void alertAggregationTask(void* parameter) {
   for (;;) {
     // Wait up to 500ms for new event
     if (xQueueReceive(alertEventQueue, &ev, pdMS_TO_TICKS(500)) == pdTRUE) {
-      // Update map
+      // Update current levels map
       if (ev.level == AlertLevel::OK) {
         g_currentLevels.erase(ev.sensorId);
       } else {
         g_currentLevels[ev.sensorId] = ev.level;
       }
+
       recalcCountsAndPublish();
     }
 
@@ -115,6 +119,10 @@ static void recalcCountsAndPublish() {
         break;
     }
   }
+
+  // Handle vibration alerts based on count changes
+  handleAlertVibration(counts, g_previousCounts);
+  g_previousCounts = counts;
 
   if (counts.warningCount != g_currentCounts.warningCount ||
       counts.criticalCount != g_currentCounts.criticalCount) {
@@ -175,5 +183,28 @@ static void recalcCountsAndPublish() {
   } else {
     // If the display queue is empty, just overwrite it with the current carousel snapshot.
     xQueueOverwrite(alertDisplayQueue, &snap);
+  }
+}
+
+/**
+ * Handle vibration alerts based on state transitions
+ */
+static void handleAlertVibration(const AlertCounts& newCounts, const AlertCounts& previousCounts) {
+  if (newCounts.criticalCount > 0) {
+    // Start continuous vibration for critical alerts (if not already active)
+    if (!isCriticalVibrationActive()) {
+      startCriticalVibration();
+    }
+  } else {
+    // Stop critical vibration if no critical alerts remain
+    if (isCriticalVibrationActive()) {
+      stopCriticalVibration();
+    }
+
+    // Handle warning transitions (only when no critical alerts)
+    if (previousCounts.warningCount == 0 && newCounts.warningCount > 0) {
+      // Transition from 0 warnings to >0 warnings - trigger double pulse
+      executeVibePattern(VIBE_DOUBLE_PULSE);
+    }
   }
 }
