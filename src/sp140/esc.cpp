@@ -523,3 +523,60 @@ bool hasVoltagDropError(uint16_t errorCode) {
 bool hasThrottleSatWarning(uint16_t errorCode) {
   return (errorCode & 0x0020) != 0;  // Bit 5
 }
+
+// Individual self-check error bit checkers
+bool hasMotorCurrentOutError(uint16_t errorCode) {
+  return (errorCode & 0x0001) != 0;  // Bit 0
+}
+
+bool hasTotalCurrentOutError(uint16_t errorCode) {
+  return (errorCode & 0x0002) != 0;  // Bit 1
+}
+
+bool hasMotorVoltageOutError(uint16_t errorCode) {
+  return (errorCode & 0x0004) != 0;  // Bit 2
+}
+
+bool hasCapNTCError(uint16_t errorCode) {
+  return (errorCode & 0x0008) != 0;  // Bit 3
+}
+
+bool hasMosNTCError(uint16_t errorCode) {
+  return (errorCode & 0x0010) != 0;  // Bit 4
+}
+
+bool hasBusVoltRangeError(uint16_t errorCode) {
+  return (errorCode & 0x0020) != 0;  // Bit 5
+}
+
+bool hasBusVoltSampleError(uint16_t errorCode) {
+  return (errorCode & 0x0040) != 0;  // Bit 6
+}
+
+bool hasMotorZLowError(uint16_t errorCode) {
+  return (errorCode & 0x0080) != 0;  // Bit 7
+}
+
+bool hasMotorZHighError(uint16_t errorCode) {
+  return (errorCode & 0x0100) != 0;  // Bit 8
+}
+
+bool hasMotorVDet1Error(uint16_t errorCode) {
+  return (errorCode & 0x0200) != 0;  // Bit 9
+}
+
+bool hasMotorVDet2Error(uint16_t errorCode) {
+  return (errorCode & 0x0400) != 0;  // Bit 10
+}
+
+bool hasMotorIDet2Error(uint16_t errorCode) {
+  return (errorCode & 0x0800) != 0;  // Bit 11
+}
+
+bool hasSwHwIncompatError(uint16_t errorCode) {
+  return (errorCode & 0x2000) != 0;  // Bit 13
+}
+
+bool hasBootloaderBadError(uint16_t errorCode) {
+  return (errorCode & 0x4000) != 0;  // Bit 14
+}

@@ -21,8 +21,21 @@ enum class SensorID {
   ESC_VoltageDrop_Error,      // Bit 7: voltage_drop
   // ESC Running Warnings (Middle Priority)
   ESC_ThrottleSat_Warning,    // Bit 5: throttle_saturation
-  // ESC Self-Check Errors (All Critical)
-  ESC_SelfCheck_Error,
+  // ESC Self-Check Errors (All Critical - Boot-time hardware faults)
+  ESC_MotorCurrentOut_Error,  // Bit 0: motor_i_out_bad
+  ESC_TotalCurrentOut_Error,  // Bit 1: total_i_out_bad
+  ESC_MotorVoltageOut_Error,  // Bit 2: motor_v_out_bad
+  ESC_CapNTC_Error,           // Bit 3: cap_ntc_bad
+  ESC_MosNTC_Error,           // Bit 4: mos_ntc_bad
+  ESC_BusVoltRange_Error,     // Bit 5: bus_v_range
+  ESC_BusVoltSample_Error,    // Bit 6: bus_v_sample_bad
+  ESC_MotorZLow_Error,        // Bit 7: motor_z_too_low
+  ESC_MotorZHigh_Error,       // Bit 8: motor_z_too_high
+  ESC_MotorVDet1_Error,       // Bit 9: motor_v_det1_bad
+  ESC_MotorVDet2_Error,       // Bit 10: motor_v_det2_bad
+  ESC_MotorIDet2_Error,       // Bit 11: motor_i_det2_bad
+  ESC_SwHwIncompat_Error,     // Bit 13: sw_hw_incompatible
+  ESC_BootloaderBad_Error,    // Bit 14: bootloader_unsupported
 
   // BMS
   BMS_MOS_Temp,

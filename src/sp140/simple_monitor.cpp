@@ -34,7 +34,7 @@ void SerialLogger::log(SensorID id, AlertLevel lvl, float v) {
 void SerialLogger::log(SensorID id, AlertLevel lvl, bool v) {
   const char* levelNames[] = {"OK", "WARN_LOW", "WARN_HIGH", "CRIT_LOW", "CRIT_HIGH", "INFO"};
 
-          // Enhanced logging for ESC errors - show decoded error details
+            // Enhanced logging for ESC running errors - show decoded error details
   if (id == SensorID::ESC_OverCurrent_Error || id == SensorID::ESC_LockedRotor_Error ||
       id == SensorID::ESC_OverTemp_Error || id == SensorID::ESC_OverVolt_Error ||
       id == SensorID::ESC_VoltageDrop_Error || id == SensorID::ESC_ThrottleSat_Warning) {
@@ -48,18 +48,25 @@ void SerialLogger::log(SensorID id, AlertLevel lvl, bool v) {
                        millis(), levelNames[(int)lvl], sensorIDToString(id),
                        v ? "ON" : "OFF");
     }
-  } else if (id == SensorID::ESC_SelfCheck_Error) {
+  // Enhanced logging for ESC self-check errors - show decoded error details
+  } else if (id == SensorID::ESC_MotorCurrentOut_Error || id == SensorID::ESC_TotalCurrentOut_Error ||
+             id == SensorID::ESC_MotorVoltageOut_Error || id == SensorID::ESC_CapNTC_Error ||
+             id == SensorID::ESC_MosNTC_Error || id == SensorID::ESC_BusVoltRange_Error ||
+             id == SensorID::ESC_BusVoltSample_Error || id == SensorID::ESC_MotorZLow_Error ||
+             id == SensorID::ESC_MotorZHigh_Error || id == SensorID::ESC_MotorVDet1_Error ||
+             id == SensorID::ESC_MotorVDet2_Error || id == SensorID::ESC_MotorIDet2_Error ||
+             id == SensorID::ESC_SwHwIncompat_Error || id == SensorID::ESC_BootloaderBad_Error) {
     if (v) {
       USBSerial.printf("[%lu] [%s] %s = %s (0x%04X: %s)\n",
                        millis(), levelNames[(int)lvl], sensorIDToString(id),
                        v ? "ON" : "OFF", monitoringEscData.selfcheck_error,
                        decodeSelfCheckError(monitoringEscData.selfcheck_error).c_str());
     } else {
-      USBSerial.printf("[%lu] [%s] %s = %s (errors cleared)\n",
+      USBSerial.printf("[%lu] [%s] %s = %s (cleared)\n",
                        millis(), levelNames[(int)lvl], sensorIDToString(id),
                        v ? "ON" : "OFF");
     }
-  } else {
+    } else {
     // Standard logging for all other sensors
     USBSerial.printf("[%lu] [%s] %s = %s\n", millis(), levelNames[(int)lvl], sensorIDToString(id), v ? "ON" : "OFF");
   }
@@ -80,8 +87,21 @@ const char* sensorIDToString(SensorID id) {
     case SensorID::ESC_VoltageDrop_Error: return "ESC_VoltageDrop_Error";
     // ESC Running Warnings
     case SensorID::ESC_ThrottleSat_Warning: return "ESC_ThrottleSat_Warning";
-    // ESC Self-Check Errors
-    case SensorID::ESC_SelfCheck_Error: return "ESC_Boot_Err";
+    // ESC Self-Check Errors (Boot-time hardware faults)
+    case SensorID::ESC_MotorCurrentOut_Error: return "ESC_MotorCurrentOut_Error";
+    case SensorID::ESC_TotalCurrentOut_Error: return "ESC_TotalCurrentOut_Error";
+    case SensorID::ESC_MotorVoltageOut_Error: return "ESC_MotorVoltageOut_Error";
+    case SensorID::ESC_CapNTC_Error: return "ESC_CapNTC_Error";
+    case SensorID::ESC_MosNTC_Error: return "ESC_MosNTC_Error";
+    case SensorID::ESC_BusVoltRange_Error: return "ESC_BusVoltRange_Error";
+    case SensorID::ESC_BusVoltSample_Error: return "ESC_BusVoltSample_Error";
+    case SensorID::ESC_MotorZLow_Error: return "ESC_MotorZLow_Error";
+    case SensorID::ESC_MotorZHigh_Error: return "ESC_MotorZHigh_Error";
+    case SensorID::ESC_MotorVDet1_Error: return "ESC_MotorVDet1_Error";
+    case SensorID::ESC_MotorVDet2_Error: return "ESC_MotorVDet2_Error";
+    case SensorID::ESC_MotorIDet2_Error: return "ESC_MotorIDet2_Error";
+    case SensorID::ESC_SwHwIncompat_Error: return "ESC_SwHwIncompat_Error";
+    case SensorID::ESC_BootloaderBad_Error: return "ESC_BootloaderBad_Error";
 
     // BMS
     case SensorID::BMS_MOS_Temp: return "BMS_MOS_Temp";
@@ -122,10 +142,23 @@ const char* sensorIDToAbbreviation(SensorID id) {
     case SensorID::ESC_OverTemp_Error: return "ESC-RE-2";     // Bit 2
     case SensorID::ESC_OverVolt_Error: return "ESC-RE-6";     // Bit 6
     case SensorID::ESC_VoltageDrop_Error: return "ESC-RE-7";  // Bit 7
-    // ESC Running Warnings - with bit numbers
+        // ESC Running Warnings - with bit numbers
     case SensorID::ESC_ThrottleSat_Warning: return "ESC-RW-5"; // Bit 5
-    // ESC Self-Check Errors
-    case SensorID::ESC_SelfCheck_Error: return "ESC-SE"; // Self-check error
+    // ESC Self-Check Errors - with bit numbers
+    case SensorID::ESC_MotorCurrentOut_Error: return "ESC-SE-0";  // Bit 0
+    case SensorID::ESC_TotalCurrentOut_Error: return "ESC-SE-1";  // Bit 1
+    case SensorID::ESC_MotorVoltageOut_Error: return "ESC-SE-2";  // Bit 2
+    case SensorID::ESC_CapNTC_Error: return "ESC-SE-3";          // Bit 3
+    case SensorID::ESC_MosNTC_Error: return "ESC-SE-4";          // Bit 4
+    case SensorID::ESC_BusVoltRange_Error: return "ESC-SE-5";    // Bit 5
+    case SensorID::ESC_BusVoltSample_Error: return "ESC-SE-6";   // Bit 6
+    case SensorID::ESC_MotorZLow_Error: return "ESC-SE-7";       // Bit 7
+    case SensorID::ESC_MotorZHigh_Error: return "ESC-SE-8";      // Bit 8
+    case SensorID::ESC_MotorVDet1_Error: return "ESC-SE-9";      // Bit 9
+    case SensorID::ESC_MotorVDet2_Error: return "ESC-SE-10";     // Bit 10
+    case SensorID::ESC_MotorIDet2_Error: return "ESC-SE-11";     // Bit 11
+    case SensorID::ESC_SwHwIncompat_Error: return "ESC-SE-13";   // Bit 13
+    case SensorID::ESC_BootloaderBad_Error: return "ESC-SE-14";  // Bit 14
 
     // BMS (Battery Management System)
     case SensorID::BMS_MOS_Temp:            return "BMS-M";
@@ -259,14 +292,90 @@ void addESCMonitors() {
     true, AlertLevel::WARN_HIGH, &multiLogger);
   monitors.push_back(escThrottleSatWarning);
 
-  // ESC Self-Check Error Monitor
-  static BooleanMonitor* escSelfCheckError = new BooleanMonitor(
-    SensorID::ESC_SelfCheck_Error,
-    []() { return hasCriticalSelfCheckError(monitoringEscData.selfcheck_error); },
-    true,  // Alert when true (when errors are present)
-    AlertLevel::CRIT_HIGH,
-    &multiLogger);
-  monitors.push_back(escSelfCheckError);
+  // Individual ESC Self-Check Error Monitors (All Critical)
+  static BooleanMonitor* escMotorCurrentOutError = new BooleanMonitor(
+    SensorID::ESC_MotorCurrentOut_Error,
+    []() { return hasMotorCurrentOutError(monitoringEscData.selfcheck_error); },
+    true, AlertLevel::CRIT_HIGH, &multiLogger);
+  monitors.push_back(escMotorCurrentOutError);
+
+  static BooleanMonitor* escTotalCurrentOutError = new BooleanMonitor(
+    SensorID::ESC_TotalCurrentOut_Error,
+    []() { return hasTotalCurrentOutError(monitoringEscData.selfcheck_error); },
+    true, AlertLevel::CRIT_HIGH, &multiLogger);
+  monitors.push_back(escTotalCurrentOutError);
+
+  static BooleanMonitor* escMotorVoltageOutError = new BooleanMonitor(
+    SensorID::ESC_MotorVoltageOut_Error,
+    []() { return hasMotorVoltageOutError(monitoringEscData.selfcheck_error); },
+    true, AlertLevel::CRIT_HIGH, &multiLogger);
+  monitors.push_back(escMotorVoltageOutError);
+
+  static BooleanMonitor* escCapNTCError = new BooleanMonitor(
+    SensorID::ESC_CapNTC_Error,
+    []() { return hasCapNTCError(monitoringEscData.selfcheck_error); },
+    true, AlertLevel::CRIT_HIGH, &multiLogger);
+  monitors.push_back(escCapNTCError);
+
+  static BooleanMonitor* escMosNTCError = new BooleanMonitor(
+    SensorID::ESC_MosNTC_Error,
+    []() { return hasMosNTCError(monitoringEscData.selfcheck_error); },
+    true, AlertLevel::CRIT_HIGH, &multiLogger);
+  monitors.push_back(escMosNTCError);
+
+  static BooleanMonitor* escBusVoltRangeError = new BooleanMonitor(
+    SensorID::ESC_BusVoltRange_Error,
+    []() { return hasBusVoltRangeError(monitoringEscData.selfcheck_error); },
+    true, AlertLevel::CRIT_HIGH, &multiLogger);
+  monitors.push_back(escBusVoltRangeError);
+
+  static BooleanMonitor* escBusVoltSampleError = new BooleanMonitor(
+    SensorID::ESC_BusVoltSample_Error,
+    []() { return hasBusVoltSampleError(monitoringEscData.selfcheck_error); },
+    true, AlertLevel::CRIT_HIGH, &multiLogger);
+  monitors.push_back(escBusVoltSampleError);
+
+  static BooleanMonitor* escMotorZLowError = new BooleanMonitor(
+    SensorID::ESC_MotorZLow_Error,
+    []() { return hasMotorZLowError(monitoringEscData.selfcheck_error); },
+    true, AlertLevel::CRIT_HIGH, &multiLogger);
+  monitors.push_back(escMotorZLowError);
+
+  static BooleanMonitor* escMotorZHighError = new BooleanMonitor(
+    SensorID::ESC_MotorZHigh_Error,
+    []() { return hasMotorZHighError(monitoringEscData.selfcheck_error); },
+    true, AlertLevel::CRIT_HIGH, &multiLogger);
+  monitors.push_back(escMotorZHighError);
+
+  static BooleanMonitor* escMotorVDet1Error = new BooleanMonitor(
+    SensorID::ESC_MotorVDet1_Error,
+    []() { return hasMotorVDet1Error(monitoringEscData.selfcheck_error); },
+    true, AlertLevel::CRIT_HIGH, &multiLogger);
+  monitors.push_back(escMotorVDet1Error);
+
+  static BooleanMonitor* escMotorVDet2Error = new BooleanMonitor(
+    SensorID::ESC_MotorVDet2_Error,
+    []() { return hasMotorVDet2Error(monitoringEscData.selfcheck_error); },
+    true, AlertLevel::CRIT_HIGH, &multiLogger);
+  monitors.push_back(escMotorVDet2Error);
+
+  static BooleanMonitor* escMotorIDet2Error = new BooleanMonitor(
+    SensorID::ESC_MotorIDet2_Error,
+    []() { return hasMotorIDet2Error(monitoringEscData.selfcheck_error); },
+    true, AlertLevel::CRIT_HIGH, &multiLogger);
+  monitors.push_back(escMotorIDet2Error);
+
+  static BooleanMonitor* escSwHwIncompatError = new BooleanMonitor(
+    SensorID::ESC_SwHwIncompat_Error,
+    []() { return hasSwHwIncompatError(monitoringEscData.selfcheck_error); },
+    true, AlertLevel::CRIT_HIGH, &multiLogger);
+  monitors.push_back(escSwHwIncompatError);
+
+  static BooleanMonitor* escBootloaderBadError = new BooleanMonitor(
+    SensorID::ESC_BootloaderBad_Error,
+    []() { return hasBootloaderBadError(monitoringEscData.selfcheck_error); },
+    true, AlertLevel::CRIT_HIGH, &multiLogger);
+  monitors.push_back(escBootloaderBadError);
 }
 
 void addBMSMonitors() {
