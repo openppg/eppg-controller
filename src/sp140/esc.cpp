@@ -498,3 +498,28 @@ bool hasWarningRunningError(uint16_t errorCode) {
 bool hasCriticalSelfCheckError(uint16_t errorCode) {
   return errorCode != 0;  // All self-check errors are critical
 }
+
+// Individual error bit checkers for specific monitoring
+bool hasOverCurrentError(uint16_t errorCode) {
+  return (errorCode & 0x0001) != 0;  // Bit 0
+}
+
+bool hasLockedRotorError(uint16_t errorCode) {
+  return (errorCode & 0x0002) != 0;  // Bit 1
+}
+
+bool hasOverTempError(uint16_t errorCode) {
+  return (errorCode & 0x0004) != 0;  // Bit 2
+}
+
+bool hasOverVoltError(uint16_t errorCode) {
+  return (errorCode & 0x0040) != 0;  // Bit 6
+}
+
+bool hasVoltagDropError(uint16_t errorCode) {
+  return (errorCode & 0x0080) != 0;  // Bit 7
+}
+
+bool hasThrottleSatWarning(uint16_t errorCode) {
+  return (errorCode & 0x0020) != 0;  // Bit 5
+}

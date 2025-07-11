@@ -34,26 +34,17 @@ void SerialLogger::log(SensorID id, AlertLevel lvl, float v) {
 void SerialLogger::log(SensorID id, AlertLevel lvl, bool v) {
   const char* levelNames[] = {"OK", "WARN_LOW", "WARN_HIGH", "CRIT_LOW", "CRIT_HIGH", "INFO"};
 
-        // Enhanced logging for ESC errors - show decoded error details
-  if (id == SensorID::ESC_Running_Error) {
+          // Enhanced logging for ESC errors - show decoded error details
+  if (id == SensorID::ESC_OverCurrent_Error || id == SensorID::ESC_LockedRotor_Error ||
+      id == SensorID::ESC_OverTemp_Error || id == SensorID::ESC_OverVolt_Error ||
+      id == SensorID::ESC_VoltageDrop_Error || id == SensorID::ESC_ThrottleSat_Warning) {
     if (v) {
       USBSerial.printf("[%lu] [%s] %s = %s (0x%04X: %s)\n",
                        millis(), levelNames[(int)lvl], sensorIDToString(id),
                        v ? "ON" : "OFF", monitoringEscData.running_error,
                        decodeRunningError(monitoringEscData.running_error).c_str());
     } else {
-      USBSerial.printf("[%lu] [%s] %s = %s (critical errors cleared)\n",
-                       millis(), levelNames[(int)lvl], sensorIDToString(id),
-                       v ? "ON" : "OFF");
-    }
-  } else if (id == SensorID::ESC_Running_Warning) {
-    if (v) {
-      USBSerial.printf("[%lu] [%s] %s = %s (0x%04X: %s)\n",
-                       millis(), levelNames[(int)lvl], sensorIDToString(id),
-                       v ? "ON" : "OFF", monitoringEscData.running_error,
-                       decodeRunningError(monitoringEscData.running_error).c_str());
-    } else {
-      USBSerial.printf("[%lu] [%s] %s = %s (warnings cleared)\n",
+      USBSerial.printf("[%lu] [%s] %s = %s (cleared)\n",
                        millis(), levelNames[(int)lvl], sensorIDToString(id),
                        v ? "ON" : "OFF");
     }
@@ -81,8 +72,15 @@ const char* sensorIDToString(SensorID id) {
     case SensorID::ESC_MCU_Temp: return "ESC_MCU_Temp";
     case SensorID::ESC_CAP_Temp: return "ESC_CAP_Temp";
     case SensorID::Motor_Temp: return "Motor_Temp";
-    case SensorID::ESC_Running_Error: return "ESC_Run_Err";
-    case SensorID::ESC_Running_Warning: return "ESC_Run_Warn";
+    // ESC Running Errors (Critical)
+    case SensorID::ESC_OverCurrent_Error: return "ESC_OverCurrent_Error";
+    case SensorID::ESC_LockedRotor_Error: return "ESC_LockedRotor_Error";
+    case SensorID::ESC_OverTemp_Error: return "ESC_OverTemp_Error";
+    case SensorID::ESC_OverVolt_Error: return "ESC_OverVolt_Error";
+    case SensorID::ESC_VoltageDrop_Error: return "ESC_VoltageDrop_Error";
+    // ESC Running Warnings
+    case SensorID::ESC_ThrottleSat_Warning: return "ESC_ThrottleSat_Warning";
+    // ESC Self-Check Errors
     case SensorID::ESC_SelfCheck_Error: return "ESC_Boot_Err";
 
     // BMS
@@ -118,8 +116,15 @@ const char* sensorIDToAbbreviation(SensorID id) {
     case SensorID::ESC_MCU_Temp: return "ESC-C";   // Controller temp
     case SensorID::ESC_CAP_Temp: return "ESC-P";   // Capacitor temp
     case SensorID::Motor_Temp:    return "MTR-T";    // Motor temp
-    case SensorID::ESC_Running_Error: return "ESC-RE";  // Running error
-    case SensorID::ESC_Running_Warning: return "ESC-RW"; // Running warning
+    // ESC Running Errors (Critical) - with bit numbers
+    case SensorID::ESC_OverCurrent_Error: return "ESC-RE-0";  // Bit 0
+    case SensorID::ESC_LockedRotor_Error: return "ESC-RE-1";  // Bit 1
+    case SensorID::ESC_OverTemp_Error: return "ESC-RE-2";     // Bit 2
+    case SensorID::ESC_OverVolt_Error: return "ESC-RE-6";     // Bit 6
+    case SensorID::ESC_VoltageDrop_Error: return "ESC-RE-7";  // Bit 7
+    // ESC Running Warnings - with bit numbers
+    case SensorID::ESC_ThrottleSat_Warning: return "ESC-RW-5"; // Bit 5
+    // ESC Self-Check Errors
     case SensorID::ESC_SelfCheck_Error: return "ESC-SE"; // Self-check error
 
     // BMS (Battery Management System)
@@ -216,23 +221,43 @@ void addESCMonitors() {
     &multiLogger);
   monitors.push_back(motorTemp);
 
-  // ESC Running Error Monitor
-  static BooleanMonitor* escRunningError = new BooleanMonitor(
-    SensorID::ESC_Running_Error,
-    []() { return hasCriticalRunningError(monitoringEscData.running_error); },
-    true,  // Alert when true (when errors are present)
-    AlertLevel::CRIT_HIGH,
-    &multiLogger);
-  monitors.push_back(escRunningError);
+  // Individual ESC Running Error Monitors (Critical)
+  static BooleanMonitor* escOverCurrentError = new BooleanMonitor(
+    SensorID::ESC_OverCurrent_Error,
+    []() { return hasOverCurrentError(monitoringEscData.running_error); },
+    true, AlertLevel::CRIT_HIGH, &multiLogger);
+  monitors.push_back(escOverCurrentError);
 
-  // ESC Running Warning Monitor (for throttle saturation, etc.)
-  static BooleanMonitor* escRunningWarning = new BooleanMonitor(
-    SensorID::ESC_Running_Warning,
-    []() { return hasWarningRunningError(monitoringEscData.running_error); },
-    true,  // Alert when true (when warnings are present)
-    AlertLevel::WARN_HIGH,
-    &multiLogger);
-  monitors.push_back(escRunningWarning);
+  static BooleanMonitor* escLockedRotorError = new BooleanMonitor(
+    SensorID::ESC_LockedRotor_Error,
+    []() { return hasLockedRotorError(monitoringEscData.running_error); },
+    true, AlertLevel::CRIT_HIGH, &multiLogger);
+  monitors.push_back(escLockedRotorError);
+
+  static BooleanMonitor* escOverTempError = new BooleanMonitor(
+    SensorID::ESC_OverTemp_Error,
+    []() { return hasOverTempError(monitoringEscData.running_error); },
+    true, AlertLevel::CRIT_HIGH, &multiLogger);
+  monitors.push_back(escOverTempError);
+
+  static BooleanMonitor* escOverVoltError = new BooleanMonitor(
+    SensorID::ESC_OverVolt_Error,
+    []() { return hasOverVoltError(monitoringEscData.running_error); },
+    true, AlertLevel::CRIT_HIGH, &multiLogger);
+  monitors.push_back(escOverVoltError);
+
+  static BooleanMonitor* escVoltageDropError = new BooleanMonitor(
+    SensorID::ESC_VoltageDrop_Error,
+    []() { return hasVoltagDropError(monitoringEscData.running_error); },
+    true, AlertLevel::CRIT_HIGH, &multiLogger);
+  monitors.push_back(escVoltageDropError);
+
+  // Individual ESC Running Warning Monitors
+  static BooleanMonitor* escThrottleSatWarning = new BooleanMonitor(
+    SensorID::ESC_ThrottleSat_Warning,
+    []() { return hasThrottleSatWarning(monitoringEscData.running_error); },
+    true, AlertLevel::WARN_HIGH, &multiLogger);
+  monitors.push_back(escThrottleSatWarning);
 
   // ESC Self-Check Error Monitor
   static BooleanMonitor* escSelfCheckError = new BooleanMonitor(

@@ -37,6 +37,14 @@ bool hasCriticalRunningError(uint16_t errorCode);
 bool hasWarningRunningError(uint16_t errorCode);
 bool hasCriticalSelfCheckError(uint16_t errorCode);
 
+// Individual error bit checkers
+bool hasOverCurrentError(uint16_t errorCode);
+bool hasLockedRotorError(uint16_t errorCode);
+bool hasOverTempError(uint16_t errorCode);
+bool hasOverVoltError(uint16_t errorCode);
+bool hasVoltagDropError(uint16_t errorCode);
+bool hasThrottleSatWarning(uint16_t errorCode);
+
 // for debugging
 void dumpThrottleResponse(const sine_esc_SetThrottleSettings2Response *res);
 void dumpESCMessages();  // dumps all messages to USBSerial

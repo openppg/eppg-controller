@@ -13,8 +13,15 @@ enum class SensorID {
   ESC_MCU_Temp,
   ESC_CAP_Temp,
   Motor_Temp,
-  ESC_Running_Error,
-  ESC_Running_Warning,
+  // ESC Running Errors (Critical - High Priority)
+  ESC_OverCurrent_Error,      // Bit 0: over_current_protect
+  ESC_LockedRotor_Error,      // Bit 1: locked_rotor_protect
+  ESC_OverTemp_Error,         // Bit 2: over_temp_protect
+  ESC_OverVolt_Error,         // Bit 6: over_volt_protect
+  ESC_VoltageDrop_Error,      // Bit 7: voltage_drop
+  // ESC Running Warnings (Middle Priority)
+  ESC_ThrottleSat_Warning,    // Bit 5: throttle_saturation
+  // ESC Self-Check Errors (All Critical)
   ESC_SelfCheck_Error,
 
   // BMS
