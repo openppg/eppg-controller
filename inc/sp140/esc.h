@@ -34,6 +34,7 @@ String decodeSelfCheckError(uint16_t errorCode);
 bool hasRunningError(uint16_t errorCode);
 bool hasSelfCheckError(uint16_t errorCode);
 bool hasCriticalRunningError(uint16_t errorCode);
+bool hasWarningRunningError(uint16_t errorCode);
 bool hasCriticalSelfCheckError(uint16_t errorCode);
 
 // for debugging

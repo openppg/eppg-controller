@@ -465,12 +465,28 @@ bool hasSelfCheckError(uint16_t errorCode) {
  */
 bool hasCriticalRunningError(uint16_t errorCode) {
   // Define critical error bits (High level errors from documentation)
-  // Bits 0,1,2,3,6,7 are High priority
-  const uint16_t criticalBits = 0x00CF;  // Bits 0,1,2,3,6,7 (High priority)
-  // Bit 4 (no_load) and Bit 8 (comm_throttle_loss) are Low priority
-  // Bit 5 (throttle_saturation) is Middle priority - treat as non-critical for now
+  // Bits 0,1,2,6,7 are High priority and relevant for CAN communication
+  const uint16_t criticalBits = 0x00C7;  // Bits 0,1,2,6,7 (High priority)
+  // Excluded bits:
+  // - Bit 3 (pwm_throttle_lost): Not relevant for CAN communication
+  // - Bit 4 (no_load): Low priority
+  // - Bit 5 (throttle_saturation): Middle priority
+  // - Bit 8 (comm_throttle_loss): Low priority, expected with CAN
 
   return (errorCode & criticalBits) != 0;
+}
+
+/**
+ * Check if there are any warning-level running errors
+ * Warning errors are middle-priority faults that should be monitored but aren't critical
+ * @param errorCode 16-bit running error code from ESC
+ * @return true if any warning error bits are set
+ */
+bool hasWarningRunningError(uint16_t errorCode) {
+  // Bit 5 (throttle_saturation) is Middle priority - treat as warning
+  const uint16_t warningBits = 0x0020;  // Bit 5 only
+
+  return (errorCode & warningBits) != 0;
 }
 
 /**

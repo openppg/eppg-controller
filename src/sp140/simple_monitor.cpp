@@ -34,7 +34,7 @@ void SerialLogger::log(SensorID id, AlertLevel lvl, float v) {
 void SerialLogger::log(SensorID id, AlertLevel lvl, bool v) {
   const char* levelNames[] = {"OK", "WARN_LOW", "WARN_HIGH", "CRIT_LOW", "CRIT_HIGH", "INFO"};
 
-      // Enhanced logging for ESC errors - show decoded error details
+        // Enhanced logging for ESC errors - show decoded error details
   if (id == SensorID::ESC_Running_Error) {
     if (v) {
       USBSerial.printf("[%lu] [%s] %s = %s (0x%04X: %s)\n",
@@ -42,7 +42,18 @@ void SerialLogger::log(SensorID id, AlertLevel lvl, bool v) {
                        v ? "ON" : "OFF", monitoringEscData.running_error,
                        decodeRunningError(monitoringEscData.running_error).c_str());
     } else {
-      USBSerial.printf("[%lu] [%s] %s = %s (errors cleared)\n",
+      USBSerial.printf("[%lu] [%s] %s = %s (critical errors cleared)\n",
+                       millis(), levelNames[(int)lvl], sensorIDToString(id),
+                       v ? "ON" : "OFF");
+    }
+  } else if (id == SensorID::ESC_Running_Warning) {
+    if (v) {
+      USBSerial.printf("[%lu] [%s] %s = %s (0x%04X: %s)\n",
+                       millis(), levelNames[(int)lvl], sensorIDToString(id),
+                       v ? "ON" : "OFF", monitoringEscData.running_error,
+                       decodeRunningError(monitoringEscData.running_error).c_str());
+    } else {
+      USBSerial.printf("[%lu] [%s] %s = %s (warnings cleared)\n",
                        millis(), levelNames[(int)lvl], sensorIDToString(id),
                        v ? "ON" : "OFF");
     }
@@ -71,6 +82,7 @@ const char* sensorIDToString(SensorID id) {
     case SensorID::ESC_CAP_Temp: return "ESC_CAP_Temp";
     case SensorID::Motor_Temp: return "Motor_Temp";
     case SensorID::ESC_Running_Error: return "ESC_Run_Err";
+    case SensorID::ESC_Running_Warning: return "ESC_Run_Warn";
     case SensorID::ESC_SelfCheck_Error: return "ESC_Boot_Err";
 
     // BMS
@@ -107,6 +119,7 @@ const char* sensorIDToAbbreviation(SensorID id) {
     case SensorID::ESC_CAP_Temp: return "ESC-P";   // Capacitor temp
     case SensorID::Motor_Temp:    return "MTR-T";    // Motor temp
     case SensorID::ESC_Running_Error: return "ESC-RE";  // Running error
+    case SensorID::ESC_Running_Warning: return "ESC-RW"; // Running warning
     case SensorID::ESC_SelfCheck_Error: return "ESC-SE"; // Self-check error
 
     // BMS (Battery Management System)
@@ -211,6 +224,15 @@ void addESCMonitors() {
     AlertLevel::CRIT_HIGH,
     &multiLogger);
   monitors.push_back(escRunningError);
+
+  // ESC Running Warning Monitor (for throttle saturation, etc.)
+  static BooleanMonitor* escRunningWarning = new BooleanMonitor(
+    SensorID::ESC_Running_Warning,
+    []() { return hasWarningRunningError(monitoringEscData.running_error); },
+    true,  // Alert when true (when warnings are present)
+    AlertLevel::WARN_HIGH,
+    &multiLogger);
+  monitors.push_back(escRunningWarning);
 
   // ESC Self-Check Error Monitor
   static BooleanMonitor* escSelfCheckError = new BooleanMonitor(
