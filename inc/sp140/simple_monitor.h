@@ -171,6 +171,7 @@ extern bool monitoringEnabled;  // Flag to control monitoring state
 // Functions
 const char* sensorIDToString(SensorID id);
 const char* sensorIDToAbbreviation(SensorID id);
+const char* sensorIDToAbbreviationWithLevel(SensorID id, AlertLevel level);
 void initSimpleMonitor();
 void checkAllSensors();
 void checkAllSensorsWithData(const STR_ESC_TELEMETRY_140& escData, const STR_BMS_TELEMETRY_140& bmsData);

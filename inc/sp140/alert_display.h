@@ -31,6 +31,7 @@ extern QueueHandle_t alertCarouselQueue;  // depth 1, overwrite
 // Message for UI to show a single alert text (or hide)
 struct AlertDisplayMsg {
   SensorID id;       // Valid sensor when show == true
+  AlertLevel level;  // Alert level for dynamic abbreviations
   bool critical;     // true = critical colouring
   bool show;         // false = hide label
 };

@@ -82,4 +82,10 @@ extern int8_t displayCS;
 void updateAlertCounterDisplay(const AlertCounts& counts);
 void loadAlertSnapshot(const AlertSnapshot& snap);
 void lv_showAlertText(SensorID id, bool critical);
+void lv_showAlertTextWithLevel(SensorID id, AlertLevel level, bool critical);
 void lv_hideAlertText();
+
+// Critical border flashing functions
+void startCriticalBorderFlash();
+void stopCriticalBorderFlash();
+bool isCriticalBorderFlashing();

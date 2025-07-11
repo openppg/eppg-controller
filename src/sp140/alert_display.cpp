@@ -80,6 +80,7 @@ static void alertAggregationTask(void* parameter) {
         AlertDisplayMsg msg;
         msg.show = true;
         msg.id = g_activeList[g_rotateIdx];
+        msg.level = g_currentLevels[g_activeList[g_rotateIdx]];  // Get the alert level for this sensor
         msg.critical = g_showingCrit;
         if (alertDisplayQueue) {
           xQueueOverwrite(alertDisplayQueue, &msg);
@@ -150,6 +151,7 @@ static void recalcCountsAndPublish() {
     } else {
       msg.show = true;
       msg.id = g_activeList[g_rotateIdx];
+      msg.level = g_currentLevels[g_activeList[g_rotateIdx]];  // Get the alert level for this sensor
       msg.critical = g_showingCrit;
     }
     if (alertDisplayQueue) {
@@ -195,10 +197,20 @@ static void handleAlertVibration(const AlertCounts& newCounts, const AlertCounts
     if (!isCriticalVibrationActive()) {
       startCriticalVibration();
     }
+    
+    // Start critical border flashing (if not already active)
+    if (!isCriticalBorderFlashing()) {
+      startCriticalBorderFlash();
+    }
   } else {
     // Stop critical vibration if no critical alerts remain
     if (isCriticalVibrationActive()) {
       stopCriticalVibration();
+    }
+    
+    // Stop critical border flashing if no critical alerts remain
+    if (isCriticalBorderFlashing()) {
+      stopCriticalBorderFlash();
     }
 
     // Handle warning transitions (only when no critical alerts)

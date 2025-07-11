@@ -165,6 +165,13 @@ static void arm_fail_flash_timer_cb(lv_timer_t* timer);  // Forward declaration
 static lv_color_t original_arm_fail_icon_color;  // To restore color after flashing
 // --- End Arm Fail Icon Flashing ---
 
+// --- Critical Alert Border Flashing ---
+static lv_obj_t* critical_border = NULL;
+static lv_timer_t* critical_border_flash_timer = NULL;
+static bool isFlashingCriticalBorder = false;
+static void critical_border_flash_timer_cb(lv_timer_t* timer);  // Forward declaration
+// --- End Critical Alert Border Flashing ---
+
 void setupLvglBuffer() {
   // Initialize LVGL library
   USBSerial.println("Initializing LVGL");
@@ -572,6 +579,20 @@ void setupMainScreen(bool darkMode) {
   }
   */
 
+  // Create critical alert border (initially hidden)
+  if (critical_border == NULL) {
+    critical_border = lv_obj_create(main_screen);
+    lv_obj_set_size(critical_border, SCREEN_WIDTH, SCREEN_HEIGHT);
+    lv_obj_set_pos(critical_border, 0, 0);
+    lv_obj_set_style_border_width(critical_border, 4, LV_PART_MAIN);
+    lv_obj_set_style_border_color(critical_border, LVGL_RED, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(critical_border, LV_OPA_0, LV_PART_MAIN);  // Transparent background
+    lv_obj_set_style_radius(critical_border, 0, LV_PART_MAIN);  // Sharp corners
+    lv_obj_add_flag(critical_border, LV_OBJ_FLAG_HIDDEN);  // Initially hidden
+    // Move border to front so it's visible over all other elements
+    lv_obj_move_foreground(critical_border);
+  }
+
   // Create arm indicator (initially hidden)
   arm_indicator = lv_obj_create(main_screen);
   lv_obj_set_size(arm_indicator, 52, 33);
@@ -939,10 +960,100 @@ void startArmFailIconFlash() {
 }
 // --- End Arm Fail Icon Flashing Implementation ---
 
+// --- Critical Alert Border Flashing Implementation ---
+static void critical_border_flash_timer_cb(lv_timer_t* timer) {
+  // This callback runs within the LVGL task handler, which is already protected by lvglMutex
+
+  if (critical_border == NULL) {
+    // Safety check
+    if (critical_border_flash_timer != NULL) {
+      lv_timer_del(critical_border_flash_timer);
+      critical_border_flash_timer = NULL;
+    }
+    isFlashingCriticalBorder = false;
+    return;
+  }
+
+  // Toggle visibility
+  if (lv_obj_has_flag(critical_border, LV_OBJ_FLAG_HIDDEN)) {
+    lv_obj_clear_flag(critical_border, LV_OBJ_FLAG_HIDDEN);
+  } else {
+    lv_obj_add_flag(critical_border, LV_OBJ_FLAG_HIDDEN);
+  }
+}
+
+void startCriticalBorderFlash() {
+  // This function can be called from other tasks, so protect with mutex
+  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(50)) == pdTRUE) {  // Use a timeout
+    if (critical_border == NULL) {
+      xSemaphoreGive(lvglMutex);
+      return;  // Can't flash if border doesn't exist
+    }
+
+    // If a flash timer is already running, delete it first
+    if (critical_border_flash_timer != NULL) {
+      lv_timer_del(critical_border_flash_timer);
+      critical_border_flash_timer = NULL;
+    }
+
+    // Reset state and start flashing
+    isFlashingCriticalBorder = true;
+
+    // Start with the border visible
+    lv_obj_clear_flag(critical_border, LV_OBJ_FLAG_HIDDEN);
+
+    // Create the timer (500ms interval for on/off cycle - matches vibration rate)
+    critical_border_flash_timer = lv_timer_create(critical_border_flash_timer_cb, 500, NULL);
+    if (critical_border_flash_timer == NULL) {
+      // Failed to create timer, reset state
+      isFlashingCriticalBorder = false;
+      lv_obj_add_flag(critical_border, LV_OBJ_FLAG_HIDDEN);  // Hide it again
+      USBSerial.println("Error: Failed to create critical border flash timer!");
+    }
+
+    xSemaphoreGive(lvglMutex);
+  } else {
+     USBSerial.println("Warning: Failed to acquire LVGL mutex for startCriticalBorderFlash");
+  }
+}
+
+void stopCriticalBorderFlash() {
+  // This function can be called from other tasks, so protect with mutex
+  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(50)) == pdTRUE) {  // Use a timeout
+    if (critical_border_flash_timer != NULL) {
+      lv_timer_del(critical_border_flash_timer);
+      critical_border_flash_timer = NULL;
+    }
+    
+    isFlashingCriticalBorder = false;
+    
+    // Hide the border
+    if (critical_border != NULL) {
+      lv_obj_add_flag(critical_border, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    xSemaphoreGive(lvglMutex);
+  } else {
+     USBSerial.println("Warning: Failed to acquire LVGL mutex for stopCriticalBorderFlash");
+  }
+}
+
+bool isCriticalBorderFlashing() {
+  return isFlashingCriticalBorder;
+}
+// --- End Critical Alert Border Flashing Implementation ---
+
 // Public helpers to control alert text externally
 void lv_showAlertText(SensorID id, bool critical) {
   if (alert_text_label == NULL) return;
   const char* txt = sensorIDToAbbreviation(id);
+  lv_label_set_text(alert_text_label, txt);
+}
+
+// New function that accepts alert level for dynamic abbreviations
+void lv_showAlertTextWithLevel(SensorID id, AlertLevel level, bool critical) {
+  if (alert_text_label == NULL) return;
+  const char* txt = sensorIDToAbbreviationWithLevel(id, level);
   lv_label_set_text(alert_text_label, txt);
   // Use larger font for critical alerts, smaller for warnings
   if (critical) {

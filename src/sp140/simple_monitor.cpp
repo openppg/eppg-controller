@@ -137,48 +137,48 @@ const char* sensorIDToString(SensorID id) {
 const char* sensorIDToAbbreviation(SensorID id) {
   switch (id) {
     // ESC
-    case SensorID::ESC_MOS_Temp: return "ESC-M";   // MOSFET temp
-    case SensorID::ESC_MCU_Temp: return "ESC-C";   // Controller temp
-    case SensorID::ESC_CAP_Temp: return "ESC-P";   // Capacitor temp
-    case SensorID::Motor_Temp:    return "MTR-T";    // Motor temp
+    case SensorID::ESC_MOS_Temp: return "MC-F";   // MOSFET temp
+    case SensorID::ESC_MCU_Temp: return "MC-C";   // Controller temp
+    case SensorID::ESC_CAP_Temp: return "MC-P";   // Capacitor temp
+    case SensorID::Motor_Temp:    return "MC-M";    // Motor temp
     // ESC Running Errors (Critical) - with bit numbers
-    case SensorID::ESC_OverCurrent_Error: return "ESC-RE-0";  // Bit 0
-    case SensorID::ESC_LockedRotor_Error: return "ESC-RE-1";  // Bit 1
-    case SensorID::ESC_OverTemp_Error: return "ESC-RE-2";     // Bit 2
-    case SensorID::ESC_OverVolt_Error: return "ESC-RE-6";     // Bit 6
-    case SensorID::ESC_VoltageDrop_Error: return "ESC-RE-7";  // Bit 7
+    case SensorID::ESC_OverCurrent_Error: return "MC-RE-0";  // Bit 0
+    case SensorID::ESC_LockedRotor_Error: return "MC-RE-1";  // Bit 1
+    case SensorID::ESC_OverTemp_Error: return "MC-RE-2";     // Bit 2
+    case SensorID::ESC_OverVolt_Error: return "MC-RE-6";     // Bit 6
+    case SensorID::ESC_VoltageDrop_Error: return "MC-RE-7";  // Bit 7
     // ESC Running Warnings - with bit numbers
-    case SensorID::ESC_ThrottleSat_Warning: return "ESC-RW-5"; // Bit 5
+    case SensorID::ESC_ThrottleSat_Warning: return "MC-RW-5"; // Bit 5
     // ESC Self-Check Errors - with bit numbers
-    case SensorID::ESC_MotorCurrentOut_Error: return "ESC-SE-0";  // Bit 0
-    case SensorID::ESC_TotalCurrentOut_Error: return "ESC-SE-1";  // Bit 1
-    case SensorID::ESC_MotorVoltageOut_Error: return "ESC-SE-2";  // Bit 2
-    case SensorID::ESC_CapNTC_Error: return "ESC-SE-3";          // Bit 3
-    case SensorID::ESC_MosNTC_Error: return "ESC-SE-4";          // Bit 4
-    case SensorID::ESC_BusVoltRange_Error: return "ESC-SE-5";    // Bit 5
-    case SensorID::ESC_BusVoltSample_Error: return "ESC-SE-6";   // Bit 6
-    case SensorID::ESC_MotorZLow_Error: return "ESC-SE-7";       // Bit 7
-    case SensorID::ESC_MotorZHigh_Error: return "ESC-SE-8";      // Bit 8
-    case SensorID::ESC_MotorVDet1_Error: return "ESC-SE-9";      // Bit 9
-    case SensorID::ESC_MotorVDet2_Error: return "ESC-SE-10";     // Bit 10
-    case SensorID::ESC_MotorIDet2_Error: return "ESC-SE-11";     // Bit 11
-    case SensorID::ESC_SwHwIncompat_Error: return "ESC-SE-13";   // Bit 13
-    case SensorID::ESC_BootloaderBad_Error: return "ESC-SE-14";  // Bit 14
+    case SensorID::ESC_MotorCurrentOut_Error: return "MC-SE-0";  // Bit 0
+    case SensorID::ESC_TotalCurrentOut_Error: return "MC-SE-1";  // Bit 1
+    case SensorID::ESC_MotorVoltageOut_Error: return "MC-SE-2";  // Bit 2
+    case SensorID::ESC_CapNTC_Error: return "MC-SE-3";          // Bit 3
+    case SensorID::ESC_MosNTC_Error: return "MC-SE-4";          // Bit 4
+    case SensorID::ESC_BusVoltRange_Error: return "MC-SE-5";    // Bit 5
+    case SensorID::ESC_BusVoltSample_Error: return "MC-SE-6";   // Bit 6
+    case SensorID::ESC_MotorZLow_Error: return "MC-SE-7";       // Bit 7
+    case SensorID::ESC_MotorZHigh_Error: return "MC-SE-8";      // Bit 8
+    case SensorID::ESC_MotorVDet1_Error: return "MC-SE-9";      // Bit 9
+    case SensorID::ESC_MotorVDet2_Error: return "MC-SE-10";     // Bit 10
+    case SensorID::ESC_MotorIDet2_Error: return "MC-SE-11";     // Bit 11
+    case SensorID::ESC_SwHwIncompat_Error: return "MC-SE-13";   // Bit 13
+    case SensorID::ESC_BootloaderBad_Error: return "MC-SE-14";  // Bit 14
 
     // BMS (Battery Management System)
-    case SensorID::BMS_MOS_Temp:            return "BMS-M";
-    case SensorID::BMS_Balance_Temp:        return "BMS-B";
-    case SensorID::BMS_T1_Temp:             return "BMS-T1";
-    case SensorID::BMS_T2_Temp:             return "BMS-T2";
-    case SensorID::BMS_T3_Temp:             return "BMS-T3";
-    case SensorID::BMS_T4_Temp:             return "BMS-T4";
-    case SensorID::BMS_High_Cell_Voltage:   return "BMS-CV-H";
-    case SensorID::BMS_Low_Cell_Voltage:    return "BMS-CV-L";
-    case SensorID::BMS_SOC:                 return "BMS-SOC";
-    case SensorID::BMS_Total_Voltage:       return "BMS-Vtot";
-    case SensorID::BMS_Voltage_Differential:return "BMS-dV";
-    case SensorID::BMS_Charge_MOS:          return "BMS-CHG";
-    case SensorID::BMS_Discharge_MOS:       return "BMS-DSG";
+    case SensorID::BMS_MOS_Temp:            return "BC-F";
+    case SensorID::BMS_Balance_Temp:        return "BC-B";
+    case SensorID::BMS_T1_Temp:             return "BC-T1";
+    case SensorID::BMS_T2_Temp:             return "BC-T2";
+    case SensorID::BMS_T3_Temp:             return "BC-T3";
+    case SensorID::BMS_T4_Temp:             return "BC-T4";
+    case SensorID::BMS_High_Cell_Voltage:   return "BC-CV-H";
+    case SensorID::BMS_Low_Cell_Voltage:    return "BC-CV-L";
+    case SensorID::BMS_SOC:                 return "BC-SOC";
+    case SensorID::BMS_Total_Voltage:       return "BC-Vtot";
+    case SensorID::BMS_Voltage_Differential:return "BC-dV";
+    case SensorID::BMS_Charge_MOS:          return "BC-CHG";
+    case SensorID::BMS_Discharge_MOS:       return "BC-DSG";
 
     // Altimeter
     case SensorID::Baro_Temp: return "BARO-T";
@@ -187,6 +187,97 @@ const char* sensorIDToAbbreviation(SensorID id) {
     case SensorID::CPU_Temp: return "CPU-T";
 
     default: return "UNK-ERR";
+  }
+}
+
+// Dynamic abbreviations for temperature sensors based on alert level
+const char* sensorIDToAbbreviationWithLevel(SensorID id, AlertLevel level) {
+  switch (id) {
+    // ESC Temperature sensors with dynamic suffixes
+    case SensorID::ESC_MOS_Temp:
+      if (level == AlertLevel::WARN_HIGH || level == AlertLevel::CRIT_HIGH) {
+        return "MC-FT-H";  // MOSFET temp high
+      } else if (level == AlertLevel::WARN_LOW || level == AlertLevel::CRIT_LOW) {
+        return "MC-FT-L";  // MOSFET temp low
+      }
+      return "MC-F";  // Default
+      
+    case SensorID::ESC_MCU_Temp:
+      if (level == AlertLevel::WARN_HIGH || level == AlertLevel::CRIT_HIGH) {
+        return "MC-CT-H";  // Controller temp high
+      } else if (level == AlertLevel::WARN_LOW || level == AlertLevel::CRIT_LOW) {
+        return "MC-CT-L";  // Controller temp low
+      }
+      return "MC-C";  // Default
+      
+    case SensorID::ESC_CAP_Temp:
+      if (level == AlertLevel::WARN_HIGH || level == AlertLevel::CRIT_HIGH) {
+        return "MC-PT-H";  // Capacitor temp high
+      } else if (level == AlertLevel::WARN_LOW || level == AlertLevel::CRIT_LOW) {
+        return "MC-PT-L";  // Capacitor temp low
+      }
+      return "MC-P";  // Default
+      
+    case SensorID::Motor_Temp:
+      if (level == AlertLevel::WARN_HIGH || level == AlertLevel::CRIT_HIGH) {
+        return "MC-MT-H";  // Motor temp high
+      } else if (level == AlertLevel::WARN_LOW || level == AlertLevel::CRIT_LOW) {
+        return "MC-MT-L";  // Motor temp low
+      }
+      return "MC-M";  // Default
+      
+    // BMS Temperature sensors with dynamic suffixes
+    case SensorID::BMS_MOS_Temp:
+      if (level == AlertLevel::WARN_HIGH || level == AlertLevel::CRIT_HIGH) {
+        return "BC-F-H";  // MOS temp high
+      } else if (level == AlertLevel::WARN_LOW || level == AlertLevel::CRIT_LOW) {
+        return "BC-F-L";  // MOS temp low
+      }
+      return "BC-F";  // Default
+      
+    case SensorID::BMS_Balance_Temp:
+      if (level == AlertLevel::WARN_HIGH || level == AlertLevel::CRIT_HIGH) {
+        return "BC-B-H";  // Balance temp high
+      } else if (level == AlertLevel::WARN_LOW || level == AlertLevel::CRIT_LOW) {
+        return "BC-B-L";  // Balance temp low
+      }
+      return "BC-B";  // Default
+      
+    case SensorID::BMS_T1_Temp:
+      if (level == AlertLevel::WARN_HIGH || level == AlertLevel::CRIT_HIGH) {
+        return "BC-T1-H";  // Cell 1 temp high
+      } else if (level == AlertLevel::WARN_LOW || level == AlertLevel::CRIT_LOW) {
+        return "BC-T1-L";  // Cell 1 temp low
+      }
+      return "BC-T1";  // Default
+      
+    case SensorID::BMS_T2_Temp:
+      if (level == AlertLevel::WARN_HIGH || level == AlertLevel::CRIT_HIGH) {
+        return "BC-T2-H";  // Cell 2 temp high
+      } else if (level == AlertLevel::WARN_LOW || level == AlertLevel::CRIT_LOW) {
+        return "BC-T2-L";  // Cell 2 temp low
+      }
+      return "BC-T2";  // Default
+      
+    case SensorID::BMS_T3_Temp:
+      if (level == AlertLevel::WARN_HIGH || level == AlertLevel::CRIT_HIGH) {
+        return "BC-T3-H";  // Cell 3 temp high
+      } else if (level == AlertLevel::WARN_LOW || level == AlertLevel::CRIT_LOW) {
+        return "BC-T3-L";  // Cell 3 temp low
+      }
+      return "BC-T3";  // Default
+      
+    case SensorID::BMS_T4_Temp:
+      if (level == AlertLevel::WARN_HIGH || level == AlertLevel::CRIT_HIGH) {
+        return "BC-T4-H";  // Cell 4 temp high
+      } else if (level == AlertLevel::WARN_LOW || level == AlertLevel::CRIT_LOW) {
+        return "BC-T4-L";  // Cell 4 temp low
+      }
+      return "BC-T4";  // Default
+      
+    // For all other sensors, use the standard abbreviation
+    default:
+      return sensorIDToAbbreviation(id);
   }
 }
 
