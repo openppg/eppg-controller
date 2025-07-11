@@ -28,6 +28,14 @@ float getHighestTemp(const STR_ESC_TELEMETRY_140& telemetry);
 // Function declarations
 TempState checkTempState(float temp, TempComponent component);
 
+// ESC Error Decoding Functions
+String decodeRunningError(uint16_t errorCode);
+String decodeSelfCheckError(uint16_t errorCode);
+bool hasRunningError(uint16_t errorCode);
+bool hasSelfCheckError(uint16_t errorCode);
+bool hasCriticalRunningError(uint16_t errorCode);
+bool hasCriticalSelfCheckError(uint16_t errorCode);
+
 // for debugging
 void dumpThrottleResponse(const sine_esc_SetThrottleSettings2Response *res);
 void dumpESCMessages();  // dumps all messages to USBSerial

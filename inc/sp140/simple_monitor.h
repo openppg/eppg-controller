@@ -13,6 +13,8 @@ enum class SensorID {
   ESC_MCU_Temp,
   ESC_CAP_Temp,
   Motor_Temp,
+  ESC_Running_Error,
+  ESC_SelfCheck_Error,
 
   // BMS
   BMS_MOS_Temp,

@@ -46,6 +46,8 @@ typedef struct {
   TempState motor_state;      // Motor temperature state
   bool temp_sensor_error;     // True if any sensor is invalid
   TelemetryState escState;       // Current connection state
+  uint16_t running_error;      // Runtime error bitmask
+  uint16_t selfcheck_error;    // Self-check error bitmask
 }STR_ESC_TELEMETRY_140;
 
 // Internal device data

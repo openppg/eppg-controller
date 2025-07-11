@@ -4,6 +4,7 @@
 #include "sp140/altimeter.h"
 #include "sp140/utilities.h"
 #include "sp140/alert_display.h"  // UI logger & event queue
+#include "sp140/esc.h"  // For ESC error checking functions
 
 // Global instances
 MultiLogger multiLogger;  // Defined here, declared extern in header
@@ -42,6 +43,8 @@ const char* sensorIDToString(SensorID id) {
     case SensorID::ESC_MCU_Temp: return "ESC_MCU_Temp";
     case SensorID::ESC_CAP_Temp: return "ESC_CAP_Temp";
     case SensorID::Motor_Temp: return "Motor_Temp";
+    case SensorID::ESC_Running_Error: return "ESC_Run_Err";
+    case SensorID::ESC_SelfCheck_Error: return "ESC_Boot_Err";
 
     // BMS
     case SensorID::BMS_MOS_Temp: return "BMS_MOS_Temp";
@@ -76,6 +79,8 @@ const char* sensorIDToAbbreviation(SensorID id) {
     case SensorID::ESC_MCU_Temp: return "ESC-C";   // Controller temp
     case SensorID::ESC_CAP_Temp: return "ESC-P";   // Capacitor temp
     case SensorID::Motor_Temp:    return "MTR-T";    // Motor temp
+    case SensorID::ESC_Running_Error: return "ESC-RE";  // Running error
+    case SensorID::ESC_SelfCheck_Error: return "ESC-SE"; // Self-check error
 
     // BMS (Battery Management System)
     case SensorID::BMS_MOS_Temp:            return "BMS-M";
@@ -170,6 +175,24 @@ void addESCMonitors() {
     []() { return monitoringEscData.motor_temp; },
     &multiLogger);
   monitors.push_back(motorTemp);
+
+  // ESC Running Error Monitor
+  static BooleanMonitor* escRunningError = new BooleanMonitor(
+    SensorID::ESC_Running_Error,
+    []() { return hasCriticalRunningError(monitoringEscData.running_error); },
+    true,  // Alert when true (when errors are present)
+    AlertLevel::CRIT_HIGH,
+    &multiLogger);
+  monitors.push_back(escRunningError);
+
+  // ESC Self-Check Error Monitor
+  static BooleanMonitor* escSelfCheckError = new BooleanMonitor(
+    SensorID::ESC_SelfCheck_Error,
+    []() { return hasCriticalSelfCheckError(monitoringEscData.selfcheck_error); },
+    true,  // Alert when true (when errors are present)
+    AlertLevel::CRIT_HIGH,
+    &multiLogger);
+  monitors.push_back(escSelfCheckError);
 }
 
 void addBMSMonitors() {
