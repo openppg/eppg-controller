@@ -835,6 +835,13 @@ void disarmSystem() {
   resetSmoothing();
   resumeLEDTask();
   runDisarmAlert();
+
+  // Calculate elapsed armed time in seconds before updating hour meter
+  if (armedAtMillis > 0) {
+    unsigned long currentMillis = millis();
+    armedSecs = (currentMillis - armedAtMillis) / 1000;
+  }
+
   updateArmedTime();
   writeDeviceData();
 
@@ -1056,6 +1063,7 @@ bool armSystem() {
   setESCThrottle(ESC_DISARMED_PWM);  // initialize the signal to low
 
   armedAtMillis = millis();
+  armedSecs = 0;  // Reset armed seconds for new session
   setGroundAltitude(deviceData);
 
   vTaskSuspend(blinkLEDTaskHandle);
