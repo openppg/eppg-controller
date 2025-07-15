@@ -148,8 +148,9 @@ void lv_showAlertTextWithLevel(SensorID id, AlertLevel level, bool critical) {
     // Hide altitude while showing critical alert
     setAltitudeVisibility(false);
     // Move alert label to altitude position (using first altitude character as reference)
+    // Offset by 5px to the right to avoid interference with flashing red border
     if (altitude_char_labels[0]) {
-      lv_obj_set_pos(alert_text_label, lv_obj_get_x(altitude_char_labels[0]), lv_obj_get_y(altitude_char_labels[0]));
+      lv_obj_set_pos(alert_text_label, lv_obj_get_x(altitude_char_labels[0]) + 5, lv_obj_get_y(altitude_char_labels[0]));
     }
   } else {
     lv_obj_set_style_text_font(alert_text_label, &lv_font_montserrat_14, 0);
