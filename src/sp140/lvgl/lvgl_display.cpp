@@ -118,6 +118,39 @@ static lv_timer_t* alert_cycle_timer = NULL;
 static AlertSnapshot currentSnap{};
 static uint8_t currentIdx = 0;
 
+// Helper function to hide/show all altitude character labels
+void setAltitudeVisibility(bool visible) {
+  for (int i = 0; i < 7; i++) {
+    if (altitude_char_labels[i]) {
+      if (visible) {
+        lv_obj_clear_flag(altitude_char_labels[i], LV_OBJ_FLAG_HIDDEN);
+      } else {
+        lv_obj_add_flag(altitude_char_labels[i], LV_OBJ_FLAG_HIDDEN);
+      }
+    }
+  }
+}
+
+// Helper function to create temperature background rectangles
+lv_obj_t* createTempBackground(lv_obj_t* parent, int x, int y, int width, int height) {
+  lv_obj_t* bg = lv_obj_create(parent);
+  lv_obj_set_size(bg, width, height);
+  lv_obj_set_pos(bg, x, y);
+  lv_obj_set_style_border_width(bg, 0, LV_PART_MAIN);
+  lv_obj_set_style_radius(bg, 0, LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(bg, LV_OPA_0, LV_PART_MAIN);
+  lv_obj_set_style_shadow_width(bg, 0, LV_PART_MAIN);
+  lv_obj_set_style_outline_width(bg, 0, LV_PART_MAIN);
+  lv_obj_set_style_pad_all(bg, 0, LV_PART_MAIN);
+  lv_obj_set_style_border_opa(bg, LV_OPA_0, LV_PART_MAIN);
+  lv_obj_set_style_outline_opa(bg, LV_OPA_0, LV_PART_MAIN);
+  lv_obj_set_style_shadow_opa(bg, LV_OPA_0, LV_PART_MAIN);
+  lv_obj_move_background(bg);
+  lv_obj_add_flag(bg, LV_OBJ_FLAG_HIDDEN);
+  return bg;
+}
+
+
 void loadAlertSnapshot(const AlertSnapshot& snap) {
   currentSnap = snap;
   currentIdx = 0;
@@ -566,52 +599,13 @@ void setupMainScreen(bool darkMode) {
 
   // Create temperature background rectangles first (behind text)
   // Battery temperature background (top section: Y=70 to Y=89, X=117 to X=148)
-  batt_temp_bg = lv_obj_create(main_screen);
-  lv_obj_set_size(batt_temp_bg, 31, 19);  // Width: 148-117=31, Height: 89-70=19
-  lv_obj_set_pos(batt_temp_bg, 117, 70);
-  lv_obj_set_style_border_width(batt_temp_bg, 0, LV_PART_MAIN);
-  lv_obj_set_style_radius(batt_temp_bg, 0, LV_PART_MAIN);
-  lv_obj_set_style_bg_opa(batt_temp_bg, LV_OPA_0, LV_PART_MAIN);  // Initially transparent
-  lv_obj_set_style_shadow_width(batt_temp_bg, 0, LV_PART_MAIN);  // No shadow
-  lv_obj_set_style_outline_width(batt_temp_bg, 0, LV_PART_MAIN);  // No outline
-  lv_obj_set_style_pad_all(batt_temp_bg, 0, LV_PART_MAIN);  // No padding
-  lv_obj_set_style_border_opa(batt_temp_bg, LV_OPA_0, LV_PART_MAIN);  // Transparent border
-  lv_obj_set_style_outline_opa(batt_temp_bg, LV_OPA_0, LV_PART_MAIN);  // Transparent outline
-  lv_obj_set_style_shadow_opa(batt_temp_bg, LV_OPA_0, LV_PART_MAIN);  // Transparent shadow
-  lv_obj_move_background(batt_temp_bg);  // Move to background layer
-  lv_obj_add_flag(batt_temp_bg, LV_OBJ_FLAG_HIDDEN);  // Hide by default, show only when highlighting
+  batt_temp_bg = createTempBackground(main_screen, 117, 70, 31, 19);
 
   // ESC temperature background (middle section: Y=89 to Y=109, X=117 to X=148)
-  esc_temp_bg = lv_obj_create(main_screen);
-  lv_obj_set_size(esc_temp_bg, 31, 20);  // Width: 148-117=31, Height: 109-89=20
-  lv_obj_set_pos(esc_temp_bg, 117, 89);
-  lv_obj_set_style_border_width(esc_temp_bg, 0, LV_PART_MAIN);
-  lv_obj_set_style_radius(esc_temp_bg, 0, LV_PART_MAIN);
-  lv_obj_set_style_bg_opa(esc_temp_bg, LV_OPA_0, LV_PART_MAIN);  // Initially transparent
-  lv_obj_set_style_shadow_width(esc_temp_bg, 0, LV_PART_MAIN);  // No shadow
-  lv_obj_set_style_outline_width(esc_temp_bg, 0, LV_PART_MAIN);  // No outline
-  lv_obj_set_style_pad_all(esc_temp_bg, 0, LV_PART_MAIN);  // No padding
-  lv_obj_set_style_border_opa(esc_temp_bg, LV_OPA_0, LV_PART_MAIN);  // Transparent border
-  lv_obj_set_style_outline_opa(esc_temp_bg, LV_OPA_0, LV_PART_MAIN);  // Transparent outline
-  lv_obj_set_style_shadow_opa(esc_temp_bg, LV_OPA_0, LV_PART_MAIN);  // Transparent shadow
-  lv_obj_move_background(esc_temp_bg);  // Move to background layer
-  lv_obj_add_flag(esc_temp_bg, LV_OBJ_FLAG_HIDDEN);  // Hide by default, show only when highlighting
+  esc_temp_bg = createTempBackground(main_screen, 117, 89, 31, 20);
 
   // Motor temperature background (bottom section: Y=109 to Y=128, X=117 to X=148)
-  motor_temp_bg = lv_obj_create(main_screen);
-  lv_obj_set_size(motor_temp_bg, 31, 19);  // Width: 148-117=31, Height: 128-109=19
-  lv_obj_set_pos(motor_temp_bg, 117, 109);
-  lv_obj_set_style_border_width(motor_temp_bg, 0, LV_PART_MAIN);
-  lv_obj_set_style_radius(motor_temp_bg, 0, LV_PART_MAIN);
-  lv_obj_set_style_bg_opa(motor_temp_bg, LV_OPA_0, LV_PART_MAIN);  // Initially transparent
-  lv_obj_set_style_shadow_width(motor_temp_bg, 0, LV_PART_MAIN);  // No shadow
-  lv_obj_set_style_outline_width(motor_temp_bg, 0, LV_PART_MAIN);  // No outline
-  lv_obj_set_style_pad_all(motor_temp_bg, 0, LV_PART_MAIN);  // No padding
-  lv_obj_set_style_border_opa(motor_temp_bg, LV_OPA_0, LV_PART_MAIN);  // Transparent border
-  lv_obj_set_style_outline_opa(motor_temp_bg, LV_OPA_0, LV_PART_MAIN);  // Transparent outline
-  lv_obj_set_style_shadow_opa(motor_temp_bg, LV_OPA_0, LV_PART_MAIN);  // Transparent shadow
-  lv_obj_move_background(motor_temp_bg);  // Move to background layer
-  lv_obj_add_flag(motor_temp_bg, LV_OBJ_FLAG_HIDDEN);  // Hide by default, show only when highlighting
+  motor_temp_bg = createTempBackground(main_screen, 117, 109, 31, 19);
 
   // Create temperature labels - adjust positions to align with divider lines
   batt_temp_label = lv_label_create(main_screen);
@@ -1388,11 +1382,7 @@ void lv_showAlertTextWithLevel(SensorID id, AlertLevel level, bool critical) {
   if (critical) {
     lv_obj_set_style_text_font(alert_text_label, &lv_font_montserrat_18, 0);
     // Hide altitude while showing critical alert
-    for (int i = 0; i < 7; i++) {
-      if (altitude_char_labels[i]) {
-        lv_obj_add_flag(altitude_char_labels[i], LV_OBJ_FLAG_HIDDEN);
-      }
-    }
+    setAltitudeVisibility(false);
     // Move alert label to altitude position (using first altitude character as reference)
     if (altitude_char_labels[0]) {
       lv_obj_set_pos(alert_text_label, lv_obj_get_x(altitude_char_labels[0]), lv_obj_get_y(altitude_char_labels[0]));
@@ -1400,11 +1390,7 @@ void lv_showAlertTextWithLevel(SensorID id, AlertLevel level, bool critical) {
   } else {
     lv_obj_set_style_text_font(alert_text_label, &lv_font_montserrat_14, 0);
     // Ensure altitude visible during warnings
-    for (int i = 0; i < 7; i++) {
-      if (altitude_char_labels[i]) {
-        lv_obj_clear_flag(altitude_char_labels[i], LV_OBJ_FLAG_HIDDEN);
-      }
-    }
+    setAltitudeVisibility(true);
     // Re-align warning text next to circles
     if (warning_counter_circle) {
       lv_obj_align_to(alert_text_label, warning_counter_circle, LV_ALIGN_OUT_RIGHT_MID, 4, 0);
@@ -1424,11 +1410,7 @@ void lv_hideAlertText() {
   if (alert_text_label == NULL) return;
   lv_obj_add_flag(alert_text_label, LV_OBJ_FLAG_HIDDEN);
   // Restore altitude visibility when no critical alert
-  for (int i = 0; i < 7; i++) {
-    if (altitude_char_labels[i]) {
-      lv_obj_clear_flag(altitude_char_labels[i], LV_OBJ_FLAG_HIDDEN);
-    }
-  }
+  setAltitudeVisibility(true);
 }
 
 void updateLvglMainScreen(
