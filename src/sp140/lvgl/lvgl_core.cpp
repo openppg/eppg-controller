@@ -3,8 +3,7 @@
 #include "../../../inc/sp140/esp32s3-config.h"
 
 // Global variables for core LVGL functionality
-lv_disp_drv_t disp_drv;
-lv_disp_draw_buf_t draw_buf;
+lv_display_t* disp = nullptr;
 lv_color_t buf[LVGL_BUFFER_SIZE];
 Adafruit_ST7735* tft_driver = nullptr;
 uint32_t lvgl_last_update = 0;
@@ -14,11 +13,6 @@ void setupLvglBuffer() {
   USBSerial.println("Initializing LVGL");
   lv_init();
   USBSerial.println("LVGL initialized");
-
-  // Setup buffer for LVGL
-  USBSerial.println("Setting up LVGL buffer");
-  lv_disp_draw_buf_init(&draw_buf, buf, NULL, LVGL_BUFFER_SIZE);
-  USBSerial.println("LVGL buffer initialized");
 }
 
 void setupLvglDisplay(const STR_DEVICE_DATA_140_V1& deviceData, int8_t dc_pin, int8_t rst_pin, SPIClass* spi) {
@@ -37,33 +31,29 @@ void setupLvglDisplay(const STR_DEVICE_DATA_140_V1& deviceData, int8_t dc_pin, i
   // Initialize LVGL buffer
   setupLvglBuffer();
 
-  // Initialize display driver
-  static lv_disp_drv_t disp_drv;
-  lv_disp_drv_init(&disp_drv);
+  // Create display with LVGL v9 API
+  disp = lv_display_create(SCREEN_WIDTH, SCREEN_HEIGHT);
 
-  // Set display driver properties
-  disp_drv.hor_res = SCREEN_WIDTH;
-  disp_drv.ver_res = SCREEN_HEIGHT;
-  disp_drv.flush_cb = lvgl_flush_cb;
-  disp_drv.draw_buf = &draw_buf;
+  // Set up the draw buffer
+  lv_display_set_buffers(disp, buf, NULL, sizeof(buf), LV_DISPLAY_RENDER_MODE_PARTIAL);
 
-  // Register the display driver
-  lv_disp_drv_register(&disp_drv);
+  // Set the flush callback
+  lv_display_set_flush_cb(disp, lvgl_flush_cb);
 
   // Set LVGL default theme - using default font
   lv_theme_t* theme = lv_theme_default_init(
-    lv_disp_get_default(),                // Display
-    lv_palette_main(LV_PALETTE_BLUE),     // Primary color
-    lv_palette_main(LV_PALETTE_AMBER),    // Secondary color
-    deviceData.theme == 1,                // Dark mode
-    LV_FONT_DEFAULT);                     // Default font
+    disp,                             // Display
+    lv_palette_main(LV_PALETTE_BLUE), // Primary color
+    lv_palette_main(LV_PALETTE_AMBER),// Secondary color
+    deviceData.theme == 1,            // Dark mode
+    LV_FONT_DEFAULT);                 // Default font
 
-  lv_disp_set_theme(lv_disp_get_default(), theme);
+  lv_display_set_theme(disp, theme);
 }
 
 // Optimize the flush callback to minimize SPI transfers
 // CS pin management is handled here where actual SPI communication occurs
-void lvgl_flush_cb(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* color_p) {
+void lvgl_flush_cb(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map) {
   // Make sure display CS is selected
   digitalWrite(displayCS, LOW);
 
@@ -76,14 +66,14 @@ void lvgl_flush_cb(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* color
 
   // Push colors - using DMA if available
   uint32_t len = w * h;
-  tft_driver->writePixels((uint16_t*)color_p, len);
+  tft_driver->writePixels((uint16_t*)px_map, len);
   tft_driver->endWrite();
 
   // Deselect display CS when done
   digitalWrite(displayCS, HIGH);
 
   // Indicate to LVGL that flush is done
-  lv_disp_flush_ready(disp);
+  lv_display_flush_ready(disp);
 }
 
 // LVGL tick handler - to be called from timer or in main loop
@@ -104,7 +94,7 @@ void updateLvgl() {
   // Update LVGL at the defined refresh rate
   if (current_ms - lvgl_last_update > LVGL_REFRESH_TIME) {
     lv_tick_handler();
-    lv_task_handler();
+    lv_timer_handler();
     lvgl_last_update = current_ms;
   }
 }
@@ -114,10 +104,10 @@ void displayLvglSplash(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
 
   // Create a new screen for the splash
   lv_obj_t* splash_screen = lv_obj_create(NULL);
-  lv_scr_load(splash_screen);
+  lv_screen_load(splash_screen);
 
   // Disable scrollbars
-  lv_obj_clear_flag(splash_screen, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_remove_flag(splash_screen, LV_OBJ_FLAG_SCROLLABLE);
 
   // Set background color based on theme
   lv_obj_set_style_bg_color(splash_screen,
@@ -139,7 +129,7 @@ void displayLvglSplash(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
   lv_anim_init(&title_anim);
   lv_anim_set_var(&title_anim, title_label);
   lv_anim_set_values(&title_anim, 0, 255);
-  lv_anim_set_time(&title_anim, 500);
+  lv_anim_set_duration(&title_anim, 500);
   lv_anim_set_exec_cb(&title_anim, [](void* var, int32_t value) {
     lv_obj_set_style_opa((lv_obj_t*)var, value, 0);
   });

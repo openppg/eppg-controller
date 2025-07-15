@@ -57,7 +57,7 @@ const LV_ATTRIBUTE_MEM_ALIGN LV_ATTRIBUTE_LARGE_CONST LV_ATTRIBUTE_IMG_WARNING_2
 const lv_img_dsc_t warning_2135850_30 = {
   // Header struct (lv_img_header_t)
   {
-    LV_IMG_CF_ALPHA_1BIT,  // Color format
+    LV_COLOR_FORMAT_A1,  // Color format
     0,  // Always zero
     0,  // Reserved
     30,  // Width

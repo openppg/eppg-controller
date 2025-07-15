@@ -56,7 +56,7 @@ const LV_ATTRIBUTE_MEM_ALIGN LV_ATTRIBUTE_LARGE_CONST LV_ATTRIBUTE_IMG_CRUISE_CO
 
 const lv_img_dsc_t cruise_control_340255_30 = {
   {
-    LV_IMG_CF_ALPHA_1BIT,
+    LV_COLOR_FORMAT_A1,
     0,
     0,
     30,

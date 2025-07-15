@@ -1,33 +1,34 @@
-#ifndef LVGL_CORE_H
-#define LVGL_CORE_H
+#ifndef LVGL_CORE_H  // NOLINT(build/header_guard)
+#define LVGL_CORE_H  // NOLINT(build/header_guard)
 
 #include <lvgl.h>
 #include <Adafruit_ST7735.h>
+#include <SPI.h>
 #include "../structs.h"
 
+// LVGL buffer size - adjust based on available memory
+#define LVGL_BUFFER_SIZE 160 * 10  // 10 rows of display width
+
 // Display dimensions
-#define SCREEN_WIDTH 160
+#define SCREEN_WIDTH  160
 #define SCREEN_HEIGHT 128
 
-// LVGL buffer size - optimize for our display
-// Use 1/4 of the screen size to balance memory usage and performance
-#define LVGL_BUFFER_SIZE (SCREEN_WIDTH * (SCREEN_HEIGHT / 4))
+// LVGL refresh time in milliseconds
+#define LVGL_REFRESH_TIME 10
 
-// LVGL refresh time in ms - match the config file setting
-#define LVGL_REFRESH_TIME 40
+// External variables from main sketch
+extern int8_t displayCS;
 
-// Core LVGL globals
-extern int8_t displayCS;  // Display chip select pin
-extern lv_disp_drv_t disp_drv;
-extern lv_disp_draw_buf_t draw_buf;
+// Global variables
+extern lv_display_t* disp;
 extern lv_color_t buf[LVGL_BUFFER_SIZE];
 extern Adafruit_ST7735* tft_driver;
 extern uint32_t lvgl_last_update;
 
-// Core function declarations
+// Function declarations
 void setupLvglBuffer();
 void setupLvglDisplay(const STR_DEVICE_DATA_140_V1& deviceData, int8_t dc_pin, int8_t rst_pin, SPIClass* spi);
-void lvgl_flush_cb(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* color_p);
+void lvgl_flush_cb(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map);
 void lv_tick_handler();
 void updateLvgl();
 void displayLvglSplash(const STR_DEVICE_DATA_140_V1& deviceData, int duration);
