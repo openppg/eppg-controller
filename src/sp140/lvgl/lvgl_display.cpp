@@ -7,6 +7,12 @@
 #include <string>
 #include <map>
 #include <utility>
+#include "../../../inc/sp140/simple_monitor.h"  // for sensor ID helpers
+#include "../../../inc/sp140/alert_display.h"
+
+// Forward declarations for alert counter UI
+void setupAlertCounterUI(bool darkMode);
+void updateAlertCounterDisplay(const AlertCounts& counts);
 
 #include "../../assets/img/cruise-control-340255-30.c"  // Cruise control icon  // NOLINT(build/include)
 #include "../../assets/img/energy-539741-26.c"  // Charging icon  // NOLINT(build/include)
@@ -98,6 +104,33 @@ static lv_obj_t* motor_letter_label = NULL;  // Letter label for Motor temp
 static lv_obj_t* batt_temp_bg = NULL;  // Background rectangle for Battery temp section
 static lv_obj_t* esc_temp_bg = NULL;  // Background rectangle for ESC temp section
 static lv_obj_t* motor_temp_bg = NULL;  // Background rectangle for Motor temp section
+
+// Alert counter UI objects
+static lv_obj_t* warning_counter_circle = NULL;
+static lv_obj_t* warning_counter_label = NULL;
+static lv_obj_t* critical_counter_circle = NULL;
+static lv_obj_t* critical_counter_label = NULL;
+
+// Alert text carousel objects
+static lv_obj_t* alert_text_label = NULL;
+static lv_timer_t* alert_cycle_timer = NULL;
+// Snapshot state shared between timer and external updater
+static AlertSnapshot currentSnap{};
+static uint8_t currentIdx = 0;
+
+void loadAlertSnapshot(const AlertSnapshot& snap) {
+  currentSnap = snap;
+  currentIdx = 0;
+  if (alert_text_label == NULL) return;
+  if (snap.count == 0) {
+    lv_obj_add_flag(alert_text_label, LV_OBJ_FLAG_HIDDEN);
+    return;
+  }
+  const char* txt = sensorIDToAbbreviation(static_cast<SensorID>(snap.ids[0]));
+  lv_label_set_text(alert_text_label, txt);
+  lv_obj_set_style_text_color(alert_text_label, snap.criticalMode ? lv_color_make(255,0,0) : lv_color_make(255,165,0), 0);
+  lv_obj_clear_flag(alert_text_label, LV_OBJ_FLAG_HIDDEN);
+}
 // static lv_obj_t* warning_label = NULL;  // New label for warnings/errors // REMOVED
 lv_obj_t* cruise_icon_img = NULL;  // Cruise control icon image object
 static lv_obj_t* charging_icon_img = NULL;  // Charging icon image object
@@ -150,6 +183,13 @@ static bool isFlashingArmFailIcon = false;
 static void arm_fail_flash_timer_cb(lv_timer_t* timer);  // Forward declaration
 static lv_color_t original_arm_fail_icon_color;  // To restore color after flashing
 // --- End Arm Fail Icon Flashing ---
+
+// --- Critical Alert Border Flashing ---
+static lv_obj_t* critical_border = NULL;
+static lv_timer_t* critical_border_flash_timer = NULL;
+static bool isFlashingCriticalBorder = false;
+static void critical_border_flash_timer_cb(lv_timer_t* timer);  // Forward declaration
+// --- End Critical Alert Border Flashing ---
 
 void setupLvglBuffer() {
   // Initialize LVGL library
@@ -758,6 +798,20 @@ void setupMainScreen(bool darkMode) {
   }
   */
 
+  // Create critical alert border (initially hidden)
+  if (critical_border == NULL) {
+    critical_border = lv_obj_create(main_screen);
+    lv_obj_set_size(critical_border, SCREEN_WIDTH, SCREEN_HEIGHT);
+    lv_obj_set_pos(critical_border, 0, 0);
+    lv_obj_set_style_border_width(critical_border, 4, LV_PART_MAIN);
+    lv_obj_set_style_border_color(critical_border, LVGL_RED, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(critical_border, LV_OPA_0, LV_PART_MAIN);  // Transparent background
+    lv_obj_set_style_radius(critical_border, 0, LV_PART_MAIN);  // Sharp corners
+    lv_obj_add_flag(critical_border, LV_OBJ_FLAG_HIDDEN);  // Initially hidden
+    // Move border to front so it's visible over all other elements
+    lv_obj_move_foreground(critical_border);
+  }
+
   // Create arm indicator (initially hidden)
   arm_indicator = lv_obj_create(main_screen);
   lv_obj_set_size(arm_indicator, 46, 33);
@@ -899,6 +953,9 @@ void setupMainScreen(bool darkMode) {
 
    // Load the screen
   lv_scr_load(main_screen);
+
+  // Create alert counter UI elements
+  setupAlertCounterUI(darkMode);
 }
 
 // Function to show the loading overlay
@@ -912,6 +969,108 @@ void showLoadingOverlay() {
 void hideLoadingOverlay() {
   if (spinner_overlay != NULL) {
     lv_obj_add_flag(spinner_overlay, LV_OBJ_FLAG_HIDDEN);
+  }
+}
+
+// ----------------- Alert Counter UI -----------------
+void setupAlertCounterUI(bool darkMode) {
+  if (main_screen == NULL) return;
+
+  const int CIRCLE_SIZE = 18;  // smaller circle
+  // Warning circle (orange)
+  if (warning_counter_circle == NULL) {
+    warning_counter_circle = lv_led_create(main_screen);
+    lv_obj_set_size(warning_counter_circle, CIRCLE_SIZE, CIRCLE_SIZE);
+    // Align relative to altitude area (using first altitude character as reference)
+    if (altitude_char_labels[0]) {
+      lv_obj_align_to(warning_counter_circle, altitude_char_labels[0], LV_ALIGN_OUT_TOP_LEFT, 0, -2);
+    } else {
+      lv_obj_align(warning_counter_circle, LV_ALIGN_TOP_LEFT, 5, 75);
+    }
+    lv_led_set_color(warning_counter_circle, LVGL_ORANGE);
+    lv_led_on(warning_counter_circle);
+    // Remove bloom/glow effect - make it a solid flat circle
+    lv_obj_set_style_bg_grad_dir(warning_counter_circle, LV_GRAD_DIR_NONE, LV_PART_MAIN);
+    lv_obj_set_style_shadow_width(warning_counter_circle, 0, LV_PART_MAIN);
+    lv_obj_set_style_shadow_opa(warning_counter_circle, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_add_flag(warning_counter_circle, LV_OBJ_FLAG_HIDDEN);
+
+    warning_counter_label = lv_label_create(warning_counter_circle);
+    lv_obj_set_style_text_font(warning_counter_label, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(warning_counter_label, LVGL_BLACK, 0);
+    lv_obj_align(warning_counter_label, LV_ALIGN_CENTER, 0, 0);
+    lv_label_set_text(warning_counter_label, "0");
+  }
+
+  // Critical circle (red)
+  if (critical_counter_circle == NULL) {
+    critical_counter_circle = lv_led_create(main_screen);
+    lv_obj_set_size(critical_counter_circle, CIRCLE_SIZE, CIRCLE_SIZE);
+    if (warning_counter_circle) {
+      lv_obj_align_to(critical_counter_circle, warning_counter_circle, LV_ALIGN_OUT_RIGHT_MID, 4, 0);
+    } else {
+      lv_obj_align(critical_counter_circle, LV_ALIGN_TOP_LEFT, 35, 75);
+    }
+    lv_led_set_color(critical_counter_circle, LVGL_RED);
+    lv_led_on(critical_counter_circle);
+    // Remove bloom/glow effect - make it a solid flat circle
+    lv_obj_set_style_bg_grad_dir(critical_counter_circle, LV_GRAD_DIR_NONE, LV_PART_MAIN);
+    lv_obj_set_style_shadow_width(critical_counter_circle, 0, LV_PART_MAIN);
+    lv_obj_set_style_shadow_opa(critical_counter_circle, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_add_flag(critical_counter_circle, LV_OBJ_FLAG_HIDDEN);
+
+    critical_counter_label = lv_label_create(critical_counter_circle);
+    lv_obj_set_style_text_font(critical_counter_label, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(critical_counter_label, LVGL_WHITE, 0);
+    lv_obj_align(critical_counter_label, LV_ALIGN_CENTER, 0, 0);
+    lv_label_set_text(critical_counter_label, "0");
+  }
+
+  // Alert text label (to the right of circles)
+  if (alert_text_label == NULL) {
+    alert_text_label = lv_label_create(main_screen);
+    lv_obj_set_style_text_font(alert_text_label, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_color(alert_text_label, LVGL_ORANGE, 0);
+    if (critical_counter_circle) {
+      lv_obj_align_to(alert_text_label, critical_counter_circle, LV_ALIGN_OUT_RIGHT_MID, 4, 0);
+    } else {
+      lv_obj_align(alert_text_label, LV_ALIGN_TOP_LEFT, 60, 75);
+    }
+    lv_obj_add_flag(alert_text_label, LV_OBJ_FLAG_HIDDEN);
+  }
+
+  // Timer removed; rotation is now driven by aggregator task via queue.
+}
+
+void updateAlertCounterDisplay(const AlertCounts& counts) {
+  if (!warning_counter_circle || !critical_counter_circle) return;
+
+  // Warning
+  if (counts.warningCount > 0) {
+    char buf[4];
+    if (counts.warningCount > 9) {
+      strcpy(buf, "9+");
+    } else {
+      snprintf(buf, sizeof(buf), "%u", counts.warningCount);
+    }
+    lv_label_set_text(warning_counter_label, buf);
+    lv_obj_clear_flag(warning_counter_circle, LV_OBJ_FLAG_HIDDEN);
+  } else {
+    lv_obj_add_flag(warning_counter_circle, LV_OBJ_FLAG_HIDDEN);
+  }
+
+  // Critical
+  if (counts.criticalCount > 0) {
+    char buf[4];
+    if (counts.criticalCount > 9) {
+      strcpy(buf, "9+");
+    } else {
+      snprintf(buf, sizeof(buf), "%u", counts.criticalCount);
+    }
+    lv_label_set_text(critical_counter_label, buf);
+    lv_obj_clear_flag(critical_counter_circle, LV_OBJ_FLAG_HIDDEN);
+  } else {
+    lv_obj_add_flag(critical_counter_circle, LV_OBJ_FLAG_HIDDEN);
   }
 }
 
@@ -1128,6 +1287,148 @@ void updateClimbRateIndicator(float climbRate) {
     }
   }
   // If climb rate is between -0.05 and +0.05, no sections are filled (neutral)
+}
+
+// --- Critical Alert Border Flashing Implementation ---
+static void critical_border_flash_timer_cb(lv_timer_t* timer) {
+  // This callback runs within the LVGL task handler, which is already protected by lvglMutex
+
+  if (critical_border == NULL) {
+    // Safety check
+    if (critical_border_flash_timer != NULL) {
+      lv_timer_del(critical_border_flash_timer);
+      critical_border_flash_timer = NULL;
+    }
+    isFlashingCriticalBorder = false;
+    return;
+  }
+
+  // Toggle visibility
+  if (lv_obj_has_flag(critical_border, LV_OBJ_FLAG_HIDDEN)) {
+    lv_obj_clear_flag(critical_border, LV_OBJ_FLAG_HIDDEN);
+  } else {
+    lv_obj_add_flag(critical_border, LV_OBJ_FLAG_HIDDEN);
+  }
+}
+
+void startCriticalBorderFlash() {
+  // This function can be called from other tasks, so protect with mutex
+  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(50)) == pdTRUE) {  // Use a timeout
+    if (critical_border == NULL) {
+      xSemaphoreGive(lvglMutex);
+      return;  // Can't flash if border doesn't exist
+    }
+
+    // If a flash timer is already running, delete it first
+    if (critical_border_flash_timer != NULL) {
+      lv_timer_del(critical_border_flash_timer);
+      critical_border_flash_timer = NULL;
+    }
+
+    // Reset state and start flashing
+    isFlashingCriticalBorder = true;
+
+    // Start with the border visible
+    lv_obj_clear_flag(critical_border, LV_OBJ_FLAG_HIDDEN);
+
+    // Create the timer (500ms interval for on/off cycle - matches vibration rate)
+    critical_border_flash_timer = lv_timer_create(critical_border_flash_timer_cb, 500, NULL);
+    if (critical_border_flash_timer == NULL) {
+      // Failed to create timer, reset state
+      isFlashingCriticalBorder = false;
+      lv_obj_add_flag(critical_border, LV_OBJ_FLAG_HIDDEN);  // Hide it again
+      USBSerial.println("Error: Failed to create critical border flash timer!");
+    }
+
+    xSemaphoreGive(lvglMutex);
+  } else {
+     USBSerial.println("Warning: Failed to acquire LVGL mutex for startCriticalBorderFlash");
+  }
+}
+
+void stopCriticalBorderFlash() {
+  // This function can be called from other tasks, so protect with mutex
+  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(50)) == pdTRUE) {  // Use a timeout
+    if (critical_border_flash_timer != NULL) {
+      lv_timer_del(critical_border_flash_timer);
+      critical_border_flash_timer = NULL;
+    }
+
+    isFlashingCriticalBorder = false;
+
+    // Hide the border
+    if (critical_border != NULL) {
+      lv_obj_add_flag(critical_border, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    xSemaphoreGive(lvglMutex);
+  } else {
+     USBSerial.println("Warning: Failed to acquire LVGL mutex for stopCriticalBorderFlash");
+  }
+}
+
+bool isCriticalBorderFlashing() {
+  return isFlashingCriticalBorder;
+}
+// --- End Critical Alert Border Flashing Implementation ---
+
+// Public helpers to control alert text externally
+void lv_showAlertText(SensorID id, bool critical) {
+  if (alert_text_label == NULL) return;
+  const char* txt = sensorIDToAbbreviation(id);
+  lv_label_set_text(alert_text_label, txt);
+}
+
+// New function that accepts alert level for dynamic abbreviations
+void lv_showAlertTextWithLevel(SensorID id, AlertLevel level, bool critical) {
+  if (alert_text_label == NULL) return;
+  const char* txt = sensorIDToAbbreviationWithLevel(id, level);
+  lv_label_set_text(alert_text_label, txt);
+  // Use larger font for critical alerts, smaller for warnings
+  if (critical) {
+    lv_obj_set_style_text_font(alert_text_label, &lv_font_montserrat_18, 0);
+    // Hide altitude while showing critical alert
+    for (int i = 0; i < 7; i++) {
+      if (altitude_char_labels[i]) {
+        lv_obj_add_flag(altitude_char_labels[i], LV_OBJ_FLAG_HIDDEN);
+      }
+    }
+    // Move alert label to altitude position (using first altitude character as reference)
+    if (altitude_char_labels[0]) {
+      lv_obj_set_pos(alert_text_label, lv_obj_get_x(altitude_char_labels[0]), lv_obj_get_y(altitude_char_labels[0]));
+    }
+  } else {
+    lv_obj_set_style_text_font(alert_text_label, &lv_font_montserrat_14, 0);
+    // Ensure altitude visible during warnings
+    for (int i = 0; i < 7; i++) {
+      if (altitude_char_labels[i]) {
+        lv_obj_clear_flag(altitude_char_labels[i], LV_OBJ_FLAG_HIDDEN);
+      }
+    }
+    // Re-align warning text next to circles
+    if (warning_counter_circle) {
+      lv_obj_align_to(alert_text_label, warning_counter_circle, LV_ALIGN_OUT_RIGHT_MID, 4, 0);
+    }
+    // Make warning text darker and slightly larger for readability
+    lv_obj_set_style_text_font(alert_text_label, &lv_font_montserrat_16, 0);
+    // Dark orange for better readability over light background
+    lv_obj_set_style_text_color(alert_text_label, lv_color_make(200,100,0), 0);
+  }
+  if (critical) {
+    lv_obj_set_style_text_color(alert_text_label, lv_color_make(255,0,0), 0);
+  }
+  lv_obj_clear_flag(alert_text_label, LV_OBJ_FLAG_HIDDEN);
+}
+
+void lv_hideAlertText() {
+  if (alert_text_label == NULL) return;
+  lv_obj_add_flag(alert_text_label, LV_OBJ_FLAG_HIDDEN);
+  // Restore altitude visibility when no critical alert
+  for (int i = 0; i < 7; i++) {
+    if (altitude_char_labels[i]) {
+      lv_obj_clear_flag(altitude_char_labels[i], LV_OBJ_FLAG_HIDDEN);
+    }
+  }
 }
 
 void updateLvglMainScreen(

@@ -5,6 +5,7 @@
 #include "sp140/shared-config.h"
 #include "sp140/structs.h"
 #include "sp140/ble.h"
+#include "sp140/simple_monitor.h"
 
 extern unsigned long cruisedAtMillis;
 extern int cruisedPotVal;

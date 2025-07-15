@@ -52,11 +52,21 @@ void updateBMSData() {
 
   // Battery status
   bmsTelemetryData.is_charging = bms_can->isBatteryCharging();
+  bmsTelemetryData.is_charge_mos = bms_can->isChargeMOSStatus();
+  bmsTelemetryData.is_discharge_mos = bms_can->isDischargeMOSStatus();
 
   // Populate individual cell voltages
   for (uint8_t i = 0; i < BMS_CELLS_NUM; i++) {
     bmsTelemetryData.cell_voltages[i] = bms_can->getCellVoltage(i);
   }
+
+  // Populate individual temperature sensors
+  bmsTelemetryData.mos_temperature = bms_can->getTemperature(0);      // BMS MOSFET
+  bmsTelemetryData.balance_temperature = bms_can->getTemperature(1);  // BMS Balance resistors
+  bmsTelemetryData.t1_temperature = bms_can->getTemperature(2);       // Cell probe 1
+  bmsTelemetryData.t2_temperature = bms_can->getTemperature(3);       // Cell probe 2
+  bmsTelemetryData.t3_temperature = bms_can->getTemperature(4);       // Cell probe 3
+  bmsTelemetryData.t4_temperature = bms_can->getTemperature(5);       // Cell probe 4
 
   bmsTelemetryData.lastUpdateMs = millis();
   // printBMSData();

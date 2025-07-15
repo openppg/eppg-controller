@@ -46,6 +46,8 @@ typedef struct {
   TempState motor_state;      // Motor temperature state
   bool temp_sensor_error;     // True if any sensor is invalid
   TelemetryState escState;       // Current connection state
+  uint16_t running_error;      // Runtime error bitmask
+  uint16_t selfcheck_error;    // Self-check error bitmask
 }STR_ESC_TELEMETRY_140;
 
 // Internal device data
@@ -100,17 +102,20 @@ typedef struct {
   float voltage_differential;   // Highest cell minus lowest cell voltage (V)
   unsigned long lastUpdateMs;   // Timestamp of last telemetry update
   bool is_charging;
+  bool is_charge_mos;
+  bool is_discharge_mos;
   TelemetryState bmsState;        // Current connection state
   float cell_voltages[BMS_CELLS_NUM];  // Individual cell voltages
+
+  // Individual temperature sensors
+  float mos_temperature;        // BMS MOSFET temperature (°C) - index 0
+  float balance_temperature;    // BMS balance resistor temperature (°C) - index 1
+  float t1_temperature;         // T1 cell temperature sensor (°C) - index 2
+  float t2_temperature;         // T2 cell temperature sensor (°C) - index 3
+  float t3_temperature;         // T3 cell temperature sensor (°C) - index 4
+  float t4_temperature;         // T4 cell temperature sensor (°C) - index 5
 } STR_BMS_TELEMETRY_140;
 #pragma pack(pop)
-
-
-static BatteryVoltagePoint batteryLevels[] = {
-  {99.6, 100},  // 99+ volts corresponds to 100%
-  {94.8, 90}, {93.36, 80}, {91.68, 70}, {89.76, 60}, {87.6, 50},
-  {85.2, 40}, {82.32, 30}, {80.16, 20}, {78, 10}, {60.96, 0}
-};
 
 // Add this struct definition near other structs
 struct MelodyRequest {

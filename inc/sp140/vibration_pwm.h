@@ -11,7 +11,8 @@ enum VibePattern {
   VIBE_TRIPLE_PULSE,
   VIBE_RAMP_UP,
   VIBE_RAMP_DOWN,
-  VIBE_WAVE
+  VIBE_WAVE,
+  VIBE_CRITICAL_CONTINUOUS  // New pattern for critical alerts
 };
 
 // Vibration request structure for queue
@@ -56,5 +57,20 @@ void executeVibePattern(VibePattern pattern);
  * @param steps Number of steps in the pattern
  */
 void customVibePattern(const uint8_t intensities[], const uint16_t durations[], int steps);
+
+/**
+ * Start continuous vibration for critical alerts
+ */
+void startCriticalVibration();
+
+/**
+ * Stop continuous vibration
+ */
+void stopCriticalVibration();
+
+/**
+ * Check if critical vibration is currently active
+ */
+bool isCriticalVibrationActive();
 
 #endif  // INC_SP140_VIBRATION_PWM_H_

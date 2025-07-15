@@ -30,6 +30,8 @@
 #include "../../inc/sp140/bms.h"
 #include "../../inc/sp140/altimeter.h"
 #include "../../inc/sp140/debug.h"
+#include "../../inc/sp140/simple_monitor.h"
+#include "../../inc/sp140/alert_display.h"
 
 #include "../../inc/sp140/buzzer.h"
 #include "../../inc/sp140/device_state.h"
@@ -226,6 +228,7 @@ TaskHandle_t throttleTaskHandle = NULL;
 TaskHandle_t watchdogTaskHandle = NULL;
 TaskHandle_t spiCommTaskHandle = NULL;
 TaskHandle_t vibeTaskHandle = NULL;  // Vibration motor task
+TaskHandle_t monitoringTaskHandle = NULL;  // Sensor monitoring task
 
 QueueHandle_t melodyQueue = NULL;
 TaskHandle_t audioTaskHandle = NULL;
@@ -234,6 +237,9 @@ QueueHandle_t bmsTelemetryQueue = NULL;
 QueueHandle_t throttleUpdateQueue = NULL;
 QueueHandle_t escTelemetryQueue = NULL;
 QueueHandle_t vibeQueue = NULL;  // Vibration motor queue
+
+// Snapshot queue for sensor monitoring
+QueueHandle_t telemetrySnapshotQueue = NULL;
 
 unsigned long lastDisarmTime = 0;
 const unsigned long DISARM_COOLDOWN = 500;  // 500ms cooldown
@@ -285,6 +291,7 @@ void throttleTask(void *pvParameters) {
 
   for (;;) {  // infinite loop
     handleThrottle();  //
+    pushTelemetrySnapshot();
     delay(20);  // wait for 20ms
   }
   vTaskDelete(NULL);  // should never reach this
@@ -352,12 +359,40 @@ void refreshDisplay() {
         break;
     }
 
+    // Handle alert counter updates, non-blocking
+    AlertCounts newCounts;
+    if (xQueueReceive(alertCountQueue, &newCounts, 0) == pdTRUE) {
+      updateAlertCounterDisplay(newCounts);
+    }
+
+    // Handle alert text message
+    AlertDisplayMsg dmsg;
+    if (xQueueReceive(alertDisplayQueue, &dmsg, 0) == pdTRUE) {
+      if (dmsg.show) {
+        lv_showAlertTextWithLevel(dmsg.id, dmsg.level, dmsg.critical);
+      } else {
+        lv_hideAlertText();
+      }
+    }
+
     // General LVGL update handler
     updateLvgl();
 
     xSemaphoreGive(lvglMutex);
   } else {
     USBSerial.println("Failed to acquire LVGL mutex in refreshDisplay");
+  }
+}
+
+void monitoringTask(void *pvParameters) {
+  TelemetrySnapshot snap;
+  for (;;) {
+    if (xQueueReceive(telemetrySnapshotQueue, &snap, pdMS_TO_TICKS(100)) == pdTRUE) {
+      // Run monitors using the fresh snapshot
+      if (monitoringEnabled) {
+        checkAllSensorsWithData(snap.esc, snap.bms);
+      }
+    }
   }
 }
 
@@ -369,6 +404,7 @@ void spiCommTask(void *pvParameters) {
         xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);  // Always latest data
         xQueueOverwrite(escTelemetryQueue, &escTelemetryData);  // Always latest data
         refreshDisplay();
+        pushTelemetrySnapshot();
       #else
         // 1. Check if CAN transceiver is initialized
         if (bmsCanInitialized) {
@@ -387,7 +423,7 @@ void spiCommTask(void *pvParameters) {
           unifiedBatteryData.amps = bmsTelemetryData.battery_current;
           unifiedBatteryData.soc = bmsTelemetryData.soc;
           unifiedBatteryData.power = bmsTelemetryData.power;
-          xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);
+                    xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);
         } else if (escTelemetryData.escState == TelemetryState::CONNECTED) {
           // BMS is either not initialized OR not currently connected
 
@@ -404,10 +440,14 @@ void spiCommTask(void *pvParameters) {
           unifiedBatteryData.soc = 0.0;
         }
 
-        // Update display - CS pin management is handled inside refreshDisplay via LVGL mutex
+                // Update display - CS pin management is handled inside refreshDisplay via LVGL mutex
         refreshDisplay();
 
+        // Publish latest telemetry snapshot for monitoring
+        pushTelemetrySnapshot();
+
       #endif
+
       vTaskDelay(pdMS_TO_TICKS(40));  // ~25fps
   }
 }
@@ -421,6 +461,8 @@ void loadHardwareConfig() {
 void printBootMessage() {
   USBSerial.print(F("Booting up V"));
   USBSerial.print(VERSION_STRING);
+  USBSerial.print(F(" git:"));
+  USBSerial.println(GIT_REV);
 }
 
 void setupBarometer() {
@@ -495,6 +537,9 @@ void setup() {
   // Pass hardcoded pin values for DC and RST
   setupLvglDisplay(deviceData, board_config.tft_dc, board_config.tft_rst, hardwareSPI);
 
+  // Initialise alert display aggregation & UI
+  initAlertDisplay();
+
   #ifndef SCREEN_DEBUG
     // Pass the hardware SPI instance to the BMS_CAN initialization
     initBMSCAN(hardwareSPI);
@@ -533,7 +578,17 @@ void setup() {
     USBSerial.println("Error creating device state queue");
   }
 
-  setupBLE();
+  // Snapshot queue for monitoring (size 1)
+  telemetrySnapshotQueue = xQueueCreate(1, sizeof(TelemetrySnapshot));
+  if (telemetrySnapshotQueue == NULL) {
+    USBSerial.println("Error creating telemetry snapshot queue");
+  }
+
+    setupBLE();
+
+  // Initialize the simple monitoring system (but keep it disabled initially)
+  initSimpleMonitor();
+
   setupTasks();  // Create all tasks after queues and BLE are initialized
 
   pulseVibeMotor();
@@ -575,6 +630,10 @@ void setup() {
   send_device_data();
   // Signal that the UI is ready for updates from tasks
   uiReady = true;
+
+  // Enable sensor monitoring after splash screen and UI setup
+  // This gives BMS/ESC time to initialize and start providing valid data
+  enableMonitoring();
 }
 
 // set up all the main threads/tasks with core 0 affinity
@@ -606,6 +665,9 @@ void setupTasks() {
     NULL,
     1,
     &webSerialTaskHandle);
+
+  // Create monitoring task
+  xTaskCreate(monitoringTask, "Monitoring", 4096, NULL, 1, &monitoringTaskHandle);
 }
 
 void setup140() {
@@ -955,7 +1017,7 @@ void handleThrottle() {
       break;
   }
 
-  // Read/Sync ESC Telemetry (runs in all armed states)
+    // Read/Sync ESC Telemetry (runs in all armed states)
   readESCTelemetry();
   syncESCTelemetry();
 }
@@ -1135,4 +1197,14 @@ void webSerialTask(void *pvParameters) {
     }
     vTaskDelay(pdMS_TO_TICKS(100));  // Check every 100ms
   }
+}
+
+// Helper to push latest telemetry snapshot to queue (size 1, overwrite)
+void pushTelemetrySnapshot() {
+  if (telemetrySnapshotQueue == NULL) return;
+
+  TelemetrySnapshot snap;
+  snap.esc = escTelemetryData;
+  snap.bms = bmsTelemetryData;
+  xQueueOverwrite(telemetrySnapshotQueue, &snap);
 }
