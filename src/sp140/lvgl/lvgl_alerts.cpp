@@ -115,7 +115,7 @@ void updateAlertCounterDisplay(const AlertCounts& counts) {
     lv_obj_add_flag(warning_counter_circle, LV_OBJ_FLAG_HIDDEN);
   }
 
-  // Critical
+    // Critical
   if (counts.criticalCount > 0) {
     char buf[4];
     if (counts.criticalCount > 9) {
@@ -125,6 +125,15 @@ void updateAlertCounterDisplay(const AlertCounts& counts) {
     }
     lv_label_set_text(critical_counter_label, buf);
     lv_obj_clear_flag(critical_counter_circle, LV_OBJ_FLAG_HIDDEN);
+
+    // Simple positioning: align with alert text if no warnings, otherwise right of warning circle
+    if (counts.warningCount == 0) {
+      // No warnings: position to align with alert text (avoid red border)
+      lv_obj_align(critical_counter_circle, LV_ALIGN_TOP_LEFT, 10, 75);
+    } else {
+      // With warnings: position to right of warning circle
+      lv_obj_align(critical_counter_circle, LV_ALIGN_TOP_LEFT, 35, 75);
+    }
   } else {
     lv_obj_add_flag(critical_counter_circle, LV_OBJ_FLAG_HIDDEN);
   }
