@@ -324,8 +324,6 @@ void updateLvglMainScreen(
   float altitude, bool armed, bool cruising,
   unsigned int armedStartMillis
 ) {
-  // Make sure display CS is selected before any LVGL calls that might draw
-  digitalWrite(displayCS, LOW);
 
   bool darkMode = (deviceData.theme == 1);
   float batteryPercent = unifiedBatteryData.soc;
@@ -818,9 +816,6 @@ void updateLvglMainScreen(
     lastAltitude = altitude;
     lastAltitudeTime = currentTime;
   }
-
-  // Deselect display CS when done drawing
-  digitalWrite(displayCS, HIGH);
 }
 
 // Test function with simulated data for development/testing

@@ -62,6 +62,7 @@ void setupLvglDisplay(const STR_DEVICE_DATA_140_V1& deviceData, int8_t dc_pin, i
 }
 
 // Optimize the flush callback to minimize SPI transfers
+// CS pin management is handled here where actual SPI communication occurs
 void lvgl_flush_cb(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* color_p) {
   // Make sure display CS is selected
   digitalWrite(displayCS, LOW);
@@ -110,9 +111,6 @@ void updateLvgl() {
 
 void displayLvglSplash(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
   USBSerial.println("Displaying LVGL splash screen");
-
-  // Make sure display CS is selected
-  digitalWrite(displayCS, LOW);
 
   // Create a new screen for the splash
   lv_obj_t* splash_screen = lv_obj_create(NULL);
@@ -177,7 +175,4 @@ void displayLvglSplash(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
     updateLvgl();
     delay(LVGL_REFRESH_TIME);
   }
-
-  // Deselect display CS when done
-  digitalWrite(displayCS, HIGH);
 }
