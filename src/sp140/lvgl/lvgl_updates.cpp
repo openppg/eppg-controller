@@ -1,6 +1,8 @@
 #include "../../../inc/sp140/lvgl/lvgl_updates.h"
 #include "../../../inc/sp140/esp32s3-config.h"
 #include "../../../inc/sp140/globals.h"
+#include "../../../inc/sp140/vibration_pwm.h"
+#include "../../../inc/sp140/shared-config.h"
 
 // Flash timer globals - definitions
 lv_timer_t* cruise_flash_timer = NULL;
@@ -175,79 +177,47 @@ void startArmFailIconFlash() {
 
 // --- Critical Alert Border Flashing Implementation ---
 static void critical_border_flash_timer_cb(lv_timer_t* timer) {
-  // This callback runs within the LVGL task handler, which is already protected by lvglMutex
+  // This callback runs within the LVGL task handler, so no mutex needed here.
+  if (critical_border != NULL) {
+    // Toggle visibility: 300ms on, 700ms off
+    bool is_on = !lv_obj_has_flag(critical_border, LV_OBJ_FLAG_HIDDEN);
+    if (is_on) {
+      lv_obj_add_flag(critical_border, LV_OBJ_FLAG_HIDDEN);
+      lv_timer_set_period(timer, 700); // Off duration
+    } else {
+      lv_obj_clear_flag(critical_border, LV_OBJ_FLAG_HIDDEN);
+      lv_timer_set_period(timer, 300); // On duration
 
-  if (critical_border == NULL) {
-    // Safety check
-    if (critical_border_flash_timer != NULL) {
-      lv_timer_del(critical_border_flash_timer);
-      critical_border_flash_timer = NULL;
+      // Trigger vibration pulse in sync with border "on"
+      if (ENABLE_VIBE) {
+        pulseVibration(300, 200); // 300ms pulse, intensity 200
+      }
     }
-    isFlashingCriticalBorder = false;
-    return;
-  }
-
-  // Toggle visibility
-  if (lv_obj_has_flag(critical_border, LV_OBJ_FLAG_HIDDEN)) {
-    lv_obj_clear_flag(critical_border, LV_OBJ_FLAG_HIDDEN);
-  } else {
-    lv_obj_add_flag(critical_border, LV_OBJ_FLAG_HIDDEN);
   }
 }
 
 void startCriticalBorderFlash() {
-  // This function can be called from other tasks, so protect with mutex
-  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(50)) == pdTRUE) {  // Use a timeout
-    if (critical_border == NULL) {
-      xSemaphoreGive(lvglMutex);
-      return;  // Can't flash if border doesn't exist
+  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+    if (critical_border != NULL && !isFlashingCriticalBorder) {
+      isFlashingCriticalBorder = true;
+      lv_obj_clear_flag(critical_border, LV_OBJ_FLAG_HIDDEN); // Start visible
+      critical_border_flash_timer = lv_timer_create(critical_border_flash_timer_cb, 300, NULL);
     }
-
-    // If a flash timer is already running, delete it first
-    if (critical_border_flash_timer != NULL) {
-      lv_timer_del(critical_border_flash_timer);
-      critical_border_flash_timer = NULL;
-    }
-
-    // Reset state and start flashing
-    isFlashingCriticalBorder = true;
-
-    // Start with the border visible
-    lv_obj_clear_flag(critical_border, LV_OBJ_FLAG_HIDDEN);
-
-    // Create the timer (500ms interval for on/off cycle - matches vibration rate)
-    critical_border_flash_timer = lv_timer_create(critical_border_flash_timer_cb, 500, NULL);
-    if (critical_border_flash_timer == NULL) {
-      // Failed to create timer, reset state
-      isFlashingCriticalBorder = false;
-      lv_obj_add_flag(critical_border, LV_OBJ_FLAG_HIDDEN);  // Hide it again
-      USBSerial.println("Error: Failed to create critical border flash timer!");
-    }
-
     xSemaphoreGive(lvglMutex);
-  } else {
-     USBSerial.println("Warning: Failed to acquire LVGL mutex for startCriticalBorderFlash");
   }
 }
 
 void stopCriticalBorderFlash() {
-  // This function can be called from other tasks, so protect with mutex
-  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(50)) == pdTRUE) {  // Use a timeout
+  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
     if (critical_border_flash_timer != NULL) {
       lv_timer_del(critical_border_flash_timer);
       critical_border_flash_timer = NULL;
     }
-
-    isFlashingCriticalBorder = false;
-
-    // Hide the border
     if (critical_border != NULL) {
       lv_obj_add_flag(critical_border, LV_OBJ_FLAG_HIDDEN);
     }
-
+    isFlashingCriticalBorder = false;
     xSemaphoreGive(lvglMutex);
-  } else {
-     USBSerial.println("Warning: Failed to acquire LVGL mutex for stopCriticalBorderFlash");
   }
 }
 

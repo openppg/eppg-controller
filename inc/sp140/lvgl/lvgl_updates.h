@@ -44,8 +44,26 @@ void updateLvglMainScreenWithTestData(const STR_DEVICE_DATA_140_V1& deviceData);
 // Flash animation functions
 void startCruiseIconFlash();
 void startArmFailIconFlash();
+
+/**
+ * @brief Starts the flashing of the critical alert border.
+ *
+ * This function should be called from a task that has acquired the LVGL mutex.
+ */
 void startCriticalBorderFlash();
+
+/**
+ * @brief Stops the flashing of the critical alert border.
+ *
+ * This function should be called from a task that has acquired the LVGL mutex.
+ */
 void stopCriticalBorderFlash();
+
+/**
+ * @brief Checks if the critical alert border is currently flashing.
+ *
+ * @return true if the border is flashing, false otherwise.
+ */
 bool isCriticalBorderFlashing();
 
 #endif // LVGL_UPDATES_H

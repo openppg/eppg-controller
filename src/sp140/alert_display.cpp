@@ -5,7 +5,7 @@
 #include <algorithm>
 #include "../../inc/sp140/lvgl/lvgl_alerts.h"
 #include "../../inc/sp140/lvgl/lvgl_updates.h"
-#include "../../inc/sp140/vibration_pwm.h"  // For alert vibrations
+#include "../../inc/sp140/vibration_pwm.h"
 
 // ------------ Globals -------------
 QueueHandle_t alertEventQueue = NULL;
@@ -43,6 +43,9 @@ void initAlertDisplay() {
     USBSerial.println("[AlertDisplay] Failed creating queues");
     return;
   }
+
+  // Init the new alert service
+  initCriticalAlertService();
 
   // Create aggregation task (low priority)
   xTaskCreate(alertAggregationTask, "AlertAgg", 3072, NULL, 1, &alertAggregationTaskHandle);
@@ -194,24 +197,14 @@ static void recalcCountsAndPublish() {
  */
 static void handleAlertVibration(const AlertCounts& newCounts, const AlertCounts& previousCounts) {
   if (newCounts.criticalCount > 0) {
-    // Start continuous vibration for critical alerts (if not already active)
-    if (!isCriticalVibrationActive()) {
-      startCriticalVibration();
-    }
-
-    // Start critical border flashing (if not already active)
-    if (!isCriticalBorderFlashing()) {
-      startCriticalBorderFlash();
+    // Use the new synchronized alert service
+    if (!isCriticalAlertActive()) {
+      startCriticalAlerts();
     }
   } else {
-    // Stop critical vibration if no critical alerts remain
-    if (isCriticalVibrationActive()) {
-      stopCriticalVibration();
-    }
-
-    // Stop critical border flashing if no critical alerts remain
-    if (isCriticalBorderFlashing()) {
-      stopCriticalBorderFlash();
+    // Stop synchronized alerts if no critical alerts remain
+    if (isCriticalAlertActive()) {
+      stopCriticalAlerts();
     }
 
     // Handle warning transitions (only when no critical alerts)

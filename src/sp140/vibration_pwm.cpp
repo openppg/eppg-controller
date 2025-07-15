@@ -1,6 +1,7 @@
 #include "sp140/vibration_pwm.h"
 #include "Arduino.h"
 #include "sp140/shared-config.h"
+#include "sp140/lvgl/lvgl_updates.h"
 
 const int VIBE_PWM_PIN = 46;  // TODO: move to config
 const int VIBE_PWM_FREQ = 1000;  // Adjust as needed
@@ -75,12 +76,6 @@ bool initVibeMotor() {
     return false;
   }
 
-  // Create critical vibration task - also pin to core 1, lower priority
-  xTaskCreatePinnedToCore(criticalVibeTask, "CriticalVibe", 2048, NULL, 1, &criticalVibeTaskHandle, 1);
-  if (criticalVibeTaskHandle == NULL) {
-    return false;
-  }
-
   return true;
 }
 
@@ -97,6 +92,29 @@ void pulseVibeMotor() {
 
   // Send request to queue (non-blocking)
   xQueueSend(vibeQueue, &request, 0);  // Don't wait if queue is full
+}
+
+/**
+ * @brief Pulses the vibration motor for a specific duration and intensity.
+ */
+void pulseVibration(uint16_t duration_ms, uint8_t intensity) {
+  if (!ENABLE_VIBE || vibeQueue == NULL) return;
+
+  VibeRequest request = {
+    .duration_ms = duration_ms,
+    .intensity = intensity
+  };
+  xQueueSend(vibeQueue, &request, 0);
+}
+
+/**
+ * @brief Stops all vibration immediately.
+ */
+void stopVibration() {
+  if (vibeQueue != NULL) {
+    xQueueReset(vibeQueue);
+  }
+  ledcWrite(VIBE_PWM_CHANNEL, 0);
 }
 
 /**
@@ -177,11 +195,6 @@ void executeVibePattern(VibePattern pattern) {
       }
       ledcWrite(VIBE_PWM_CHANNEL, 0);
       break;
-
-    case VIBE_CRITICAL_CONTINUOUS:
-      // This pattern is handled by the continuous vibration task
-      startCriticalVibration();
-      break;
   }
 }
 
@@ -201,35 +214,45 @@ void customVibePattern(const uint8_t intensities[], const uint16_t durations[], 
   ledcWrite(VIBE_PWM_CHANNEL, 0);
 }
 
-/**
- * Start continuous vibration for critical alerts
- */
-void startCriticalVibration() {
-  if (!ENABLE_VIBE) return;
+// Service state for critical alerts
+static bool g_critical_alert_active = false;
 
-  if (!criticalVibrationActive) {
-    criticalVibrationActive = true;
-    if (criticalVibeTaskHandle != NULL) {
-      vTaskResume(criticalVibeTaskHandle);
-    }
-  }
+/**
+ * @brief Initializes the critical alert service.
+ */
+void initCriticalAlertService() {
+  // Initialization can be expanded if needed in the future.
 }
 
 /**
- * Stop continuous vibration
+ * @brief Starts the critical alert notifications.
  */
-void stopCriticalVibration() {
-  if (criticalVibrationActive) {
-    criticalVibrationActive = false;
-    // Turn off vibration immediately
-    ledcWrite(VIBE_PWM_CHANNEL, 0);
-    // Task will suspend itself on next iteration
+void startCriticalAlerts() {
+  if (g_critical_alert_active) {
+    return;
   }
+  g_critical_alert_active = true;
+
+  // Start the single master LVGL timer, which will handle both border and vibration
+  startCriticalBorderFlash();
 }
 
 /**
- * Check if critical vibration is currently active
+ * @brief Stops the critical alert notifications.
  */
-bool isCriticalVibrationActive() {
-  return criticalVibrationActive;
+void stopCriticalAlerts() {
+  if (!g_critical_alert_active) {
+    return;
+  }
+  g_critical_alert_active = false;
+
+  // Stop the master LVGL timer
+  stopCriticalBorderFlash();
+}
+
+/**
+ * @brief Checks if the critical alert system is currently active.
+ */
+bool isCriticalAlertActive() {
+  return g_critical_alert_active;
 }
