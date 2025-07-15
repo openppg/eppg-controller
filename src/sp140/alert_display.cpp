@@ -3,7 +3,8 @@
 #include <freertos/queue.h>
 #include <map>
 #include <algorithm>
-#include "../../inc/sp140/lvgl/lvgl_display.h"
+#include "../../inc/sp140/lvgl/lvgl_alerts.h"
+#include "../../inc/sp140/lvgl/lvgl_updates.h"
 #include "../../inc/sp140/vibration_pwm.h"  // For alert vibrations
 
 // ------------ Globals -------------
@@ -197,7 +198,7 @@ static void handleAlertVibration(const AlertCounts& newCounts, const AlertCounts
     if (!isCriticalVibrationActive()) {
       startCriticalVibration();
     }
-    
+
     // Start critical border flashing (if not already active)
     if (!isCriticalBorderFlashing()) {
       startCriticalBorderFlash();
@@ -207,7 +208,7 @@ static void handleAlertVibration(const AlertCounts& newCounts, const AlertCounts
     if (isCriticalVibrationActive()) {
       stopCriticalVibration();
     }
-    
+
     // Stop critical border flashing if no critical alerts remain
     if (isCriticalBorderFlashing()) {
       stopCriticalBorderFlash();

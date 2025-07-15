@@ -26,7 +26,10 @@
 
 #include "../../inc/sp140/globals.h"  // device config
 #include "../../inc/sp140/esc.h"
-#include "../../inc/sp140/lvgl/lvgl_display.h"
+#include "../../inc/sp140/lvgl/lvgl_core.h"
+#include "../../inc/sp140/lvgl/lvgl_main_screen.h"
+#include "../../inc/sp140/lvgl/lvgl_updates.h"
+#include "../../inc/sp140/lvgl/lvgl_alerts.h"
 #include "../../inc/sp140/bms.h"
 #include "../../inc/sp140/altimeter.h"
 #include "../../inc/sp140/debug.h"
