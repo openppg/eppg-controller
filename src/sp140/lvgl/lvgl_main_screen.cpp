@@ -1,4 +1,5 @@
 #include "../../../inc/sp140/lvgl/lvgl_main_screen.h"
+#include "../../../inc/sp140/lvgl/lvgl_alerts.h"
 #include "../../../inc/sp140/esp32s3-config.h"
 
 #include "../../assets/img/cruise-control-340255-30.c"  // Cruise control icon  // NOLINT(build/include)
@@ -609,6 +610,9 @@ void setupMainScreen(bool darkMode) {
     // Move border to front so it's visible over all other elements
     lv_obj_move_foreground(critical_border);
   }
+
+  // Setup alert counter UI elements (circles, labels, and alert text display)
+  setupAlertCounterUI(darkMode);
 
   // Load the screen
   lv_scr_load(main_screen);
