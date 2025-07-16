@@ -415,6 +415,9 @@ void spiCommTask(void *pvParameters) {
             bmsTelemetryData.bmsState = TelemetryState::NOT_CONNECTED;
           }
         }
+        
+        // Clear alerts for disconnected components
+        clearDisconnectedComponentAlerts();
 
         // 2. Use BMS data if connected, otherwise use ESC data
         if (bmsTelemetryData.bmsState == TelemetryState::CONNECTED) {

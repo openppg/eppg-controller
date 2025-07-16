@@ -34,8 +34,26 @@ float getVerticalSpeed() {
     return 0.0f;  // Not enough readings yet
   }
 
-  // Get oldest and newest readings
-  const AltitudeReading& oldest = altitudeBuffer.first();
+  // Calculate 5-second rolling average
+  const unsigned long currentTime = millis();
+  const unsigned long fiveSecondsAgo = currentTime - 5000;  // 5 seconds ago
+  
+  // Find the oldest reading within the last 5 seconds
+  int oldestIndex = -1;
+  for (int i = 0; i < altitudeBuffer.size(); i++) {
+    if (altitudeBuffer[i].timestamp >= fiveSecondsAgo) {
+      oldestIndex = i;
+      break;
+    }
+  }
+  
+  // If no readings within 5 seconds, use the oldest available reading
+  if (oldestIndex == -1) {
+    oldestIndex = 0;
+  }
+  
+  // Get the readings for the 5-second window
+  const AltitudeReading& oldest = altitudeBuffer[oldestIndex];
   const AltitudeReading& newest = altitudeBuffer.last();
 
   // Calculate time difference in seconds

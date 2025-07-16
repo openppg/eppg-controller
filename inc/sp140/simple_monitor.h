@@ -107,6 +107,7 @@ extern MultiLogger multiLogger;  // Global fan-out logger
 struct IMonitor {
   virtual ~IMonitor() = default;
   virtual void check() = 0;
+  virtual void resetState() = 0;  // Reset internal state for reconnection scenarios
 };
 
 // Sensor monitor for analog values
@@ -135,6 +136,10 @@ struct SensorMonitor : public IMonitor {
       last = now;
     }
   }
+  
+  void resetState() override {
+    last = AlertLevel::OK;  // Reset to force state change detection
+  }
 };
 
 // New monitor for boolean conditions
@@ -161,6 +166,10 @@ struct BooleanMonitor : public IMonitor {
             lastState = currentState;
         }
     }
+    
+    void resetState() override {
+        lastState = !alertOnTrue;  // Reset to force state change detection
+    }
 };
 
 // Global monitor registry
@@ -180,5 +189,8 @@ void addBMSMonitors();
 void addAltimeterMonitors();
 void addInternalMonitors();
 void enableMonitoring();
+
+// Function to reset monitor states (for reconnection scenarios)
+void resetMonitorStates(bool bms, bool esc);
 
 #endif  // INC_SP140_SIMPLE_MONITOR_H_

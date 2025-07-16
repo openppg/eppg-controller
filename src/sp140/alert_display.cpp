@@ -5,6 +5,8 @@
 #include <algorithm>
 #include "../../inc/sp140/lvgl/lvgl_display.h"
 #include "../../inc/sp140/vibration_pwm.h"  // For alert vibrations
+#include "../../inc/sp140/globals.h"  // For connection status
+#include "../../inc/sp140/simple_monitor.h"  // For checkAllSensors()
 
 // ------------ Globals -------------
 QueueHandle_t alertEventQueue = NULL;
@@ -30,6 +32,72 @@ static void alertAggregationTask(void* parameter);
 static void recalcCountsAndPublish();
 static void handleAlertVibration(const AlertCounts& newCounts, const AlertCounts& previousCounts);
 
+// Helper function to check if a sensor belongs to a connected component
+static bool isSensorFromConnectedComponent(SensorID sensorId) {
+  bool isConnected = false;
+  
+  switch (sensorId) {
+    // BMS sensors - only alert if BMS is connected
+    case SensorID::BMS_MOS_Temp:
+    case SensorID::BMS_Balance_Temp:
+    case SensorID::BMS_T1_Temp:
+    case SensorID::BMS_T2_Temp:
+    case SensorID::BMS_T3_Temp:
+    case SensorID::BMS_T4_Temp:
+    case SensorID::BMS_High_Cell_Voltage:
+    case SensorID::BMS_Low_Cell_Voltage:
+    case SensorID::BMS_SOC:
+    case SensorID::BMS_Total_Voltage:
+    case SensorID::BMS_Voltage_Differential:
+    case SensorID::BMS_Charge_MOS:
+    case SensorID::BMS_Discharge_MOS:
+      isConnected = (bmsTelemetryData.bmsState == TelemetryState::CONNECTED);
+      if (!isConnected) {
+        USBSerial.printf("[AlertDisplay] Filtering BMS alert for %s - BMS not connected\n", sensorIDToString(sensorId));
+      }
+      return isConnected;
+      
+    // ESC sensors - only alert if ESC is connected
+    case SensorID::ESC_MOS_Temp:
+    case SensorID::ESC_MCU_Temp:
+    case SensorID::ESC_CAP_Temp:
+    case SensorID::Motor_Temp:
+    case SensorID::ESC_OverCurrent_Error:
+    case SensorID::ESC_LockedRotor_Error:
+    case SensorID::ESC_OverTemp_Error:
+    case SensorID::ESC_OverVolt_Error:
+    case SensorID::ESC_VoltageDrop_Error:
+    case SensorID::ESC_ThrottleSat_Warning:
+    case SensorID::ESC_MotorCurrentOut_Error:
+    case SensorID::ESC_TotalCurrentOut_Error:
+    case SensorID::ESC_MotorVoltageOut_Error:
+    case SensorID::ESC_CapNTC_Error:
+    case SensorID::ESC_MosNTC_Error:
+    case SensorID::ESC_BusVoltRange_Error:
+    case SensorID::ESC_BusVoltSample_Error:
+    case SensorID::ESC_MotorZLow_Error:
+    case SensorID::ESC_MotorZHigh_Error:
+    case SensorID::ESC_MotorVDet1_Error:
+    case SensorID::ESC_MotorVDet2_Error:
+    case SensorID::ESC_MotorIDet2_Error:
+    case SensorID::ESC_SwHwIncompat_Error:
+    case SensorID::ESC_BootloaderBad_Error:
+      isConnected = (escTelemetryData.escState == TelemetryState::CONNECTED);
+      if (!isConnected) {
+        USBSerial.printf("[AlertDisplay] Filtering ESC alert for %s - ESC not connected\n", sensorIDToString(sensorId));
+      }
+      return isConnected;
+      
+    // Internal sensors - always alert (no connection dependency)
+    case SensorID::Baro_Temp:
+    case SensorID::CPU_Temp:
+      return true;
+      
+    default:
+      return true;  // Default to allowing alerts for unknown sensors
+  }
+}
+
 // ------------ Public helpers -------------
 void initAlertDisplay() {
   // Create queues – small, non-blocking
@@ -52,6 +120,98 @@ void sendAlertEvent(SensorID id, AlertLevel level) {
   if (!alertEventQueue) return;
   AlertEvent ev{ id, level, millis() };
   xQueueSend(alertEventQueue, &ev, 0); // best-effort, drop if full
+}
+
+// Track previous connection states to detect reconnections
+static bool bmsWasConnected = false;
+static bool escWasConnected = false;
+
+// Function to clear alerts for disconnected components and trigger re-evaluation on reconnection
+void clearDisconnectedComponentAlerts() {
+  if (!alertEventQueue) return;
+  
+  bool bmsCurrentlyConnected = (bmsTelemetryData.bmsState == TelemetryState::CONNECTED);
+  bool escCurrentlyConnected = (escTelemetryData.escState == TelemetryState::CONNECTED);
+  
+  // Check for BMS alerts to clear if BMS is disconnected
+  if (!bmsCurrentlyConnected) {
+    // Clear all BMS-related alerts
+    SensorID bmsSensors[] = {
+      SensorID::BMS_MOS_Temp, SensorID::BMS_Balance_Temp,
+      SensorID::BMS_T1_Temp, SensorID::BMS_T2_Temp,
+      SensorID::BMS_T3_Temp, SensorID::BMS_T4_Temp,
+      SensorID::BMS_High_Cell_Voltage, SensorID::BMS_Low_Cell_Voltage,
+      SensorID::BMS_SOC, SensorID::BMS_Total_Voltage,
+      SensorID::BMS_Voltage_Differential, SensorID::BMS_Charge_MOS,
+      SensorID::BMS_Discharge_MOS
+    };
+    
+    for (SensorID sensorId : bmsSensors) {
+      AlertEvent ev{ sensorId, AlertLevel::OK, millis() };
+      xQueueSend(alertEventQueue, &ev, 0);
+    }
+    
+    // Debug output
+    USBSerial.println("[AlertDisplay] Cleared BMS alerts - BMS disconnected");
+  }
+  
+  // Check for ESC alerts to clear if ESC is disconnected
+  if (!escCurrentlyConnected) {
+    // Clear all ESC-related alerts
+    SensorID escSensors[] = {
+      SensorID::ESC_MOS_Temp, SensorID::ESC_MCU_Temp,
+      SensorID::ESC_CAP_Temp, SensorID::Motor_Temp,
+      SensorID::ESC_OverCurrent_Error, SensorID::ESC_LockedRotor_Error,
+      SensorID::ESC_OverTemp_Error, SensorID::ESC_OverVolt_Error,
+      SensorID::ESC_VoltageDrop_Error, SensorID::ESC_ThrottleSat_Warning,
+      SensorID::ESC_MotorCurrentOut_Error, SensorID::ESC_TotalCurrentOut_Error,
+      SensorID::ESC_MotorVoltageOut_Error, SensorID::ESC_CapNTC_Error,
+      SensorID::ESC_MosNTC_Error, SensorID::ESC_BusVoltRange_Error,
+      SensorID::ESC_BusVoltSample_Error, SensorID::ESC_MotorZLow_Error,
+      SensorID::ESC_MotorZHigh_Error, SensorID::ESC_MotorVDet1_Error,
+      SensorID::ESC_MotorVDet2_Error, SensorID::ESC_MotorIDet2_Error,
+      SensorID::ESC_SwHwIncompat_Error, SensorID::ESC_BootloaderBad_Error
+    };
+    
+    for (SensorID sensorId : escSensors) {
+      AlertEvent ev{ sensorId, AlertLevel::OK, millis() };
+      xQueueSend(alertEventQueue, &ev, 0);
+    }
+    
+    // Debug output
+    USBSerial.println("[AlertDisplay] Cleared ESC alerts - ESC disconnected");
+  }
+  
+  // Check for reconnections and trigger sensor re-evaluation
+  if (bmsCurrentlyConnected && !bmsWasConnected) {
+    // BMS just reconnected - trigger re-evaluation of all BMS sensors
+    USBSerial.println("[AlertDisplay] BMS reconnected - triggering sensor re-evaluation");
+    triggerSensorReevaluation(true, false);  // BMS only
+  }
+  
+  if (escCurrentlyConnected && !escWasConnected) {
+    // ESC just reconnected - trigger re-evaluation of all ESC sensors
+    USBSerial.println("[AlertDisplay] ESC reconnected - triggering sensor re-evaluation");
+    triggerSensorReevaluation(false, true);  // ESC only
+  }
+  
+  // Update previous states
+  bmsWasConnected = bmsCurrentlyConnected;
+  escWasConnected = escCurrentlyConnected;
+}
+
+// Function to trigger sensor re-evaluation for reconnected components
+void triggerSensorReevaluation(bool bms, bool esc) {
+  if (bms || esc) {
+    // First, reset the monitor states to force re-evaluation
+    resetMonitorStates(bms, esc);
+    
+    // Then trigger a full sensor check
+    checkAllSensors();
+    
+    USBSerial.printf("[AlertDisplay] Triggered sensor re-evaluation - BMS: %s, ESC: %s\n", 
+                     bms ? "yes" : "no", esc ? "yes" : "no");
+  }
 }
 
 // ------------ Internal implementation -------------
@@ -105,19 +265,21 @@ static void recalcCountsAndPublish() {
   std::vector<SensorID> critList;
   std::vector<SensorID> warnList;
   for (const auto& kv : g_currentLevels) {
-    switch (kv.second) {
-      case AlertLevel::WARN_LOW:
-      case AlertLevel::WARN_HIGH:
-        warnList.push_back(kv.first);
-        counts.warningCount++;
-        break;
-      case AlertLevel::CRIT_LOW:
-      case AlertLevel::CRIT_HIGH:
-        critList.push_back(kv.first);
-        counts.criticalCount++;
-        break;
-      default:
-        break;
+    if (isSensorFromConnectedComponent(kv.first)) {
+      switch (kv.second) {
+        case AlertLevel::WARN_LOW:
+        case AlertLevel::WARN_HIGH:
+          warnList.push_back(kv.first);
+          counts.warningCount++;
+          break;
+        case AlertLevel::CRIT_LOW:
+        case AlertLevel::CRIT_HIGH:
+          critList.push_back(kv.first);
+          counts.criticalCount++;
+          break;
+        default:
+          break;
+      }
     }
   }
 
@@ -173,19 +335,8 @@ static void recalcCountsAndPublish() {
     xQueueOverwrite(alertCarouselQueue, &snap);
   }
 
-  // Rotate display queue
-  AlertSnapshot currentDisplaySnap;
-  if (xQueuePeek(alertDisplayQueue, &currentDisplaySnap, 0) == pdTRUE) {
-    // If the current display snapshot is the same as the carousel snapshot,
-    // we need to rotate it to show the next set of alerts.
-    // This logic is simplified here; in a real system, you'd manage a queue of snapshots.
-    // For now, we just overwrite the display queue with the current carousel snapshot.
-    // A more robust solution would involve a separate queue for display snapshots.
-    xQueueOverwrite(alertDisplayQueue, &snap);
-  } else {
-    // If the display queue is empty, just overwrite it with the current carousel snapshot.
-    xQueueOverwrite(alertDisplayQueue, &snap);
-  }
+  // Note: Display queue is managed separately by the alertAggregationTask
+  // The carousel snapshot is used for other purposes
 }
 
 /**

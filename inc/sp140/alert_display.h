@@ -60,6 +60,12 @@ void updateAlertCounterDisplay(const AlertCounts& counts);
 // Helper for monitors/UI logger to push alert events
 void sendAlertEvent(SensorID id, AlertLevel level);
 
+// Function to clear alerts for disconnected components
+void clearDisconnectedComponentAlerts();
+
+// Function to trigger sensor re-evaluation for reconnected components
+void triggerSensorReevaluation(bool bms, bool esc);
+
 // ILogger sink that pushes events to the alert queue (for UI)
 struct AlertUILogger : ILogger {
   void log(SensorID id, AlertLevel lvl, float v) override {

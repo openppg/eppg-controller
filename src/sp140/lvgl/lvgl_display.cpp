@@ -9,6 +9,7 @@
 #include <utility>
 #include "../../../inc/sp140/simple_monitor.h"  // for sensor ID helpers
 #include "../../../inc/sp140/alert_display.h"
+#include "../../../inc/sp140/altimeter.h"  // for getVerticalSpeed()
 
 // Forward declarations for alert counter UI
 void setupAlertCounterUI(bool darkMode);
@@ -436,14 +437,14 @@ void setupMainScreen(bool darkMode) {
 
   // Left voltage label
   voltage_left_label = lv_label_create(main_screen);
-  lv_obj_align(voltage_left_label, LV_ALIGN_TOP_LEFT, 3, 12);  // Adjust Y position slightly for smaller font
+  lv_obj_align(voltage_left_label, LV_ALIGN_TOP_LEFT, 6, 12);  // Move right by 3 pixels
   lv_obj_set_style_text_font(voltage_left_label, &lv_font_montserrat_12, 0);  // Much smaller font for voltage
   lv_obj_set_style_text_color(voltage_left_label,
                             darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
 
   // Right voltage label
   voltage_right_label = lv_label_create(main_screen);
-  lv_obj_align(voltage_right_label, LV_ALIGN_TOP_RIGHT, -3, 12);  // Adjust Y position slightly for smaller font
+  lv_obj_align(voltage_right_label, LV_ALIGN_TOP_RIGHT, -5, 12);  // Move left by 2 pixels
   lv_obj_set_style_text_font(voltage_right_label, &lv_font_montserrat_12, 0);  // Much smaller font for voltage
   lv_obj_set_style_text_color(voltage_right_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
@@ -996,12 +997,13 @@ void setupAlertCounterUI(bool darkMode) {
     lv_label_set_text(warning_counter_label, "0");
   }
 
-  // Critical circle (red)
+  // Critical circle (red) - positioned at top right of critical alert section
   if (critical_counter_circle == NULL) {
     critical_counter_circle = lv_led_create(main_screen);
     lv_obj_set_size(critical_counter_circle, CIRCLE_SIZE, CIRCLE_SIZE);
-    if (warning_counter_circle) {
-      lv_obj_align_to(critical_counter_circle, warning_counter_circle, LV_ALIGN_OUT_RIGHT_MID, 4, 0);
+    // Position at top right of the critical alert area (using altitude area as reference)
+    if (altitude_char_labels[0]) {
+      lv_obj_align_to(critical_counter_circle, altitude_char_labels[0], LV_ALIGN_OUT_TOP_RIGHT, 6, -5);
     } else {
       lv_obj_align(critical_counter_circle, LV_ALIGN_TOP_LEFT, 35, 75);
     }
@@ -1380,12 +1382,12 @@ void lv_showAlertTextWithLevel(SensorID id, AlertLevel level, bool critical) {
   lv_label_set_text(alert_text_label, txt);
   // Use larger font for critical alerts, smaller for warnings
   if (critical) {
-    lv_obj_set_style_text_font(alert_text_label, &lv_font_montserrat_18, 0);
+    lv_obj_set_style_text_font(alert_text_label, &lv_font_montserrat_24, 0);  // Larger font for critical alerts
     // Hide altitude while showing critical alert
     setAltitudeVisibility(false);
-    // Move alert label to altitude position (using first altitude character as reference)
+    // Move alert label to altitude position (using first altitude character as reference) + 5 pixels to the right and 4 pixels up
     if (altitude_char_labels[0]) {
-      lv_obj_set_pos(alert_text_label, lv_obj_get_x(altitude_char_labels[0]), lv_obj_get_y(altitude_char_labels[0]));
+      lv_obj_set_pos(alert_text_label, lv_obj_get_x(altitude_char_labels[0]) + 5, lv_obj_get_y(altitude_char_labels[0]) - 4);
     }
   } else {
     lv_obj_set_style_text_font(alert_text_label, &lv_font_montserrat_14, 0);
@@ -1504,8 +1506,8 @@ void updateLvglMainScreen(
            lv_label_set_text(battery_label, batt_buffer);
            lv_obj_set_style_text_color(battery_label, LVGL_BLACK, 0);
         } else {
-           // If SOC is 0, maybe show voltage instead or clear? Let's clear for now.
-           lv_label_set_text(battery_label, "-");
+           // If SOC is 0, show 0%
+           lv_label_set_text(battery_label, "0%");
            lv_obj_set_style_text_color(battery_label, LVGL_BLACK, 0);
         }
 
@@ -1901,23 +1903,14 @@ void updateLvglMainScreen(
     lv_obj_set_style_img_recolor(arm_fail_warning_icon_img, original_arm_fail_icon_color, LV_PART_MAIN);
   }
 
-  // Update climb rate indicator
-  static float lastAltitude = 0.0f;
-  static uint32_t lastAltitudeTime = 0;
+  // Update climb rate indicator using 5-second rolling average
+  static uint32_t lastClimbRateUpdate = 0;
   uint32_t currentTime = millis();
 
-  if (currentTime - lastAltitudeTime > 500) {  // Update climb rate every 500ms
-    float climbRate = 0.0f;
-    if (lastAltitudeTime > 0) {  // Skip first calculation
-      float altitudeChange = altitude - lastAltitude;
-      float timeChange = (currentTime - lastAltitudeTime) / 1000.0f;  // Convert to seconds
-      if (timeChange > 0) {
-        climbRate = altitudeChange / timeChange;  // m/s
-      }
-    }
+  if (currentTime - lastClimbRateUpdate > 500) {  // Update climb rate every 500ms
+    float climbRate = getVerticalSpeed();  // Use the 5-second rolling average
     updateClimbRateIndicator(climbRate);
-    lastAltitude = altitude;
-    lastAltitudeTime = currentTime;
+    lastClimbRateUpdate = currentTime;
   }
 
   // Deselect display CS when done drawing

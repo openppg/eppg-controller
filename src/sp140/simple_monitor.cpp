@@ -321,3 +321,17 @@ void enableMonitoring() {
   monitoringEnabled = true;
   USBSerial.println("Sensor monitoring enabled");
 }
+
+void resetMonitorStates(bool bms, bool esc) {
+  if (!monitoringEnabled) return;
+  
+  for (auto* monitor : monitors) {
+    if (!monitor) continue;
+    
+    // Reset all monitor states - this will force them to re-evaluate on next check
+    monitor->resetState();
+  }
+  
+  USBSerial.printf("[SimpleMonitor] Reset monitor states - BMS: %s, ESC: %s\n", 
+                   bms ? "yes" : "no", esc ? "yes" : "no");
+}
