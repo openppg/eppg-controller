@@ -76,12 +76,9 @@ UBaseType_t uxCoreAffinityMask0 = (1 << 0);  // Core 0
 UBaseType_t uxCoreAffinityMask1 = (1 << 1);  // Core 1
 
 HardwareConfig board_config;
-bool bmsCanInitialized = false;
 bool escTwaiInitialized = false;
 
 ResponsiveAnalogRead* pot;
-
-UnifiedBatteryData unifiedBatteryData = {0.0f, 0.0f, 0.0f};
 
 CircularBuffer<int, 8> potBuffer;
 
@@ -325,7 +322,8 @@ void refreshDisplay() {
     return;
   }
 
-  if (xSemaphoreTake(lvglMutex, portMAX_DELAY) == pdTRUE) {
+  // Try to acquire mutex with a shorter timeout for better responsiveness
+  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
     // Get the current relative altitude (updates buffer for vario)
     const float currentRelativeAltitude = getAltitude(deviceData);
 
@@ -337,14 +335,19 @@ void refreshDisplay() {
     bool isArmed = (currentState != DISARMED);
     bool isCruising = (currentState == ARMED_CRUISING);
 
+    // Get telemetry data thread-safely
+    STR_ESC_TELEMETRY_140 currentEscData = getESCDataThreadSafe();
+    STR_BMS_TELEMETRY_140 currentBmsData = getBMSDataThreadSafe();
+    UnifiedBatteryData currentUnifiedData = getUnifiedBatteryDataThreadSafe();
+
     // Select the appropriate screen update function based on the current page
     switch (currentScreenPage) {
       case MAIN_SCREEN:
         updateLvglMainScreen(
           deviceData,
-          escTelemetryData,
-          bmsTelemetryData,
-          unifiedBatteryData,
+          currentEscData,
+          currentBmsData,
+          currentUnifiedData,
           altitudeToShow,
           isArmed,
           isCruising,
@@ -375,12 +378,35 @@ void refreshDisplay() {
       }
     }
 
+    // Handle critical border control message
+    bool showBorder;
+    if (xQueueReceive(criticalBorderQueue, &showBorder, 0) == pdTRUE) {
+      // USBSerial.print("Critical border: Received message - showBorder = ");  // Reduced debug output
+      // USBSerial.println(showBorder ? "true" : "false");
+      if (showBorder) {
+        startCriticalBorderFlash();
+        // USBSerial.println("Critical border: Called startCriticalBorderFlash()");  // Reduced debug output
+      } else {
+        stopCriticalBorderFlash();
+        // USBSerial.println("Critical border: Called stopCriticalBorderFlash()");  // Reduced debug output
+      }
+    }
+
     // General LVGL update handler
     updateLvgl();
 
     xSemaphoreGive(lvglMutex);
   } else {
-    USBSerial.println("Failed to acquire LVGL mutex in refreshDisplay");
+    // If we can't get the mutex, at least try to process alert updates
+    // to prevent them from blocking the display
+    AlertCounts newCounts;
+    if (xQueueReceive(alertCountQueue, &newCounts, 0) == pdTRUE) {
+      // Store for next successful display update
+      // Note: This is a simplified approach - in a more complex solution,
+      // we might want to use a separate queue for pending alert updates
+    }
+    
+    USBSerial.println("Failed to acquire LVGL mutex in refreshDisplay - display may be slow");
   }
 }
 
@@ -408,9 +434,12 @@ void spiCommTask(void *pvParameters) {
       #else
         // 1. Check if CAN transceiver is initialized
         if (bmsCanInitialized) {
-          updateBMSData();  // This function handles its own CS pins
-          if (bms_can->isConnected()) {
-            bmsTelemetryData.bmsState = TelemetryState::CONNECTED;
+          updateBMSData();  // This function handles its own CS pins and uses thread-safe access
+        
+          // Get updated BMS data thread-safely
+          STR_BMS_TELEMETRY_140 currentBmsData = getBMSDataThreadSafe();
+          if (currentBmsData.bmsState == TelemetryState::CONNECTED) {
+            xQueueOverwrite(bmsTelemetryQueue, &currentBmsData);
           } else {
             bmsTelemetryData.bmsState = TelemetryState::NOT_CONNECTED;
           }
@@ -420,30 +449,38 @@ void spiCommTask(void *pvParameters) {
         clearDisconnectedComponentAlerts();
 
         // 2. Use BMS data if connected, otherwise use ESC data
-        if (bmsTelemetryData.bmsState == TelemetryState::CONNECTED) {
+        UnifiedBatteryData currentUnifiedData = getUnifiedBatteryDataThreadSafe();
+        STR_BMS_TELEMETRY_140 currentBmsData = getBMSDataThreadSafe();
+        STR_ESC_TELEMETRY_140 currentEscData = getESCDataThreadSafe();
+        
+        if (currentBmsData.bmsState == TelemetryState::CONNECTED) {
           // BMS is initialized AND currently connected
-          unifiedBatteryData.volts = bmsTelemetryData.battery_voltage;
-          unifiedBatteryData.amps = bmsTelemetryData.battery_current;
-          unifiedBatteryData.soc = bmsTelemetryData.soc;
-          unifiedBatteryData.power = bmsTelemetryData.power;
-                    xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);
-        } else if (escTelemetryData.escState == TelemetryState::CONNECTED) {
+          UnifiedBatteryData newUnifiedData = {};
+          newUnifiedData.volts = currentBmsData.battery_voltage;
+          newUnifiedData.amps = currentBmsData.battery_current;
+          newUnifiedData.soc = currentBmsData.soc;
+          newUnifiedData.power = currentBmsData.power;
+          updateUnifiedBatteryDataThreadSafe(newUnifiedData);
+        } else if (currentEscData.escState == TelemetryState::CONNECTED) {
           // BMS is either not initialized OR not currently connected
 
           // Fallback to ESC data for unified view
-          unifiedBatteryData.volts = escTelemetryData.volts;
-          unifiedBatteryData.amps = escTelemetryData.amps;
-          unifiedBatteryData.power = escTelemetryData.amps * escTelemetryData.volts / 1000.0;
-
-          unifiedBatteryData.soc = 0.0;  // We don't estimate SOC from voltage anymore
+          UnifiedBatteryData newUnifiedData = {};
+          newUnifiedData.volts = currentEscData.volts;
+          newUnifiedData.amps = currentEscData.amps;
+          newUnifiedData.power = currentEscData.amps * currentEscData.volts / 1000.0;
+          newUnifiedData.soc = 0.0;  // We don't estimate SOC from voltage anymore
+          updateUnifiedBatteryDataThreadSafe(newUnifiedData);
         } else {  // Not connected to either BMS or ESC, probably USB powered
           // No connection to either BMS or ESC
-          unifiedBatteryData.volts = 0.0;
-          unifiedBatteryData.amps = 0.0;
-          unifiedBatteryData.soc = 0.0;
+          UnifiedBatteryData newUnifiedData = {};
+          newUnifiedData.volts = 0.0;
+          newUnifiedData.amps = 0.0;
+          newUnifiedData.soc = 0.0;
+          updateUnifiedBatteryDataThreadSafe(newUnifiedData);
         }
 
-                // Update display - CS pin management is handled inside refreshDisplay via LVGL mutex
+        // Update display - CS pin management is handled inside refreshDisplay via LVGL mutex
         refreshDisplay();
 
         // Publish latest telemetry snapshot for monitoring
@@ -516,6 +553,33 @@ void setup() {
     USBSerial.println("Error creating LVGL mutex");
   }
 
+  // Initialize thread safety mutexes
+  telemetryMutex = xSemaphoreCreateMutex();
+  if (telemetryMutex == NULL) {
+    USBSerial.println("Error creating telemetry mutex");
+    return;
+  }
+
+  buttonMutex = xSemaphoreCreateMutex();
+  if (buttonMutex == NULL) {
+    USBSerial.println("Error creating button mutex");
+    return;
+  }
+
+  alertStateMutex = xSemaphoreCreateMutex();
+  if (alertStateMutex == NULL) {
+    USBSerial.println("Error creating alert state mutex");
+    return;
+  }
+
+  unifiedDataMutex = xSemaphoreCreateMutex();
+  if (unifiedDataMutex == NULL) {
+    USBSerial.println("Error creating unified data mutex");
+    return;
+  }
+
+  // Initialize global telemetry data
+  initializeGlobalTelemetryData();
   refreshDeviceData();
   printBootMessage();
   setupBarometer();
@@ -559,32 +623,38 @@ void setup() {
   bmsTelemetryQueue = xQueueCreate(1, sizeof(STR_BMS_TELEMETRY_140));
   if (bmsTelemetryQueue == NULL) {
     USBSerial.println("Error creating BMS telemetry queue");
+    return;  // Don't continue if critical queues fail
   }
 
   throttleUpdateQueue = xQueueCreate(1, sizeof(uint16_t));
   if (throttleUpdateQueue == NULL) {
     USBSerial.println("Error creating throttle update queue");
+    return;
   }
 
   escTelemetryQueue = xQueueCreate(1, sizeof(STR_ESC_TELEMETRY_140));
   if (escTelemetryQueue == NULL) {
     USBSerial.println("Error creating ESC telemetry queue");
+    return;
   }
 
   bleStateQueue = xQueueCreate(5, sizeof(BLEStateUpdate));
   if (bleStateQueue == NULL) {
     USBSerial.println("Error creating BLE state queue");
+    return;
   }
 
   deviceStateQueue = xQueueCreate(1, sizeof(uint8_t));
   if (deviceStateQueue == NULL) {
     USBSerial.println("Error creating device state queue");
+    return;
   }
 
   // Snapshot queue for monitoring (size 1)
   telemetrySnapshotQueue = xQueueCreate(1, sizeof(TelemetrySnapshot));
   if (telemetrySnapshotQueue == NULL) {
     USBSerial.println("Error creating telemetry snapshot queue");
+    return;
   }
 
     setupBLE();
@@ -641,36 +711,69 @@ void setup() {
 
 // set up all the main threads/tasks with core 0 affinity
 void setupTasks() {
-  xTaskCreate(blinkLEDTask, "blinkLed", 1536, NULL, 1, &blinkLEDTaskHandle);
-  xTaskCreatePinnedToCore(throttleTask, "throttle", 4096, NULL, 3, &throttleTaskHandle, 0);
-  xTaskCreatePinnedToCore(spiCommTask, "SPIComm", 10096, NULL, 5, &spiCommTaskHandle, 1);
-  xTaskCreate(updateBLETask, "BLE Update Task", 8192, NULL, 1, NULL);
-  xTaskCreate(deviceStateUpdateTask, "State Update Task", 4096, NULL, 1, &deviceStateUpdateTaskHandle);
+  if (xTaskCreate(blinkLEDTask, "blinkLed", 1536, NULL, 1, &blinkLEDTaskHandle) != pdPASS) {
+    USBSerial.println("Error creating blink LED task");
+    return;
+  }
+  
+  if (xTaskCreatePinnedToCore(throttleTask, "throttle", 4096, NULL, 3, &throttleTaskHandle, 0) != pdPASS) {
+    USBSerial.println("Error creating throttle task");
+    return;
+  }
+  
+  if (xTaskCreatePinnedToCore(spiCommTask, "SPIComm", 10096, NULL, 5, &spiCommTaskHandle, 1) != pdPASS) {
+    USBSerial.println("Error creating SPI communication task");
+    return;
+  }
+  
+  if (xTaskCreate(updateBLETask, "BLE Update Task", 8192, NULL, 1, NULL) != pdPASS) {
+    USBSerial.println("Error creating BLE update task");
+    return;
+  }
+  
+  if (xTaskCreate(deviceStateUpdateTask, "State Update Task", 4096, NULL, 1, &deviceStateUpdateTaskHandle) != pdPASS) {
+    USBSerial.println("Error creating device state update task");
+    return;
+  }
+  
   // Create BLE update task with high priority but on core 1
-  xTaskCreatePinnedToCore(bleStateUpdateTask, "BLEStateUpdate", 8192, NULL, 4, &bleStateUpdateTaskHandle, 1);
+  if (xTaskCreatePinnedToCore(bleStateUpdateTask, "BLEStateUpdate", 8192, NULL, 4, &bleStateUpdateTaskHandle, 1) != pdPASS) {
+    USBSerial.println("Error creating BLE state update task");
+    return;
+  }
 
   // Create melody queue
   melodyQueue = xQueueCreate(5, sizeof(MelodyRequest));
+  if (melodyQueue == NULL) {
+    USBSerial.println("Error creating melody queue");
+    return;
+  }
 
   // Create audio task - pin to core 1 to avoid interference with throttle
-  xTaskCreatePinnedToCore(audioTask, "Audio", 2048, NULL, 2, &audioTaskHandle, 1);
+  if (xTaskCreatePinnedToCore(audioTask, "Audio", 2048, NULL, 2, &audioTaskHandle, 1) != pdPASS) {
+    USBSerial.println("Error creating audio task");
+    return;
+  }
 
   // TODO: add watchdog task (based on esc writing to CAN)
   //xTaskCreatePinnedToCore(watchdogTask, "watchdog", 1000, NULL, 5, &watchdogTaskHandle, 0);  // Run on core 0
 
-  xTaskCreate(updateESCBLETask, "ESC BLE Update Task", 8192, NULL, 1, NULL);
+  if (xTaskCreate(updateESCBLETask, "ESC BLE Update Task", 8192, NULL, 1, NULL) != pdPASS) {
+    USBSerial.println("Error creating ESC BLE update task");
+    return;
+  }
 
   // Create WebSerial task
-  xTaskCreate(
-    webSerialTask,
-    "WebSerial",
-    4096,
-    NULL,
-    1,
-    &webSerialTaskHandle);
+  if (xTaskCreate(webSerialTask, "WebSerial", 4096, NULL, 1, &webSerialTaskHandle) != pdPASS) {
+    USBSerial.println("Error creating WebSerial task");
+    return;
+  }
 
   // Create monitoring task
-  xTaskCreate(monitoringTask, "Monitoring", 4096, NULL, 1, &monitoringTaskHandle);
+  if (xTaskCreate(monitoringTask, "Monitoring", 4096, NULL, 1, &monitoringTaskHandle) != pdPASS) {
+    USBSerial.println("Error creating monitoring task");
+    return;
+  }
 }
 
 void setup140() {
@@ -689,6 +792,13 @@ void setup140() {
 // main loop all work is done in tasks
 void loop() {
   delay(25);
+  
+  // Remove test function call - this was for debugging only
+  // static unsigned long lastTestTime = 0;
+  // if (millis() - lastTestTime > 10000) {  // Every 10 seconds
+  //   lastTestTime = millis();
+  //   testCriticalBorderFlash();
+  // }
 }
 
 void initButtons() {

@@ -2,10 +2,6 @@
 #include "sp140/structs.h"
 #include "sp140/globals.h"
 
-STR_BMS_TELEMETRY_140 bmsTelemetryData = {
-  .bmsState = TelemetryState::NOT_CONNECTED
-};
-
 // Initialize bms_can as nullptr, to be set in initBMSCAN
 BMS_CAN* bms_can = nullptr;
 
@@ -18,7 +14,41 @@ extern int8_t bmsCS;
 // Update BMS data and populate unified battery data
 void updateBMSData() {
   // Check if BMS is currently connected and the object exists
-  if (bms_can == nullptr || !bmsCanInitialized) return;
+  if (bms_can == nullptr || !bmsCanInitialized) {
+    // BMS not connected - update with sentinel values
+    STR_BMS_TELEMETRY_140 newBmsData = {};
+    newBmsData.bmsState = TelemetryState::NOT_CONNECTED;
+    
+    // Set sentinel values for all numeric fields
+    newBmsData.soc = -1.0f;
+    newBmsData.battery_voltage = -1.0f;
+    newBmsData.battery_current = -1.0f;
+    newBmsData.power = -1.0f;
+    newBmsData.highest_cell_voltage = -1.0f;
+    newBmsData.lowest_cell_voltage = -1.0f;
+    newBmsData.highest_temperature = -1.0f;
+    newBmsData.lowest_temperature = -1.0f;
+    newBmsData.voltage_differential = -1.0f;
+    newBmsData.mos_temperature = -1.0f;
+    newBmsData.balance_temperature = -1.0f;
+    newBmsData.t1_temperature = -1.0f;
+    newBmsData.t2_temperature = -1.0f;
+    newBmsData.t3_temperature = -1.0f;
+    newBmsData.t4_temperature = -1.0f;
+    
+    // Update the global telemetry data thread-safely
+    updateBMSDataThreadSafe(newBmsData);
+    
+    // Update unified battery data with sentinel values
+    UnifiedBatteryData newUnifiedData = {};
+    newUnifiedData.volts = -1.0f;
+    newUnifiedData.amps = -1.0f;
+    newUnifiedData.soc = -1.0f;
+    newUnifiedData.power = -1.0f;
+    updateUnifiedBatteryDataThreadSafe(newUnifiedData);
+    
+    return;
+  }
 
   // TODO track bms incrementing cycle count
   // Ensure display CS is deselected and BMS CS is selected
@@ -28,48 +58,64 @@ void updateBMSData() {
   // USBSerial.println("Updating BMS Data");
   bms_can->update();
 
+  // Create a local copy of the telemetry data
+  STR_BMS_TELEMETRY_140 newBmsData = {};
+
   // Basic measurements
-  bmsTelemetryData.battery_voltage = bms_can->getBatteryVoltage();
-  bmsTelemetryData.battery_current = bms_can->getBatteryCurrent();
-  bmsTelemetryData.soc = bms_can->getSOC();
-  bmsTelemetryData.power = bms_can->getPower();
+  newBmsData.battery_voltage = bms_can->getBatteryVoltage();
+  newBmsData.battery_current = bms_can->getBatteryCurrent();
+  newBmsData.soc = bms_can->getSOC();
+  newBmsData.power = bms_can->getPower();
 
   // Cell voltages
-  bmsTelemetryData.highest_cell_voltage = bms_can->getHighestCellVoltage();
-  bmsTelemetryData.lowest_cell_voltage = bms_can->getLowestCellVoltage();
+  newBmsData.highest_cell_voltage = bms_can->getHighestCellVoltage();
+  newBmsData.lowest_cell_voltage = bms_can->getLowestCellVoltage();
 
   // Calculated highest cell minus lowest cell voltage
-  bmsTelemetryData.voltage_differential = bms_can->getHighestCellVoltage() - bms_can->getLowestCellVoltage();
+  newBmsData.voltage_differential = bms_can->getHighestCellVoltage() - bms_can->getLowestCellVoltage();
 
   // Temperature readings
-  bmsTelemetryData.highest_temperature = bms_can->getHighestTemperature();
-  bmsTelemetryData.lowest_temperature = bms_can->getLowestTemperature();
+  newBmsData.highest_temperature = bms_can->getHighestTemperature();
+  newBmsData.lowest_temperature = bms_can->getLowestTemperature();
 
   // Battery statistics
-  bmsTelemetryData.battery_cycle = bms_can->getBatteryCycle();
-  bmsTelemetryData.energy_cycle = bms_can->getEnergyCycle();
-  bmsTelemetryData.battery_failure_level = bms_can->getBatteryFailureLevel();
+  newBmsData.battery_cycle = bms_can->getBatteryCycle();
+  newBmsData.energy_cycle = bms_can->getEnergyCycle();
+  newBmsData.battery_failure_level = bms_can->getBatteryFailureLevel();
 
   // Battery status
-  bmsTelemetryData.is_charging = bms_can->isBatteryCharging();
-  bmsTelemetryData.is_charge_mos = bms_can->isChargeMOSStatus();
-  bmsTelemetryData.is_discharge_mos = bms_can->isDischargeMOSStatus();
+  newBmsData.is_charging = bms_can->isBatteryCharging();
+  newBmsData.is_charge_mos = bms_can->isChargeMOSStatus();
+  newBmsData.is_discharge_mos = bms_can->isDischargeMOSStatus();
+
+  // Set connection state
+  newBmsData.bmsState = TelemetryState::CONNECTED;
 
   // Populate individual cell voltages
   for (uint8_t i = 0; i < BMS_CELLS_NUM; i++) {
-    bmsTelemetryData.cell_voltages[i] = bms_can->getCellVoltage(i);
+    newBmsData.cell_voltages[i] = bms_can->getCellVoltage(i);
   }
 
   // Populate individual temperature sensors
-  bmsTelemetryData.mos_temperature = bms_can->getTemperature(0);      // BMS MOSFET
-  bmsTelemetryData.balance_temperature = bms_can->getTemperature(1);  // BMS Balance resistors
-  bmsTelemetryData.t1_temperature = bms_can->getTemperature(2);       // Cell probe 1
-  bmsTelemetryData.t2_temperature = bms_can->getTemperature(3);       // Cell probe 2
-  bmsTelemetryData.t3_temperature = bms_can->getTemperature(4);       // Cell probe 3
-  bmsTelemetryData.t4_temperature = bms_can->getTemperature(5);       // Cell probe 4
+  newBmsData.mos_temperature = bms_can->getTemperature(0);      // BMS MOSFET
+  newBmsData.balance_temperature = bms_can->getTemperature(1);  // BMS Balance resistors
+  newBmsData.t1_temperature = bms_can->getTemperature(2);       // Cell probe 1
+  newBmsData.t2_temperature = bms_can->getTemperature(3);       // Cell probe 2
+  newBmsData.t3_temperature = bms_can->getTemperature(4);       // Cell probe 3
+  newBmsData.t4_temperature = bms_can->getTemperature(5);       // Cell probe 4
 
-  bmsTelemetryData.lastUpdateMs = millis();
-  // printBMSData();
+  newBmsData.lastUpdateMs = millis();
+
+  // Update the global telemetry data thread-safely
+  updateBMSDataThreadSafe(newBmsData);
+
+  // Update unified battery data thread-safely
+  UnifiedBatteryData newUnifiedData = {};
+  newUnifiedData.volts = newBmsData.battery_voltage;
+  newUnifiedData.amps = newBmsData.battery_current;
+  newUnifiedData.soc = newBmsData.soc;
+  newUnifiedData.power = newBmsData.power;
+  updateUnifiedBatteryDataThreadSafe(newUnifiedData);
 
   // Deselect BMS CS when done
   digitalWrite(bmsCS, HIGH);

@@ -10,89 +10,99 @@ extern MultiLogger multiLogger;
 extern STR_BMS_TELEMETRY_140 monitoringBmsData;
 
 void addBMSMonitors() {
-  // BMS MOSFET Temperature (Warning: 50°C, Critical: 60°C)
+  // BMS MOSFET Temperature (Warning: 50°C, Critical: 60°C) - 1°C hysteresis
   static SensorMonitor* bmsMosTemp = new SensorMonitor(
     SensorID::BMS_MOS_Temp,
     bmsTempThresholds,
     []() { return monitoringBmsData.mos_temperature; },
-    &multiLogger);
+    &multiLogger,
+    1.0f);  // 1°C hysteresis for temperature sensors
   monitors.push_back(bmsMosTemp);
 
-  // BMS Balance Resistor Temperature (Warning: 50°C, Critical: 60°C)
+  // BMS Balance Resistor Temperature (Warning: 50°C, Critical: 60°C) - 1°C hysteresis
   static SensorMonitor* bmsBalanceTemp = new SensorMonitor(
     SensorID::BMS_Balance_Temp,
     bmsTempThresholds,
     []() { return monitoringBmsData.balance_temperature; },
-    &multiLogger);
+    &multiLogger,
+    1.0f);  // 1°C hysteresis
   monitors.push_back(bmsBalanceTemp);
 
-  // T1-T4 Cell Temperature Sensors (Warning: 50°C, Critical: 56°C)
+  // T1-T4 Cell Temperature Sensors (Warning: 50°C, Critical: 56°C) - 1°C hysteresis
   static SensorMonitor* bmsT1Temp = new SensorMonitor(
     SensorID::BMS_T1_Temp,
     bmsCellTempThresholds,
     []() { return monitoringBmsData.t1_temperature; },
-    &multiLogger);
+    &multiLogger,
+    1.0f);  // 1°C hysteresis
   monitors.push_back(bmsT1Temp);
 
   static SensorMonitor* bmsT2Temp = new SensorMonitor(
     SensorID::BMS_T2_Temp,
     bmsCellTempThresholds,
     []() { return monitoringBmsData.t2_temperature; },
-    &multiLogger);
+    &multiLogger,
+    1.0f);  // 1°C hysteresis
   monitors.push_back(bmsT2Temp);
 
   static SensorMonitor* bmsT3Temp = new SensorMonitor(
     SensorID::BMS_T3_Temp,
     bmsCellTempThresholds,
     []() { return monitoringBmsData.t3_temperature; },
-    &multiLogger);
+    &multiLogger,
+    1.0f);  // 1°C hysteresis
   monitors.push_back(bmsT3Temp);
 
   static SensorMonitor* bmsT4Temp = new SensorMonitor(
     SensorID::BMS_T4_Temp,
     bmsCellTempThresholds,
     []() { return monitoringBmsData.t4_temperature; },
-    &multiLogger);
+    &multiLogger,
+    1.0f);  // 1°C hysteresis
   monitors.push_back(bmsT4Temp);
 
-  // High Cell Voltage (Warn: 4.1V, Crit: 4.2V)
+  // High Cell Voltage (Warn: 4.1V, Crit: 4.2V) - 0.05V hysteresis
   static SensorMonitor* bmsHighCellVoltage = new SensorMonitor(
     SensorID::BMS_High_Cell_Voltage,
     bmsHighCellVoltageThresholds,
     []() { return monitoringBmsData.highest_cell_voltage; },
-    &multiLogger);
+    &multiLogger,
+    0.05f);  // 0.05V hysteresis for voltage sensors
   monitors.push_back(bmsHighCellVoltage);
 
-  // Low Cell Voltage (Warn: 3.2V, Crit: 3.0V)
+  // Low Cell Voltage (Warn: 3.2V, Crit: 3.0V) - 0.05V hysteresis
   static SensorMonitor* bmsLowCellVoltage = new SensorMonitor(
     SensorID::BMS_Low_Cell_Voltage,
     bmsLowCellVoltageThresholds,
     []() { return monitoringBmsData.lowest_cell_voltage; },
-    &multiLogger);
+    &multiLogger,
+    0.05f);  // 0.05V hysteresis
   monitors.push_back(bmsLowCellVoltage);
 
-  // State of Charge (Warn: 15%, Crit: 5%)
+  // State of Charge (Warn: 15%, Crit: 5%) - No hysteresis needed for SOC
   static SensorMonitor* bmsSoc = new SensorMonitor(
     SensorID::BMS_SOC,
     bmsSOCThresholds,
     []() { return monitoringBmsData.soc; },
-    &multiLogger);
+    &multiLogger);  // Use default constructor (no hysteresis)
   monitors.push_back(bmsSoc);
 
-  // Total Voltage (Low - Warn: 79.2V, Crit: 69.6V | High - Warn: 100.4V, Crit: 100.8V)
+  // Total Voltage (Low - Warn: 79.2V, Crit: 69.6V | High - Warn: 100.4V, Crit: 100.8V) - 1V hysteresis
   static SensorMonitor* bmsTotalVoltage = new SensorMonitor(
     SensorID::BMS_Total_Voltage,
     bmsTotalVoltageThresholds,
     []() { return monitoringBmsData.battery_voltage; },
-    &multiLogger);
+    &multiLogger,
+    1.0f);  // 1V hysteresis for total voltage
   monitors.push_back(bmsTotalVoltage);
 
-  // Voltage Differential (Warn: 0.20V, Crit: 0.40V)
+  // Voltage Differential (Warn: 0.20V, Crit: 0.40V) - 0.02V hysteresis
   static SensorMonitor* bmsVoltageDifferential = new SensorMonitor(
     SensorID::BMS_Voltage_Differential,
     bmsVoltageDifferentialThresholds,
     []() { return monitoringBmsData.voltage_differential; },
-    &multiLogger);
+    &multiLogger,
+    0.02f);  // 0.02V hysteresis for voltage differential
   monitors.push_back(bmsVoltageDifferential);
 
   // Charge MOS (Alert when OFF)

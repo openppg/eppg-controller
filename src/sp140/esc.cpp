@@ -16,13 +16,6 @@ static uint8_t memory_pool[1024] __attribute__((aligned(8)));
 static SineEsc esc(adapter);
 static unsigned long lastSuccessfulCommTimeMs = 0;  // Store millis() time of last successful ESC comm
 
-
-STR_ESC_TELEMETRY_140 escTelemetryData = {
-  .escState = TelemetryState::NOT_CONNECTED,
-  .running_error = 0,
-  .selfcheck_error = 0
-};
-
 /**
  * Initialize the ESC communication system
  * Sets up the CAN bus (TWAI) interface and configures the ESC with default settings
@@ -74,8 +67,11 @@ void readESCTelemetry() {
   // Only proceed if TWAI is initialized
   if (!escTwaiInitialized) { return; }  // NOLINT(whitespace/newline)
 
+  // Get current telemetry data thread-safely
+  STR_ESC_TELEMETRY_140 currentEscData = getESCDataThreadSafe();
+  
   // Store the last known ESC timestamp before checking for new data
-  unsigned long previousEscReportedTimeMs = escTelemetryData.lastUpdateMs;
+  unsigned long previousEscReportedTimeMs = currentEscData.lastUpdateMs;
 
   const SineEscModel &model = esc.getModel();
 
@@ -86,37 +82,53 @@ void readESCTelemetry() {
 
     // Check if the timestamp from the ESC has actually changed
     if (newEscReportedTimeMs != previousEscReportedTimeMs) {
+      // Create a new telemetry data structure
+      STR_ESC_TELEMETRY_140 newEscData = currentEscData;
+      
       // Timestamp is new, process the telemetry data
-      escTelemetryData.lastUpdateMs = newEscReportedTimeMs;
+      newEscData.lastUpdateMs = newEscReportedTimeMs;
 
       // Update telemetry data
-      escTelemetryData.volts = res->voltage / 10.0f;
-      escTelemetryData.amps = res->bus_current / 10.0f;
-      escTelemetryData.mos_temp = res->mos_temp / 10.0f;
-      escTelemetryData.cap_temp = res->cap_temp / 10.0f;
-      escTelemetryData.mcu_temp = res->mcu_temp / 10.0f;
-      escTelemetryData.motor_temp = res->motor_temp / 10.0f;
-      escTelemetryData.eRPM = res->speed;
-      escTelemetryData.inPWM = res->recv_pwm / 10.0f;
-      watts = escTelemetryData.amps * escTelemetryData.volts;
+      newEscData.volts = res->voltage / 10.0f;
+      newEscData.amps = res->bus_current / 10.0f;
+      newEscData.mos_temp = res->mos_temp / 10.0f;
+      newEscData.cap_temp = res->cap_temp / 10.0f;
+      newEscData.mcu_temp = res->mcu_temp / 10.0f;
+      newEscData.motor_temp = res->motor_temp / 10.0f;
+      newEscData.eRPM = res->speed;
+      newEscData.inPWM = res->recv_pwm / 10.0f;
 
       // Store error bitmasks
-      escTelemetryData.running_error = res->running_error;
-      escTelemetryData.selfcheck_error = res->selfcheck_error;
+      newEscData.running_error = res->running_error;
+      newEscData.selfcheck_error = res->selfcheck_error;
 
       // Temperature states
-      escTelemetryData.mos_state = checkTempState(escTelemetryData.mos_temp, COMP_ESC_MOS);
-      escTelemetryData.mcu_state = checkTempState(escTelemetryData.mcu_temp, COMP_ESC_MCU);
-      escTelemetryData.cap_state = checkTempState(escTelemetryData.cap_temp, COMP_ESC_CAP);
-      escTelemetryData.motor_state = checkTempState(escTelemetryData.motor_temp, COMP_MOTOR);
-      escTelemetryData.temp_sensor_error =
-        (escTelemetryData.mos_state == TEMP_INVALID) ||
-        (escTelemetryData.mcu_state == TEMP_INVALID) ||
-        (escTelemetryData.cap_state == TEMP_INVALID) ||
-        (escTelemetryData.motor_state == TEMP_INVALID);
+      newEscData.mos_state = checkTempState(newEscData.mos_temp, COMP_ESC_MOS);
+      newEscData.mcu_state = checkTempState(newEscData.mcu_temp, COMP_ESC_MCU);
+      newEscData.cap_state = checkTempState(newEscData.cap_temp, COMP_ESC_CAP);
+      newEscData.motor_state = checkTempState(newEscData.motor_temp, COMP_MOTOR);
+      newEscData.temp_sensor_error =
+        (newEscData.mos_state == TEMP_INVALID) ||
+        (newEscData.mcu_state == TEMP_INVALID) ||
+        (newEscData.cap_state == TEMP_INVALID) ||
+        (newEscData.motor_state == TEMP_INVALID);
 
       // Record the time of this successful communication using the local clock
       lastSuccessfulCommTimeMs = millis();
+      
+      // Update the global telemetry data thread-safely
+      updateESCDataThreadSafe(newEscData);
+      
+      // Update unified battery data if ESC is the primary source
+      UnifiedBatteryData currentUnifiedData = getUnifiedBatteryDataThreadSafe();
+      if (currentUnifiedData.volts == 0.0f) {  // Only update if BMS data not available
+        UnifiedBatteryData newUnifiedData = {};
+        newUnifiedData.volts = newEscData.volts;
+        newUnifiedData.amps = newEscData.amps;
+        newUnifiedData.power = newEscData.amps * newEscData.volts / 1000.0f;
+        newUnifiedData.soc = 0.0f;  // ESC doesn't provide SOC
+        updateUnifiedBatteryDataThreadSafe(newUnifiedData);
+      }
     }  // else: Timestamp hasn't changed, treat as stale data, don't update local timer or telemetry
 
   } else {
@@ -126,18 +138,44 @@ void readESCTelemetry() {
 
   // Update connection state based on time since last successful communication
   unsigned long currentTimeMs = millis();
+  STR_ESC_TELEMETRY_140 updatedEscData = getESCDataThreadSafe();
+  
   if (lastSuccessfulCommTimeMs == 0 || (currentTimeMs - lastSuccessfulCommTimeMs) > TELEMETRY_TIMEOUT_MS) {
-    if (escTelemetryData.escState != TelemetryState::NOT_CONNECTED) {
+    if (updatedEscData.escState != TelemetryState::NOT_CONNECTED) {
       // Log state change only if it actually changed
-      USBSerial.printf("ESC State: %d -> NOT_CONNECTED (Timeout)\n", escTelemetryData.escState);
-      escTelemetryData.escState = TelemetryState::NOT_CONNECTED;
-      // Optional: Consider resetting telemetry values here if needed when disconnected
+      USBSerial.printf("ESC State: %d -> NOT_CONNECTED (Timeout)\n", updatedEscData.escState);
+      updatedEscData.escState = TelemetryState::NOT_CONNECTED;
+      
+      // Set sentinel values for all numeric fields when disconnected
+      updatedEscData.volts = -1.0f;
+      updatedEscData.amps = -1.0f;
+      updatedEscData.mos_temp = -1.0f;
+      updatedEscData.cap_temp = -1.0f;
+      updatedEscData.mcu_temp = -1.0f;
+      updatedEscData.motor_temp = -1.0f;
+      updatedEscData.eRPM = -1.0f;
+      updatedEscData.inPWM = -1.0f;
+      updatedEscData.outPWM = -1.0f;
+      
+      updateESCDataThreadSafe(updatedEscData);
+      
+      // Update unified battery data with sentinel values if ESC was the primary source
+      UnifiedBatteryData currentUnifiedData = getUnifiedBatteryDataThreadSafe();
+      if (currentUnifiedData.volts == 0.0f || currentUnifiedData.volts > 0.0f) {  // Update if BMS not available or ESC was source
+        UnifiedBatteryData newUnifiedData = {};
+        newUnifiedData.volts = -1.0f;
+        newUnifiedData.amps = -1.0f;
+        newUnifiedData.power = -1.0f;
+        newUnifiedData.soc = -1.0f;
+        updateUnifiedBatteryDataThreadSafe(newUnifiedData);
+      }
     }
   } else {
-    if (escTelemetryData.escState != TelemetryState::CONNECTED) {
+    if (updatedEscData.escState != TelemetryState::CONNECTED) {
       // Log state change only if it actually changed
-      USBSerial.printf("ESC State: %d -> CONNECTED\n", escTelemetryData.escState);
-      escTelemetryData.escState = TelemetryState::CONNECTED;
+      USBSerial.printf("ESC State: %d -> CONNECTED\n", updatedEscData.escState);
+      updatedEscData.escState = TelemetryState::CONNECTED;
+      updateESCDataThreadSafe(updatedEscData);
     }
   }
 

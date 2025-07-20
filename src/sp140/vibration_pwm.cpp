@@ -66,18 +66,19 @@ bool initVibeMotor() {
   // Create vibration queue
   vibeQueue = xQueueCreate(5, sizeof(VibeRequest));
   if (vibeQueue == NULL) {
+    USBSerial.println("Error: Failed to create vibration queue");
     return false;
   }
 
   // Create vibration task - pin to core 1 to keep it away from throttle task
-  xTaskCreatePinnedToCore(vibeTask, "Vibration", 2048, NULL, 2, &vibeTaskHandle, 1);
-  if (vibeTaskHandle == NULL) {
+  if (xTaskCreatePinnedToCore(vibeTask, "Vibration", 2048, NULL, 2, &vibeTaskHandle, 1) != pdPASS) {
+    USBSerial.println("Error: Failed to create vibration task");
     return false;
   }
 
   // Create critical vibration task - also pin to core 1, lower priority
-  xTaskCreatePinnedToCore(criticalVibeTask, "CriticalVibe", 2048, NULL, 1, &criticalVibeTaskHandle, 1);
-  if (criticalVibeTaskHandle == NULL) {
+  if (xTaskCreatePinnedToCore(criticalVibeTask, "CriticalVibe", 2048, NULL, 1, &criticalVibeTaskHandle, 1) != pdPASS) {
+    USBSerial.println("Error: Failed to create critical vibration task");
     return false;
   }
 

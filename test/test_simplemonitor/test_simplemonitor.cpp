@@ -377,6 +377,53 @@ TEST(SimpleMonitor, ESCTemperatureAlerts) {
     EXPECT_EQ(logger.entries.back().lvl, AlertLevel::CRIT_LOW);
 }
 
+TEST(SimpleMonitor, HysteresisPreventsAlertSpam) {
+  FakeLogger logger;
+  
+  // Create a monitor with 2°C hysteresis around 90°C warning threshold
+  Thresholds tempThresholds = {.warnLow = -10, .warnHigh = 90, .critLow = -20, .critHigh = 110};
+  float fakeTemp = 85.0f;  // Start below threshold
+  SensorMonitor tempMonitor(SensorID::ESC_MOS_Temp, tempThresholds, [&]() { return fakeTemp; }, &logger, 2.0f);
+
+  // 1. Initial check - should be OK, no log
+  tempMonitor.check();
+  EXPECT_TRUE(logger.entries.empty());
+
+  // 2. Cross threshold to warning - should trigger alert
+  fakeTemp = 91.0f;
+  tempMonitor.check();
+  ASSERT_EQ(logger.entries.size(), 1u);
+  EXPECT_EQ(logger.entries.back().lvl, AlertLevel::WARN_HIGH);
+  EXPECT_EQ(logger.entries.back().fval, 91.0f);
+
+  // 3. Oscillate around threshold - should NOT trigger additional alerts
+  fakeTemp = 89.0f;  // Back below threshold
+  tempMonitor.check();
+  ASSERT_EQ(logger.entries.size(), 1u);  // No new alert
+
+  fakeTemp = 90.5f;  // Back above threshold
+  tempMonitor.check();
+  ASSERT_EQ(logger.entries.size(), 1u);  // No new alert
+
+  fakeTemp = 88.0f;  // Back below threshold
+  tempMonitor.check();
+  ASSERT_EQ(logger.entries.size(), 1u);  // No new alert
+
+  // 4. Move far enough below threshold to clear alert (90 - 2 = 88°C)
+  fakeTemp = 87.0f;  // Below threshold - hysteresis
+  tempMonitor.check();
+  ASSERT_EQ(logger.entries.size(), 2u);  // Should clear alert
+  EXPECT_EQ(logger.entries.back().lvl, AlertLevel::OK);
+  EXPECT_EQ(logger.entries.back().fval, 87.0f);
+
+  // 5. Cross threshold again - should trigger new alert
+  fakeTemp = 91.0f;
+  tempMonitor.check();
+  ASSERT_EQ(logger.entries.size(), 3u);
+  EXPECT_EQ(logger.entries.back().lvl, AlertLevel::WARN_HIGH);
+  EXPECT_EQ(logger.entries.back().fval, 91.0f);
+}
+
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
     RUN_ALL_TESTS();

@@ -27,6 +27,13 @@ struct AlertEvent {
 extern QueueHandle_t alertEventQueue;   // depth ~10
 extern QueueHandle_t alertCountQueue;   // depth 1
 extern QueueHandle_t alertCarouselQueue;  // depth 1, overwrite
+extern QueueHandle_t alertDisplayQueue;   // depth 1, overwrite
+extern QueueHandle_t criticalBorderQueue;  // depth 1, overwrite - for critical border control
+
+// Message for critical border control
+struct CriticalBorderMsg {
+  bool show;  // true = start flashing, false = stop flashing
+};
 
 // Message for UI to show a single alert text (or hide)
 struct AlertDisplayMsg {
@@ -35,8 +42,6 @@ struct AlertDisplayMsg {
   bool critical;     // true = critical colouring
   bool show;         // false = hide label
 };
-
-extern QueueHandle_t alertDisplayQueue;   // depth 1, overwrite
 
 // Snapshot for carousel text
 #define MAX_ALERT_ITEMS 8
@@ -65,6 +70,10 @@ void clearDisconnectedComponentAlerts();
 
 // Function to trigger sensor re-evaluation for reconnected components
 void triggerSensorReevaluation(bool bms, bool esc);
+
+// Test function to manually trigger critical border flashing
+void testCriticalBorderFlash();
+
 
 // ILogger sink that pushes events to the alert queue (for UI)
 struct AlertUILogger : ILogger {

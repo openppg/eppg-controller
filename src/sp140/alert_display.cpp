@@ -13,6 +13,7 @@ QueueHandle_t alertEventQueue = NULL;
 QueueHandle_t alertCountQueue = NULL;
 QueueHandle_t alertCarouselQueue = NULL;
 QueueHandle_t alertDisplayQueue = NULL;
+QueueHandle_t criticalBorderQueue = NULL;  // New queue for critical border control
 TaskHandle_t alertAggregationTaskHandle = NULL;
 
 // Internal state: current alert levels per sensor
@@ -52,9 +53,6 @@ static bool isSensorFromConnectedComponent(SensorID sensorId) {
     case SensorID::BMS_Charge_MOS:
     case SensorID::BMS_Discharge_MOS:
       isConnected = (bmsTelemetryData.bmsState == TelemetryState::CONNECTED);
-      if (!isConnected) {
-        USBSerial.printf("[AlertDisplay] Filtering BMS alert for %s - BMS not connected\n", sensorIDToString(sensorId));
-      }
       return isConnected;
       
     // ESC sensors - only alert if ESC is connected
@@ -83,9 +81,6 @@ static bool isSensorFromConnectedComponent(SensorID sensorId) {
     case SensorID::ESC_SwHwIncompat_Error:
     case SensorID::ESC_BootloaderBad_Error:
       isConnected = (escTelemetryData.escState == TelemetryState::CONNECTED);
-      if (!isConnected) {
-        USBSerial.printf("[AlertDisplay] Filtering ESC alert for %s - ESC not connected\n", sensorIDToString(sensorId));
-      }
       return isConnected;
       
     // Internal sensors - always alert (no connection dependency)
@@ -105,15 +100,18 @@ void initAlertDisplay() {
   alertCountQueue  = xQueueCreate(1,  sizeof(AlertCounts));
   alertCarouselQueue = xQueueCreate(1, sizeof(AlertSnapshot));
   alertDisplayQueue = xQueueCreate(1, sizeof(AlertDisplayMsg)); // New queue for display rotation
+  criticalBorderQueue = xQueueCreate(1, sizeof(bool)); // New queue for critical border control
 
-  if (!alertEventQueue || !alertCountQueue || !alertCarouselQueue || !alertDisplayQueue) {
-    USBSerial.println("[AlertDisplay] Failed creating queues");
+  if (!alertEventQueue || !alertCountQueue || !alertCarouselQueue || !alertDisplayQueue || !criticalBorderQueue) {
+    USBSerial.println("Error: Failed to create alert display queues");
     return;
   }
 
-  // Create aggregation task (low priority)
-  xTaskCreate(alertAggregationTask, "AlertAgg", 3072, NULL, 1, &alertAggregationTaskHandle);
-  USBSerial.println("[AlertDisplay] Init complete");
+  // Create aggregation task (increased priority for better responsiveness)
+  if (xTaskCreate(alertAggregationTask, "AlertAgg", 3072, NULL, 3, &alertAggregationTaskHandle) != pdPASS) {
+    USBSerial.println("Error: Failed to create alert aggregation task");
+    return;
+  }
 }
 
 void sendAlertEvent(SensorID id, AlertLevel level) {
@@ -150,9 +148,6 @@ void clearDisconnectedComponentAlerts() {
       AlertEvent ev{ sensorId, AlertLevel::OK, millis() };
       xQueueSend(alertEventQueue, &ev, 0);
     }
-    
-    // Debug output
-    USBSerial.println("[AlertDisplay] Cleared BMS alerts - BMS disconnected");
   }
   
   // Check for ESC alerts to clear if ESC is disconnected
@@ -177,21 +172,16 @@ void clearDisconnectedComponentAlerts() {
       AlertEvent ev{ sensorId, AlertLevel::OK, millis() };
       xQueueSend(alertEventQueue, &ev, 0);
     }
-    
-    // Debug output
-    USBSerial.println("[AlertDisplay] Cleared ESC alerts - ESC disconnected");
   }
   
   // Check for reconnections and trigger sensor re-evaluation
   if (bmsCurrentlyConnected && !bmsWasConnected) {
     // BMS just reconnected - trigger re-evaluation of all BMS sensors
-    USBSerial.println("[AlertDisplay] BMS reconnected - triggering sensor re-evaluation");
     triggerSensorReevaluation(true, false);  // BMS only
   }
   
   if (escCurrentlyConnected && !escWasConnected) {
     // ESC just reconnected - trigger re-evaluation of all ESC sensors
-    USBSerial.println("[AlertDisplay] ESC reconnected - triggering sensor re-evaluation");
     triggerSensorReevaluation(false, true);  // ESC only
   }
   
@@ -208,18 +198,34 @@ void triggerSensorReevaluation(bool bms, bool esc) {
     
     // Then trigger a full sensor check
     checkAllSensors();
-    
-    USBSerial.printf("[AlertDisplay] Triggered sensor re-evaluation - BMS: %s, ESC: %s\n", 
-                     bms ? "yes" : "no", esc ? "yes" : "no");
   }
 }
+
+// Test function to manually trigger critical border flashing
+void testCriticalBorderFlash() {
+  USBSerial.println("Testing critical border flash...");
+  
+  // Simulate a critical alert by sending an alert event
+  sendAlertEvent(SensorID::ESC_MOS_Temp, AlertLevel::CRIT_HIGH);
+  
+  // Wait a moment for the alert to be processed
+  vTaskDelay(pdMS_TO_TICKS(100));
+  
+  // Check if critical border is flashing
+  if (isCriticalBorderFlashing()) {
+    USBSerial.println("Critical border flash test: SUCCESS - border is flashing");
+  } else {
+    USBSerial.println("Critical border flash test: FAILED - border is not flashing");
+  }
+}
+
 
 // ------------ Internal implementation -------------
 static void alertAggregationTask(void* parameter) {
   AlertEvent ev;
   for (;;) {
-    // Wait up to 500ms for new event
-    if (xQueueReceive(alertEventQueue, &ev, pdMS_TO_TICKS(500)) == pdTRUE) {
+    // Wait up to 200ms for new event (reduced from 500ms for better responsiveness)
+    if (xQueueReceive(alertEventQueue, &ev, pdMS_TO_TICKS(200)) == pdTRUE) {
       // Update current levels map
       if (ev.level == AlertLevel::OK) {
         g_currentLevels.erase(ev.sensorId);
@@ -257,6 +263,9 @@ static void alertAggregationTask(void* parameter) {
         hideSent = true;
       }
     }
+    
+    // Small delay to prevent task starvation
+    vTaskDelay(pdMS_TO_TICKS(10));
   }
 }
 
@@ -343,15 +352,27 @@ static void recalcCountsAndPublish() {
  * Handle vibration alerts based on state transitions
  */
 static void handleAlertVibration(const AlertCounts& newCounts, const AlertCounts& previousCounts) {
+  // Only process if there are actual changes to avoid unnecessary work
+  if (newCounts.criticalCount == previousCounts.criticalCount && 
+      newCounts.warningCount == previousCounts.warningCount) {
+    return;
+  }
+  
   if (newCounts.criticalCount > 0) {
     // Start continuous vibration for critical alerts (if not already active)
     if (!isCriticalVibrationActive()) {
       startCriticalVibration();
     }
     
-    // Start critical border flashing (if not already active)
+    // Send critical border start message via queue (if not already active)
     if (!isCriticalBorderFlashing()) {
-      startCriticalBorderFlash();
+      bool showBorder = true;
+      if (criticalBorderQueue) {
+        xQueueOverwrite(criticalBorderQueue, &showBorder);
+        // USBSerial.println("Critical border: Sending START message via queue");  // Reduced debug output
+      } else {
+        USBSerial.println("Critical border: Queue is NULL, cannot send START message");
+      }
     }
   } else {
     // Stop critical vibration if no critical alerts remain
@@ -359,9 +380,15 @@ static void handleAlertVibration(const AlertCounts& newCounts, const AlertCounts
       stopCriticalVibration();
     }
     
-    // Stop critical border flashing if no critical alerts remain
+    // Send critical border stop message via queue (if currently active)
     if (isCriticalBorderFlashing()) {
-      stopCriticalBorderFlash();
+      bool showBorder = false;
+      if (criticalBorderQueue) {
+        xQueueOverwrite(criticalBorderQueue, &showBorder);
+        // USBSerial.println("Critical border: Sending STOP message via queue");  // Reduced debug output
+      } else {
+        USBSerial.println("Critical border: Queue is NULL, cannot send STOP message");
+      }
     }
 
     // Handle warning transitions (only when no critical alerts)

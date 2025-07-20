@@ -11,12 +11,13 @@ extern MultiLogger multiLogger;
 extern STR_ESC_TELEMETRY_140 monitoringEscData;
 
 void addESCMonitors() {
-  // ESC MOS Temperature Monitor
+  // ESC MOS Temperature Monitor - Temperature sensors need smaller hysteresis (1°C)
   static SensorMonitor* escMosTemp = new SensorMonitor(
     SensorID::ESC_MOS_Temp,
     escMosTempThresholds,
     []() { return monitoringEscData.mos_temp; },
-    &multiLogger);
+    &multiLogger,
+    1.0f);  // 1°C hysteresis for temperature sensors
   monitors.push_back(escMosTemp);
 
   // ESC MCU Temperature Monitor
@@ -24,7 +25,8 @@ void addESCMonitors() {
     SensorID::ESC_MCU_Temp,
     escMcuTempThresholds,
     []() { return monitoringEscData.mcu_temp; },
-    &multiLogger);
+    &multiLogger,
+    1.0f);  // 1°C hysteresis
   monitors.push_back(escMcuTemp);
 
   // ESC Capacitor Temperature Monitor
@@ -32,7 +34,8 @@ void addESCMonitors() {
     SensorID::ESC_CAP_Temp,
     escCapTempThresholds,
     []() { return monitoringEscData.cap_temp; },
-    &multiLogger);
+    &multiLogger,
+    1.0f);  // 1°C hysteresis
   monitors.push_back(escCapTemp);
 
   // Motor Temperature Monitor
@@ -40,7 +43,8 @@ void addESCMonitors() {
     SensorID::Motor_Temp,
     motorTempThresholds,
     []() { return monitoringEscData.motor_temp; },
-    &multiLogger);
+    &multiLogger,
+    1.0f);  // 1°C hysteresis
   monitors.push_back(motorTemp);
 
   // Individual ESC Running Error Monitors (Critical)

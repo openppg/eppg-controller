@@ -366,7 +366,7 @@ void displayLvglSplash(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
   // Version label
   lv_obj_t* version_label = lv_label_create(splash_screen);
   char version_str[10];
-  snprintf(version_str, sizeof(version_str), "v%d.%d", VERSION_MAJOR, VERSION_MINOR);
+  snprintf(version_str, sizeof(version_str), "V%d.%dB", VERSION_MAJOR, VERSION_MINOR);
   lv_label_set_text(version_label, version_str);
   lv_obj_set_style_text_font(version_label, &lv_font_montserrat_16, 0);
   lv_obj_set_style_text_color(version_label,
@@ -978,9 +978,9 @@ void setupAlertCounterUI(bool darkMode) {
     lv_obj_set_size(warning_counter_circle, CIRCLE_SIZE, CIRCLE_SIZE);
     // Align relative to altitude area (using first altitude character as reference)
     if (altitude_char_labels[0]) {
-      lv_obj_align_to(warning_counter_circle, altitude_char_labels[0], LV_ALIGN_OUT_TOP_LEFT, 0, -2);
+      lv_obj_align_to(warning_counter_circle, altitude_char_labels[0], LV_ALIGN_OUT_TOP_LEFT, 34, -5);
     } else {
-      lv_obj_align(warning_counter_circle, LV_ALIGN_TOP_LEFT, 5, 75);
+      lv_obj_align(warning_counter_circle, LV_ALIGN_TOP_LEFT, 39, 74);
     }
     lv_led_set_color(warning_counter_circle, LVGL_ORANGE);
     lv_led_on(warning_counter_circle);
@@ -1051,6 +1051,23 @@ void updateAlertCounterDisplay(const AlertCounts& counts) {
     }
     lv_label_set_text(warning_counter_label, buf);
     lv_obj_clear_flag(warning_counter_circle, LV_OBJ_FLAG_HIDDEN);
+    
+    // Adjust warning circle position based on whether critical alerts are present
+    if (counts.criticalCount == 0) {
+      // Only warnings - move orange bubble left by 20 pixels
+      if (altitude_char_labels[0]) {
+        lv_obj_align_to(warning_counter_circle, altitude_char_labels[0], LV_ALIGN_OUT_TOP_LEFT, 14, -5);
+      } else {
+        lv_obj_align(warning_counter_circle, LV_ALIGN_TOP_LEFT, 19, 74);
+      }
+    } else {
+      // Critical alerts present - use normal position
+      if (altitude_char_labels[0]) {
+        lv_obj_align_to(warning_counter_circle, altitude_char_labels[0], LV_ALIGN_OUT_TOP_LEFT, 34, -5);
+      } else {
+        lv_obj_align(warning_counter_circle, LV_ALIGN_TOP_LEFT, 39, 74);
+      }
+    }
   } else {
     lv_obj_add_flag(warning_counter_circle, LV_OBJ_FLAG_HIDDEN);
   }
@@ -1107,7 +1124,7 @@ static void cruise_flash_timer_cb(lv_timer_t* timer) {
 
 void startCruiseIconFlash() {
   // This function can be called from other tasks, so protect with mutex
-  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(50)) == pdTRUE) {  // Use a timeout
+  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(10)) == pdTRUE) {  // Reduced timeout from 50ms to 10ms
     if (cruise_icon_img == NULL) {
       xSemaphoreGive(lvglMutex);
       return;  // Can't flash if icon doesn't exist
@@ -1146,7 +1163,7 @@ void startCruiseIconFlash() {
 }
 // --- End Cruise Icon Flashing Implementation ---
 
-// --- Arm Fail Icon Flashing Implementation ---
+// --- Arm Fail Icon Flashing ---
 static void arm_fail_flash_timer_cb(lv_timer_t* timer) {
   // This callback runs within the LVGL task handler, which is already protected by lvglMutex
 
@@ -1185,7 +1202,7 @@ static void arm_fail_flash_timer_cb(lv_timer_t* timer) {
 
 void startArmFailIconFlash() {
   // This function can be called from other tasks, so protect with mutex
-  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(50)) == pdTRUE) {  // Use a timeout
+  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(10)) == pdTRUE) {  // Reduced timeout from 50ms to 10ms
     if (arm_fail_warning_icon_img == NULL) {
       xSemaphoreGive(lvglMutex);
       return;  // Can't flash if icon doesn't exist
@@ -1222,7 +1239,7 @@ void startArmFailIconFlash() {
      USBSerial.println("Warning: Failed to acquire LVGL mutex for startArmFailIconFlash");
   }
 }
-// --- End Arm Fail Icon Flashing Implementation ---
+// --- End Arm Fail Icon Flashing ---
 
 // Update the climb rate indicator
 void updateClimbRateIndicator(float climbRate) {
@@ -1302,15 +1319,19 @@ static void critical_border_flash_timer_cb(lv_timer_t* timer) {
   // Toggle visibility
   if (lv_obj_has_flag(critical_border, LV_OBJ_FLAG_HIDDEN)) {
     lv_obj_clear_flag(critical_border, LV_OBJ_FLAG_HIDDEN);
+    // USBSerial.println("Critical border: Timer callback - made visible");  // Reduced debug output
   } else {
     lv_obj_add_flag(critical_border, LV_OBJ_FLAG_HIDDEN);
+    // USBSerial.println("Critical border: Timer callback - made hidden");  // Reduced debug output
   }
 }
 
 void startCriticalBorderFlash() {
   // This function can be called from other tasks, so protect with mutex
-  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(50)) == pdTRUE) {  // Use a timeout
+  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(10)) == pdTRUE) {  // Reduced timeout from 50ms to 10ms
+    // USBSerial.println("Critical border: startCriticalBorderFlash() - acquired mutex");  // Reduced debug output
     if (critical_border == NULL) {
+      USBSerial.println("Critical border: ERROR - critical_border is NULL");
       xSemaphoreGive(lvglMutex);
       return;  // Can't flash if border doesn't exist
     }
@@ -1319,6 +1340,7 @@ void startCriticalBorderFlash() {
     if (critical_border_flash_timer != NULL) {
       lv_timer_del(critical_border_flash_timer);
       critical_border_flash_timer = NULL;
+      // USBSerial.println("Critical border: Deleted existing flash timer");  // Reduced debug output
     }
 
     // Reset state and start flashing
@@ -1326,6 +1348,7 @@ void startCriticalBorderFlash() {
 
     // Start with the border visible
     lv_obj_clear_flag(critical_border, LV_OBJ_FLAG_HIDDEN);
+    // USBSerial.println("Critical border: Made border visible");  // Reduced debug output
 
     // Create the timer (500ms interval for on/off cycle - matches vibration rate)
     critical_border_flash_timer = lv_timer_create(critical_border_flash_timer_cb, 500, NULL);
@@ -1334,17 +1357,19 @@ void startCriticalBorderFlash() {
       isFlashingCriticalBorder = false;
       lv_obj_add_flag(critical_border, LV_OBJ_FLAG_HIDDEN);  // Hide it again
       USBSerial.println("Error: Failed to create critical border flash timer!");
+    } else {
+      // USBSerial.println("Critical border: Successfully created flash timer");  // Reduced debug output
     }
 
     xSemaphoreGive(lvglMutex);
   } else {
-     USBSerial.println("Warning: Failed to acquire LVGL mutex for startCriticalBorderFlash");
+    USBSerial.println("Failed to acquire LVGL mutex for startCriticalBorderFlash");
   }
 }
 
 void stopCriticalBorderFlash() {
   // This function can be called from other tasks, so protect with mutex
-  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(50)) == pdTRUE) {  // Use a timeout
+  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(10)) == pdTRUE) {  // Reduced timeout from 50ms to 10ms
     if (critical_border_flash_timer != NULL) {
       lv_timer_del(critical_border_flash_timer);
       critical_border_flash_timer = NULL;
@@ -1393,14 +1418,21 @@ void lv_showAlertTextWithLevel(SensorID id, AlertLevel level, bool critical) {
     lv_obj_set_style_text_font(alert_text_label, &lv_font_montserrat_14, 0);
     // Ensure altitude visible during warnings
     setAltitudeVisibility(true);
-    // Re-align warning text next to circles
+    // Re-align warning text next to circles - adjust position based on whether critical alerts are present
     if (warning_counter_circle) {
-      lv_obj_align_to(alert_text_label, warning_counter_circle, LV_ALIGN_OUT_RIGHT_MID, 4, 0);
+      // Check if critical alerts are present by looking at the critical counter circle visibility
+      if (critical_counter_circle && !lv_obj_has_flag(critical_counter_circle, LV_OBJ_FLAG_HIDDEN)) {
+        // Critical alerts present - use normal positioning
+        lv_obj_align_to(alert_text_label, warning_counter_circle, LV_ALIGN_OUT_RIGHT_MID, 4, 0);
+      } else {
+        // Only warnings - move text right by 5 pixels to avoid overlap (was 24, now 9)
+        lv_obj_align_to(alert_text_label, warning_counter_circle, LV_ALIGN_OUT_RIGHT_MID, 9, 0);
+      }
     }
     // Make warning text darker and slightly larger for readability
     lv_obj_set_style_text_font(alert_text_label, &lv_font_montserrat_16, 0);
-    // Dark orange for better readability over light background
-    lv_obj_set_style_text_color(alert_text_label, lv_color_make(200,100,0), 0);
+    // Black text for better readability over light background
+    lv_obj_set_style_text_color(alert_text_label, LVGL_BLACK, 0);
   }
   if (critical) {
     lv_obj_set_style_text_color(alert_text_label, lv_color_make(255,0,0), 0);
@@ -1466,7 +1498,7 @@ void updateLvglMainScreen(
     snprintf(buffer, sizeof(buffer), "%d%%", (int)batteryPercent);
     lv_label_set_text(battery_label, buffer);
     lv_obj_set_style_text_color(battery_label, LVGL_BLACK, 0);
-  } else if (escConnected) {
+  } else if (escConnected && totalVolts > 0) {
     // clear the battery bar, we handle voltage later
     lv_bar_set_value(battery_bar, 0, LV_ANIM_OFF);
   } else {
@@ -1477,7 +1509,7 @@ void updateLvglMainScreen(
 
   // Update left voltage (cell voltage)
   if (voltage_left_label != NULL) {  // Check object exists
-    if (bmsConnected) {
+    if (bmsConnected && lowestCellV > 0) {
         char buffer[10];
         snprintf(buffer, sizeof(buffer), "%2.2fv", lowestCellV);
         lv_label_set_text(voltage_left_label, buffer);
@@ -1495,7 +1527,7 @@ void updateLvglMainScreen(
   // Update right voltage (total voltage)
   // if esc connected, show esc voltage in center of screen
   if (voltage_right_label != NULL && battery_label != NULL) {  // Check objects exist
-    if (bmsConnected) {
+    if (bmsConnected && totalVolts > 0) {
         char buffer[10];
         snprintf(buffer, sizeof(buffer), "%2.0fv", totalVolts);
         lv_label_set_text(voltage_right_label, buffer);
@@ -1511,7 +1543,7 @@ void updateLvglMainScreen(
            lv_obj_set_style_text_color(battery_label, LVGL_BLACK, 0);
         }
 
-    } else if (escConnected) {
+    } else if (escConnected && totalVolts > 0) {
         lv_label_set_text(voltage_right_label, "");
 
         char buffer[10];
@@ -1525,17 +1557,18 @@ void updateLvglMainScreen(
 
   // Update power display with individual character positions
   if (power_char_labels[0] != NULL) {  // Check if power display is initialized
-    if (bmsConnected || escConnected) {
+    if ((bmsConnected || escConnected) && unifiedBatteryData.power > 0) {
         float kWatts = unifiedBatteryData.power;
-
-        // Clear all positions first
-        for (int i = 0; i < 4; i++) {
-          lv_label_set_text(power_char_labels[i], "");
-        }
 
         // Format power to one decimal place (e.g., 12.5)
         int whole_part = static_cast<int>(kWatts);
         int decimal_part = static_cast<int>(round((kWatts - whole_part) * 10));
+        
+        // Handle rounding overflow - if decimal_part becomes 10, increment whole_part
+        if (decimal_part >= 10) {
+          whole_part++;
+          decimal_part = 0;
+        }
 
         // Extract individual digits
         int tens = whole_part / 10;
@@ -1548,6 +1581,8 @@ void updateLvglMainScreen(
         if (tens > 0) {
           snprintf(power_digit_buffers[0], 2, "%d", tens);
           lv_label_set_text(power_char_labels[0], power_digit_buffers[0]);
+        } else {
+          lv_label_set_text(power_char_labels[0], "");
         }
 
         // Ones digit (always show)
@@ -1748,7 +1783,7 @@ void updateLvglMainScreen(
     lv_color_t text_color = darkMode ? LVGL_WHITE : LVGL_BLACK;
     lv_opa_t bg_opacity = LV_OPA_0;  // Default transparent
 
-    if (bmsTelemetry.bmsState == TelemetryState::CONNECTED) {
+    if (bmsTelemetry.bmsState == TelemetryState::CONNECTED && batteryTemp > 0) {
       lv_label_set_text_fmt(batt_temp_label, "%d", static_cast<int>(batteryTemp));
 
       if (batteryTemp >= BATT_TEMP_CRITICAL) {
@@ -1789,7 +1824,7 @@ void updateLvglMainScreen(
     lv_color_t text_color = darkMode ? LVGL_WHITE : LVGL_BLACK;
     lv_opa_t bg_opacity = LV_OPA_0;
 
-    if (escTelemetry.escState == TelemetryState::CONNECTED) {
+    if (escTelemetry.escState == TelemetryState::CONNECTED && escTemp > 0) {
       lv_label_set_text_fmt(esc_temp_label, "%d", static_cast<int>(escTemp));
 
       if (escTemp >= ESC_TEMP_CRITICAL) {

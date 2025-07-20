@@ -8,12 +8,13 @@ extern std::vector<IMonitor*> monitors;
 extern MultiLogger multiLogger;
 
 void addInternalMonitors() {
-  // ESP32-S3 CPU Temperature (Warning: 50°C, Critical: 80°C)
+  // ESP32-S3 CPU Temperature (Warning: 50°C, Critical: 80°C) - 1°C hysteresis
   static SensorMonitor* cpuTemp = new SensorMonitor(
     SensorID::CPU_Temp,
     cpuTempThresholds,
     []() { return temperatureRead(); },
-    &multiLogger);
+    &multiLogger,
+    1.0f);  // 1°C hysteresis for temperature sensors
   monitors.push_back(cpuTemp);
 }
 

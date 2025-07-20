@@ -117,21 +117,69 @@ struct SensorMonitor : public IMonitor {
   std::function<float()> read;
   AlertLevel last;
   ILogger* logger;
+  
+  // Hysteresis support to prevent alert spam
+  static constexpr float DEFAULT_HYSTERESIS = 2.0f;  // Default 2°C/2V hysteresis
+  float hysteresis;
+  bool inHysteresisZone;  // Track if we're in a hysteresis zone
+  AlertLevel lastStableLevel;  // Last stable alert level (outside hysteresis)
 
   // Constructor
-  SensorMonitor(SensorID i, Thresholds t, std::function<float()> r, ILogger* l)
-    : id(i), thr(t), read(r), last(AlertLevel::OK), logger(l) {}
+  SensorMonitor(SensorID i, Thresholds t, std::function<float()> r, ILogger* l, float hyst = DEFAULT_HYSTERESIS)
+    : id(i), thr(t), read(r), last(AlertLevel::OK), logger(l), 
+      hysteresis(hyst), inHysteresisZone(false), lastStableLevel(AlertLevel::OK) {}
 
   void check() override {
     float v = read();
+    
+    // Check for sentinel value (-1.0f) indicating no data available
+    if (v <= -1.0f) {
+      // If we were previously in an alert state, clear it
+      if (last != AlertLevel::OK) {
+        logger->log(id, AlertLevel::OK, v);
+        last = AlertLevel::OK;
+        lastStableLevel = AlertLevel::OK;
+        inHysteresisZone = false;
+      }
+      return;  // Skip processing for sentinel values
+    }
+    
     AlertLevel now = AlertLevel::OK;
 
+    // Determine the alert level based on current value
     if      (v <= thr.critLow)  now = AlertLevel::CRIT_LOW;
     else if (v <= thr.warnLow)  now = AlertLevel::WARN_LOW;
     else if (v >= thr.critHigh) now = AlertLevel::CRIT_HIGH;
     else if (v >= thr.warnHigh) now = AlertLevel::WARN_HIGH;
 
-    if (now != last) {
+    // Apply hysteresis logic
+    bool shouldAlert = false;
+    
+    if (now != AlertLevel::OK) {
+      // We're in an alert state - check if we should trigger
+      if (last == AlertLevel::OK) {
+        // First time entering alert - always trigger
+        shouldAlert = true;
+        lastStableLevel = now;
+      } else if (now != last) {
+        // Level changed - check if it's a significant change
+        if (isSignificantLevelChange(now, last)) {
+          shouldAlert = true;
+          lastStableLevel = now;
+        }
+      }
+    } else {
+      // We're in OK state - check if we should clear the alert
+      if (last != AlertLevel::OK) {
+        // Check if we've moved far enough away from the threshold
+        if (isClearOfThreshold(v)) {
+          shouldAlert = true;
+          lastStableLevel = AlertLevel::OK;
+        }
+      }
+    }
+
+    if (shouldAlert) {
       logger->log(id, now, v);
       last = now;
     }
@@ -139,6 +187,54 @@ struct SensorMonitor : public IMonitor {
   
   void resetState() override {
     last = AlertLevel::OK;  // Reset to force state change detection
+    inHysteresisZone = false;
+    lastStableLevel = AlertLevel::OK;
+  }
+
+private:
+  // Check if the level change is significant enough to trigger an alert
+  bool isSignificantLevelChange(AlertLevel newLevel, AlertLevel oldLevel) {
+    // Always trigger for critical changes
+    if (newLevel == AlertLevel::CRIT_LOW || newLevel == AlertLevel::CRIT_HIGH) {
+      return true;
+    }
+    if (oldLevel == AlertLevel::CRIT_LOW || oldLevel == AlertLevel::CRIT_HIGH) {
+      return true;
+    }
+    
+    // For warning levels, only trigger if moving between warn and OK
+    // (not between warn_low and warn_high)
+    if ((newLevel == AlertLevel::WARN_LOW || newLevel == AlertLevel::WARN_HIGH) &&
+        oldLevel == AlertLevel::OK) {
+      return true;
+    }
+    if (newLevel == AlertLevel::OK &&
+        (oldLevel == AlertLevel::WARN_LOW || oldLevel == AlertLevel::WARN_HIGH)) {
+      return true;
+    }
+    
+    return false;
+  }
+  
+  // Check if the value has moved far enough away from threshold to clear alert
+  bool isClearOfThreshold(float value) {
+    // For high thresholds (warnHigh, critHigh), check if we're below threshold - hysteresis
+    if (last == AlertLevel::WARN_HIGH && value < (thr.warnHigh - hysteresis)) {
+      return true;
+    }
+    if (last == AlertLevel::CRIT_HIGH && value < (thr.critHigh - hysteresis)) {
+      return true;
+    }
+    
+    // For low thresholds (warnLow, critLow), check if we're above threshold + hysteresis
+    if (last == AlertLevel::WARN_LOW && value > (thr.warnLow + hysteresis)) {
+      return true;
+    }
+    if (last == AlertLevel::CRIT_LOW && value > (thr.critLow + hysteresis)) {
+      return true;
+    }
+    
+    return false;
   }
 };
 
