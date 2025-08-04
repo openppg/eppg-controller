@@ -1,0 +1,47 @@
+{
+  "name": "Ubuntu Development Environment",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+
+  "features": {
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.12"
+    },
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20"
+    }
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "platformio.platformio-ide",
+        "ms-vscode.cpptools-extension-pack",
+        "ms-python.python"
+      ],
+      "settings": {
+        "C_Cpp.default.intelliSenseMode": "gcc-x64",
+        "C_Cpp.default.compilerPath": "/usr/bin/gcc",
+        "editor.tabSize": 2,
+        "editor.insertSpaces": true,
+        "files.associations": {
+          "*.ino": "cpp",
+          "*.h": "c",
+          "*.hpp": "cpp"
+        }
+      }
+    }
+  },
+
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+
+  "remoteUser": "vscode",
+
+  "mounts": [
+    "source=/dev,target=/dev,type=bind,consistency=cached"
+  ],
+
+  "runArgs": [
+    "--privileged"
+  ]
+}
