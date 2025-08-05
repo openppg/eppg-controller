@@ -1,8 +1,7 @@
 #include "sp140/vibration_pwm.h"
 #include "Arduino.h"
 #include "sp140/shared-config.h"
-
-const int VIBE_PWM_PIN = 46;  // TODO: move to config
+#include "sp140/esp32s3-config.h"
 const int VIBE_PWM_FREQ = 1000;  // Adjust as needed
 const int VIBE_PWM_RESOLUTION = 8;  // 8-bit resolution
 
@@ -41,8 +40,9 @@ void vibeTask(void* parameter) {
  * @return Returns true if initialization was successful, false otherwise
  */
 bool initVibeMotor() {
+  extern HardwareConfig board_config;
   ledcSetup(VIBE_PWM_CHANNEL, VIBE_PWM_FREQ, VIBE_PWM_RESOLUTION);
-  ledcAttachPin(VIBE_PWM_PIN, VIBE_PWM_CHANNEL);
+  ledcAttachPin(board_config.vibe_pwm, VIBE_PWM_CHANNEL);
 
   // Create vibration queue
   vibeQueue = xQueueCreate(5, sizeof(VibeRequest));
@@ -72,7 +72,10 @@ void pulseVibeMotor() {
   };
 
   // Send request to queue (non-blocking)
-  xQueueSend(vibeQueue, &request, 0);  // Don't wait if queue is full
+  if (xQueueSend(vibeQueue, &request, 0) != pdTRUE) {
+    // Handle queue full error
+    USBSerial.println("Vibration queue full!");
+  }
 }
 
 /**

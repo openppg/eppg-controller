@@ -275,7 +275,7 @@ void blinkLEDTask(void *pvParameters) {
 
   for (;;) {  // infinite loop
     blinkLED();  // call blinkLED function
-    delay(500);  // wait for 500ms
+    vTaskDelay(pdMS_TO_TICKS(500));  // wait for 500ms
   }
   vTaskDelete(NULL);  // should never reach this
 }
@@ -285,7 +285,7 @@ void throttleTask(void *pvParameters) {
 
   for (;;) {  // infinite loop
     handleThrottle();  //
-    delay(20);  // wait for 20ms
+    vTaskDelay(pdMS_TO_TICKS(20));  // wait for 20ms
   }
   vTaskDelete(NULL);  // should never reach this
 }
@@ -445,7 +445,7 @@ void setupAnalogRead() {
 void setupWatchdog() {
 #ifndef OPENPPG_DEBUG
   // Initialize Task Watchdog
-  //ESP_ERROR_CHECK(esp_task_wdt_init(3000, true));  // 3 second timeout, panic on timeout
+  ESP_ERROR_CHECK(esp_task_wdt_init(3000, true));  // 3 second timeout, panic on timeout
 #endif // OPENPPG_DEBUG
 }
 
@@ -623,7 +623,7 @@ void setup140() {
 
 // main loop all work is done in tasks
 void loop() {
-  delay(25);
+  vTaskDelay(pdMS_TO_TICKS(25));
 }
 
 void initButtons() {
@@ -783,7 +783,7 @@ void disarmSystem() {
   updateArmedTime();
   writeDeviceData();
 
-  delay(500);  // TODO: just disable button thread to not allow immediate rearming
+  vTaskDelay(pdMS_TO_TICKS(500));  // TODO: just disable button thread to not allow immediate rearming
   // Set the last disarm time
   lastDisarmTime = millis();
 }
