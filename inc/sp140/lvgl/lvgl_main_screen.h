@@ -34,6 +34,10 @@ enum ScreenPage {
 #define CELL_VOLTAGE_WARNING 3.2f
 #define CELL_VOLTAGE_CRITICAL 2.95f
 
+// LVGL styles for temperature warnings and critical states
+extern lv_style_t style_warning;
+extern lv_style_t style_critical;
+
 // Main screen objects
 extern lv_obj_t* main_screen;
 extern lv_obj_t* battery_bar;

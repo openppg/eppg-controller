@@ -10,6 +10,10 @@
 // External font declaration
 extern const lv_font_t roboto_mono_16;
 
+// LVGL styles for temperature warnings and critical states
+lv_style_t style_warning;
+lv_style_t style_critical;
+
 // Main screen objects - definitions
 lv_obj_t* main_screen = NULL;
 lv_obj_t* battery_bar = NULL;
@@ -79,6 +83,21 @@ lv_obj_t* createTempBackground(lv_obj_t* parent, int x, int y, int width, int he
   lv_obj_move_background(bg);
   lv_obj_add_flag(bg, LV_OBJ_FLAG_HIDDEN);
   return bg;
+}
+
+// Function to initialize styles
+void init_temp_styles(bool darkMode) {
+  // Warning style (yellow background, black text)
+  lv_style_init(&style_warning);
+  lv_style_set_bg_color(&style_warning, LVGL_YELLOW);
+  lv_style_set_text_color(&style_warning, LVGL_BLACK);
+  lv_style_set_bg_opa(&style_warning, LV_OPA_100);
+
+  // Critical style (red background, black text)
+  lv_style_init(&style_critical);
+  lv_style_set_bg_color(&style_critical, LVGL_RED);
+  lv_style_set_text_color(&style_critical, LVGL_BLACK);
+  lv_style_set_bg_opa(&style_critical, LV_OPA_100);
 }
 
 // Function to show the loading overlay
@@ -613,6 +632,9 @@ void setupMainScreen(bool darkMode) {
 
   // Setup alert counter UI elements (circles, labels, and alert text display)
   setupAlertCounterUI(darkMode);
+
+  // Initialize custom styles
+  init_temp_styles(darkMode);
 
   // Load the screen
   lv_scr_load(main_screen);

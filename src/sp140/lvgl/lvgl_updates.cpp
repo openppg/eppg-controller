@@ -609,124 +609,70 @@ void updateLvglMainScreen(
   // Update temperature labels
   // -- Battery Temperature --
   if (batt_temp_label != NULL && batt_letter_label != NULL) {  // Check labels exist
-    lv_color_t bg_color = LVGL_BLACK;  // Default, will be overridden if opaque
-    lv_color_t text_color = darkMode ? LVGL_WHITE : LVGL_BLACK;
-    lv_opa_t bg_opacity = LV_OPA_0;  // Default transparent
+    lv_obj_remove_style(batt_temp_bg, &style_warning, 0);
+    lv_obj_remove_style(batt_temp_bg, &style_critical, 0);
 
     if (bmsTelemetry.bmsState == TelemetryState::CONNECTED) {
       lv_label_set_text_fmt(batt_temp_label, "%d", static_cast<int>(batteryTemp));
 
       if (batteryTemp >= BATT_TEMP_CRITICAL) {
-        bg_color = LVGL_RED;
-        text_color = LVGL_BLACK;
-        bg_opacity = LV_OPA_100;
+        lv_obj_add_style(batt_temp_bg, &style_critical, 0);
+        lv_obj_clear_flag(batt_temp_bg, LV_OBJ_FLAG_HIDDEN);
       } else if (batteryTemp >= BATT_TEMP_WARNING) {
-        bg_color = LVGL_YELLOW;
-        text_color = LVGL_BLACK;
-        bg_opacity = LV_OPA_100;
+        lv_obj_add_style(batt_temp_bg, &style_warning, 0);
+        lv_obj_clear_flag(batt_temp_bg, LV_OBJ_FLAG_HIDDEN);
+      } else {
+        lv_obj_add_flag(batt_temp_bg, LV_OBJ_FLAG_HIDDEN);
       }
     } else {
       lv_label_set_text(batt_temp_label, "-");
-    }
-
-    lv_obj_set_style_bg_opa(batt_temp_label, LV_OPA_0, 0);  // Keep label background transparent
-    lv_obj_set_style_bg_opa(batt_letter_label, LV_OPA_0, 0);  // Keep letter background transparent
-    lv_obj_set_style_text_color(batt_temp_label, text_color, 0);
-    lv_obj_set_style_text_color(batt_letter_label, darkMode ? LVGL_WHITE : LVGL_BLACK, 0);  // Keep letter normal color
-
-    // Apply highlighting to the full background rectangle
-    if (batt_temp_bg != NULL) {
-      if (bg_opacity > 0) {
-        // Show background and set color when highlighting is needed
-        lv_obj_clear_flag(batt_temp_bg, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_style_bg_opa(batt_temp_bg, bg_opacity, LV_PART_MAIN);
-        lv_obj_set_style_bg_color(batt_temp_bg, bg_color, LV_PART_MAIN);
-      } else {
-        // Hide background when no highlighting is needed
-        lv_obj_add_flag(batt_temp_bg, LV_OBJ_FLAG_HIDDEN);
-      }
+      lv_obj_add_flag(batt_temp_bg, LV_OBJ_FLAG_HIDDEN);
     }
   }
 
   // -- ESC Temperature --
   if (esc_temp_label != NULL && esc_letter_label != NULL) {  // Check labels exist
-    lv_color_t bg_color = LVGL_BLACK;
-    lv_color_t text_color = darkMode ? LVGL_WHITE : LVGL_BLACK;
-    lv_opa_t bg_opacity = LV_OPA_0;
+    lv_obj_remove_style(esc_temp_bg, &style_warning, 0);
+    lv_obj_remove_style(esc_temp_bg, &style_critical, 0);
 
     if (escTelemetry.escState == TelemetryState::CONNECTED) {
       lv_label_set_text_fmt(esc_temp_label, "%d", static_cast<int>(escTemp));
 
       if (escTemp >= ESC_TEMP_CRITICAL) {
-        bg_color = LVGL_RED;
-        text_color = LVGL_BLACK;
-        bg_opacity = LV_OPA_100;
+        lv_obj_add_style(esc_temp_bg, &style_critical, 0);
+        lv_obj_clear_flag(esc_temp_bg, LV_OBJ_FLAG_HIDDEN);
       } else if (escTemp >= ESC_TEMP_WARNING) {
-        bg_color = LVGL_YELLOW;
-        text_color = LVGL_BLACK;
-        bg_opacity = LV_OPA_100;
+        lv_obj_add_style(esc_temp_bg, &style_warning, 0);
+        lv_obj_clear_flag(esc_temp_bg, LV_OBJ_FLAG_HIDDEN);
+      } else {
+        lv_obj_add_flag(esc_temp_bg, LV_OBJ_FLAG_HIDDEN);
       }
     } else {
       lv_label_set_text(esc_temp_label, "-");
-    }
-
-    lv_obj_set_style_bg_opa(esc_temp_label, LV_OPA_0, 0);  // Keep label background transparent
-    lv_obj_set_style_bg_opa(esc_letter_label, LV_OPA_0, 0);  // Keep letter background transparent
-    lv_obj_set_style_text_color(esc_temp_label, text_color, 0);
-    lv_obj_set_style_text_color(esc_letter_label, darkMode ? LVGL_WHITE : LVGL_BLACK, 0);  // Keep letter normal color
-
-    // Apply highlighting to the full background rectangle
-    if (esc_temp_bg != NULL) {
-      if (bg_opacity > 0) {
-        // Show background and set color when highlighting is needed
-        lv_obj_clear_flag(esc_temp_bg, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_style_bg_opa(esc_temp_bg, bg_opacity, LV_PART_MAIN);
-        lv_obj_set_style_bg_color(esc_temp_bg, bg_color, LV_PART_MAIN);
-      } else {
-        // Hide background when no highlighting is needed
-        lv_obj_add_flag(esc_temp_bg, LV_OBJ_FLAG_HIDDEN);
-      }
+      lv_obj_add_flag(esc_temp_bg, LV_OBJ_FLAG_HIDDEN);
     }
   }
 
   // -- Motor Temperature --
   if (motor_temp_label != NULL && motor_letter_label != NULL) {  // Check labels exist
-    lv_color_t bg_color = LVGL_BLACK;
-    lv_color_t text_color = darkMode ? LVGL_WHITE : LVGL_BLACK;
-    lv_opa_t bg_opacity = LV_OPA_0;
+    lv_obj_remove_style(motor_temp_bg, &style_warning, 0);
+    lv_obj_remove_style(motor_temp_bg, &style_critical, 0);
 
     if (escTelemetry.escState == TelemetryState::CONNECTED && motorTemp > -20.0f) {
       lv_label_set_text_fmt(motor_temp_label, "%d", static_cast<int>(motorTemp));
 
       if (motorTemp >= MOTOR_TEMP_CRITICAL) {
-        bg_color = LVGL_RED;
-        text_color = LVGL_BLACK;
-        bg_opacity = LV_OPA_100;
+        lv_obj_add_style(motor_temp_bg, &style_critical, 0);
+        lv_obj_clear_flag(motor_temp_bg, LV_OBJ_FLAG_HIDDEN);
       } else if (motorTemp >= MOTOR_TEMP_WARNING) {
-        bg_color = LVGL_YELLOW;
-        text_color = LVGL_BLACK;
-        bg_opacity = LV_OPA_100;
+        lv_obj_add_style(motor_temp_bg, &style_warning, 0);
+        lv_obj_clear_flag(motor_temp_bg, LV_OBJ_FLAG_HIDDEN);
+      } else {
+        lv_obj_add_flag(motor_temp_bg, LV_OBJ_FLAG_HIDDEN);
       }
     } else {
       lv_label_set_text(motor_temp_label, "-");
-    }
-
-    lv_obj_set_style_bg_opa(motor_temp_label, LV_OPA_0, 0);  // Keep label background transparent
-    lv_obj_set_style_bg_opa(motor_letter_label, LV_OPA_0, 0);  // Keep letter background transparent
-    lv_obj_set_style_text_color(motor_temp_label, text_color, 0);
-    lv_obj_set_style_text_color(motor_letter_label, darkMode ? LVGL_WHITE : LVGL_BLACK, 0);  // Keep letter normal color
-
-    // Apply highlighting to the full background rectangle
-    if (motor_temp_bg != NULL) {
-      if (bg_opacity > 0) {
-        // Show background and set color when highlighting is needed
-        lv_obj_clear_flag(motor_temp_bg, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_style_bg_opa(motor_temp_bg, bg_opacity, LV_PART_MAIN);
-        lv_obj_set_style_bg_color(motor_temp_bg, bg_color, LV_PART_MAIN);
-      } else {
-        // Hide background when no highlighting is needed
-        lv_obj_add_flag(motor_temp_bg, LV_OBJ_FLAG_HIDDEN);
-      }
+      lv_obj_add_flag(motor_temp_bg, LV_OBJ_FLAG_HIDDEN);
     }
   }
 
