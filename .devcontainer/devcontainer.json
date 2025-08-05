@@ -38,7 +38,8 @@
   "remoteUser": "vscode",
 
   "mounts": [
-    "source=/dev,target=/dev,type=bind,consistency=cached"
+    "source=/dev,target=/dev,type=bind,consistency=cached",
+    "source=/Users/zach/.claude-code-router,target=/home/vscode/.claude-code-router,type=bind"
   ],
 
   "runArgs": [

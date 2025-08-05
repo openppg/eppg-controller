@@ -52,6 +52,11 @@ python3 -m pip install --upgrade \
 echo "Installing Gemini CLI..."
 curl -sS https://storage.googleapis.com/gemini-cli/install.sh | bash
 
+# Install Claude Code CLI
+echo "Installing Claude Code CLI..."
+npm install -g @anthropic-ai/claude-code
+npm install -g @musistudio/claude-code-router
+
 # Set up Git configuration (if not already configured)
 if [ -z "$(git config --global user.name)" ]; then
     echo "Git user name not configured. You may want to run:"
