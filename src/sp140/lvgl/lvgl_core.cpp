@@ -8,6 +8,8 @@ lv_disp_draw_buf_t draw_buf;
 lv_color_t buf[LVGL_BUFFER_SIZE];
 Adafruit_ST7735* tft_driver = nullptr;
 uint32_t lvgl_last_update = 0;
+// Define the shared SPI bus mutex
+SemaphoreHandle_t spiBusMutex = NULL;
 
 void setupLvglBuffer() {
   // Initialize LVGL library
@@ -23,6 +25,14 @@ void setupLvglBuffer() {
 
 void setupLvglDisplay(const STR_DEVICE_DATA_140_V1& deviceData, int8_t dc_pin, int8_t rst_pin, SPIClass* spi) {
   USBSerial.println("Setting up LVGL display");
+
+  // Create SPI bus mutex on first use if not already created
+  if (spiBusMutex == NULL) {
+    spiBusMutex = xSemaphoreCreateMutex();
+    if (spiBusMutex == NULL) {
+      USBSerial.println("Error creating SPI bus mutex");
+    }
+  }
 
   // Create the TFT driver instance if not already created
   if (tft_driver == nullptr) {
@@ -71,6 +81,10 @@ void lvgl_flush_cb(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* color
   uint32_t h = (area->y2 - area->y1 + 1);
 
   // Set drawing window
+  // Guard shared SPI bus for display flush
+  if (spiBusMutex != NULL) {
+    xSemaphoreTake(spiBusMutex, portMAX_DELAY);
+  }
   tft_driver->startWrite();
   tft_driver->setAddrWindow(area->x1, area->y1, w, h);
 
@@ -81,6 +95,9 @@ void lvgl_flush_cb(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* color
 
   // Deselect display CS when done
   digitalWrite(displayCS, HIGH);
+  if (spiBusMutex != NULL) {
+    xSemaphoreGive(spiBusMutex);
+  }
 
   // Indicate to LVGL that flush is done
   lv_disp_flush_ready(disp);

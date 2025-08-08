@@ -328,7 +328,7 @@ void refreshDisplay() {
     return;
   }
 
-  if (xSemaphoreTake(lvglMutex, portMAX_DELAY) == pdTRUE) {
+  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(40)) == pdTRUE) {
     // Get the current relative altitude (updates buffer for vario)
     const float currentRelativeAltitude = getAltitude(deviceData);
 
@@ -383,7 +383,7 @@ void refreshDisplay() {
 
     xSemaphoreGive(lvglMutex);
   } else {
-    USBSerial.println("Failed to acquire LVGL mutex in refreshDisplay");
+    // Avoid spamming the serial log; skip this frame if mutex busy
   }
 }
 
@@ -400,6 +400,8 @@ void monitoringTask(void *pvParameters) {
 }
 
 void spiCommTask(void *pvParameters) {
+  TickType_t lastWake = xTaskGetTickCount();
+  const TickType_t cycleTicks = pdMS_TO_TICKS(40); // ~25 fps cadence for UI + BMS
   for (;;) {
       #ifdef SCREEN_DEBUG
         float altitude = 0;
@@ -451,7 +453,8 @@ void spiCommTask(void *pvParameters) {
 
       #endif
 
-      vTaskDelay(pdMS_TO_TICKS(40));  // ~25fps
+      // Keep a consistent loop period regardless of jitter in work
+      vTaskDelayUntil(&lastWake, cycleTicks);
   }
 }
 
@@ -633,6 +636,9 @@ void setup() {
   send_device_data();
   // Signal that the UI is ready for updates from tasks
   uiReady = true;
+
+  // Simple instrumentation to detect UI/BMS latency
+  USBSerial.println("Init complete. UI + BMS loop running at ~25Hz.");
 
   // Enable sensor monitoring after splash screen and UI setup
   // This gives BMS/ESC time to initialize and start providing valid data

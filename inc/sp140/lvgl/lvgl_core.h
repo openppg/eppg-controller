@@ -4,6 +4,9 @@
 #include <lvgl.h>
 #include <Adafruit_ST7735.h>
 #include "../structs.h"
+// FreeRTOS for mutex used to guard shared SPI bus
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 
 // Display dimensions
 #define SCREEN_WIDTH 160
@@ -23,6 +26,8 @@ extern lv_disp_draw_buf_t draw_buf;
 extern lv_color_t buf[LVGL_BUFFER_SIZE];
 extern Adafruit_ST7735* tft_driver;
 extern uint32_t lvgl_last_update;
+// Shared SPI bus mutex (guards TFT + MCP2515 access)
+extern SemaphoreHandle_t spiBusMutex;
 
 // Core function declarations
 void setupLvglBuffer();
