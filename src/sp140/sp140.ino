@@ -138,6 +138,74 @@ void switchScreenPage(ScreenPage newPage) {
   }
 }
 
+// -----------------------------------------------
+// Periodic FreeRTOS stack high-watermark logger
+// -----------------------------------------------
+// Forward declarations for task handles used by the logger
+extern TaskHandle_t blinkLEDTaskHandle;
+extern TaskHandle_t throttleTaskHandle;
+extern TaskHandle_t watchdogTaskHandle;
+extern TaskHandle_t uiTaskHandle;
+extern TaskHandle_t bmsTaskHandle;
+extern TaskHandle_t monitoringTaskHandle;
+extern TaskHandle_t audioTaskHandle;
+extern TaskHandle_t webSerialTaskHandle;
+extern TaskHandle_t bleStateUpdateTaskHandle;
+extern TaskHandle_t deviceStateUpdateTaskHandle;
+extern TaskHandle_t buttonTaskHandle;
+extern TaskHandle_t vibeTaskHandle;
+
+static TaskHandle_t stackLoggerTaskHandle = NULL;
+static const uint32_t STACK_LOGGER_INTERVAL_MS = 5000;  // Log every 5 seconds
+
+static void stackWatermarkLoggerTask(void* parameter) {
+  // Give the system a moment to spin up all tasks
+  vTaskDelay(pdMS_TO_TICKS(5000));
+
+  for (;;) {
+    USBSerial.println("[StackLogger] Task stack high-water marks (words / bytes):");
+
+    struct TaskEntry { const char* label; TaskHandle_t* handlePtr; };
+    TaskEntry taskEntries[] = {
+      {"blinkLed", &blinkLEDTaskHandle},
+      {"throttle", &throttleTaskHandle},
+      {"watchdog", &watchdogTaskHandle},
+      {"UI", &uiTaskHandle},
+      {"BMS", &bmsTaskHandle},
+      {"Monitoring", &monitoringTaskHandle},
+      {"Audio", &audioTaskHandle},
+      {"WebSerial", &webSerialTaskHandle},
+      {"BLEStateUpdate", &bleStateUpdateTaskHandle},
+      {"StateUpdate", &deviceStateUpdateTaskHandle},
+      {"ButtonHandler", &buttonTaskHandle},
+      {"Vibration", &vibeTaskHandle},
+    };
+
+    for (const auto& entry : taskEntries) {
+      TaskHandle_t handle = entry.handlePtr ? *entry.handlePtr : NULL;
+      if (handle != NULL) {
+        UBaseType_t words = uxTaskGetStackHighWaterMark(handle);
+        const char* rtosName = pcTaskGetName(handle);
+        unsigned int bytes = (unsigned int)(words * sizeof(StackType_t));
+        USBSerial.printf("  %-14s [RTOS:%s] HWM: %u words (%u bytes)\n",
+                         entry.label,
+                         (rtosName ? rtosName : "?"),
+                         (unsigned int)words,
+                         bytes);
+      } else {
+        USBSerial.printf("  %-14s handle NULL\n", entry.label);
+      }
+    }
+
+    USBSerial.flush();
+    vTaskDelay(pdMS_TO_TICKS(STACK_LOGGER_INTERVAL_MS));
+  }
+}
+
+// Forward declarations for tasks defined in other compilation units
+extern void vibeTask(void* parameter);
+extern void buttonHandlerTask(void* parameter);
+
 // Add this function to handle BLE updates safely
 void bleStateUpdateTask(void* parameter) {
   BLEStateUpdate update;
@@ -677,7 +745,7 @@ void setupTasks() {
   melodyQueue = xQueueCreate(5, sizeof(MelodyRequest));
 
   // Create audio task - pin to core 1 to avoid interference with throttle
-  xTaskCreatePinnedToCore(audioTask, "Audio", 2048, NULL, 1, &audioTaskHandle, 1);
+  xTaskCreatePinnedToCore(audioTask, "Audio", 1536, NULL, 1, &audioTaskHandle, 1);
 
   // Add hardware watchdog task on core 0 (highest priority among low-prio group)
   xTaskCreatePinnedToCore(watchdogTask, "watchdog", 1536, NULL, 3, &watchdogTaskHandle, 0);
@@ -688,13 +756,21 @@ void setupTasks() {
   xTaskCreate(
     webSerialTask,
     "WebSerial",
-    1536,
+    1280,
     NULL,
     1,
     &webSerialTaskHandle);
 
   // Create monitoring task
   xTaskCreate(monitoringTask, "Monitoring", 4864, NULL, 1, &monitoringTaskHandle);
+
+  // Create vibration task (centralized here after initVibeMotor)
+  xTaskCreatePinnedToCore(vibeTask, "Vibration", 1536, NULL, 2, &vibeTaskHandle, 1);
+
+  #ifdef OPENPPG_DEBUG
+    // Create periodic stack watermark logger (low priority)
+    xTaskCreatePinnedToCore(stackWatermarkLoggerTask, "StackLogger", 3072, NULL, 1, &stackLoggerTaskHandle, 1);
+  #endif
 }
 
 void setup140() {
