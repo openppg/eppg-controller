@@ -43,7 +43,7 @@ void initESC() {
   const uint16_t IdleThrottle_us = 10000;  // 1000us (0.1us resolution)
   esc.setThrottleSettings2(IdleThrottle_us);
   adapter.processTxRxOnce();
-  delay(20);  // Wait for ESC to process the command
+  vTaskDelay(pdMS_TO_TICKS(20));  // Wait for ESC to process the command
 }
 
 /**

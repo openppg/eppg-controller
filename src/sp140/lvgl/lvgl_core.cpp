@@ -190,6 +190,6 @@ void displayLvglSplash(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
   uint32_t start_time = millis();
   while (millis() - start_time < duration) {
     updateLvgl();
-    delay(LVGL_REFRESH_TIME);
+    vTaskDelay(pdMS_TO_TICKS(LVGL_REFRESH_TIME));
   }
 }

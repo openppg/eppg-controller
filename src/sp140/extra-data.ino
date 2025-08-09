@@ -137,7 +137,7 @@ static BLECharacteristic* pBMSCellVoltages = nullptr;
 void updateThrottleBLE(int value) {
   // Handle disconnecting
   if (!deviceConnected && oldDeviceConnected) {
-    delay(500);  // give the bluetooth stack the chance to get things ready
+    vTaskDelay(pdMS_TO_TICKS(500));  // give the bluetooth stack the chance to get things ready
     pServer->startAdvertising();  // restart advertising
     USBSerial.println("Start advertising");
     oldDeviceConnected = deviceConnected;
@@ -153,7 +153,7 @@ void updateThrottleBLE(int value) {
     try {
       pThrottleCharacteristic->setValue((uint8_t*)&value, sizeof(value));
       pThrottleCharacteristic->notify();
-      delay(5);  // prevent bluetooth stack congestion - can be as low as 3ms
+      vTaskDelay(pdMS_TO_TICKS(5));  // prevent bluetooth stack congestion - can be as low as 3ms
     } catch (...) {
       USBSerial.println("Error sending BLE notification");
     }

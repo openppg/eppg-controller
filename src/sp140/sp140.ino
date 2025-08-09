@@ -284,9 +284,9 @@ void watchdogTask(void* parameter) {
 void blinkLEDTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
-  for (;;) {  // infinite loop
+  for (;;) {
     blinkLED();  // call blinkLED function
-    delay(500);  // wait for 500ms
+    vTaskDelay(pdMS_TO_TICKS(500));  // wait for 500ms
   }
   vTaskDelete(NULL);  // should never reach this
 }
@@ -294,10 +294,12 @@ void blinkLEDTask(void *pvParameters) {
 void throttleTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
-  for (;;) {  // infinite loop
-    handleThrottle();  //
+  TickType_t lastWake = xTaskGetTickCount();
+  const TickType_t throttleTicks = pdMS_TO_TICKS(20); // 50 Hz
+  for (;;) {
+    handleThrottle();
     pushTelemetrySnapshot();
-    delay(20);  // wait for 20ms
+    vTaskDelayUntil(&lastWake, throttleTicks);
   }
   vTaskDelete(NULL);  // should never reach this
 }
@@ -649,18 +651,18 @@ void setupTasks() {
   xTaskCreate(blinkLEDTask, "blinkLed", 1536, NULL, 1, &blinkLEDTaskHandle);
   xTaskCreatePinnedToCore(throttleTask, "throttle", 4096, NULL, 3, &throttleTaskHandle, 0);
   // Split UI and BMS into dedicated tasks
-  xTaskCreatePinnedToCore(uiTask, "UI", 8192, NULL, 6, &uiTaskHandle, 1);
-  xTaskCreatePinnedToCore(bmsTask, "BMS", 8192, NULL, 4, &bmsTaskHandle, 1);
+  xTaskCreatePinnedToCore(uiTask, "UI", 8192, NULL, 2, &uiTaskHandle, 1);
+  xTaskCreatePinnedToCore(bmsTask, "BMS", 8192, NULL, 2, &bmsTaskHandle, 1);
   xTaskCreate(updateBLETask, "BLE Update Task", 8192, NULL, 1, NULL);
   xTaskCreate(deviceStateUpdateTask, "State Update Task", 4096, NULL, 1, &deviceStateUpdateTaskHandle);
   // Create BLE update task with high priority but on core 1
-  xTaskCreatePinnedToCore(bleStateUpdateTask, "BLEStateUpdate", 8192, NULL, 4, &bleStateUpdateTaskHandle, 1);
+  xTaskCreatePinnedToCore(bleStateUpdateTask, "BLEStateUpdate", 8192, NULL, 1, &bleStateUpdateTaskHandle, 1);
 
   // Create melody queue
   melodyQueue = xQueueCreate(5, sizeof(MelodyRequest));
 
   // Create audio task - pin to core 1 to avoid interference with throttle
-  xTaskCreatePinnedToCore(audioTask, "Audio", 2048, NULL, 2, &audioTaskHandle, 1);
+  xTaskCreatePinnedToCore(audioTask, "Audio", 2048, NULL, 1, &audioTaskHandle, 1);
 
   // TODO: add watchdog task (based on esc writing to CAN)
   //xTaskCreatePinnedToCore(watchdogTask, "watchdog", 1000, NULL, 5, &watchdogTaskHandle, 0);  // Run on core 0
@@ -695,7 +697,7 @@ void setup140() {
 
 // main loop all work is done in tasks
 void loop() {
-  delay(25);
+  vTaskDelay(pdMS_TO_TICKS(25));
 }
 
 void initButtons() {
@@ -855,7 +857,7 @@ void disarmSystem() {
   updateArmedTime();
   writeDeviceData();
 
-  delay(500);  // TODO: just disable button thread to not allow immediate rearming
+  vTaskDelay(pdMS_TO_TICKS(500));  // TODO: just disable button thread to not allow immediate rearming
   // Set the last disarm time
   lastDisarmTime = millis();
 }
