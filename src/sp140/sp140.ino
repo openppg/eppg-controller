@@ -229,7 +229,9 @@ unsigned long armedSecs = 0;
 TaskHandle_t blinkLEDTaskHandle = NULL;
 TaskHandle_t throttleTaskHandle = NULL;
 TaskHandle_t watchdogTaskHandle = NULL;
-TaskHandle_t spiCommTaskHandle = NULL;
+TaskHandle_t spiCommTaskHandle = NULL;  // legacy; not used after split
+TaskHandle_t uiTaskHandle = NULL;
+TaskHandle_t bmsTaskHandle = NULL;
 TaskHandle_t vibeTaskHandle = NULL;  // Vibration motor task
 TaskHandle_t monitoringTaskHandle = NULL;  // Sensor monitoring task
 
@@ -399,62 +401,59 @@ void monitoringTask(void *pvParameters) {
   }
 }
 
-void spiCommTask(void *pvParameters) {
+// UI task: fixed 25 Hz refresh and snapshot publish
+void uiTask(void *pvParameters) {
   TickType_t lastWake = xTaskGetTickCount();
-  const TickType_t cycleTicks = pdMS_TO_TICKS(40); // ~25 fps cadence for UI + BMS
+  const TickType_t uiTicks = pdMS_TO_TICKS(40); // 25 Hz
   for (;;) {
-      #ifdef SCREEN_DEBUG
-        float altitude = 0;
-        generateFakeTelemetry(escTelemetryData, bmsTelemetryData, unifiedBatteryData, altitude);
-        xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);  // Always latest data
-        xQueueOverwrite(escTelemetryQueue, &escTelemetryData);  // Always latest data
-        refreshDisplay();
-        pushTelemetrySnapshot();
-      #else
-        // 1. Check if CAN transceiver is initialized
-        if (bmsCanInitialized) {
-          updateBMSData();  // This function handles its own CS pins
-          if (bms_can->isConnected()) {
-            bmsTelemetryData.bmsState = TelemetryState::CONNECTED;
-          } else {
-            bmsTelemetryData.bmsState = TelemetryState::NOT_CONNECTED;
-          }
+    refreshDisplay();
+    pushTelemetrySnapshot();
+    vTaskDelayUntil(&lastWake, uiTicks);
+  }
+}
+
+// BMS task: ~10 Hz polling and unified battery update
+void bmsTask(void *pvParameters) {
+  TickType_t lastWake = xTaskGetTickCount();
+  const TickType_t bmsTicks = pdMS_TO_TICKS(100); // 10 Hz
+  for (;;) {
+    #ifdef SCREEN_DEBUG
+      float altitude = 0;
+      generateFakeTelemetry(escTelemetryData, bmsTelemetryData, unifiedBatteryData, altitude);
+      xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);
+      xQueueOverwrite(escTelemetryQueue, &escTelemetryData);
+    #else
+      if (bmsCanInitialized) {
+        updateBMSData();
+        if (bms_can->isConnected()) {
+          bmsTelemetryData.bmsState = TelemetryState::CONNECTED;
+        } else {
+          bmsTelemetryData.bmsState = TelemetryState::NOT_CONNECTED;
         }
+      }
 
-        // 2. Use BMS data if connected, otherwise use ESC data
-        if (bmsTelemetryData.bmsState == TelemetryState::CONNECTED) {
-          // BMS is initialized AND currently connected
-          unifiedBatteryData.volts = bmsTelemetryData.battery_voltage;
-          unifiedBatteryData.amps = bmsTelemetryData.battery_current;
-          unifiedBatteryData.soc = bmsTelemetryData.soc;
-          unifiedBatteryData.power = bmsTelemetryData.power;
-                    xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);
-        } else if (escTelemetryData.escState == TelemetryState::CONNECTED) {
-          // BMS is either not initialized OR not currently connected
-
-          // Fallback to ESC data for unified view
-          unifiedBatteryData.volts = escTelemetryData.volts;
-          unifiedBatteryData.amps = escTelemetryData.amps;
-          unifiedBatteryData.power = escTelemetryData.amps * escTelemetryData.volts / 1000.0;
-
-          unifiedBatteryData.soc = 0.0;  // We don't estimate SOC from voltage anymore
-        } else {  // Not connected to either BMS or ESC, probably USB powered
-          // No connection to either BMS or ESC
-          unifiedBatteryData.volts = 0.0;
-          unifiedBatteryData.amps = 0.0;
-          unifiedBatteryData.soc = 0.0;
+      if (bmsTelemetryData.bmsState == TelemetryState::CONNECTED) {
+        unifiedBatteryData.volts = bmsTelemetryData.battery_voltage;
+        unifiedBatteryData.amps = bmsTelemetryData.battery_current;
+        unifiedBatteryData.soc = bmsTelemetryData.soc;
+        unifiedBatteryData.power = bmsTelemetryData.power;
+        if (bmsTelemetryQueue != NULL) {
+          xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);
         }
+      } else if (escTelemetryData.escState == TelemetryState::CONNECTED) {
+        unifiedBatteryData.volts = escTelemetryData.volts;
+        unifiedBatteryData.amps = escTelemetryData.amps;
+        unifiedBatteryData.power = escTelemetryData.amps * escTelemetryData.volts / 1000.0;
+        unifiedBatteryData.soc = 0.0;
+      } else {
+        unifiedBatteryData.volts = 0.0;
+        unifiedBatteryData.amps = 0.0;
+        unifiedBatteryData.soc = 0.0;
+        unifiedBatteryData.power = 0.0;
+      }
+    #endif
 
-                // Update display - CS pin management is handled inside refreshDisplay via LVGL mutex
-        refreshDisplay();
-
-        // Publish latest telemetry snapshot for monitoring
-        pushTelemetrySnapshot();
-
-      #endif
-
-      // Keep a consistent loop period regardless of jitter in work
-      vTaskDelayUntil(&lastWake, cycleTicks);
+    vTaskDelayUntil(&lastWake, bmsTicks);
   }
 }
 
@@ -649,7 +648,9 @@ void setup() {
 void setupTasks() {
   xTaskCreate(blinkLEDTask, "blinkLed", 1536, NULL, 1, &blinkLEDTaskHandle);
   xTaskCreatePinnedToCore(throttleTask, "throttle", 4096, NULL, 3, &throttleTaskHandle, 0);
-  xTaskCreatePinnedToCore(spiCommTask, "SPIComm", 10096, NULL, 5, &spiCommTaskHandle, 1);
+  // Split UI and BMS into dedicated tasks
+  xTaskCreatePinnedToCore(uiTask, "UI", 8192, NULL, 6, &uiTaskHandle, 1);
+  xTaskCreatePinnedToCore(bmsTask, "BMS", 8192, NULL, 4, &bmsTaskHandle, 1);
   xTaskCreate(updateBLETask, "BLE Update Task", 8192, NULL, 1, NULL);
   xTaskCreate(deviceStateUpdateTask, "State Update Task", 4096, NULL, 1, &deviceStateUpdateTaskHandle);
   // Create BLE update task with high priority but on core 1
