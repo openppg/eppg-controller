@@ -70,13 +70,7 @@ bool initVibeMotor() {
     return false;
   }
 
-  // Create vibration task - pin to core 1 to keep it away from throttle task
-  // HWM ~1268 words -> ~2x usage target ~ 2560 bytes
-  xTaskCreatePinnedToCore(vibeTask, "Vibration", 2560, NULL, 2, &vibeTaskHandle, 1);
-  if (vibeTaskHandle == NULL) {
-    return false;
-  }
-
+  // Task is created in setupTasks() after init, to centralize task creation
   return true;
 }
 
