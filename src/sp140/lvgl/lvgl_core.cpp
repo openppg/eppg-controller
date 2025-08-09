@@ -1,3 +1,4 @@
+// Copyright 2020 <Zach Whitehead>
 #include "../../../inc/sp140/lvgl/lvgl_core.h"
 #include "../../../inc/version.h"
 #include "../../../inc/sp140/esp32s3-config.h"
@@ -23,7 +24,12 @@ void setupLvglBuffer() {
   USBSerial.println("LVGL buffer initialized");
 }
 
-void setupLvglDisplay(const STR_DEVICE_DATA_140_V1& deviceData, int8_t dc_pin, int8_t rst_pin, SPIClass* spi) {
+void setupLvglDisplay(
+  const STR_DEVICE_DATA_140_V1& deviceData,
+  int8_t dc_pin,
+  int8_t rst_pin,
+  SPIClass* spi
+) {
   USBSerial.println("Setting up LVGL display");
 
   // Create SPI bus mutex on first use if not already created
@@ -47,8 +53,7 @@ void setupLvglDisplay(const STR_DEVICE_DATA_140_V1& deviceData, int8_t dc_pin, i
   // Initialize LVGL buffer
   setupLvglBuffer();
 
-  // Initialize display driver
-  static lv_disp_drv_t disp_drv;
+  // Initialize display driver (use global disp_drv)
   lv_disp_drv_init(&disp_drv);
 
   // Set display driver properties
@@ -90,7 +95,7 @@ void lvgl_flush_cb(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* color
 
   // Push colors - using DMA if available
   uint32_t len = w * h;
-  tft_driver->writePixels((uint16_t*)color_p, len);
+  tft_driver->writePixels((uint16_t*)color_p, len);  // NOLINT(readability/casting)
   tft_driver->endWrite();
 
   // Deselect display CS when done
@@ -158,7 +163,7 @@ void displayLvglSplash(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
   lv_anim_set_values(&title_anim, 0, 255);
   lv_anim_set_time(&title_anim, 500);
   lv_anim_set_exec_cb(&title_anim, [](void* var, int32_t value) {
-    lv_obj_set_style_opa((lv_obj_t*)var, value, 0);
+    lv_obj_set_style_opa((lv_obj_t*)var, value, 0);  // NOLINT(readability/casting)
   });
   lv_anim_start(&title_anim);
 

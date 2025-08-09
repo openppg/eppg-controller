@@ -229,7 +229,6 @@ unsigned long armedSecs = 0;
 TaskHandle_t blinkLEDTaskHandle = NULL;
 TaskHandle_t throttleTaskHandle = NULL;
 TaskHandle_t watchdogTaskHandle = NULL;
-TaskHandle_t spiCommTaskHandle = NULL;  // legacy; not used after split
 TaskHandle_t uiTaskHandle = NULL;
 TaskHandle_t bmsTaskHandle = NULL;
 TaskHandle_t vibeTaskHandle = NULL;  // Vibration motor task
@@ -248,6 +247,11 @@ QueueHandle_t telemetrySnapshotQueue = NULL;
 
 unsigned long lastDisarmTime = 0;
 const unsigned long DISARM_COOLDOWN = 500;  // 500ms cooldown
+
+// Timestamps updated by core tasks for watchdog monitoring
+volatile uint32_t lastThrottleRunMs = 0;
+volatile uint32_t lastUiRunMs = 0;
+volatile uint32_t lastBmsRunMs = 0;
 
 #pragma message "Warning: OpenPPG software is in beta"
 
@@ -273,11 +277,15 @@ void setupSPI(const HardwareConfig& board_config) {
 }
 
 void watchdogTask(void* parameter) {
+#ifndef OPENPPG_DEBUG
+  // Register this task with the hardware Task WDT; only this task feeds it
+  ESP_ERROR_CHECK(esp_task_wdt_add(NULL));
+#endif
   for (;;) {
-    #ifndef OPENPPG_DEBUG
-      ESP_ERROR_CHECK(esp_task_wdt_reset());
-    #endif
-    vTaskDelay(pdMS_TO_TICKS(100));  // Delay for 100ms
+#ifndef OPENPPG_DEBUG
+    esp_task_wdt_reset();
+#endif
+    vTaskDelay(pdMS_TO_TICKS(100));
   }
 }
 
@@ -299,6 +307,7 @@ void throttleTask(void *pvParameters) {
   for (;;) {
     handleThrottle();
     pushTelemetrySnapshot();
+    lastThrottleRunMs = millis();
     vTaskDelayUntil(&lastWake, throttleTicks);
   }
   vTaskDelete(NULL);  // should never reach this
@@ -410,6 +419,7 @@ void uiTask(void *pvParameters) {
   for (;;) {
     refreshDisplay();
     pushTelemetrySnapshot();
+    lastUiRunMs = millis();
     vTaskDelayUntil(&lastWake, uiTicks);
   }
 }
@@ -455,6 +465,7 @@ void bmsTask(void *pvParameters) {
       }
     #endif
 
+    lastBmsRunMs = millis();
     vTaskDelayUntil(&lastWake, bmsTicks);
   }
 }
@@ -493,8 +504,8 @@ void setupAnalogRead() {
 
 void setupWatchdog() {
 #ifndef OPENPPG_DEBUG
-  // Initialize Task Watchdog
-  //ESP_ERROR_CHECK(esp_task_wdt_init(3000, true));  // 3 second timeout, panic on timeout
+  // Initialize Task Watchdog for main critical tasks (ESC/UI/BMS)
+  ESP_ERROR_CHECK(esp_task_wdt_init(3000, true));  // 3 second timeout, panic on timeout
 #endif // OPENPPG_DEBUG
 }
 
@@ -664,8 +675,8 @@ void setupTasks() {
   // Create audio task - pin to core 1 to avoid interference with throttle
   xTaskCreatePinnedToCore(audioTask, "Audio", 2048, NULL, 1, &audioTaskHandle, 1);
 
-  // TODO: add watchdog task (based on esc writing to CAN)
-  //xTaskCreatePinnedToCore(watchdogTask, "watchdog", 1000, NULL, 5, &watchdogTaskHandle, 0);  // Run on core 0
+  // Add hardware watchdog task on core 0 (highest priority among low-prio group)
+  xTaskCreatePinnedToCore(watchdogTask, "watchdog", 2048, NULL, 3, &watchdogTaskHandle, 0);
 
   xTaskCreate(updateESCBLETask, "ESC BLE Update Task", 8192, NULL, 1, NULL);
 
