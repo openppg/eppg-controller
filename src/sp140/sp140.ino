@@ -43,6 +43,10 @@
 #include "../../inc/sp140/vibration_pwm.h"
 #include "../../inc/sp140/led.h"
 
+// FreeRTOS task utilities for stack watermark logging
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+
 // Global variable for shared SPI
 SPIClass* hardwareSPI = nullptr;
 
@@ -188,7 +192,7 @@ void changeDeviceState(DeviceState newState) {
     }
 
     USBSerial.print("Device State Changed to: ");
-    switch(newState) {
+    switch (newState) {
       case DISARMED:
         USBSerial.println("DISARMED");
         break;
@@ -303,7 +307,7 @@ void throttleTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
   TickType_t lastWake = xTaskGetTickCount();
-  const TickType_t throttleTicks = pdMS_TO_TICKS(20); // 50 Hz
+  const TickType_t throttleTicks = pdMS_TO_TICKS(20);  // 50 Hz
   for (;;) {
     handleThrottle();
     pushTelemetrySnapshot();
@@ -659,13 +663,13 @@ void setup() {
 
 // set up all the main threads/tasks with core 0 affinity
 void setupTasks() {
-  xTaskCreate(blinkLEDTask, "blinkLed", 1536, NULL, 1, &blinkLEDTaskHandle);
-  xTaskCreatePinnedToCore(throttleTask, "throttle", 4096, NULL, 3, &throttleTaskHandle, 0);
+  xTaskCreate(blinkLEDTask, "blinkLed", 2560, NULL, 1, &blinkLEDTaskHandle);
+  xTaskCreatePinnedToCore(throttleTask, "throttle", 4352, NULL, 3, &throttleTaskHandle, 0);
   // Split UI and BMS into dedicated tasks
-  xTaskCreatePinnedToCore(uiTask, "UI", 8192, NULL, 2, &uiTaskHandle, 1);
-  xTaskCreatePinnedToCore(bmsTask, "BMS", 8192, NULL, 2, &bmsTaskHandle, 1);
+  xTaskCreatePinnedToCore(uiTask, "UI", 5888, NULL, 2, &uiTaskHandle, 1);
+  xTaskCreatePinnedToCore(bmsTask, "BMS", 2304, NULL, 2, &bmsTaskHandle, 1);
   xTaskCreate(updateBLETask, "BLE Update Task", 8192, NULL, 1, NULL);
-  xTaskCreate(deviceStateUpdateTask, "State Update Task", 4096, NULL, 1, &deviceStateUpdateTaskHandle);
+  xTaskCreate(deviceStateUpdateTask, "State Update Task", 2048, NULL, 1, &deviceStateUpdateTaskHandle);
   // Create BLE update task with high priority but on core 1
   xTaskCreatePinnedToCore(bleStateUpdateTask, "BLEStateUpdate", 8192, NULL, 1, &bleStateUpdateTaskHandle, 1);
 
@@ -676,7 +680,7 @@ void setupTasks() {
   xTaskCreatePinnedToCore(audioTask, "Audio", 2048, NULL, 1, &audioTaskHandle, 1);
 
   // Add hardware watchdog task on core 0 (highest priority among low-prio group)
-  xTaskCreatePinnedToCore(watchdogTask, "watchdog", 2048, NULL, 3, &watchdogTaskHandle, 0);
+  xTaskCreatePinnedToCore(watchdogTask, "watchdog", 1536, NULL, 3, &watchdogTaskHandle, 0);
 
   xTaskCreate(updateESCBLETask, "ESC BLE Update Task", 8192, NULL, 1, NULL);
 
@@ -684,13 +688,13 @@ void setupTasks() {
   xTaskCreate(
     webSerialTask,
     "WebSerial",
-    4096,
+    1536,
     NULL,
     1,
     &webSerialTaskHandle);
 
   // Create monitoring task
-  xTaskCreate(monitoringTask, "Monitoring", 4096, NULL, 1, &monitoringTaskHandle);
+  xTaskCreate(monitoringTask, "Monitoring", 4864, NULL, 1, &monitoringTaskHandle);
 }
 
 void setup140() {
@@ -715,7 +719,7 @@ void initButtons() {
   pinMode(board_config.button_top, INPUT_PULLUP);
 
   // Create button handling task
-  xTaskCreatePinnedToCore(buttonHandlerTask, "ButtonHandler", 2048, NULL, 2, &buttonTaskHandle, 0);
+  xTaskCreatePinnedToCore(buttonHandlerTask, "ButtonHandler", 4096, NULL, 2, &buttonTaskHandle, 0);
 }
 
 // Add new button handler task
