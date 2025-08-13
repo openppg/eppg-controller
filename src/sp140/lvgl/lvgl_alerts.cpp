@@ -39,9 +39,9 @@ void setupAlertCounterUI(bool darkMode) {
     lv_obj_set_size(warning_counter_circle, CIRCLE_SIZE, CIRCLE_SIZE);
     // Align relative to altitude area (using first altitude character as reference)
     if (altitude_char_labels[0]) {
-      lv_obj_align_to(warning_counter_circle, altitude_char_labels[0], LV_ALIGN_OUT_TOP_LEFT, 0, -2);
+      lv_obj_align_to(warning_counter_circle, altitude_char_labels[0], LV_ALIGN_OUT_TOP_LEFT, 1, -2);
     } else {
-      lv_obj_align(warning_counter_circle, LV_ALIGN_TOP_LEFT, 5, 75);
+      lv_obj_align(warning_counter_circle, LV_ALIGN_TOP_LEFT, 6, 75);
     }
     lv_led_set_color(warning_counter_circle, LVGL_ORANGE);
     lv_led_on(warning_counter_circle);
@@ -63,7 +63,7 @@ void setupAlertCounterUI(bool darkMode) {
     critical_counter_circle = lv_led_create(main_screen);
     lv_obj_set_size(critical_counter_circle, CIRCLE_SIZE, CIRCLE_SIZE);
     if (warning_counter_circle) {
-      lv_obj_align_to(critical_counter_circle, warning_counter_circle, LV_ALIGN_OUT_RIGHT_MID, 4, 0);
+      lv_obj_align_to(critical_counter_circle, warning_counter_circle, LV_ALIGN_OUT_RIGHT_BOTTOM, 4, 0);
     } else {
       lv_obj_align(critical_counter_circle, LV_ALIGN_TOP_LEFT, 35, 75);
     }
@@ -131,8 +131,10 @@ void updateAlertCounterDisplay(const AlertCounts& counts) {
       // No warnings: position to align with alert text (avoid red border)
       lv_obj_align(critical_counter_circle, LV_ALIGN_TOP_LEFT, 10, 75);
     } else {
-      // With warnings: position to right of warning circle
-      lv_obj_align(critical_counter_circle, LV_ALIGN_TOP_LEFT, 35, 75);
+      // With warnings: position to the right of the warning circle, align bottoms
+      if (warning_counter_circle) {
+        lv_obj_align_to(critical_counter_circle, warning_counter_circle, LV_ALIGN_OUT_RIGHT_BOTTOM, 4, 0);
+      }
     }
   } else {
     lv_obj_add_flag(critical_counter_circle, LV_OBJ_FLAG_HIDDEN);

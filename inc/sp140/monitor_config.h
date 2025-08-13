@@ -24,6 +24,6 @@ static const Thresholds bmsVoltageDifferentialThresholds = {.warnLow = -1.0, .wa
 static const Thresholds baroTempThresholds = {.warnLow = 0, .warnHigh = 50, .critLow = -10, .critHigh = 80};
 
 // -- Internal Thresholds --
-static const Thresholds cpuTempThresholds = {.warnLow = 0, .warnHigh = 50, .critLow = -10, .critHigh = 80};
+static const Thresholds cpuTempThresholds = {.warnLow = 0, .warnHigh = 60, .critLow = -10, .critHigh = 80};
 
 #endif  // INC_SP140_MONITOR_CONFIG_H_
