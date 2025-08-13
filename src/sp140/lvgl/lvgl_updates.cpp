@@ -393,14 +393,23 @@ void updateLvglMainScreen(
     if (bmsConnected || escConnected) {
         float kWatts = unifiedBatteryData.power;
 
+        // Treat tiny magnitudes as zero and clamp negatives to zero for display
+        if (kWatts > -0.05f && kWatts < 0.05f) {
+          kWatts = 0.0f;
+        }
+        if (kWatts < 0.0f) {
+          kWatts = 0.0f;
+        }
+
         // Clear all positions first
         for (int i = 0; i < 4; i++) {
           lv_label_set_text(power_char_labels[i], "");
         }
 
-        // Format power to one decimal place (e.g., 12.5)
-        int whole_part = static_cast<int>(kWatts);
-        int decimal_part = static_cast<int>(round((kWatts - whole_part) * 10));
+        // Carry-safe rounding to one decimal place (e.g., 9.95 -> 10.0)
+        int tenths_total = static_cast<int>(kWatts * 10.0f + 0.5f);
+        int whole_part = tenths_total / 10;
+        int decimal_part = tenths_total % 10;
 
         // Extract individual digits
         int tens = whole_part / 10;
@@ -697,9 +706,10 @@ void updateLvglMainScreen(
     lv_obj_set_style_img_recolor(cruise_icon_img, original_cruise_icon_color, LV_PART_MAIN);
   }
 
-  // Update Charging Icon Visibility
+  // Update Charging Icon Visibility - only when BMS is connected and reports charging
   if (charging_icon_img != NULL) {  // Check object exists
-    if (bmsTelemetry.is_charging) {  // Check the charging flag
+    bool showChargingIcon = (bmsTelemetry.bmsState == TelemetryState::CONNECTED) && bmsTelemetry.is_charging;
+    if (showChargingIcon) {
       lv_obj_clear_flag(charging_icon_img, LV_OBJ_FLAG_HIDDEN);
     } else {
       lv_obj_add_flag(charging_icon_img, LV_OBJ_FLAG_HIDDEN);

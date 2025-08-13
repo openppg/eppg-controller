@@ -172,8 +172,8 @@ void setupMainScreen(bool darkMode) {
   int power_char_width = 16;      // Character width spacing
   int power_decimal_width = 8;    // Decimal point width
   int power_char_height = 28;     // Character height
-  int power_start_x = -1;         // Start position from left (shifted left by 6px total)
-  int power_start_y = 54 - 14;    // Y position (middle section, offset up by 14 total - shifted up 4px more)
+  int power_start_x = 0;         // Start position from left
+  int power_start_y = 54 - 14;    // Y position
 
   // Position array for each character (X offsets)
   int power_char_positions[4] = {
@@ -201,9 +201,9 @@ void setupMainScreen(bool darkMode) {
     lv_label_set_text(power_char_labels[i], "");
   }
 
-  // Power unit label ("kW" text only) - position after the numbers
+  // Power unit label ("kW" text only)
   power_unit_label = lv_label_create(main_screen);
-  lv_obj_align(power_unit_label, LV_ALIGN_LEFT_MID, power_start_x + 4 * power_char_width + power_decimal_width + 2 - 20 + 3, -7);  // Position shifted left 20px, down 3px, then right 3px
+  lv_obj_align(power_unit_label, LV_ALIGN_LEFT_MID, power_start_x + 4 * power_char_width + power_decimal_width + 2 - 20 + 4, -7);
   lv_obj_set_style_text_font(power_unit_label, &lv_font_montserrat_10, 0);  // Even smaller font for unit
   lv_obj_set_style_text_color(power_unit_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
@@ -236,9 +236,9 @@ void setupMainScreen(bool darkMode) {
   int unit_width = 12;      // Narrower width for unit character to reduce buffer
 
   // Calculate total width needed and position from the right
-  int total_width = 5 * char_width + decimal_width + unit_width;  // 5 full chars + decimal + narrower unit
-  int start_x = 120 - total_width - 5;  // Start 5px from right edge (moved left 3px more)
-  int start_y = 128 - 5 - char_height;  // Y position
+  int total_width = 5 * char_width + decimal_width + unit_width;
+  int start_x = 120 - total_width - 5;
+  int start_y = 128 - 5 - char_height;
 
   // Position array for each character (X offsets)
   int char_positions[7] = {
@@ -247,8 +247,8 @@ void setupMainScreen(bool darkMode) {
     start_x + 2 * char_width,           // Position 2: tens digit
     start_x + 3 * char_width,           // Position 3: ones digit
     start_x + 4 * char_width,           // Position 4: decimal point (will adjust width)
-    start_x + 4 * char_width + decimal_width,  // Position 5: tenths digit
-    start_x + 5 * char_width + decimal_width       // Position 6: unit letter (moved 5px right total)
+    start_x + 4 * char_width + decimal_width,
+    start_x + 5 * char_width + decimal_width
   };
 
   for (int i = 0; i < 7; i++) {
@@ -290,7 +290,7 @@ void setupMainScreen(bool darkMode) {
     // Adjust Y position for unit character to align with baseline
     int y_pos = start_y;
     if (i == 6) {
-      y_pos += 11;  // Move smaller unit character down 11 pixels to align with baseline of 28pt font
+      y_pos += 11;
     }
     lv_obj_set_pos(altitude_char_labels[i], char_positions[i], y_pos);
 
@@ -310,7 +310,7 @@ void setupMainScreen(bool darkMode) {
 
   // Create temperature labels - adjust positions to align with divider lines
   batt_temp_label = lv_label_create(main_screen);
-  // Align bottom-right, adjust Y offset for spacing, move left to avoid new section
+  // Align bottom-right
   lv_obj_align(batt_temp_label, LV_ALIGN_BOTTOM_RIGHT, -11, -39);
   lv_obj_set_style_text_font(batt_temp_label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(batt_temp_label,
@@ -328,7 +328,7 @@ void setupMainScreen(bool darkMode) {
 
   // Create letter label for B
   batt_letter_label = lv_label_create(main_screen);
-  // Align bottom-left, moved left 2px and down 7px total, then up 1px
+  // Align bottom-left
   lv_obj_align(batt_letter_label, LV_ALIGN_BOTTOM_LEFT, 116, -41);
   lv_obj_set_style_text_font(batt_letter_label, &lv_font_montserrat_10, 0);
   lv_obj_set_style_text_color(batt_letter_label, darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
@@ -342,7 +342,7 @@ void setupMainScreen(bool darkMode) {
   lv_label_set_text(batt_letter_label, "B");
 
   esc_temp_label = lv_label_create(main_screen);
-  // Align bottom-right, adjust Y offset for spacing, move left to avoid new section
+  // Align bottom-right
   lv_obj_align(esc_temp_label, LV_ALIGN_BOTTOM_RIGHT, -11, -20);
   lv_obj_set_style_text_font(esc_temp_label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(esc_temp_label,
@@ -360,7 +360,7 @@ void setupMainScreen(bool darkMode) {
 
   // Create letter label for E
   esc_letter_label = lv_label_create(main_screen);
-  // Align bottom-left, moved left 2px and down 7px total, then up 1px
+  // Align bottom-left
   lv_obj_align(esc_letter_label, LV_ALIGN_BOTTOM_LEFT, 116, -22);
   lv_obj_set_style_text_font(esc_letter_label, &lv_font_montserrat_10, 0);
   lv_obj_set_style_text_color(esc_letter_label, darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
@@ -374,7 +374,7 @@ void setupMainScreen(bool darkMode) {
   lv_label_set_text(esc_letter_label, "E");
 
   motor_temp_label = lv_label_create(main_screen);
-  // Align bottom-right, adjust Y offset for spacing, move left to avoid new section
+  // Align bottom-right
   lv_obj_align(motor_temp_label, LV_ALIGN_BOTTOM_RIGHT, -11, 0);
   lv_obj_set_style_text_font(motor_temp_label, &lv_font_montserrat_12, 0);
 
@@ -399,7 +399,7 @@ void setupMainScreen(bool darkMode) {
 
   // Create letter label for M
   motor_letter_label = lv_label_create(main_screen);
-  // Align bottom-left, moved left 2px and down 7px total, then down 1px more
+  // Align bottom-left
   lv_obj_align(motor_letter_label, LV_ALIGN_BOTTOM_LEFT, 116, -1);
   lv_obj_set_style_text_font(motor_letter_label, &lv_font_montserrat_10, 0);
 
@@ -440,7 +440,7 @@ void setupMainScreen(bool darkMode) {
                              LV_PART_MAIN);
   lv_obj_set_style_line_width(h_line2, 1, LV_PART_MAIN);
 
-  // Create vertical line in middle section (shifted left by 6 pixels)
+  // Create vertical line in middle section
   lv_obj_t* v_line1 = lv_line_create(main_screen);
   static lv_point_t v_line1_points[] = {{102, 37}, {102, 70}};
   lv_line_set_points(v_line1, v_line1_points, 2);
@@ -449,7 +449,7 @@ void setupMainScreen(bool darkMode) {
                              LV_PART_MAIN);
   lv_obj_set_style_line_width(v_line1, 1, LV_PART_MAIN);
 
-  // Create vertical line in bottom section (moved left 3px)
+  // Create vertical line in bottom section
   lv_obj_t* v_line2 = lv_line_create(main_screen);
   static lv_point_t v_line2_points[] = {{117, 70}, {117, 128}};
   lv_line_set_points(v_line2, v_line2_points, 2);
@@ -458,7 +458,7 @@ void setupMainScreen(bool darkMode) {
                              LV_PART_MAIN);
   lv_obj_set_style_line_width(v_line2, 1, LV_PART_MAIN);
 
-  // Create vertical line for new far-right section (12px from right edge)
+  // Create vertical line for new far-right section
   lv_obj_t* v_line3 = lv_line_create(main_screen);
   static lv_point_t v_line3_points[] = {{148, 37}, {148, 128}};
   lv_line_set_points(v_line3, v_line3_points, 2);
@@ -468,7 +468,7 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_style_line_width(v_line3, 1, LV_PART_MAIN);
 
   // Create horizontal dividers for temperature section
-  // Line between B and E at Y=89 (start from moved vertical line)
+  // Line between B and E at Y=89
   lv_obj_t* h_line3 = lv_line_create(main_screen);
   static lv_point_t h_line3_points[] = {{117, 89}, {148, 89}};
   lv_line_set_points(h_line3, h_line3_points, 2);
@@ -477,7 +477,7 @@ void setupMainScreen(bool darkMode) {
                              LV_PART_MAIN);
   lv_obj_set_style_line_width(h_line3, 1, LV_PART_MAIN);
 
-  // Line between E and M at Y=109 (start from moved vertical line)
+  // Line between E and M at Y=109
   lv_obj_t* h_line4 = lv_line_create(main_screen);
   static lv_point_t h_line4_points[] = {{117, 109}, {148, 109}};
   lv_line_set_points(h_line4, h_line4_points, 2);
@@ -510,7 +510,7 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_style_img_recolor(cruise_icon_img, icon_color, LV_PART_MAIN);
   lv_obj_set_style_img_recolor_opa(cruise_icon_img, LV_OPA_COVER, LV_PART_MAIN);  // Make icon fully opaque
 
-  lv_obj_align(cruise_icon_img, LV_ALIGN_CENTER, 5, -11);  // Align center, offset right 5, up 11
+  lv_obj_align(cruise_icon_img, LV_ALIGN_CENTER, 5, -11);
   lv_obj_move_foreground(cruise_icon_img);  // Ensure icon is on the top layer
   lv_obj_add_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);  // Hide initially
 
@@ -568,7 +568,6 @@ void setupMainScreen(bool darkMode) {
   lv_obj_add_flag(spinner_overlay, LV_OBJ_FLAG_HIDDEN);
 
   // Create climb rate indicator horizontal divider lines in the far-right section
-  // Section spans from y=37 to y=128 (91 pixels), with 13 horizontal divider lines
   const int climb_section_start_y = 37;
   const int climb_section_end_y = 128;
 
