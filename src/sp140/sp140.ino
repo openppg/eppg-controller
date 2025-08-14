@@ -576,7 +576,7 @@ void setupAnalogRead() {
 
 void setupWatchdog() {
 #ifndef OPENPPG_DEBUG
-  // Initialize Task Watchdog for main critical tasks (ESC/UI/BMS)
+  // Initialize Task Watchdog
   ESP_ERROR_CHECK(esp_task_wdt_init(3000, true));  // 3 second timeout, panic on timeout
 #endif // OPENPPG_DEBUG
 }

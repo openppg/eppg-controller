@@ -61,8 +61,9 @@ void vibeTask(void* parameter) {
  * @return Returns true if initialization was successful, false otherwise
  */
 bool initVibeMotor() {
+  extern HardwareConfig board_config;
   ledcSetup(VIBE_PWM_CHANNEL, VIBE_PWM_FREQ, VIBE_PWM_RESOLUTION);
-  ledcAttachPin(VIBE_PWM_PIN, VIBE_PWM_CHANNEL);
+  ledcAttachPin(board_config.vibe_pwm, VIBE_PWM_CHANNEL);
 
   // Create vibration queue
   vibeQueue = xQueueCreate(5, sizeof(VibeRequest));
@@ -86,7 +87,10 @@ void pulseVibeMotor() {
   };
 
   // Send request to queue (non-blocking)
-  xQueueSend(vibeQueue, &request, 0);  // Don't wait if queue is full
+  if (xQueueSend(vibeQueue, &request, 0) != pdTRUE) {
+    // Handle queue full error
+    USBSerial.println("Vibration queue full!");
+  }
 }
 
 /**
