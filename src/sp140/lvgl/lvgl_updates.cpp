@@ -225,6 +225,26 @@ bool isCriticalBorderFlashing() {
   return isFlashingCriticalBorder;
 }
 
+// Direct control functions for use within UI task (no mutex)
+void startCriticalBorderFlashDirect() {
+  if (critical_border != NULL && !isFlashingCriticalBorder) {
+    isFlashingCriticalBorder = true;
+    lv_obj_clear_flag(critical_border, LV_OBJ_FLAG_HIDDEN); // Start visible
+    critical_border_flash_timer = lv_timer_create(critical_border_flash_timer_cb, 300, NULL);
+  }
+}
+
+void stopCriticalBorderFlashDirect() {
+  if (critical_border_flash_timer != NULL) {
+    lv_timer_del(critical_border_flash_timer);
+    critical_border_flash_timer = NULL;
+  }
+  if (critical_border != NULL) {
+    lv_obj_add_flag(critical_border, LV_OBJ_FLAG_HIDDEN);
+  }
+  isFlashingCriticalBorder = false;
+}
+
 // Update the climb rate indicator
 void updateClimbRateIndicator(float climbRate) {
   // Clamp climb rate to displayable range (-0.6 to +0.6 m/s)

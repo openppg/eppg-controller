@@ -86,6 +86,7 @@ static void alertAggregationTask(void* parameter) {
         update.displayId = g_activeList[g_rotateIdx];
         update.displayLevel = g_currentLevels[g_activeList[g_rotateIdx]];
         update.displayCritical = g_showingCrit;
+        update.criticalAlertsActive = (g_currentCounts.criticalCount > 0);
         update.updateEpoch = g_epoch;
         if (alertUIQueue) {
           xQueueOverwrite(alertUIQueue, &update);
@@ -99,6 +100,7 @@ static void alertAggregationTask(void* parameter) {
         AlertUIUpdate update;
         update.counts = g_currentCounts;
         update.showDisplay = false;
+        update.criticalAlertsActive = (g_currentCounts.criticalCount > 0);
         update.updateEpoch = g_epoch;
         if (alertUIQueue) xQueueOverwrite(alertUIQueue, &update);
         hideSent = true;
@@ -154,6 +156,7 @@ static void recalcCountsAndPublish() {
 
     AlertUIUpdate update;
     update.counts = g_currentCounts;
+    update.criticalAlertsActive = (g_currentCounts.criticalCount > 0);
     update.updateEpoch = g_epoch;
 
     if (g_activeList.empty()) {
@@ -164,6 +167,9 @@ static void recalcCountsAndPublish() {
       update.displayLevel = g_currentLevels[g_activeList[g_rotateIdx]];
       update.displayCritical = g_showingCrit;
     }
+
+    USBSerial.printf("[Alert] Sending UI update: crit=%d warn=%d critActive=%d\n",
+                     update.counts.criticalCount, update.counts.warningCount, update.criticalAlertsActive);
 
     if (alertUIQueue) {
       xQueueOverwrite(alertUIQueue, &update);
@@ -187,25 +193,16 @@ static void recalcCountsAndPublish() {
 
 /**
  * Handle vibration alerts based on state transitions
+ * Note: This now only handles one-shot vibration patterns.
+ * Critical alert border/vibration is handled by UI task based on criticalAlertsActive flag.
  */
 static void handleAlertVibration(const AlertCounts& newCounts, const AlertCounts& previousCounts) {
-  if (newCounts.criticalCount > 0) {
-    // Use the new synchronized alert service
-    if (!isCriticalAlertActive()) {
-      startCriticalAlerts();
-    }
-  } else {
-    // Stop synchronized alerts if no critical alerts remain
-    if (isCriticalAlertActive()) {
-      stopCriticalAlerts();
-    }
-
-    // Handle warning transitions (only when no critical alerts)
-    if (previousCounts.warningCount == 0 && newCounts.warningCount > 0) {
-      // Short delay to sync with UI
-      vTaskDelay(pdMS_TO_TICKS(250));
-      // Transition from 0 warnings to >0 warnings - trigger double pulse
-      executeVibePattern(VIBE_DOUBLE_PULSE);
-    }
+  // Handle warning transitions (only when no critical alerts)
+  if (newCounts.criticalCount == 0 &&
+      previousCounts.warningCount == 0 && newCounts.warningCount > 0) {
+    // Short delay to sync with UI
+    vTaskDelay(pdMS_TO_TICKS(100));
+    // Transition from 0 warnings to >0 warnings - trigger double pulse
+    executeVibePattern(VIBE_DOUBLE_PULSE);
   }
 }

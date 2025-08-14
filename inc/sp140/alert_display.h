@@ -31,13 +31,16 @@ extern QueueHandle_t alertCarouselQueue;  // depth 1, overwrite
 struct AlertUIUpdate {
   // Counter data
   AlertCounts counts;
-  
+
   // Display message data
   SensorID displayId;       // Valid sensor when showDisplay == true
   AlertLevel displayLevel;  // Alert level for dynamic abbreviations
   bool displayCritical;     // true = critical colouring
   bool showDisplay;         // false = hide label
-  
+
+  // Critical alert state (for border/vibration control)
+  bool criticalAlertsActive;  // true = show red border + vibration
+
   // Synchronization
   uint32_t updateEpoch;     // Ensures atomicity
 };

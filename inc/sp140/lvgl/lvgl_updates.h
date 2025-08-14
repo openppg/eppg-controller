@@ -66,4 +66,11 @@ void stopCriticalBorderFlash();
  */
 bool isCriticalBorderFlashing();
 
+/**
+ * @brief Direct control functions for use within UI task (no mutex).
+ * These should only be called when the LVGL mutex is already held.
+ */
+void startCriticalBorderFlashDirect();
+void stopCriticalBorderFlashDirect();
+
 #endif // LVGL_UPDATES_H

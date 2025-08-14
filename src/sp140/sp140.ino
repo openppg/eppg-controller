@@ -452,11 +452,24 @@ void refreshDisplay() {
     if (xQueueReceive(alertUIQueue, &alertUpdate, 0) == pdTRUE) {
       // Update counter and display atomically
       updateAlertCounterDisplay(alertUpdate.counts);
-      
+
       if (alertUpdate.showDisplay) {
         lv_showAlertTextWithLevel(alertUpdate.displayId, alertUpdate.displayLevel, alertUpdate.displayCritical);
       } else {
         lv_hideAlertText();
+      }
+
+      // Control critical border and vibration based on state
+      static bool lastCriticalState = false;
+      if (alertUpdate.criticalAlertsActive != lastCriticalState) {
+        if (alertUpdate.criticalAlertsActive) {
+          USBSerial.println("[UI] Starting critical border flash");
+          startCriticalBorderFlashDirect(); // Direct control - we already have the mutex
+        } else {
+          USBSerial.println("[UI] Stopping critical border flash");
+          stopCriticalBorderFlashDirect(); // Direct control - we already have the mutex
+        }
+        lastCriticalState = alertUpdate.criticalAlertsActive;
       }
     }
 
