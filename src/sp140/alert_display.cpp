@@ -9,9 +9,8 @@
 
 // ------------ Globals -------------
 QueueHandle_t alertEventQueue = NULL;
-QueueHandle_t alertCountQueue = NULL;
 QueueHandle_t alertCarouselQueue = NULL;
-QueueHandle_t alertDisplayQueue = NULL;
+QueueHandle_t alertUIQueue = NULL;
 TaskHandle_t alertAggregationTaskHandle = NULL;
 
 // Internal state: current alert levels per sensor
@@ -34,12 +33,11 @@ static void handleAlertVibration(const AlertCounts& newCounts, const AlertCounts
 // ------------ Public helpers -------------
 void initAlertDisplay() {
   // Create queues – small, non-blocking
-  alertEventQueue  = xQueueCreate(10, sizeof(AlertEvent));
-  alertCountQueue  = xQueueCreate(1,  sizeof(AlertCounts));
+  alertEventQueue  = xQueueCreate(20, sizeof(AlertEvent));
   alertCarouselQueue = xQueueCreate(1, sizeof(AlertSnapshot));
-  alertDisplayQueue = xQueueCreate(1, sizeof(AlertDisplayMsg)); // New queue for display rotation
+  alertUIQueue = xQueueCreate(1, sizeof(AlertUIUpdate)); // Unified queue for synchronized updates
 
-  if (!alertEventQueue || !alertCountQueue || !alertCarouselQueue || !alertDisplayQueue) {
+  if (!alertEventQueue || !alertCarouselQueue || !alertUIQueue) {
     USBSerial.println("[AlertDisplay] Failed creating queues");
     return;
   }
@@ -48,7 +46,7 @@ void initAlertDisplay() {
   initCriticalAlertService();
 
   // Create aggregation task (low priority)
-  xTaskCreate(alertAggregationTask, "AlertAgg", 3072, NULL, 1, &alertAggregationTaskHandle);
+  xTaskCreate(alertAggregationTask, "AlertAgg", 4096, NULL, 1, &alertAggregationTaskHandle);
   USBSerial.println("[AlertDisplay] Init complete");
 }
 
@@ -81,13 +79,16 @@ static void alertAggregationTask(void* parameter) {
         g_lastRotateMs = now;
         g_rotateIdx = (g_rotateIdx + 1) % g_activeList.size();
 
-        AlertDisplayMsg msg;
-        msg.show = true;
-        msg.id = g_activeList[g_rotateIdx];
-        msg.level = g_currentLevels[g_activeList[g_rotateIdx]];  // Get the alert level for this sensor
-        msg.critical = g_showingCrit;
-        if (alertDisplayQueue) {
-          xQueueOverwrite(alertDisplayQueue, &msg);
+        // Send unified update with current counts and display info
+        AlertUIUpdate update;
+        update.counts = g_currentCounts;
+        update.showDisplay = true;
+        update.displayId = g_activeList[g_rotateIdx];
+        update.displayLevel = g_currentLevels[g_activeList[g_rotateIdx]];
+        update.displayCritical = g_showingCrit;
+        update.updateEpoch = g_epoch;
+        if (alertUIQueue) {
+          xQueueOverwrite(alertUIQueue, &update);
         }
       }
     }
@@ -95,9 +96,11 @@ static void alertAggregationTask(void* parameter) {
       // If list empty ensure label hidden once
       static bool hideSent = false;
       if (!hideSent) {
-        AlertDisplayMsg msg{};
-        msg.show = false;
-        if (alertDisplayQueue) xQueueOverwrite(alertDisplayQueue,&msg);
+        AlertUIUpdate update;
+        update.counts = g_currentCounts;
+        update.showDisplay = false;
+        update.updateEpoch = g_epoch;
+        if (alertUIQueue) xQueueOverwrite(alertUIQueue, &update);
         hideSent = true;
       }
     }
@@ -129,13 +132,10 @@ static void recalcCountsAndPublish() {
   handleAlertVibration(counts, g_previousCounts);
   g_previousCounts = counts;
 
-  if (counts.warningCount != g_currentCounts.warningCount ||
-      counts.criticalCount != g_currentCounts.criticalCount) {
-    g_currentCounts = counts;
-    if (alertCountQueue) {
-      xQueueOverwrite(alertCountQueue, &g_currentCounts);
-    }
-  }
+  // Always update current counts for internal tracking
+  bool countsChanged = (counts.warningCount != g_currentCounts.warningCount ||
+                       counts.criticalCount != g_currentCounts.criticalCount);
+  g_currentCounts = counts;
 
   // Update active list for display rotation
   bool newShowingCrit = !critList.empty();
@@ -143,23 +143,30 @@ static void recalcCountsAndPublish() {
 
   bool listChanged = (newShowingCrit != g_showingCrit) || (newList != g_activeList);
 
-  if (listChanged) {
-    g_activeList = newList;
-    g_showingCrit = newShowingCrit;
-    g_rotateIdx = 0;
-    g_lastRotateMs = millis();
-
-    AlertDisplayMsg msg;
-    if (g_activeList.empty()) {
-      msg.show = false;
-    } else {
-      msg.show = true;
-      msg.id = g_activeList[g_rotateIdx];
-      msg.level = g_currentLevels[g_activeList[g_rotateIdx]];  // Get the alert level for this sensor
-      msg.critical = g_showingCrit;
+  // Send unified update when counts change or display list changes
+  if (countsChanged || listChanged) {
+    if (listChanged) {
+      g_activeList = newList;
+      g_showingCrit = newShowingCrit;
+      g_rotateIdx = 0;
+      g_lastRotateMs = millis();
     }
-    if (alertDisplayQueue) {
-      xQueueOverwrite(alertDisplayQueue, &msg);
+
+    AlertUIUpdate update;
+    update.counts = g_currentCounts;
+    update.updateEpoch = g_epoch;
+
+    if (g_activeList.empty()) {
+      update.showDisplay = false;
+    } else {
+      update.showDisplay = true;
+      update.displayId = g_activeList[g_rotateIdx];
+      update.displayLevel = g_currentLevels[g_activeList[g_rotateIdx]];
+      update.displayCritical = g_showingCrit;
+    }
+
+    if (alertUIQueue) {
+      xQueueOverwrite(alertUIQueue, &update);
     }
   }
 
@@ -175,20 +182,6 @@ static void recalcCountsAndPublish() {
 
   if (alertCarouselQueue) {
     xQueueOverwrite(alertCarouselQueue, &snap);
-  }
-
-  // Rotate display queue
-  AlertSnapshot currentDisplaySnap;
-  if (xQueuePeek(alertDisplayQueue, &currentDisplaySnap, 0) == pdTRUE) {
-    // If the current display snapshot is the same as the carousel snapshot,
-    // we need to rotate it to show the next set of alerts.
-    // This logic is simplified here; in a real system, you'd manage a queue of snapshots.
-    // For now, we just overwrite the display queue with the current carousel snapshot.
-    // A more robust solution would involve a separate queue for display snapshots.
-    xQueueOverwrite(alertDisplayQueue, &snap);
-  } else {
-    // If the display queue is empty, just overwrite it with the current carousel snapshot.
-    xQueueOverwrite(alertDisplayQueue, &snap);
   }
 }
 
@@ -209,6 +202,8 @@ static void handleAlertVibration(const AlertCounts& newCounts, const AlertCounts
 
     // Handle warning transitions (only when no critical alerts)
     if (previousCounts.warningCount == 0 && newCounts.warningCount > 0) {
+      // Short delay to sync with UI
+      vTaskDelay(pdMS_TO_TICKS(250));
       // Transition from 0 warnings to >0 warnings - trigger double pulse
       executeVibePattern(VIBE_DOUBLE_PULSE);
     }

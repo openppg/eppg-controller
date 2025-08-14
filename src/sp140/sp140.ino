@@ -447,17 +447,14 @@ void refreshDisplay() {
         break;
     }
 
-    // Handle alert counter updates, non-blocking
-    AlertCounts newCounts;
-    if (xQueueReceive(alertCountQueue, &newCounts, 0) == pdTRUE) {
-      updateAlertCounterDisplay(newCounts);
-    }
-
-    // Handle alert text message
-    AlertDisplayMsg dmsg;
-    if (xQueueReceive(alertDisplayQueue, &dmsg, 0) == pdTRUE) {
-      if (dmsg.show) {
-        lv_showAlertTextWithLevel(dmsg.id, dmsg.level, dmsg.critical);
+    // Handle synchronized alert updates (counter + display together)
+    AlertUIUpdate alertUpdate;
+    if (xQueueReceive(alertUIQueue, &alertUpdate, 0) == pdTRUE) {
+      // Update counter and display atomically
+      updateAlertCounterDisplay(alertUpdate.counts);
+      
+      if (alertUpdate.showDisplay) {
+        lv_showAlertTextWithLevel(alertUpdate.displayId, alertUpdate.displayLevel, alertUpdate.displayCritical);
       } else {
         lv_hideAlertText();
       }

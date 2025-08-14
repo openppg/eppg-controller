@@ -25,18 +25,24 @@ struct AlertEvent {
 
 // Global queues
 extern QueueHandle_t alertEventQueue;   // depth ~10
-extern QueueHandle_t alertCountQueue;   // depth 1
 extern QueueHandle_t alertCarouselQueue;  // depth 1, overwrite
 
-// Message for UI to show a single alert text (or hide)
-struct AlertDisplayMsg {
-  SensorID id;       // Valid sensor when show == true
-  AlertLevel level;  // Alert level for dynamic abbreviations
-  bool critical;     // true = critical colouring
-  bool show;         // false = hide label
+// Unified message for synchronized UI updates
+struct AlertUIUpdate {
+  // Counter data
+  AlertCounts counts;
+  
+  // Display message data
+  SensorID displayId;       // Valid sensor when showDisplay == true
+  AlertLevel displayLevel;  // Alert level for dynamic abbreviations
+  bool displayCritical;     // true = critical colouring
+  bool showDisplay;         // false = hide label
+  
+  // Synchronization
+  uint32_t updateEpoch;     // Ensures atomicity
 };
 
-extern QueueHandle_t alertDisplayQueue;   // depth 1, overwrite
+extern QueueHandle_t alertUIQueue;   // depth 1, overwrite - replaces alertCountQueue and alertDisplayQueue
 
 // Snapshot for carousel text
 #define MAX_ALERT_ITEMS 8
