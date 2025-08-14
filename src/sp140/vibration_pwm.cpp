@@ -1,6 +1,5 @@
 #include "sp140/vibration_pwm.h"
-#include "Arduino.h"
-#include "sp140/shared-config.h"
+#include "sp140/esp32s3-config.h"
 #include "sp140/lvgl/lvgl_updates.h"
 
 const int VIBE_PWM_PIN = 46;  // TODO: move to config
