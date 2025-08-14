@@ -313,7 +313,7 @@ void updateLvglMainScreen(
   }
 
   // Update battery bar and percentage
-  if (bmsConnected && batteryPercent > 0) {
+  if (bmsConnected && batteryPercent >= 0) {
     lv_bar_set_value(battery_bar, (int)batteryPercent, LV_ANIM_OFF);
 
     // Set color based on percentage
@@ -365,14 +365,10 @@ void updateLvglMainScreen(
         snprintf(buffer, sizeof(buffer), "%2.0fv", totalVolts);
         lv_label_set_text(voltage_right_label, buffer);
         // Ensure battery label shows percentage if BMS is connected
-        if (batteryPercent > 0) {
+        if (batteryPercent >= 0) {
            char batt_buffer[10];
            snprintf(batt_buffer, sizeof(batt_buffer), "%d%%", (int)batteryPercent);
            lv_label_set_text(battery_label, batt_buffer);
-           lv_obj_set_style_text_color(battery_label, LVGL_BLACK, 0);
-        } else {
-           // If SOC is 0, maybe show voltage instead or clear? Let's clear for now.
-           lv_label_set_text(battery_label, "-");
            lv_obj_set_style_text_color(battery_label, LVGL_BLACK, 0);
         }
 
