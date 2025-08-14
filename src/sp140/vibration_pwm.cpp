@@ -244,8 +244,14 @@ void stopCriticalAlerts() {
   }
   g_critical_alert_active = false;
 
-  // Stop the master LVGL timer
+  // Stop the master LVGL timer - retry if mutex is busy
   stopCriticalBorderFlash();
+
+  // Verify the border actually stopped - retry up to 3 times if needed
+  for (int retry = 0; retry < 3 && isCriticalBorderFlashing(); retry++) {
+    vTaskDelay(pdMS_TO_TICKS(20)); // Brief delay
+    stopCriticalBorderFlash();
+  }
 }
 
 /**
