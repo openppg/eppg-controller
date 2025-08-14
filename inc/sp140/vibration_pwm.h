@@ -57,4 +57,52 @@ void executeVibePattern(VibePattern pattern);
  */
 void customVibePattern(const uint8_t intensities[], const uint16_t durations[], int steps);
 
+/**
+ * @brief Pulses the vibration motor for a specific duration and intensity.
+ *
+ * This is a non-blocking function that sends a request to the vibe queue.
+ *
+ * @param duration_ms The duration of the pulse in milliseconds.
+ * @param intensity The vibration intensity (0-255).
+ */
+void pulseVibration(uint16_t duration_ms, uint8_t intensity);
+
+/**
+ * @brief Stops all vibration immediately.
+ *
+ * This function clears the vibration queue and turns off the PWM signal.
+ */
+void stopVibration();
+
+/**
+ * @brief Initializes the critical alert service.
+ *
+ * This function sets up the necessary resources for handling synchronized critical alerts.
+ * It should be called once during system initialization.
+ */
+void initCriticalAlertService();
+
+/**
+ * @brief Starts the critical alert notifications.
+ *
+ * Activates the synchronized vibration and border flashing. If alerts are
+ * already running, this function has no effect.
+ */
+void startCriticalAlerts();
+
+/**
+ * @brief Stops the critical alert notifications.
+ *
+ * Deactivates the vibration and border flashing. If alerts are not currently
+ * running, this function has no effect.
+ */
+void stopCriticalAlerts();
+
+/**
+ * @brief Checks if the critical alert system is currently active.
+ *
+ * @return true if critical alerts are active, false otherwise.
+ */
+bool isCriticalAlertActive();
+
 #endif  // INC_SP140_VIBRATION_PWM_H_

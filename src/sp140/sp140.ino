@@ -26,10 +26,15 @@
 
 #include "../../inc/sp140/globals.h"  // device config
 #include "../../inc/sp140/esc.h"
-#include "../../inc/sp140/lvgl/lvgl_display.h"
+#include "../../inc/sp140/lvgl/lvgl_core.h"
+#include "../../inc/sp140/lvgl/lvgl_main_screen.h"
+#include "../../inc/sp140/lvgl/lvgl_updates.h"
+#include "../../inc/sp140/lvgl/lvgl_alerts.h"
 #include "../../inc/sp140/bms.h"
 #include "../../inc/sp140/altimeter.h"
 #include "../../inc/sp140/debug.h"
+#include "../../inc/sp140/simple_monitor.h"
+#include "../../inc/sp140/alert_display.h"
 
 #include "../../inc/sp140/buzzer.h"
 #include "../../inc/sp140/device_state.h"
@@ -37,6 +42,10 @@
 #include "../../inc/sp140/throttle.h"
 #include "../../inc/sp140/vibration_pwm.h"
 #include "../../inc/sp140/led.h"
+
+// FreeRTOS task utilities for stack watermark logging
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 // Global variable for shared SPI
 SPIClass* hardwareSPI = nullptr;
@@ -129,6 +138,74 @@ void switchScreenPage(ScreenPage newPage) {
   }
 }
 
+// -----------------------------------------------
+// Periodic FreeRTOS stack high-watermark logger
+// -----------------------------------------------
+// Forward declarations for task handles used by the logger
+extern TaskHandle_t blinkLEDTaskHandle;
+extern TaskHandle_t throttleTaskHandle;
+extern TaskHandle_t watchdogTaskHandle;
+extern TaskHandle_t uiTaskHandle;
+extern TaskHandle_t bmsTaskHandle;
+extern TaskHandle_t monitoringTaskHandle;
+extern TaskHandle_t audioTaskHandle;
+extern TaskHandle_t webSerialTaskHandle;
+extern TaskHandle_t bleStateUpdateTaskHandle;
+extern TaskHandle_t deviceStateUpdateTaskHandle;
+extern TaskHandle_t buttonTaskHandle;
+extern TaskHandle_t vibeTaskHandle;
+
+static TaskHandle_t stackLoggerTaskHandle = NULL;
+static const uint32_t STACK_LOGGER_INTERVAL_MS = 5000;  // Log every 5 seconds
+
+static void stackWatermarkLoggerTask(void* parameter) {
+  // Give the system a moment to spin up all tasks
+  vTaskDelay(pdMS_TO_TICKS(5000));
+
+  for (;;) {
+    USBSerial.println("[StackLogger] Task stack high-water marks (words / bytes):");
+
+    struct TaskEntry { const char* label; TaskHandle_t* handlePtr; };
+    TaskEntry taskEntries[] = {
+      {"blinkLed", &blinkLEDTaskHandle},
+      {"throttle", &throttleTaskHandle},
+      {"watchdog", &watchdogTaskHandle},
+      {"UI", &uiTaskHandle},
+      {"BMS", &bmsTaskHandle},
+      {"Monitoring", &monitoringTaskHandle},
+      {"Audio", &audioTaskHandle},
+      {"WebSerial", &webSerialTaskHandle},
+      {"BLEStateUpdate", &bleStateUpdateTaskHandle},
+      {"StateUpdate", &deviceStateUpdateTaskHandle},
+      {"ButtonHandler", &buttonTaskHandle},
+      {"Vibration", &vibeTaskHandle},
+    };
+
+    for (const auto& entry : taskEntries) {
+      TaskHandle_t handle = entry.handlePtr ? *entry.handlePtr : NULL;
+      if (handle != NULL) {
+        UBaseType_t words = uxTaskGetStackHighWaterMark(handle);
+        const char* rtosName = pcTaskGetName(handle);
+        unsigned int bytes = (unsigned int)(words * sizeof(StackType_t));
+        USBSerial.printf("  %-14s [RTOS:%s] HWM: %u words (%u bytes)\n",
+                         entry.label,
+                         (rtosName ? rtosName : "?"),
+                         (unsigned int)words,
+                         bytes);
+      } else {
+        USBSerial.printf("  %-14s handle NULL\n", entry.label);
+      }
+    }
+
+    USBSerial.flush();
+    vTaskDelay(pdMS_TO_TICKS(STACK_LOGGER_INTERVAL_MS));
+  }
+}
+
+// Forward declarations for tasks defined in other compilation units
+extern void vibeTask(void* parameter);
+extern void buttonHandlerTask(void* parameter);
+
 // Add this function to handle BLE updates safely
 void bleStateUpdateTask(void* parameter) {
   BLEStateUpdate update;
@@ -183,7 +260,7 @@ void changeDeviceState(DeviceState newState) {
     }
 
     USBSerial.print("Device State Changed to: ");
-    switch(newState) {
+    switch (newState) {
       case DISARMED:
         USBSerial.println("DISARMED");
         break;
@@ -224,8 +301,10 @@ unsigned long armedSecs = 0;
 TaskHandle_t blinkLEDTaskHandle = NULL;
 TaskHandle_t throttleTaskHandle = NULL;
 TaskHandle_t watchdogTaskHandle = NULL;
-TaskHandle_t spiCommTaskHandle = NULL;
+TaskHandle_t uiTaskHandle = NULL;
+TaskHandle_t bmsTaskHandle = NULL;
 TaskHandle_t vibeTaskHandle = NULL;  // Vibration motor task
+TaskHandle_t monitoringTaskHandle = NULL;  // Sensor monitoring task
 
 QueueHandle_t melodyQueue = NULL;
 TaskHandle_t audioTaskHandle = NULL;
@@ -235,8 +314,16 @@ QueueHandle_t throttleUpdateQueue = NULL;
 QueueHandle_t escTelemetryQueue = NULL;
 QueueHandle_t vibeQueue = NULL;  // Vibration motor queue
 
+// Snapshot queue for sensor monitoring
+QueueHandle_t telemetrySnapshotQueue = NULL;
+
 unsigned long lastDisarmTime = 0;
 const unsigned long DISARM_COOLDOWN = 500;  // 500ms cooldown
+
+// Timestamps updated by core tasks for watchdog monitoring
+volatile uint32_t lastThrottleRunMs = 0;
+volatile uint32_t lastUiRunMs = 0;
+volatile uint32_t lastBmsRunMs = 0;
 
 #pragma message "Warning: OpenPPG software is in beta"
 
@@ -262,18 +349,22 @@ void setupSPI(const HardwareConfig& board_config) {
 }
 
 void watchdogTask(void* parameter) {
+#ifndef OPENPPG_DEBUG
+  // Register this task with the hardware Task WDT; only this task feeds it
+  ESP_ERROR_CHECK(esp_task_wdt_add(NULL));
+#endif
   for (;;) {
-    #ifndef OPENPPG_DEBUG
-      ESP_ERROR_CHECK(esp_task_wdt_reset());
-    #endif
-    vTaskDelay(pdMS_TO_TICKS(100));  // Delay for 100ms
+#ifndef OPENPPG_DEBUG
+    esp_task_wdt_reset();
+#endif
+    vTaskDelay(pdMS_TO_TICKS(100));
   }
 }
 
 void blinkLEDTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
-  for (;;) {  // infinite loop
+  for (;;) {
     blinkLED();  // call blinkLED function
     vTaskDelay(pdMS_TO_TICKS(500));  // wait for 500ms
   }
@@ -283,9 +374,13 @@ void blinkLEDTask(void *pvParameters) {
 void throttleTask(void *pvParameters) {
   (void) pvParameters;  // this is a standard idiom to avoid compiler warnings about unused parameters.
 
-  for (;;) {  // infinite loop
-    handleThrottle();  //
-    vTaskDelay(pdMS_TO_TICKS(20));  // wait for 20ms
+  TickType_t lastWake = xTaskGetTickCount();
+  const TickType_t throttleTicks = pdMS_TO_TICKS(20);  // 50 Hz
+  for (;;) {
+    handleThrottle();
+    pushTelemetrySnapshot();
+    lastThrottleRunMs = millis();
+    vTaskDelayUntil(&lastWake, throttleTicks);
   }
   vTaskDelete(NULL);  // should never reach this
 }
@@ -318,7 +413,7 @@ void refreshDisplay() {
     return;
   }
 
-  if (xSemaphoreTake(lvglMutex, portMAX_DELAY) == pdTRUE) {
+  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(40)) == pdTRUE) {
     // Get the current relative altitude (updates buffer for vario)
     const float currentRelativeAltitude = getAltitude(deviceData);
 
@@ -352,63 +447,98 @@ void refreshDisplay() {
         break;
     }
 
+    // Handle alert counter updates, non-blocking
+    AlertCounts newCounts;
+    if (xQueueReceive(alertCountQueue, &newCounts, 0) == pdTRUE) {
+      updateAlertCounterDisplay(newCounts);
+    }
+
+    // Handle alert text message
+    AlertDisplayMsg dmsg;
+    if (xQueueReceive(alertDisplayQueue, &dmsg, 0) == pdTRUE) {
+      if (dmsg.show) {
+        lv_showAlertTextWithLevel(dmsg.id, dmsg.level, dmsg.critical);
+      } else {
+        lv_hideAlertText();
+      }
+    }
+
     // General LVGL update handler
     updateLvgl();
 
     xSemaphoreGive(lvglMutex);
   } else {
-    USBSerial.println("Failed to acquire LVGL mutex in refreshDisplay");
+    // Avoid spamming the serial log; skip this frame if mutex busy
   }
 }
 
-void spiCommTask(void *pvParameters) {
+void monitoringTask(void *pvParameters) {
+  TelemetrySnapshot snap;
   for (;;) {
-      #ifdef SCREEN_DEBUG
-        float altitude = 0;
-        generateFakeTelemetry(escTelemetryData, bmsTelemetryData, unifiedBatteryData, altitude);
-        xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);  // Always latest data
-        xQueueOverwrite(escTelemetryQueue, &escTelemetryData);  // Always latest data
-        refreshDisplay();
-      #else
-        // 1. Check if CAN transceiver is initialized
-        if (bmsCanInitialized) {
-          updateBMSData();  // This function handles its own CS pins
-          if (bms_can->isConnected()) {
-            bmsTelemetryData.bmsState = TelemetryState::CONNECTED;
-          } else {
-            bmsTelemetryData.bmsState = TelemetryState::NOT_CONNECTED;
-          }
-        }
+    if (xQueueReceive(telemetrySnapshotQueue, &snap, pdMS_TO_TICKS(100)) == pdTRUE) {
+      // Run monitors using the fresh snapshot
+      if (monitoringEnabled) {
+        checkAllSensorsWithData(snap.esc, snap.bms);
+      }
+    }
+  }
+}
 
-        // 2. Use BMS data if connected, otherwise use ESC data
-        if (bmsTelemetryData.bmsState == TelemetryState::CONNECTED) {
-          // BMS is initialized AND currently connected
-          unifiedBatteryData.volts = bmsTelemetryData.battery_voltage;
-          unifiedBatteryData.amps = bmsTelemetryData.battery_current;
-          unifiedBatteryData.soc = bmsTelemetryData.soc;
-          unifiedBatteryData.power = bmsTelemetryData.power;
+// UI task: fixed 25 Hz refresh and snapshot publish
+void uiTask(void *pvParameters) {
+  TickType_t lastWake = xTaskGetTickCount();
+  const TickType_t uiTicks = pdMS_TO_TICKS(40); // 25 Hz
+  for (;;) {
+    refreshDisplay();
+    pushTelemetrySnapshot();
+    lastUiRunMs = millis();
+    vTaskDelayUntil(&lastWake, uiTicks);
+  }
+}
+
+// BMS task: ~10 Hz polling and unified battery update
+void bmsTask(void *pvParameters) {
+  TickType_t lastWake = xTaskGetTickCount();
+  const TickType_t bmsTicks = pdMS_TO_TICKS(100); // 10 Hz
+  for (;;) {
+    #ifdef SCREEN_DEBUG
+      float altitude = 0;
+      generateFakeTelemetry(escTelemetryData, bmsTelemetryData, unifiedBatteryData, altitude);
+      xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);
+      xQueueOverwrite(escTelemetryQueue, &escTelemetryData);
+    #else
+      if (bmsCanInitialized) {
+        updateBMSData();
+        if (bms_can->isConnected()) {
+          bmsTelemetryData.bmsState = TelemetryState::CONNECTED;
+        } else {
+          bmsTelemetryData.bmsState = TelemetryState::NOT_CONNECTED;
+        }
+      }
+
+      if (bmsTelemetryData.bmsState == TelemetryState::CONNECTED) {
+        unifiedBatteryData.volts = bmsTelemetryData.battery_voltage;
+        unifiedBatteryData.amps = bmsTelemetryData.battery_current;
+        unifiedBatteryData.soc = bmsTelemetryData.soc;
+        unifiedBatteryData.power = bmsTelemetryData.power;
+        if (bmsTelemetryQueue != NULL) {
           xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);
-        } else if (escTelemetryData.escState == TelemetryState::CONNECTED) {
-          // BMS is either not initialized OR not currently connected
-
-          // Fallback to ESC data for unified view
-          unifiedBatteryData.volts = escTelemetryData.volts;
-          unifiedBatteryData.amps = escTelemetryData.amps;
-          unifiedBatteryData.power = escTelemetryData.amps * escTelemetryData.volts / 1000.0;
-
-          unifiedBatteryData.soc = 0.0;  // We don't estimate SOC from voltage anymore
-        } else {  // Not connected to either BMS or ESC, probably USB powered
-          // No connection to either BMS or ESC
-          unifiedBatteryData.volts = 0.0;
-          unifiedBatteryData.amps = 0.0;
-          unifiedBatteryData.soc = 0.0;
         }
+      } else if (escTelemetryData.escState == TelemetryState::CONNECTED) {
+        unifiedBatteryData.volts = escTelemetryData.volts;
+        unifiedBatteryData.amps = escTelemetryData.amps;
+        unifiedBatteryData.power = escTelemetryData.amps * escTelemetryData.volts / 1000.0;
+        unifiedBatteryData.soc = 0.0;
+      } else {
+        unifiedBatteryData.volts = 0.0;
+        unifiedBatteryData.amps = 0.0;
+        unifiedBatteryData.soc = 0.0;
+        unifiedBatteryData.power = 0.0;
+      }
+    #endif
 
-        // Update display - CS pin management is handled inside refreshDisplay via LVGL mutex
-        refreshDisplay();
-
-      #endif
-      vTaskDelay(pdMS_TO_TICKS(40));  // ~25fps
+    lastBmsRunMs = millis();
+    vTaskDelayUntil(&lastWake, bmsTicks);
   }
 }
 
@@ -421,6 +551,8 @@ void loadHardwareConfig() {
 void printBootMessage() {
   USBSerial.print(F("Booting up V"));
   USBSerial.print(VERSION_STRING);
+  USBSerial.print(F(" git:"));
+  USBSerial.println(GIT_REV);
 }
 
 void setupBarometer() {
@@ -495,6 +627,9 @@ void setup() {
   // Pass hardcoded pin values for DC and RST
   setupLvglDisplay(deviceData, board_config.tft_dc, board_config.tft_rst, hardwareSPI);
 
+  // Initialise alert display aggregation & UI
+  initAlertDisplay();
+
   #ifndef SCREEN_DEBUG
     // Pass the hardware SPI instance to the BMS_CAN initialization
     initBMSCAN(hardwareSPI);
@@ -533,7 +668,17 @@ void setup() {
     USBSerial.println("Error creating device state queue");
   }
 
-  setupBLE();
+  // Snapshot queue for monitoring (size 1)
+  telemetrySnapshotQueue = xQueueCreate(1, sizeof(TelemetrySnapshot));
+  if (telemetrySnapshotQueue == NULL) {
+    USBSerial.println("Error creating telemetry snapshot queue");
+  }
+
+    setupBLE();
+
+  // Initialize the simple monitoring system (but keep it disabled initially)
+  initSimpleMonitor();
+
   setupTasks();  // Create all tasks after queues and BLE are initialized
 
   pulseVibeMotor();
@@ -575,26 +720,35 @@ void setup() {
   send_device_data();
   // Signal that the UI is ready for updates from tasks
   uiReady = true;
+
+  // Simple instrumentation to detect UI/BMS latency
+  USBSerial.println("Init complete. UI + BMS loop running at ~25Hz.");
+
+  // Enable sensor monitoring after splash screen and UI setup
+  // This gives BMS/ESC time to initialize and start providing valid data
+  enableMonitoring();
 }
 
 // set up all the main threads/tasks with core 0 affinity
 void setupTasks() {
-  xTaskCreate(blinkLEDTask, "blinkLed", 1536, NULL, 1, &blinkLEDTaskHandle);
-  xTaskCreatePinnedToCore(throttleTask, "throttle", 4096, NULL, 3, &throttleTaskHandle, 0);
-  xTaskCreatePinnedToCore(spiCommTask, "SPIComm", 10096, NULL, 5, &spiCommTaskHandle, 1);
+  xTaskCreate(blinkLEDTask, "blinkLed", 2560, NULL, 1, &blinkLEDTaskHandle);
+  xTaskCreatePinnedToCore(throttleTask, "throttle", 4352, NULL, 3, &throttleTaskHandle, 0);
+  // Split UI and BMS into dedicated tasks
+  xTaskCreatePinnedToCore(uiTask, "UI", 5888, NULL, 2, &uiTaskHandle, 1);
+  xTaskCreatePinnedToCore(bmsTask, "BMS", 2304, NULL, 2, &bmsTaskHandle, 1);
   xTaskCreate(updateBLETask, "BLE Update Task", 8192, NULL, 1, NULL);
-  xTaskCreate(deviceStateUpdateTask, "State Update Task", 4096, NULL, 1, &deviceStateUpdateTaskHandle);
+  xTaskCreate(deviceStateUpdateTask, "State Update Task", 2048, NULL, 1, &deviceStateUpdateTaskHandle);
   // Create BLE update task with high priority but on core 1
-  xTaskCreatePinnedToCore(bleStateUpdateTask, "BLEStateUpdate", 8192, NULL, 4, &bleStateUpdateTaskHandle, 1);
+  xTaskCreatePinnedToCore(bleStateUpdateTask, "BLEStateUpdate", 8192, NULL, 1, &bleStateUpdateTaskHandle, 1);
 
   // Create melody queue
   melodyQueue = xQueueCreate(5, sizeof(MelodyRequest));
 
   // Create audio task - pin to core 1 to avoid interference with throttle
-  xTaskCreatePinnedToCore(audioTask, "Audio", 2048, NULL, 2, &audioTaskHandle, 1);
+  xTaskCreatePinnedToCore(audioTask, "Audio", 1536, NULL, 1, &audioTaskHandle, 1);
 
-  // TODO: add watchdog task (based on esc writing to CAN)
-  //xTaskCreatePinnedToCore(watchdogTask, "watchdog", 1000, NULL, 5, &watchdogTaskHandle, 0);  // Run on core 0
+  // Add hardware watchdog task on core 0 (highest priority among low-prio group)
+  xTaskCreatePinnedToCore(watchdogTask, "watchdog", 1536, NULL, 3, &watchdogTaskHandle, 0);
 
   xTaskCreate(updateESCBLETask, "ESC BLE Update Task", 8192, NULL, 1, NULL);
 
@@ -602,10 +756,21 @@ void setupTasks() {
   xTaskCreate(
     webSerialTask,
     "WebSerial",
-    4096,
+    1280,
     NULL,
     1,
     &webSerialTaskHandle);
+
+  // Create monitoring task
+  xTaskCreate(monitoringTask, "Monitoring", 4864, NULL, 1, &monitoringTaskHandle);
+
+  // Create vibration task (centralized here after initVibeMotor)
+  xTaskCreatePinnedToCore(vibeTask, "Vibration", 1536, NULL, 2, &vibeTaskHandle, 1);
+
+  #ifdef OPENPPG_DEBUG
+    // Create periodic stack watermark logger (low priority)
+    xTaskCreatePinnedToCore(stackWatermarkLoggerTask, "StackLogger", 3072, NULL, 1, &stackLoggerTaskHandle, 1);
+  #endif
 }
 
 void setup140() {
@@ -630,7 +795,7 @@ void initButtons() {
   pinMode(board_config.button_top, INPUT_PULLUP);
 
   // Create button handling task
-  xTaskCreatePinnedToCore(buttonHandlerTask, "ButtonHandler", 2048, NULL, 2, &buttonTaskHandle, 0);
+  xTaskCreatePinnedToCore(buttonHandlerTask, "ButtonHandler", 4096, NULL, 2, &buttonTaskHandle, 0);
 }
 
 // Add new button handler task
@@ -955,7 +1120,7 @@ void handleThrottle() {
       break;
   }
 
-  // Read/Sync ESC Telemetry (runs in all armed states)
+    // Read/Sync ESC Telemetry (runs in all armed states)
   readESCTelemetry();
   syncESCTelemetry();
 }
@@ -1135,4 +1300,14 @@ void webSerialTask(void *pvParameters) {
     }
     vTaskDelay(pdMS_TO_TICKS(100));  // Check every 100ms
   }
+}
+
+// Helper to push latest telemetry snapshot to queue (size 1, overwrite)
+void pushTelemetrySnapshot() {
+  if (telemetrySnapshotQueue == NULL) return;
+
+  TelemetrySnapshot snap;
+  snap.esc = escTelemetryData;
+  snap.bms = bmsTelemetryData;
+  xQueueOverwrite(telemetrySnapshotQueue, &snap);
 }
