@@ -7,6 +7,7 @@
 lv_disp_drv_t disp_drv;
 lv_disp_draw_buf_t draw_buf;
 lv_color_t buf[LVGL_BUFFER_SIZE];
+lv_color_t buf2[LVGL_BUFFER_SIZE];  // Second buffer for double buffering
 Adafruit_ST7735* tft_driver = nullptr;
 uint32_t lvgl_last_update = 0;
 // Define the shared SPI bus mutex
@@ -18,10 +19,10 @@ void setupLvglBuffer() {
   lv_init();
   USBSerial.println("LVGL initialized");
 
-  // Setup buffer for LVGL
-  USBSerial.println("Setting up LVGL buffer");
-  lv_disp_draw_buf_init(&draw_buf, buf, NULL, LVGL_BUFFER_SIZE);
-  USBSerial.println("LVGL buffer initialized");
+  // Setup double buffer for LVGL to reduce tearing
+  USBSerial.println("Setting up LVGL double buffer");
+  lv_disp_draw_buf_init(&draw_buf, buf, buf2, LVGL_BUFFER_SIZE);
+  USBSerial.println("LVGL double buffer initialized");
 }
 
 void setupLvglDisplay(

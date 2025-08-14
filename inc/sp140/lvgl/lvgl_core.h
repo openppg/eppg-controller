@@ -24,6 +24,7 @@ extern int8_t displayCS;  // Display chip select pin
 extern lv_disp_drv_t disp_drv;
 extern lv_disp_draw_buf_t draw_buf;
 extern lv_color_t buf[LVGL_BUFFER_SIZE];
+extern lv_color_t buf2[LVGL_BUFFER_SIZE];  // Second buffer for double buffering
 extern Adafruit_ST7735* tft_driver;
 extern uint32_t lvgl_last_update;
 // Shared SPI bus mutex (guards TFT + MCP2515 access)

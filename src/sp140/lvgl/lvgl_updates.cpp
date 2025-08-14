@@ -183,9 +183,13 @@ static void critical_border_flash_timer_cb(lv_timer_t* timer) {
     bool is_on = !lv_obj_has_flag(critical_border, LV_OBJ_FLAG_HIDDEN);
     if (is_on) {
       lv_obj_add_flag(critical_border, LV_OBJ_FLAG_HIDDEN);
+      // Invalidate the border area to ensure clean redraw
+      lv_obj_invalidate(critical_border);
       lv_timer_set_period(timer, 700); // Off duration
     } else {
       lv_obj_clear_flag(critical_border, LV_OBJ_FLAG_HIDDEN);
+      // Invalidate the border area to ensure clean redraw
+      lv_obj_invalidate(critical_border);
       lv_timer_set_period(timer, 300); // On duration
 
       // Trigger vibration pulse in sync with border "on"
@@ -193,6 +197,8 @@ static void critical_border_flash_timer_cb(lv_timer_t* timer) {
         pulseVibration(300, 200); // 300ms pulse, intensity 200
       }
     }
+    // Force immediate refresh to minimize tearing
+    lv_refr_now(lv_disp_get_default());
   }
 }
 
@@ -230,7 +236,10 @@ void startCriticalBorderFlashDirect() {
   if (critical_border != NULL && !isFlashingCriticalBorder) {
     isFlashingCriticalBorder = true;
     lv_obj_clear_flag(critical_border, LV_OBJ_FLAG_HIDDEN); // Start visible
+    lv_obj_invalidate(critical_border); // Ensure clean initial draw
     critical_border_flash_timer = lv_timer_create(critical_border_flash_timer_cb, 300, NULL);
+    // Force immediate refresh for clean start
+    lv_refr_now(lv_disp_get_default());
   }
 }
 
@@ -241,6 +250,9 @@ void stopCriticalBorderFlashDirect() {
   }
   if (critical_border != NULL) {
     lv_obj_add_flag(critical_border, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_invalidate(critical_border); // Ensure clean removal
+    // Force immediate refresh for clean stop
+    lv_refr_now(lv_disp_get_default());
   }
   isFlashingCriticalBorder = false;
 }
