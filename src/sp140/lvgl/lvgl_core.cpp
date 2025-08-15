@@ -22,7 +22,7 @@ public:
       auto cfg = _bus_instance.config();
       cfg.spi_host = SPI2_HOST;  // Use SPI2 (HSPI)
       cfg.spi_mode = 0;
-      cfg.freq_write = 27000000;  // SPI speed for writing
+      cfg.freq_write = 20000000;  // SPI speed for writing (safer)
       cfg.freq_read = 16000000;   // SPI speed for reading
       cfg.spi_3wire = false;
       cfg.use_lock = true;
@@ -39,19 +39,21 @@ public:
       cfg.pin_cs = 10;
       cfg.pin_rst = 15;
       cfg.pin_busy = -1;
-      cfg.memory_width = 160;
-      cfg.memory_height = 128;
+      // Adafruit 1.8" ST7735R (#618) visible 160x128, controller RAM 162x132
+      cfg.memory_width = 162;
+      cfg.memory_height = 132;
       cfg.panel_width = 160;
       cfg.panel_height = 128;
-      // ST7735 BLACKTAB variant - specific settings for 160x128 display
-      cfg.offset_x = 0;
-      cfg.offset_y = 0;
+      // Typical offsets for BLACKTAB
+      cfg.offset_x = 1;
+      cfg.offset_y = 2;
       cfg.offset_rotation = 0;
       cfg.dummy_read_pixel = 8;
       cfg.dummy_read_bits = 1;
       cfg.readable = false;
-      cfg.invert = false;  // User reported darker display, so no invert needed
-      cfg.rgb_order = false;  // Try RGB order instead of BGR
+      // Use BGR order (common for ST7735 BLACKTAB) to correct red/blue swap; no inversion
+      cfg.invert = false;
+      cfg.rgb_order = true;
       cfg.dlen_16bit = false;
       cfg.bus_shared = true;  // Important for shared SPI
       _panel_instance.config(cfg);
@@ -96,18 +98,21 @@ void setupLvglDisplay(
   if (tft_driver == nullptr) {
     // Store the shared SPI instance
     hardwareSPI = spi;
-    
+
     // Create custom ST7735 configuration for LovyanGFX
     tft_driver = new LGFX_ST7735();
-    
+
     // Initialize display with custom configuration
     if (tft_driver->init()) {
+      // Ensure color format matches LVGL (RGB565) and correct byte order
+      tft_driver->setColorDepth(16);
+      tft_driver->setSwapBytes(true);
       tft_driver->setRotation(deviceData.screen_rotation);
-      
+
       // Clear screen with a test pattern to verify it's working
       tft_driver->fillScreen(0x0000);  // Black
       tft_driver->fillRect(10, 10, 50, 50, 0xF800);  // Red square for testing
-      
+
       USBSerial.println("LovyanGFX ST7735 initialized successfully");
     } else {
       USBSerial.println("ERROR: LovyanGFX ST7735 initialization failed!");
@@ -150,11 +155,8 @@ void lvgl_flush_cb(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* color
     xSemaphoreTake(spiBusMutex, portMAX_DELAY);
   }
 
-  // LovyanGFX DMA-optimized pixel transfer
-  tft_driver->startWrite();
-  tft_driver->setAddrWindow(area->x1, area->y1, w, h);
-  tft_driver->writePixels((uint16_t*)color_p, w * h);  // NOLINT(readability/casting)
-  tft_driver->endWrite();
+  // LovyanGFX optimized pixel transfer
+  tft_driver->pushImage(area->x1, area->y1, w, h, (const uint16_t*)color_p);
 
   if (spiBusMutex != NULL) {
     xSemaphoreGive(spiBusMutex);
