@@ -22,11 +22,16 @@ void updateBMSData() {
   if (bms_can == nullptr || !bmsCanInitialized) return;
 
   // TODO track bms incrementing cycle count
-  // Ensure display CS is deselected and BMS CS is selected
-  digitalWrite(displayCS, HIGH);
+  
   // Take the shared SPI mutex to prevent contention with TFT flush
   if (spiBusMutex != NULL) {
     xSemaphoreTake(spiBusMutex, portMAX_DELAY);
+  }
+  
+  // Begin SPI transaction for MCP2515 (adjust settings as needed for your MCP2515)
+  SPIClass* spi = getSharedSPI();
+  if (spi) {
+    spi->beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE0)); // 10MHz, Mode 0 for MCP2515
   }
   digitalWrite(bmsCS, LOW);
 
@@ -83,8 +88,12 @@ void updateBMSData() {
   }
   // printBMSData();
 
-  // Deselect BMS CS when done and release mutex
+  // End SPI transaction and cleanup
   digitalWrite(bmsCS, HIGH);
+  if (spi) {
+    spi->endTransaction();
+  }
+  
   if (spiBusMutex != NULL) {
     xSemaphoreGive(spiBusMutex);
   }

@@ -8,7 +8,57 @@ lv_disp_drv_t disp_drv;
 lv_disp_draw_buf_t draw_buf;
 lv_color_t buf[LVGL_BUFFER_SIZE];
 lv_color_t buf2[LVGL_BUFFER_SIZE];  // Second buffer for double buffering
-Adafruit_ST7735* tft_driver = nullptr;
+lgfx::LGFX_Device* tft_driver = nullptr;
+extern SPIClass* hardwareSPI; // External reference to shared SPI instance
+
+// Custom LovyanGFX configuration for ST7735
+class LGFX_ST7735 : public lgfx::LGFX_Device {
+  lgfx::Panel_ST7735S _panel_instance;
+  lgfx::Bus_SPI _bus_instance;
+
+public:
+  LGFX_ST7735() {
+    {
+      auto cfg = _bus_instance.config();
+      cfg.spi_host = SPI2_HOST;  // Use SPI2 (HSPI)
+      cfg.spi_mode = 0;
+      cfg.freq_write = 27000000;  // SPI speed for writing
+      cfg.freq_read = 16000000;   // SPI speed for reading
+      cfg.spi_3wire = false;
+      cfg.use_lock = true;
+      cfg.dma_channel = SPI_DMA_CH_AUTO;
+      cfg.pin_sclk = 12;
+      cfg.pin_mosi = 11;
+      cfg.pin_miso = 13;
+      cfg.pin_dc = 14;
+      _bus_instance.config(cfg);
+      _panel_instance.setBus(&_bus_instance);
+    }
+    {
+      auto cfg = _panel_instance.config();
+      cfg.pin_cs = 10;
+      cfg.pin_rst = 15;
+      cfg.pin_busy = -1;
+      cfg.memory_width = 160;
+      cfg.memory_height = 128;
+      cfg.panel_width = 160;
+      cfg.panel_height = 128;
+      // ST7735 BLACKTAB variant - specific settings for 160x128 display
+      cfg.offset_x = 0;
+      cfg.offset_y = 0;
+      cfg.offset_rotation = 0;
+      cfg.dummy_read_pixel = 8;
+      cfg.dummy_read_bits = 1;
+      cfg.readable = false;
+      cfg.invert = false;  // User reported darker display, so no invert needed
+      cfg.rgb_order = false;  // Try RGB order instead of BGR
+      cfg.dlen_16bit = false;
+      cfg.bus_shared = true;  // Important for shared SPI
+      _panel_instance.config(cfg);
+    }
+    setPanel(&_panel_instance);
+  }
+};
 uint32_t lvgl_last_update = 0;
 // Define the shared SPI bus mutex
 SemaphoreHandle_t spiBusMutex = NULL;
@@ -31,6 +81,7 @@ void setupLvglDisplay(
   int8_t rst_pin,
   SPIClass* spi
 ) {
+  // Note: TFT_eSPI doesn't use the spi parameter - it's configured via build flags
   USBSerial.println("Setting up LVGL display");
 
   // Create SPI bus mutex on first use if not already created
@@ -41,18 +92,26 @@ void setupLvglDisplay(
     }
   }
 
-  // Create the TFT driver instance if not already created
+  // Create the LovyanGFX driver instance if not already created
   if (tft_driver == nullptr) {
-    tft_driver = new Adafruit_ST7735(spi, displayCS, dc_pin, rst_pin);
-
-    // Initialize the display
-    tft_driver->initR(INITR_BLACKTAB);
-    tft_driver->setRotation(deviceData.screen_rotation);
+    // Store the shared SPI instance
+    hardwareSPI = spi;
     
-    // Optimize SPI speed - limited by MCP2515 max of 10MHz on shared bus
-    tft_driver->setSPISpeed(10000000); // 10MHz - safe for both ST7735 and MCP2515
+    // Create custom ST7735 configuration for LovyanGFX
+    tft_driver = new LGFX_ST7735();
     
-    tft_driver->fillScreen(ST77XX_BLACK);
+    // Initialize display with custom configuration
+    if (tft_driver->init()) {
+      tft_driver->setRotation(deviceData.screen_rotation);
+      
+      // Clear screen with a test pattern to verify it's working
+      tft_driver->fillScreen(0x0000);  // Black
+      tft_driver->fillRect(10, 10, 50, 50, 0xF800);  // Red square for testing
+      
+      USBSerial.println("LovyanGFX ST7735 initialized successfully");
+    } else {
+      USBSerial.println("ERROR: LovyanGFX ST7735 initialization failed!");
+    }
   }
 
   // Initialize LVGL buffer
@@ -81,39 +140,21 @@ void setupLvglDisplay(
   lv_disp_set_theme(lv_disp_get_default(), theme);
 }
 
-// Optimized flush callback to minimize tearing and improve performance
-// CS pin management is handled here where actual SPI communication occurs
+// High-performance flush callback using LovyanGFX with DMA
 void lvgl_flush_cb(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* color_p) {
   uint32_t w = (area->x2 - area->x1 + 1);
   uint32_t h = (area->y2 - area->y1 + 1);
-  uint32_t len = w * h;
 
-  // Guard shared SPI bus for display flush
+  // LovyanGFX handles SPI transactions internally, but we still guard for MCP2515
   if (spiBusMutex != NULL) {
     xSemaphoreTake(spiBusMutex, portMAX_DELAY);
   }
 
-  // Disable interrupts during critical display update to prevent tearing
-  portDISABLE_INTERRUPTS();
-  
-  // Make sure display CS is selected
-  digitalWrite(displayCS, LOW);
-  
-  // Start optimized write sequence
+  // LovyanGFX DMA-optimized pixel transfer
   tft_driver->startWrite();
   tft_driver->setAddrWindow(area->x1, area->y1, w, h);
-
-  // Push colors using DMA for optimal performance
-  tft_driver->writePixels((uint16_t*)color_p, len);  // NOLINT(readability/casting)
-  
-  // Complete write sequence
+  tft_driver->writePixels((uint16_t*)color_p, w * h);  // NOLINT(readability/casting)
   tft_driver->endWrite();
-
-  // Deselect display CS when done
-  digitalWrite(displayCS, HIGH);
-  
-  // Re-enable interrupts
-  portENABLE_INTERRUPTS();
 
   if (spiBusMutex != NULL) {
     xSemaphoreGive(spiBusMutex);
@@ -134,7 +175,11 @@ void lv_tick_handler() {
   }
 }
 
-// Update LVGL - call this regularly
+// Shared SPI helper function
+SPIClass* getSharedSPI() {
+  return hardwareSPI;
+}
+
 void updateLvgl() {
   uint32_t current_ms = millis();
 

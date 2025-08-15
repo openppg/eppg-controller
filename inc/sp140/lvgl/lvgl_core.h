@@ -2,7 +2,8 @@
 #define LVGL_CORE_H
 
 #include <lvgl.h>
-#include <Adafruit_ST7735.h>
+#define LGFX_ESP32_S3
+#include <LovyanGFX.hpp>
 #include "../structs.h"
 // FreeRTOS for mutex used to guard shared SPI bus
 #include <freertos/FreeRTOS.h>
@@ -27,7 +28,7 @@ extern lv_disp_drv_t disp_drv;
 extern lv_disp_draw_buf_t draw_buf;
 extern lv_color_t buf[LVGL_BUFFER_SIZE];
 extern lv_color_t buf2[LVGL_BUFFER_SIZE];  // Second buffer for double buffering
-extern Adafruit_ST7735* tft_driver;
+extern lgfx::LGFX_Device* tft_driver;
 extern uint32_t lvgl_last_update;
 // Shared SPI bus mutex (guards TFT + MCP2515 access)
 extern SemaphoreHandle_t spiBusMutex;
@@ -39,5 +40,8 @@ void lvgl_flush_cb(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* color
 void lv_tick_handler();
 void updateLvgl();
 void displayLvglSplash(const STR_DEVICE_DATA_140_V1& deviceData, int duration);
+
+// Shared SPI helper functions  
+SPIClass* getSharedSPI(); // Get shared SPI instance for other devices
 
 #endif // LVGL_CORE_H

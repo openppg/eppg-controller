@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(pio)",
-      "Bash(pio run)"
+      "Bash(pio run)",
+      "WebSearch",
+      "Bash(pio run:*)",
+      "WebFetch(domain:github.com)"
     ],
     "deny": []
   }

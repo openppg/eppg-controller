@@ -632,17 +632,15 @@ void setup() {
   // First initialize the shared SPI bus
   setupSPI(board_config);
 
-  // Then setup the display - use LVGL display instead of the old one
-  // setupDisplay(deviceData, board_config, hardwareSPI);
-  // Pass hardcoded pin values for DC and RST
+  // Setup Adafruit_ST7735 display with shared SPI  
   setupLvglDisplay(deviceData, board_config.tft_dc, board_config.tft_rst, hardwareSPI);
 
   // Initialise alert display aggregation & UI
   initAlertDisplay();
 
   #ifndef SCREEN_DEBUG
-    // Pass the hardware SPI instance to the BMS_CAN initialization
-    initBMSCAN(hardwareSPI);
+    // Use shared SPI instance for BMS CAN
+    initBMSCAN(getSharedSPI());
   #endif
 
   initESC();
