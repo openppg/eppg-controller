@@ -14,7 +14,9 @@
 
 // LVGL buffer size - optimize for our display
 // Use 1/4 of the screen size to balance memory usage and performance
-#define LVGL_BUFFER_SIZE (SCREEN_WIDTH * (SCREEN_HEIGHT / 4))
+// Align to 32-byte boundary for optimal DMA performance
+#define LVGL_BUFFER_SIZE_RAW (SCREEN_WIDTH * (SCREEN_HEIGHT / 4))
+#define LVGL_BUFFER_SIZE ((LVGL_BUFFER_SIZE_RAW + 31) & ~31)
 
 // LVGL refresh time in ms - match the config file setting
 #define LVGL_REFRESH_TIME 40

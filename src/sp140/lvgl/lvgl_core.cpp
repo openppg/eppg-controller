@@ -48,6 +48,10 @@ void setupLvglDisplay(
     // Initialize the display
     tft_driver->initR(INITR_BLACKTAB);
     tft_driver->setRotation(deviceData.screen_rotation);
+    
+    // Optimize SPI speed - limited by MCP2515 max of 10MHz on shared bus
+    tft_driver->setSPISpeed(10000000); // 10MHz - safe for both ST7735 and MCP2515
+    
     tft_driver->fillScreen(ST77XX_BLACK);
   }
 
@@ -77,30 +81,40 @@ void setupLvglDisplay(
   lv_disp_set_theme(lv_disp_get_default(), theme);
 }
 
-// Optimize the flush callback to minimize SPI transfers
+// Optimized flush callback to minimize tearing and improve performance
 // CS pin management is handled here where actual SPI communication occurs
 void lvgl_flush_cb(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* color_p) {
-  // Make sure display CS is selected
-  digitalWrite(displayCS, LOW);
-
   uint32_t w = (area->x2 - area->x1 + 1);
   uint32_t h = (area->y2 - area->y1 + 1);
+  uint32_t len = w * h;
 
-  // Set drawing window
   // Guard shared SPI bus for display flush
   if (spiBusMutex != NULL) {
     xSemaphoreTake(spiBusMutex, portMAX_DELAY);
   }
+
+  // Disable interrupts during critical display update to prevent tearing
+  portDISABLE_INTERRUPTS();
+  
+  // Make sure display CS is selected
+  digitalWrite(displayCS, LOW);
+  
+  // Start optimized write sequence
   tft_driver->startWrite();
   tft_driver->setAddrWindow(area->x1, area->y1, w, h);
 
-  // Push colors - using DMA if available
-  uint32_t len = w * h;
+  // Push colors using DMA for optimal performance
   tft_driver->writePixels((uint16_t*)color_p, len);  // NOLINT(readability/casting)
+  
+  // Complete write sequence
   tft_driver->endWrite();
 
   // Deselect display CS when done
   digitalWrite(displayCS, HIGH);
+  
+  // Re-enable interrupts
+  portENABLE_INTERRUPTS();
+
   if (spiBusMutex != NULL) {
     xSemaphoreGive(spiBusMutex);
   }

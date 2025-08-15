@@ -17,6 +17,7 @@ lv_color_t original_arm_fail_icon_color;
 
 lv_timer_t* critical_border_flash_timer = NULL;
 bool isFlashingCriticalBorder = false;
+static uint32_t last_border_update = 0;  // Timestamp for rate limiting border updates
 
 // Timer callback declarations
 static void cruise_flash_timer_cb(lv_timer_t* timer);
@@ -179,17 +180,22 @@ void startArmFailIconFlash() {
 static void critical_border_flash_timer_cb(lv_timer_t* timer) {
   // This callback runs within the LVGL task handler, so no mutex needed here.
   if (critical_border != NULL) {
+    // Rate limit border updates to prevent excessive refreshes
+    uint32_t now = millis();
+    if (now - last_border_update < 15) {  // Minimum 15ms between updates
+      return;
+    }
+    last_border_update = now;
+    
     // Toggle visibility: 300ms on, 700ms off
     bool is_on = !lv_obj_has_flag(critical_border, LV_OBJ_FLAG_HIDDEN);
+    
+    // Batch visibility change with area invalidation for atomic update
     if (is_on) {
       lv_obj_add_flag(critical_border, LV_OBJ_FLAG_HIDDEN);
-      // Invalidate the border area to ensure clean redraw
-      lv_obj_invalidate(critical_border);
       lv_timer_set_period(timer, 700); // Off duration
     } else {
       lv_obj_clear_flag(critical_border, LV_OBJ_FLAG_HIDDEN);
-      // Invalidate the border area to ensure clean redraw
-      lv_obj_invalidate(critical_border);
       lv_timer_set_period(timer, 300); // On duration
 
       // Trigger vibration pulse in sync with border "on"
@@ -197,8 +203,9 @@ static void critical_border_flash_timer_cb(lv_timer_t* timer) {
         pulseVibration(300, 200); // 300ms pulse, intensity 200
       }
     }
-    // Force immediate refresh to minimize tearing
-    lv_refr_now(lv_disp_get_default());
+    
+    // Single invalidation after state change to reduce redundant redraws
+    lv_obj_invalidate(critical_border);
   }
 }
 
@@ -235,11 +242,10 @@ bool isCriticalBorderFlashing() {
 void startCriticalBorderFlashDirect() {
   if (critical_border != NULL && !isFlashingCriticalBorder) {
     isFlashingCriticalBorder = true;
+    last_border_update = millis();  // Reset rate limit timer
     lv_obj_clear_flag(critical_border, LV_OBJ_FLAG_HIDDEN); // Start visible
     lv_obj_invalidate(critical_border); // Ensure clean initial draw
     critical_border_flash_timer = lv_timer_create(critical_border_flash_timer_cb, 300, NULL);
-    // Force immediate refresh for clean start
-    lv_refr_now(lv_disp_get_default());
   }
 }
 
@@ -251,10 +257,9 @@ void stopCriticalBorderFlashDirect() {
   if (critical_border != NULL) {
     lv_obj_add_flag(critical_border, LV_OBJ_FLAG_HIDDEN);
     lv_obj_invalidate(critical_border); // Ensure clean removal
-    // Force immediate refresh for clean stop
-    lv_refr_now(lv_disp_get_default());
   }
   isFlashingCriticalBorder = false;
+  last_border_update = 0;  // Reset rate limit timer
 }
 
 // Update the climb rate indicator
