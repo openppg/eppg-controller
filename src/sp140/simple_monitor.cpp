@@ -1,4 +1,5 @@
 #include "sp140/simple_monitor.h"
+#include <vector>
 #include "sp140/monitor_config.h"
 #include "sp140/globals.h"
 #include "sp140/altimeter.h"
@@ -201,7 +202,7 @@ const char* sensorIDToAbbreviationWithLevel(SensorID id, AlertLevel level) {
         return "MC-FT-L";  // MOSFET temp low
       }
       return "MC-F";  // Default
-      
+
     case SensorID::ESC_MCU_Temp:
       if (level == AlertLevel::WARN_HIGH || level == AlertLevel::CRIT_HIGH) {
         return "MC-CT-H";  // Controller temp high
@@ -209,7 +210,7 @@ const char* sensorIDToAbbreviationWithLevel(SensorID id, AlertLevel level) {
         return "MC-CT-L";  // Controller temp low
       }
       return "MC-C";  // Default
-      
+
     case SensorID::ESC_CAP_Temp:
       if (level == AlertLevel::WARN_HIGH || level == AlertLevel::CRIT_HIGH) {
         return "MC-PT-H";  // Capacitor temp high
@@ -217,7 +218,7 @@ const char* sensorIDToAbbreviationWithLevel(SensorID id, AlertLevel level) {
         return "MC-PT-L";  // Capacitor temp low
       }
       return "MC-P";  // Default
-      
+
     case SensorID::Motor_Temp:
       if (level == AlertLevel::WARN_HIGH || level == AlertLevel::CRIT_HIGH) {
         return "MC-MT-H";  // Motor temp high
@@ -225,7 +226,7 @@ const char* sensorIDToAbbreviationWithLevel(SensorID id, AlertLevel level) {
         return "MC-MT-L";  // Motor temp low
       }
       return "MC-M";  // Default
-      
+
     // BMS Temperature sensors with dynamic suffixes
     case SensorID::BMS_MOS_Temp:
       if (level == AlertLevel::WARN_HIGH || level == AlertLevel::CRIT_HIGH) {
@@ -234,7 +235,7 @@ const char* sensorIDToAbbreviationWithLevel(SensorID id, AlertLevel level) {
         return "BC-F-L";  // MOS temp low
       }
       return "BC-F";  // Default
-      
+
     case SensorID::BMS_Balance_Temp:
       if (level == AlertLevel::WARN_HIGH || level == AlertLevel::CRIT_HIGH) {
         return "BC-B-H";  // Balance temp high
@@ -242,7 +243,7 @@ const char* sensorIDToAbbreviationWithLevel(SensorID id, AlertLevel level) {
         return "BC-B-L";  // Balance temp low
       }
       return "BC-B";  // Default
-      
+
     case SensorID::BMS_T1_Temp:
       if (level == AlertLevel::WARN_HIGH || level == AlertLevel::CRIT_HIGH) {
         return "BC-T1-H";  // Cell 1 temp high
@@ -250,7 +251,7 @@ const char* sensorIDToAbbreviationWithLevel(SensorID id, AlertLevel level) {
         return "BC-T1-L";  // Cell 1 temp low
       }
       return "BC-T1";  // Default
-      
+
     case SensorID::BMS_T2_Temp:
       if (level == AlertLevel::WARN_HIGH || level == AlertLevel::CRIT_HIGH) {
         return "BC-T2-H";  // Cell 2 temp high
@@ -258,7 +259,7 @@ const char* sensorIDToAbbreviationWithLevel(SensorID id, AlertLevel level) {
         return "BC-T2-L";  // Cell 2 temp low
       }
       return "BC-T2";  // Default
-      
+
     case SensorID::BMS_T3_Temp:
       if (level == AlertLevel::WARN_HIGH || level == AlertLevel::CRIT_HIGH) {
         return "BC-T3-H";  // Cell 3 temp high
@@ -266,7 +267,7 @@ const char* sensorIDToAbbreviationWithLevel(SensorID id, AlertLevel level) {
         return "BC-T3-L";  // Cell 3 temp low
       }
       return "BC-T3";  // Default
-      
+
     case SensorID::BMS_T4_Temp:
       if (level == AlertLevel::WARN_HIGH || level == AlertLevel::CRIT_HIGH) {
         return "BC-T4-H";  // Cell 4 temp high
@@ -274,7 +275,7 @@ const char* sensorIDToAbbreviationWithLevel(SensorID id, AlertLevel level) {
         return "BC-T4-L";  // Cell 4 temp low
       }
       return "BC-T4";  // Default
-      
+
     // For all other sensors, use the standard abbreviation
     default:
       return sensorIDToAbbreviation(id);
@@ -292,6 +293,62 @@ void initSimpleMonitor() {
   USBSerial.printf("Monitoring %d sensors\n", monitors.size());
 }
 
+SensorCategory getSensorCategory(SensorID id) {
+  switch (id) {
+    // ESC sensors
+    case SensorID::ESC_MOS_Temp:
+    case SensorID::ESC_MCU_Temp:
+    case SensorID::ESC_CAP_Temp:
+    case SensorID::Motor_Temp:
+    case SensorID::ESC_OverCurrent_Error:
+    case SensorID::ESC_LockedRotor_Error:
+    case SensorID::ESC_OverTemp_Error:
+    case SensorID::ESC_OverVolt_Error:
+    case SensorID::ESC_VoltageDrop_Error:
+    case SensorID::ESC_ThrottleSat_Warning:
+    case SensorID::ESC_MotorCurrentOut_Error:
+    case SensorID::ESC_TotalCurrentOut_Error:
+    case SensorID::ESC_MotorVoltageOut_Error:
+    case SensorID::ESC_CapNTC_Error:
+    case SensorID::ESC_MosNTC_Error:
+    case SensorID::ESC_BusVoltRange_Error:
+    case SensorID::ESC_BusVoltSample_Error:
+    case SensorID::ESC_MotorZLow_Error:
+    case SensorID::ESC_MotorZHigh_Error:
+    case SensorID::ESC_MotorVDet1_Error:
+    case SensorID::ESC_MotorVDet2_Error:
+    case SensorID::ESC_MotorIDet2_Error:
+    case SensorID::ESC_SwHwIncompat_Error:
+    case SensorID::ESC_BootloaderBad_Error:
+      return SensorCategory::ESC;
+
+    // BMS sensors
+    case SensorID::BMS_MOS_Temp:
+    case SensorID::BMS_Balance_Temp:
+    case SensorID::BMS_T1_Temp:
+    case SensorID::BMS_T2_Temp:
+    case SensorID::BMS_T3_Temp:
+    case SensorID::BMS_T4_Temp:
+    case SensorID::BMS_High_Cell_Voltage:
+    case SensorID::BMS_Low_Cell_Voltage:
+    case SensorID::BMS_SOC:
+    case SensorID::BMS_Total_Voltage:
+    case SensorID::BMS_Voltage_Differential:
+    case SensorID::BMS_Charge_MOS:
+    case SensorID::BMS_Discharge_MOS:
+      return SensorCategory::BMS;
+
+    // Altimeter sensors
+    case SensorID::Baro_Temp:
+      return SensorCategory::ALTIMETER;
+
+    // Internal sensors
+    case SensorID::CPU_Temp:
+    default:
+      return SensorCategory::INTERNAL;
+  }
+}
+
 void checkAllSensors() {
   if (!monitoringEnabled) return;  // Skip if monitoring is disabled
 
@@ -302,17 +359,78 @@ void checkAllSensors() {
   }
 }
 
-void checkAllSensorsWithData(const STR_ESC_TELEMETRY_140& escData, const STR_BMS_TELEMETRY_140& bmsData) {
+void checkAllSensorsWithData(const STR_ESC_TELEMETRY_140& escData,
+                             const STR_BMS_TELEMETRY_140& bmsData) {
   if (!monitoringEnabled) return;  // Skip if monitoring is disabled
+
+  // Check connection status
+  bool escConnected = (escData.escState == TelemetryState::CONNECTED);
+  bool bmsConnected = (bmsData.bmsState == TelemetryState::CONNECTED);
+
+  // Track previous connection states to detect disconnections
+  static bool prevEscConnected = false;
+  static bool prevBmsConnected = false;
+
+  // If a device disconnected, clear all its alerts
+  if (prevEscConnected && !escConnected) {
+    // ESC just disconnected - send OK alerts for all ESC sensors to clear them
+    for (auto* monitor : monitors) {
+      if (monitor) {
+        SensorID id = monitor->getSensorID();
+        if (getSensorCategory(id) == SensorCategory::ESC) {
+          // Force clear this alert by sending OK - this will clear it from the UI
+          sendAlertEvent(id, AlertLevel::OK);
+        }
+      }
+    }
+  }
+
+  if (prevBmsConnected && !bmsConnected) {
+    // BMS just disconnected - send OK alerts for all BMS sensors to clear them
+    for (auto* monitor : monitors) {
+      if (monitor) {
+        SensorID id = monitor->getSensorID();
+        if (getSensorCategory(id) == SensorCategory::BMS) {
+          // Force clear this alert by sending OK - this will clear it from the UI
+          sendAlertEvent(id, AlertLevel::OK);
+        }
+      }
+    }
+  }
+
+  // Update previous connection states
+  prevEscConnected = escConnected;
+  prevBmsConnected = bmsConnected;
 
   // Update our monitoring copies with the safe data
   monitoringEscData = escData;
   monitoringBmsData = bmsData;
 
-  // Now check all monitors (they'll use the safe copies)
+  // Now check all monitors, but only for connected devices
   for (auto* monitor : monitors) {
     if (monitor) {
-      monitor->check();
+      // Determine if this monitor should run based on device connection status
+      SensorID id = monitor->getSensorID();
+      SensorCategory category = getSensorCategory(id);
+
+      bool shouldRun = true;
+      switch (category) {
+        case SensorCategory::ESC:
+          shouldRun = escConnected;
+          break;
+        case SensorCategory::BMS:
+          shouldRun = bmsConnected;
+          break;
+        case SensorCategory::ALTIMETER:
+        case SensorCategory::INTERNAL:
+        default:
+          shouldRun = true;  // Always check altimeter and internal sensors
+          break;
+      }
+
+      if (shouldRun) {
+        monitor->check();
+      }
     }
   }
 }

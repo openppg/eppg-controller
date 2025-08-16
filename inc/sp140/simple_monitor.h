@@ -6,6 +6,14 @@
 #include <Arduino.h>
 #include "sp140/structs.h"
 
+// Sensor categories for grouped handling
+enum class SensorCategory {
+  ESC,        // ESC-related sensors (temperatures, errors)
+  BMS,        // BMS-related sensors (temperatures, voltages, etc.)
+  ALTIMETER,  // Barometric sensors
+  INTERNAL    // CPU and other internal sensors
+};
+
 // Unique identifiers for each sensor
 enum class SensorID {
   // ESC
@@ -107,6 +115,7 @@ extern MultiLogger multiLogger;  // Global fan-out logger
 struct IMonitor {
   virtual ~IMonitor() = default;
   virtual void check() = 0;
+  virtual SensorID getSensorID() const = 0;  // Add method to get sensor ID
 };
 
 // Sensor monitor for analog values
@@ -135,6 +144,10 @@ struct SensorMonitor : public IMonitor {
       last = now;
     }
   }
+
+  SensorID getSensorID() const override {
+    return id;
+  }
 };
 
 // New monitor for boolean conditions
@@ -161,6 +174,10 @@ struct BooleanMonitor : public IMonitor {
             lastState = currentState;
         }
     }
+
+    SensorID getSensorID() const override {
+        return id;
+    }
 };
 
 // Global monitor registry
@@ -172,6 +189,7 @@ extern bool monitoringEnabled;  // Flag to control monitoring state
 const char* sensorIDToString(SensorID id);
 const char* sensorIDToAbbreviation(SensorID id);
 const char* sensorIDToAbbreviationWithLevel(SensorID id, AlertLevel level);
+SensorCategory getSensorCategory(SensorID id);  // Get category for a sensor
 void initSimpleMonitor();
 void checkAllSensors();
 void checkAllSensorsWithData(const STR_ESC_TELEMETRY_140& escData, const STR_BMS_TELEMETRY_140& bmsData);
