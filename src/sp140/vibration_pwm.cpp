@@ -61,8 +61,8 @@ void vibeTask(void* parameter) {
  */
 bool initVibeMotor() {
   extern HardwareConfig board_config;
-  ledcSetup(VIBE_PWM_CHANNEL, VIBE_PWM_FREQ, VIBE_PWM_RESOLUTION);
-  ledcAttachPin(board_config.vibe_pwm, VIBE_PWM_CHANNEL);
+  // Arduino-ESP32 3.x LEDC API: use ledcAttach(pin, freq, resolution)
+  ledcAttach(board_config.vibe_pwm, VIBE_PWM_FREQ, VIBE_PWM_RESOLUTION);
 
   // Create vibration queue
   vibeQueue = xQueueCreate(5, sizeof(VibeRequest));

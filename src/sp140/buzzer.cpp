@@ -29,9 +29,9 @@ static bool buzzerInitialized = false;
  * @return Returns true if initialization was successful, false otherwise
  */
 bool initBuzz() {
-  // Setup LEDC channel for buzzer
-  ledcSetup(BUZZER_PWM_CHANNEL, BUZZER_PWM_FREQUENCY, BUZZER_PWM_RESOLUTION);
-  ledcAttachPin(board_config.buzzer_pin, BUZZER_PWM_CHANNEL);
+  // Setup LEDC channel for buzzer (Arduino-ESP32 3.x API)
+  // Channels are implicitly allocated; attach pin to channel and set frequency/resolution
+  ledcAttach(board_config.buzzer_pin, BUZZER_PWM_FREQUENCY, BUZZER_PWM_RESOLUTION);
   buzzerInitialized = true;
   return true;
 }
@@ -43,9 +43,9 @@ void startTone(uint16_t frequency) {
   if (!buzzerInitialized || !ENABLE_BUZZ) return;
 
   // Change the frequency for this channel
-  ledcChangeFrequency(BUZZER_PWM_CHANNEL, frequency, BUZZER_PWM_RESOLUTION);
+  ledcWriteTone(board_config.buzzer_pin, frequency);
   // Set 50% duty cycle (square wave)
-  ledcWrite(BUZZER_PWM_CHANNEL, 128);
+  ledcWrite(board_config.buzzer_pin, 128);
 }
 
 /**
@@ -55,7 +55,7 @@ void stopTone() {
   if (!buzzerInitialized) return;
 
   // Set duty cycle to 0 to stop the tone
-  ledcWrite(BUZZER_PWM_CHANNEL, 0);
+  ledcWrite(board_config.buzzer_pin, 0);
 }
 
 /**
