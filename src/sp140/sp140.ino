@@ -497,7 +497,7 @@ void monitoringTask(void *pvParameters) {
 // UI task: fixed 25 Hz refresh and snapshot publish
 void uiTask(void *pvParameters) {
   TickType_t lastWake = xTaskGetTickCount();
-  const TickType_t uiTicks = pdMS_TO_TICKS(40); // 25 Hz
+  const TickType_t uiTicks = pdMS_TO_TICKS(50);  // 20 Hz
   for (;;) {
     refreshDisplay();
     pushTelemetrySnapshot();

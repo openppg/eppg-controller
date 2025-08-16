@@ -13,8 +13,8 @@
 #define SCREEN_HEIGHT 128
 
 // LVGL buffer size - optimize for our display
-// Use 1/4 of the screen size to balance memory usage and performance
-#define LVGL_BUFFER_SIZE (SCREEN_WIDTH * (SCREEN_HEIGHT / 4))
+// Use half screen size for single flush to balance performance and memory usage
+#define LVGL_BUFFER_SIZE (SCREEN_WIDTH * SCREEN_HEIGHT / 2)
 
 // LVGL refresh time in ms - match the config file setting
 #define LVGL_REFRESH_TIME 40
