@@ -624,7 +624,7 @@ void setupMainScreen(bool darkMode) {
     lv_obj_set_style_border_color(critical_border, LVGL_RED, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(critical_border, LV_OPA_0, LV_PART_MAIN);  // Transparent background
     lv_obj_set_style_radius(critical_border, 0, LV_PART_MAIN);  // Sharp corners
-    lv_obj_add_flag(critical_border, LV_OBJ_FLAG_HIDDEN);  // Initially hidden
+    lv_obj_set_style_border_opa(critical_border, LV_OPA_0, LV_PART_MAIN);  // Initially invisible border
     // Move border to front so it's visible over all other elements
     lv_obj_move_foreground(critical_border);
   }
