@@ -13,6 +13,7 @@ void addBMSMonitors() {
   // BMS MOSFET Temperature (Warning: 50°C, Critical: 60°C)
   static SensorMonitor* bmsMosTemp = new SensorMonitor(
     SensorID::BMS_MOS_Temp,
+    SensorCategory::BMS,
     bmsTempThresholds,
     []() { return monitoringBmsData.mos_temperature; },
     &multiLogger);
@@ -21,6 +22,7 @@ void addBMSMonitors() {
   // BMS Balance Resistor Temperature (Warning: 50°C, Critical: 60°C)
   static SensorMonitor* bmsBalanceTemp = new SensorMonitor(
     SensorID::BMS_Balance_Temp,
+    SensorCategory::BMS,
     bmsTempThresholds,
     []() { return monitoringBmsData.balance_temperature; },
     &multiLogger);
@@ -29,6 +31,7 @@ void addBMSMonitors() {
   // T1-T4 Cell Temperature Sensors (Warning: 50°C, Critical: 56°C)
   static SensorMonitor* bmsT1Temp = new SensorMonitor(
     SensorID::BMS_T1_Temp,
+    SensorCategory::BMS,
     bmsCellTempThresholds,
     []() { return monitoringBmsData.t1_temperature; },
     &multiLogger);
@@ -36,6 +39,7 @@ void addBMSMonitors() {
 
   static SensorMonitor* bmsT2Temp = new SensorMonitor(
     SensorID::BMS_T2_Temp,
+    SensorCategory::BMS,
     bmsCellTempThresholds,
     []() { return monitoringBmsData.t2_temperature; },
     &multiLogger);
@@ -43,6 +47,7 @@ void addBMSMonitors() {
 
   static SensorMonitor* bmsT3Temp = new SensorMonitor(
     SensorID::BMS_T3_Temp,
+    SensorCategory::BMS,
     bmsCellTempThresholds,
     []() { return monitoringBmsData.t3_temperature; },
     &multiLogger);
@@ -50,6 +55,7 @@ void addBMSMonitors() {
 
   static SensorMonitor* bmsT4Temp = new SensorMonitor(
     SensorID::BMS_T4_Temp,
+    SensorCategory::BMS,
     bmsCellTempThresholds,
     []() { return monitoringBmsData.t4_temperature; },
     &multiLogger);
@@ -58,6 +64,7 @@ void addBMSMonitors() {
   // High Cell Voltage (Warn: 4.1V, Crit: 4.2V)
   static SensorMonitor* bmsHighCellVoltage = new SensorMonitor(
     SensorID::BMS_High_Cell_Voltage,
+    SensorCategory::BMS,
     bmsHighCellVoltageThresholds,
     []() { return monitoringBmsData.highest_cell_voltage; },
     &multiLogger);
@@ -66,6 +73,7 @@ void addBMSMonitors() {
   // Low Cell Voltage (Warn: 3.2V, Crit: 3.0V)
   static SensorMonitor* bmsLowCellVoltage = new SensorMonitor(
     SensorID::BMS_Low_Cell_Voltage,
+    SensorCategory::BMS,
     bmsLowCellVoltageThresholds,
     []() { return monitoringBmsData.lowest_cell_voltage; },
     &multiLogger);
@@ -74,6 +82,7 @@ void addBMSMonitors() {
   // State of Charge (Warn: 15%, Crit: 5%)
   static SensorMonitor* bmsSoc = new SensorMonitor(
     SensorID::BMS_SOC,
+    SensorCategory::BMS,
     bmsSOCThresholds,
     []() { return monitoringBmsData.soc; },
     &multiLogger);
@@ -82,6 +91,7 @@ void addBMSMonitors() {
   // Total Voltage (Low - Warn: 79.2V, Crit: 69.6V | High - Warn: 100.4V, Crit: 100.8V)
   static SensorMonitor* bmsTotalVoltage = new SensorMonitor(
     SensorID::BMS_Total_Voltage,
+    SensorCategory::BMS,
     bmsTotalVoltageThresholds,
     []() { return monitoringBmsData.battery_voltage; },
     &multiLogger);
@@ -90,6 +100,7 @@ void addBMSMonitors() {
   // Voltage Differential (Warn: 0.20V, Crit: 0.40V)
   static SensorMonitor* bmsVoltageDifferential = new SensorMonitor(
     SensorID::BMS_Voltage_Differential,
+    SensorCategory::BMS,
     bmsVoltageDifferentialThresholds,
     []() { return monitoringBmsData.voltage_differential; },
     &multiLogger);
@@ -98,6 +109,7 @@ void addBMSMonitors() {
   // Charge MOS (Alert when OFF)
   static BooleanMonitor* bmsChargeMos = new BooleanMonitor(
     SensorID::BMS_Charge_MOS,
+    SensorCategory::BMS,
     []() { return monitoringBmsData.is_charge_mos; },
     false,  // Alert when false
     AlertLevel::CRIT_HIGH,
@@ -107,6 +119,7 @@ void addBMSMonitors() {
   // Discharge MOS (Alert when OFF)
   static BooleanMonitor* bmsDischargeMos = new BooleanMonitor(
     SensorID::BMS_Discharge_MOS,
+    SensorCategory::BMS,
     []() { return monitoringBmsData.is_discharge_mos; },
     false,  // Alert when false
     AlertLevel::CRIT_HIGH,

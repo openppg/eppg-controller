@@ -115,20 +115,22 @@ extern MultiLogger multiLogger;  // Global fan-out logger
 struct IMonitor {
   virtual ~IMonitor() = default;
   virtual void check() = 0;
-  virtual SensorID getSensorID() const = 0;  // Add method to get sensor ID
+  virtual SensorID getSensorID() const = 0;
+  virtual SensorCategory getCategory() const = 0;  // Each monitor knows its category
 };
 
 // Sensor monitor for analog values
 struct SensorMonitor : public IMonitor {
   SensorID id;
+  SensorCategory category;
   Thresholds thr;
   std::function<float()> read;
   AlertLevel last;
   ILogger* logger;
 
-  // Constructor
-  SensorMonitor(SensorID i, Thresholds t, std::function<float()> r, ILogger* l)
-    : id(i), thr(t), read(r), last(AlertLevel::OK), logger(l) {}
+  // Constructor - now takes category explicitly
+  SensorMonitor(SensorID i, SensorCategory cat, Thresholds t, std::function<float()> r, ILogger* l)
+    : id(i), category(cat), thr(t), read(r), last(AlertLevel::OK), logger(l) {}
 
   void check() override {
     float v = read();
@@ -148,20 +150,25 @@ struct SensorMonitor : public IMonitor {
   SensorID getSensorID() const override {
     return id;
   }
+
+  SensorCategory getCategory() const override {
+    return category;
+  }
 };
 
 // New monitor for boolean conditions
 struct BooleanMonitor : public IMonitor {
     SensorID id;
+    SensorCategory category;
     std::function<bool()> read;
     bool alertOnTrue;  // true to alert on true, false for false
     AlertLevel level;  // level to report when condition is met
     bool lastState;
     ILogger* logger;
 
-    // Constructor
-    BooleanMonitor(SensorID i, std::function<bool()> r, bool alertOn, AlertLevel alertLevel, ILogger* l)
-        : id(i), read(r), alertOnTrue(alertOn), level(alertLevel), lastState(!alertOn), logger(l) {}
+    // Constructor - now takes category explicitly
+    BooleanMonitor(SensorID i, SensorCategory cat, std::function<bool()> r, bool alertOn, AlertLevel alertLevel, ILogger* l)
+        : id(i), category(cat), read(r), alertOnTrue(alertOn), level(alertLevel), lastState(!alertOn), logger(l) {}
 
     void check() override {
         bool currentState = read();
@@ -177,6 +184,10 @@ struct BooleanMonitor : public IMonitor {
 
     SensorID getSensorID() const override {
         return id;
+    }
+
+    SensorCategory getCategory() const override {
+        return category;
     }
 };
 

@@ -293,61 +293,7 @@ void initSimpleMonitor() {
   USBSerial.printf("Monitoring %d sensors\n", monitors.size());
 }
 
-SensorCategory getSensorCategory(SensorID id) {
-  switch (id) {
-    // ESC sensors
-    case SensorID::ESC_MOS_Temp:
-    case SensorID::ESC_MCU_Temp:
-    case SensorID::ESC_CAP_Temp:
-    case SensorID::Motor_Temp:
-    case SensorID::ESC_OverCurrent_Error:
-    case SensorID::ESC_LockedRotor_Error:
-    case SensorID::ESC_OverTemp_Error:
-    case SensorID::ESC_OverVolt_Error:
-    case SensorID::ESC_VoltageDrop_Error:
-    case SensorID::ESC_ThrottleSat_Warning:
-    case SensorID::ESC_MotorCurrentOut_Error:
-    case SensorID::ESC_TotalCurrentOut_Error:
-    case SensorID::ESC_MotorVoltageOut_Error:
-    case SensorID::ESC_CapNTC_Error:
-    case SensorID::ESC_MosNTC_Error:
-    case SensorID::ESC_BusVoltRange_Error:
-    case SensorID::ESC_BusVoltSample_Error:
-    case SensorID::ESC_MotorZLow_Error:
-    case SensorID::ESC_MotorZHigh_Error:
-    case SensorID::ESC_MotorVDet1_Error:
-    case SensorID::ESC_MotorVDet2_Error:
-    case SensorID::ESC_MotorIDet2_Error:
-    case SensorID::ESC_SwHwIncompat_Error:
-    case SensorID::ESC_BootloaderBad_Error:
-      return SensorCategory::ESC;
-
-    // BMS sensors
-    case SensorID::BMS_MOS_Temp:
-    case SensorID::BMS_Balance_Temp:
-    case SensorID::BMS_T1_Temp:
-    case SensorID::BMS_T2_Temp:
-    case SensorID::BMS_T3_Temp:
-    case SensorID::BMS_T4_Temp:
-    case SensorID::BMS_High_Cell_Voltage:
-    case SensorID::BMS_Low_Cell_Voltage:
-    case SensorID::BMS_SOC:
-    case SensorID::BMS_Total_Voltage:
-    case SensorID::BMS_Voltage_Differential:
-    case SensorID::BMS_Charge_MOS:
-    case SensorID::BMS_Discharge_MOS:
-      return SensorCategory::BMS;
-
-    // Altimeter sensors
-    case SensorID::Baro_Temp:
-      return SensorCategory::ALTIMETER;
-
-    // Internal sensors
-    case SensorID::CPU_Temp:
-    default:
-      return SensorCategory::INTERNAL;
-  }
-}
+// No more giant switch statement! Each monitor knows its own category.
 
 void checkAllSensors() {
   if (!monitoringEnabled) return;  // Skip if monitoring is disabled
@@ -375,12 +321,9 @@ void checkAllSensorsWithData(const STR_ESC_TELEMETRY_140& escData,
   if (prevEscConnected && !escConnected) {
     // ESC just disconnected - send OK alerts for all ESC sensors to clear them
     for (auto* monitor : monitors) {
-      if (monitor) {
-        SensorID id = monitor->getSensorID();
-        if (getSensorCategory(id) == SensorCategory::ESC) {
-          // Force clear this alert by sending OK - this will clear it from the UI
-          sendAlertEvent(id, AlertLevel::OK);
-        }
+      if (monitor && monitor->getCategory() == SensorCategory::ESC) {
+        // Force clear this alert by sending OK - this will clear it from the UI
+        sendAlertEvent(monitor->getSensorID(), AlertLevel::OK);
       }
     }
   }
@@ -388,12 +331,9 @@ void checkAllSensorsWithData(const STR_ESC_TELEMETRY_140& escData,
   if (prevBmsConnected && !bmsConnected) {
     // BMS just disconnected - send OK alerts for all BMS sensors to clear them
     for (auto* monitor : monitors) {
-      if (monitor) {
-        SensorID id = monitor->getSensorID();
-        if (getSensorCategory(id) == SensorCategory::BMS) {
-          // Force clear this alert by sending OK - this will clear it from the UI
-          sendAlertEvent(id, AlertLevel::OK);
-        }
+      if (monitor && monitor->getCategory() == SensorCategory::BMS) {
+        // Force clear this alert by sending OK - this will clear it from the UI
+        sendAlertEvent(monitor->getSensorID(), AlertLevel::OK);
       }
     }
   }
@@ -410,8 +350,7 @@ void checkAllSensorsWithData(const STR_ESC_TELEMETRY_140& escData,
   for (auto* monitor : monitors) {
     if (monitor) {
       // Determine if this monitor should run based on device connection status
-      SensorID id = monitor->getSensorID();
-      SensorCategory category = getSensorCategory(id);
+      SensorCategory category = monitor->getCategory();
 
       bool shouldRun = true;
       switch (category) {

@@ -29,7 +29,7 @@ TEST(SimpleMonitor, NumericThresholdTransitions) {
   Thresholds thr{.warnLow = -100.0f, .warnHigh = 50.0f, .critLow = -200.0f, .critHigh = 80.0f};
 
   float sensorVal = 0.0f;
-  SensorMonitor mon(SensorID::CPU_Temp, thr, [&]() { return sensorVal; }, &logger);
+  SensorMonitor mon(SensorID::CPU_Temp, SensorCategory::INTERNAL, thr, [&]() { return sensorVal; }, &logger);
 
   // Start in OK
   mon.check();
@@ -57,7 +57,7 @@ TEST(SimpleMonitor, NumericThresholdTransitions) {
 TEST(SimpleMonitor, BooleanMonitorTransitions) {
   FakeLogger logger;
   bool state = true;
-  BooleanMonitor mon(SensorID::BMS_Charge_MOS, [&]() { return state; }, false, AlertLevel::CRIT_HIGH, &logger);
+  BooleanMonitor mon(SensorID::BMS_Charge_MOS, SensorCategory::BMS, [&]() { return state; }, false, AlertLevel::CRIT_HIGH, &logger);
 
   // Initial state true (no alert because alertOnTrue = false)
   mon.check();
@@ -81,7 +81,7 @@ TEST(SimpleMonitor, BMSSOCAlerts) {
 
   // Use the single source of truth for thresholds
   float fakeSOC = 50.0f; // Start with a healthy SOC
-  SensorMonitor socMonitor(SensorID::BMS_SOC, bmsSOCThresholds, [&]() { return fakeSOC; }, &logger);
+  SensorMonitor socMonitor(SensorID::BMS_SOC, SensorCategory::BMS, bmsSOCThresholds, [&]() { return fakeSOC; }, &logger);
 
   // 1. Initial check, should be OK, no log
   socMonitor.check();
@@ -126,7 +126,7 @@ TEST(SimpleMonitor, BMSVoltageAlerts) {
 
   // -- High Cell Voltage --
   fakeVoltage = 4.0f;
-  SensorMonitor highCellMon(SensorID::BMS_High_Cell_Voltage, bmsHighCellVoltageThresholds, [&]() { return fakeVoltage; }, &logger);
+  SensorMonitor highCellMon(SensorID::BMS_High_Cell_Voltage, SensorCategory::BMS, bmsHighCellVoltageThresholds, [&]() { return fakeVoltage; }, &logger);
   highCellMon.check(); // OK
   EXPECT_TRUE(logger.entries.empty());
 
@@ -143,7 +143,7 @@ TEST(SimpleMonitor, BMSVoltageAlerts) {
   // -- Low Cell Voltage --
   logger.entries.clear();
   fakeVoltage = 3.5f;
-  SensorMonitor lowCellMon(SensorID::BMS_Low_Cell_Voltage, bmsLowCellVoltageThresholds, [&]() { return fakeVoltage; }, &logger);
+  SensorMonitor lowCellMon(SensorID::BMS_Low_Cell_Voltage, SensorCategory::BMS, bmsLowCellVoltageThresholds, [&]() { return fakeVoltage; }, &logger);
   lowCellMon.check(); // OK
   EXPECT_TRUE(logger.entries.empty());
 
@@ -160,7 +160,7 @@ TEST(SimpleMonitor, BMSVoltageAlerts) {
   // -- Total Voltage --
   logger.entries.clear();
   fakeVoltage = 85.0f;
-  SensorMonitor totalVoltsMon(SensorID::BMS_Total_Voltage, bmsTotalVoltageThresholds, [&]() { return fakeVoltage; }, &logger);
+  SensorMonitor totalVoltsMon(SensorID::BMS_Total_Voltage, SensorCategory::BMS, bmsTotalVoltageThresholds, [&]() { return fakeVoltage; }, &logger);
   totalVoltsMon.check(); // OK
   EXPECT_TRUE(logger.entries.empty());
 
@@ -201,7 +201,7 @@ TEST(SimpleMonitor, BMSVoltageAlerts) {
   // -- Voltage Differential --
   logger.entries.clear();
   fakeVoltage = 0.1f;
-  SensorMonitor diffMon(SensorID::BMS_Voltage_Differential, bmsVoltageDifferentialThresholds, [&]() { return fakeVoltage; }, &logger);
+  SensorMonitor diffMon(SensorID::BMS_Voltage_Differential, SensorCategory::BMS, bmsVoltageDifferentialThresholds, [&]() { return fakeVoltage; }, &logger);
   diffMon.check(); // OK
   EXPECT_TRUE(logger.entries.empty());
 
@@ -221,7 +221,7 @@ TEST(SimpleMonitor, BMSTemperatureAlerts) {
     float fakeTemp = 30.0f;
 
     // We can use BMS_MOS_Temp as a representative sensor for bmsTempThresholds
-    SensorMonitor tempMon(SensorID::BMS_MOS_Temp, bmsTempThresholds, [&]() { return fakeTemp; }, &logger);
+    SensorMonitor tempMon(SensorID::BMS_MOS_Temp, SensorCategory::BMS, bmsTempThresholds, [&]() { return fakeTemp; }, &logger);
 
     tempMon.check(); // OK
     EXPECT_TRUE(logger.entries.empty());
@@ -237,13 +237,39 @@ TEST(SimpleMonitor, BMSTemperatureAlerts) {
     EXPECT_EQ(logger.entries.back().lvl, AlertLevel::CRIT_HIGH);
 }
 
+TEST(SimpleMonitor, MonitorIDAccess) {
+    FakeLogger logger;
+
+    // Test that monitors can provide their sensor IDs
+    float normalTemp = 50.0f;
+    SensorMonitor escMonitor(SensorID::ESC_MOS_Temp, SensorCategory::ESC, escMosTempThresholds,
+                            [&]() { return normalTemp; }, &logger);
+    SensorMonitor bmsMonitor(SensorID::BMS_SOC, SensorCategory::BMS, bmsSOCThresholds,
+                            [&]() { return normalTemp; }, &logger);
+    SensorMonitor cpuMonitor(SensorID::CPU_Temp, SensorCategory::INTERNAL, cpuTempThresholds,
+                            [&]() { return normalTemp; }, &logger);
+
+    // Test that getSensorID works correctly
+    EXPECT_EQ(escMonitor.getSensorID(), SensorID::ESC_MOS_Temp);
+    EXPECT_EQ(bmsMonitor.getSensorID(), SensorID::BMS_SOC);
+    EXPECT_EQ(cpuMonitor.getSensorID(), SensorID::CPU_Temp);
+
+    // Test that monitors work as expected
+    escMonitor.check();
+    bmsMonitor.check();
+    cpuMonitor.check();
+
+    // All should be OK (no alerts) with normal values
+    EXPECT_TRUE(logger.entries.empty());
+}
+
 TEST(SimpleMonitor, ESCTemperatureAlerts) {
     FakeLogger logger;
     float fakeTemp;
 
     // -- MOS Temp High --
     fakeTemp = 80.0f;
-    SensorMonitor mosTempMon(SensorID::ESC_MOS_Temp, escMosTempThresholds, [&]() { return fakeTemp; }, &logger);
+    SensorMonitor mosTempMon(SensorID::ESC_MOS_Temp, SensorCategory::ESC, escMosTempThresholds, [&]() { return fakeTemp; }, &logger);
     mosTempMon.check();
     EXPECT_TRUE(logger.entries.empty());
 
@@ -260,7 +286,7 @@ TEST(SimpleMonitor, ESCTemperatureAlerts) {
     // -- MOS Temp Low --
     logger.entries.clear();
     fakeTemp = 0.0f;
-    SensorMonitor mosTempLowMon(SensorID::ESC_MOS_Temp, escMosTempThresholds, [&]() { return fakeTemp; }, &logger);
+    SensorMonitor mosTempLowMon(SensorID::ESC_MOS_Temp, SensorCategory::ESC, escMosTempThresholds, [&]() { return fakeTemp; }, &logger);
     mosTempLowMon.check();
     EXPECT_TRUE(logger.entries.empty());
 
@@ -277,7 +303,7 @@ TEST(SimpleMonitor, ESCTemperatureAlerts) {
     // -- MCU Temp High --
     logger.entries.clear();
     fakeTemp = 75.0f;
-    SensorMonitor mcuTempMon(SensorID::ESC_MCU_Temp, escMcuTempThresholds, [&]() { return fakeTemp; }, &logger);
+    SensorMonitor mcuTempMon(SensorID::ESC_MCU_Temp, SensorCategory::ESC, escMcuTempThresholds, [&]() { return fakeTemp; }, &logger);
     mcuTempMon.check();
     EXPECT_TRUE(logger.entries.empty());
 
@@ -294,7 +320,7 @@ TEST(SimpleMonitor, ESCTemperatureAlerts) {
     // -- MCU Temp Low --
     logger.entries.clear();
     fakeTemp = 0.0f;
-    SensorMonitor mcuTempLowMon(SensorID::ESC_MCU_Temp, escMcuTempThresholds, [&]() { return fakeTemp; }, &logger);
+    SensorMonitor mcuTempLowMon(SensorID::ESC_MCU_Temp, SensorCategory::ESC, escMcuTempThresholds, [&]() { return fakeTemp; }, &logger);
     mcuTempLowMon.check();
     EXPECT_TRUE(logger.entries.empty());
 
@@ -311,7 +337,7 @@ TEST(SimpleMonitor, ESCTemperatureAlerts) {
     // -- Cap Temp High --
     logger.entries.clear();
     fakeTemp = 80.0f;
-    SensorMonitor capTempMon(SensorID::ESC_CAP_Temp, escCapTempThresholds, [&]() { return fakeTemp; }, &logger);
+    SensorMonitor capTempMon(SensorID::ESC_CAP_Temp, SensorCategory::ESC, escCapTempThresholds, [&]() { return fakeTemp; }, &logger);
     capTempMon.check();
     EXPECT_TRUE(logger.entries.empty());
 
@@ -328,7 +354,7 @@ TEST(SimpleMonitor, ESCTemperatureAlerts) {
     // -- Cap Temp Low --
     logger.entries.clear();
     fakeTemp = 0.0f;
-    SensorMonitor capTempLowMon(SensorID::ESC_CAP_Temp, escCapTempThresholds, [&]() { return fakeTemp; }, &logger);
+    SensorMonitor capTempLowMon(SensorID::ESC_CAP_Temp, SensorCategory::ESC, escCapTempThresholds, [&]() { return fakeTemp; }, &logger);
     capTempLowMon.check();
     EXPECT_TRUE(logger.entries.empty());
 
@@ -345,7 +371,7 @@ TEST(SimpleMonitor, ESCTemperatureAlerts) {
     // -- Motor Temp High --
     logger.entries.clear();
     fakeTemp = 85.0f;
-    SensorMonitor motorTempMon(SensorID::Motor_Temp, motorTempThresholds, [&]() { return fakeTemp; }, &logger);
+    SensorMonitor motorTempMon(SensorID::Motor_Temp, SensorCategory::ESC, motorTempThresholds, [&]() { return fakeTemp; }, &logger);
     motorTempMon.check();
     EXPECT_TRUE(logger.entries.empty());
 
@@ -362,7 +388,7 @@ TEST(SimpleMonitor, ESCTemperatureAlerts) {
     // -- Motor Temp Low --
     logger.entries.clear();
     fakeTemp = -10.0f;
-    SensorMonitor motorTempLowMon(SensorID::Motor_Temp, motorTempThresholds, [&]() { return fakeTemp; }, &logger);
+    SensorMonitor motorTempLowMon(SensorID::Motor_Temp, SensorCategory::ESC, motorTempThresholds, [&]() { return fakeTemp; }, &logger);
     motorTempLowMon.check();
     EXPECT_TRUE(logger.entries.empty());
 
@@ -375,6 +401,96 @@ TEST(SimpleMonitor, ESCTemperatureAlerts) {
     motorTempLowMon.check();
     ASSERT_EQ(logger.entries.size(), 2u);
     EXPECT_EQ(logger.entries.back().lvl, AlertLevel::CRIT_LOW);
+}
+
+TEST(SimpleMonitor, SensorMonitorCategoryProperty) {
+  FakeLogger logger;
+
+  // Test ESC category
+  SensorMonitor escMonitor(SensorID::ESC_MOS_Temp, SensorCategory::ESC,
+                          Thresholds{-10.0f, 10.0f, 90.0f, 100.0f},
+                          []() { return 25.0f; }, &logger);
+  EXPECT_EQ(escMonitor.getCategory(), SensorCategory::ESC);
+  EXPECT_EQ(escMonitor.getSensorID(), SensorID::ESC_MOS_Temp);
+
+  // Test BMS category
+  SensorMonitor bmsMonitor(SensorID::BMS_SOC, SensorCategory::BMS,
+                          Thresholds{5.0f, 15.0f, 85.0f, 95.0f},
+                          []() { return 50.0f; }, &logger);
+  EXPECT_EQ(bmsMonitor.getCategory(), SensorCategory::BMS);
+  EXPECT_EQ(bmsMonitor.getSensorID(), SensorID::BMS_SOC);
+
+  // Test INTERNAL category
+  SensorMonitor internalMonitor(SensorID::CPU_Temp, SensorCategory::INTERNAL,
+                               Thresholds{-10.0f, 10.0f, 70.0f, 85.0f},
+                               []() { return 45.0f; }, &logger);
+  EXPECT_EQ(internalMonitor.getCategory(), SensorCategory::INTERNAL);
+  EXPECT_EQ(internalMonitor.getSensorID(), SensorID::CPU_Temp);
+
+  // Test ALTIMETER category
+  SensorMonitor altimeterMonitor(SensorID::Baro_Temp, SensorCategory::ALTIMETER,
+                                Thresholds{-20.0f, 0.0f, 60.0f, 80.0f},
+                                []() { return 20.0f; }, &logger);
+  EXPECT_EQ(altimeterMonitor.getCategory(), SensorCategory::ALTIMETER);
+  EXPECT_EQ(altimeterMonitor.getSensorID(), SensorID::Baro_Temp);
+}
+
+TEST(SimpleMonitor, BooleanMonitorCategoryProperty) {
+  FakeLogger logger;
+
+  // Test ESC category Boolean monitor
+  BooleanMonitor escErrorMonitor(SensorID::ESC_OverCurrent_Error, SensorCategory::ESC,
+                                []() { return false; }, true, AlertLevel::CRIT_HIGH, &logger);
+  EXPECT_EQ(escErrorMonitor.getCategory(), SensorCategory::ESC);
+  EXPECT_EQ(escErrorMonitor.getSensorID(), SensorID::ESC_OverCurrent_Error);
+
+  // Test BMS category Boolean monitor
+  BooleanMonitor bmsMosMonitor(SensorID::BMS_Charge_MOS, SensorCategory::BMS,
+                              []() { return true; }, false, AlertLevel::CRIT_HIGH, &logger);
+  EXPECT_EQ(bmsMosMonitor.getCategory(), SensorCategory::BMS);
+  EXPECT_EQ(bmsMosMonitor.getSensorID(), SensorID::BMS_Charge_MOS);
+}
+
+TEST(SimpleMonitor, CategoryBasedFiltering) {
+  FakeLogger logger;
+
+  // Create monitors from different categories
+  SensorMonitor escMonitor(SensorID::ESC_MOS_Temp, SensorCategory::ESC,
+                          Thresholds{-10.0f, 10.0f, 90.0f, 100.0f},
+                          []() { return 25.0f; }, &logger);
+
+  SensorMonitor bmsMonitor(SensorID::BMS_SOC, SensorCategory::BMS,
+                          Thresholds{5.0f, 15.0f, 85.0f, 95.0f},
+                          []() { return 50.0f; }, &logger);
+
+  SensorMonitor internalMonitor(SensorID::CPU_Temp, SensorCategory::INTERNAL,
+                               Thresholds{-10.0f, 10.0f, 70.0f, 85.0f},
+                               []() { return 45.0f; }, &logger);
+
+  // Test that we can filter monitors by category
+  std::vector<IMonitor*> testMonitors = {&escMonitor, &bmsMonitor, &internalMonitor};
+
+  int escCount = 0, bmsCount = 0, internalCount = 0;
+
+  for (auto* monitor : testMonitors) {
+    switch (monitor->getCategory()) {
+      case SensorCategory::ESC:
+        escCount++;
+        break;
+      case SensorCategory::BMS:
+        bmsCount++;
+        break;
+      case SensorCategory::INTERNAL:
+        internalCount++;
+        break;
+      case SensorCategory::ALTIMETER:
+        break;
+    }
+  }
+
+  EXPECT_EQ(escCount, 1);
+  EXPECT_EQ(bmsCount, 1);
+  EXPECT_EQ(internalCount, 1);
 }
 
 int main(int argc, char **argv) {

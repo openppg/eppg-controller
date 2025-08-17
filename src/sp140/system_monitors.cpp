@@ -11,6 +11,7 @@ void addInternalMonitors() {
   // ESP32-S3 CPU Temperature (Warning: 50°C, Critical: 80°C)
   static SensorMonitor* cpuTemp = new SensorMonitor(
     SensorID::CPU_Temp,
+    SensorCategory::INTERNAL,
     cpuTempThresholds,
     []() { return temperatureRead(); },
     &multiLogger);
@@ -29,6 +30,7 @@ void addAltimeterMonitors() {
   //
   // static SensorMonitor* baroTemp = new SensorMonitor(
   //   SensorID::Baro_Temp,
+  //   SensorCategory::ALTIMETER,
   //   baroTempThresholds,
   //   []() { return getBaroTemperature(); },
   //   &multiLogger);
