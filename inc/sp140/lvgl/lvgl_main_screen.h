@@ -21,18 +21,6 @@ enum ScreenPage {
 #define LVGL_PURPLE lv_color_make(128, 0, 128)
 #define LVGL_GRAY lv_color_make(128, 128, 128)
 
-// Temperature thresholds
-#define BATT_TEMP_WARNING 45.0f
-#define BATT_TEMP_CRITICAL 55.0f
-#define ESC_TEMP_WARNING 90.0f
-#define ESC_TEMP_CRITICAL 100.0f
-#define MOTOR_TEMP_WARNING 90.0f
-#define MOTOR_TEMP_CRITICAL 110.0f
-
-#define BATT_CRITICAL_SOC_THRESHOLD 5.0f
-#define BATT_WARNING_SOC_THRESHOLD 20.0f
-#define CELL_VOLTAGE_WARNING 3.2f
-#define CELL_VOLTAGE_CRITICAL 2.95f
 
 // LVGL styles for temperature warnings and critical states
 extern lv_style_t style_warning;

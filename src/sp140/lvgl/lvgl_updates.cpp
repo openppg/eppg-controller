@@ -1,5 +1,6 @@
 #include "../../../inc/sp140/lvgl/lvgl_updates.h"
 #include "../../../inc/sp140/esp32s3-config.h"
+#include "../../../inc/sp140/monitor_config.h"  // For direct threshold access
 #include "../../../inc/sp140/globals.h"
 #include "../../../inc/sp140/vibration_pwm.h"
 #include "../../../inc/sp140/shared-config.h"
@@ -352,9 +353,9 @@ void updateLvglMainScreen(
 
     // Set color based on percentage
     lv_color_t batteryColor = LVGL_RED;
-    if (batteryPercent >= BATT_WARNING_SOC_THRESHOLD) {
+    if (batteryPercent >= bmsSOCThresholds.warnLow) {
       batteryColor = LVGL_GREEN;
-    } else if (batteryPercent >= BATT_CRITICAL_SOC_THRESHOLD) {
+    } else if (batteryPercent >= bmsSOCThresholds.critLow) {
       batteryColor = LVGL_YELLOW;
     }
 
@@ -654,10 +655,10 @@ void updateLvglMainScreen(
     if (bmsTelemetry.bmsState == TelemetryState::CONNECTED) {
       lv_label_set_text_fmt(batt_temp_label, "%d", static_cast<int>(batteryTemp));
 
-      if (batteryTemp >= BATT_TEMP_CRITICAL) {
+      if (batteryTemp >= bmsTempThresholds.critHigh) {
         lv_obj_add_style(batt_temp_bg, &style_critical, 0);
         lv_obj_clear_flag(batt_temp_bg, LV_OBJ_FLAG_HIDDEN);
-      } else if (batteryTemp >= BATT_TEMP_WARNING) {
+      } else if (batteryTemp >= bmsTempThresholds.warnHigh) {
         lv_obj_add_style(batt_temp_bg, &style_warning, 0);
         lv_obj_clear_flag(batt_temp_bg, LV_OBJ_FLAG_HIDDEN);
       } else {
@@ -677,10 +678,10 @@ void updateLvglMainScreen(
     if (escTelemetry.escState == TelemetryState::CONNECTED) {
       lv_label_set_text_fmt(esc_temp_label, "%d", static_cast<int>(escTemp));
 
-      if (escTemp >= ESC_TEMP_CRITICAL) {
+      if (escTemp >= escMosTempThresholds.critHigh) {
         lv_obj_add_style(esc_temp_bg, &style_critical, 0);
         lv_obj_clear_flag(esc_temp_bg, LV_OBJ_FLAG_HIDDEN);
-      } else if (escTemp >= ESC_TEMP_WARNING) {
+      } else if (escTemp >= escMosTempThresholds.warnHigh) {
         lv_obj_add_style(esc_temp_bg, &style_warning, 0);
         lv_obj_clear_flag(esc_temp_bg, LV_OBJ_FLAG_HIDDEN);
       } else {
@@ -700,10 +701,10 @@ void updateLvglMainScreen(
     if (escTelemetry.escState == TelemetryState::CONNECTED && motorTemp > -20.0f) {
       lv_label_set_text_fmt(motor_temp_label, "%d", static_cast<int>(motorTemp));
 
-      if (motorTemp >= MOTOR_TEMP_CRITICAL) {
+      if (motorTemp >= motorTempThresholds.critHigh) {
         lv_obj_add_style(motor_temp_bg, &style_critical, 0);
         lv_obj_clear_flag(motor_temp_bg, LV_OBJ_FLAG_HIDDEN);
-      } else if (motorTemp >= MOTOR_TEMP_WARNING) {
+      } else if (motorTemp >= motorTempThresholds.warnHigh) {
         lv_obj_add_style(motor_temp_bg, &style_warning, 0);
         lv_obj_clear_flag(motor_temp_bg, LV_OBJ_FLAG_HIDDEN);
       } else {
