@@ -26,7 +26,11 @@ void updateBMSData() {
   digitalWrite(displayCS, HIGH);
   // Take the shared SPI mutex to prevent contention with TFT flush
   if (spiBusMutex != NULL) {
-    xSemaphoreTake(spiBusMutex, portMAX_DELAY);
+    if (xSemaphoreTake(spiBusMutex, pdMS_TO_TICKS(150)) != pdTRUE) {
+      // SPI bus timeout - display might be doing long operation
+      USBSerial.println("[BMS] SPI bus timeout - skipping BMS update cycle");
+      return; // Use stale BMS data this cycle rather than hang
+    }
   }
   digitalWrite(bmsCS, LOW);
 

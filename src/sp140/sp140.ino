@@ -249,6 +249,7 @@ void deviceStateUpdateTask(void* parameter) {
 }
 
 void changeDeviceState(DeviceState newState) {
+  // State changes are safety-critical - must not timeout (especially DISARM)
   if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
     DeviceState oldState = currentState;
     currentState = newState;
@@ -732,7 +733,7 @@ void setup() {
   uiReady = true;
 
   // Simple instrumentation to detect UI/BMS latency
-  USBSerial.println("Init complete. UI + BMS loop running at ~25Hz.");
+  USBSerial.println("Init complete. UI + BMS loop running");
 
   // Enable sensor monitoring after splash screen and UI setup
   // This gives BMS/ESC time to initialize and start providing valid data
