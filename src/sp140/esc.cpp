@@ -15,6 +15,7 @@ static CanardAdapter adapter;
 static uint8_t memory_pool[1024] __attribute__((aligned(8)));
 static SineEsc esc(adapter);
 static unsigned long lastSuccessfulCommTimeMs = 0;  // Store millis() time of last successful ESC comm
+static bool escReady = false;
 
 
 STR_ESC_TELEMETRY_140 escTelemetryData = {
@@ -36,14 +37,13 @@ void initESC() {
   }
 
   adapter.begin(memory_pool, sizeof(memory_pool));
-  adapter.setLocalNodeId(LOCAL_NODE_ID);
   esc.begin(0x20);  // Default ID for the ESC
+  adapter.setLocalNodeId(LOCAL_NODE_ID);
 
-  // Set idle throttle only if ESC is found
-  const uint16_t IdleThrottle_us = 10000;  // 1000us (0.1us resolution)
-  esc.setThrottleSettings2(IdleThrottle_us);
+  // Defer sending throttle until after first adapter process to avoid null pointer in CANARD
   adapter.processTxRxOnce();
-  vTaskDelay(pdMS_TO_TICKS(20));  // Wait for ESC to process the command
+  vTaskDelay(pdMS_TO_TICKS(20));  // Give ESC time to be ready
+  escReady = true;
 }
 
 /**
@@ -54,6 +54,10 @@ void initESC() {
  * Important: The ESC requires messages at least every 300ms or it will reset
  */
 void setESCThrottle(int throttlePWM) {
+  // Ensure TWAI/ESC subsystem is initialized
+  if (!escTwaiInitialized || !escReady) {
+    return;
+  }
   // Input validation
   if (throttlePWM < 1000 || throttlePWM > 2000) {
     return;  // Ignore invalid throttle values

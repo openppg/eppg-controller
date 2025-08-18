@@ -224,7 +224,7 @@ void updateBMSTelemetry(const STR_BMS_TELEMETRY_140& telemetry) {
 
 class MetricAltCallbacks: public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *pCharacteristic) {
-    std::string value = pCharacteristic->getValue();
+    String value = pCharacteristic->getValue();
 
     if (value.length() == 1) {  // Ensure we only get a single byte
       USBSerial.print("New: ");
@@ -243,7 +243,7 @@ class MetricAltCallbacks: public BLECharacteristicCallbacks {
 
 class PerformanceModeCallbacks: public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *pCharacteristic) {
-    std::string value = pCharacteristic->getValue();
+    String value = pCharacteristic->getValue();
 
     if (value.length() == 1) {
       uint8_t mode = value[0];
@@ -262,7 +262,7 @@ class PerformanceModeCallbacks: public BLECharacteristicCallbacks {
 
 class ScreenRotationCallbacks: public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *pCharacteristic) {
-    std::string value = pCharacteristic->getValue();
+    String value = pCharacteristic->getValue();
 
     if (value.length() == 1) {
       uint8_t rotation = value[0];
@@ -293,7 +293,7 @@ class ThrottleValueCallbacks: public BLECharacteristicCallbacks {
       return;  // Only allow updates while in cruise mode
     }
 
-    std::string value = pCharacteristic->getValue();
+    String value = pCharacteristic->getValue();
     if (value.length() == 2) {  // Expecting 2 bytes for PWM value
       uint16_t newPWM = (value[0] << 8) | value[1];
 
@@ -325,14 +325,14 @@ class MyServerCallbacks: public BLEServerCallbacks {
 
 class TimeCallbacks: public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *pCharacteristic) {
-    std::string value = pCharacteristic->getValue();
+    String value = pCharacteristic->getValue();
 
     if (value.length() == sizeof(time_t)) {  // Expecting just a unix timestamp
       struct timeval tv;
       time_t timestamp;
 
       // Copy the incoming timestamp
-      memcpy(&timestamp, value.data(), sizeof(timestamp));
+      memcpy(&timestamp, value.c_str(), sizeof(timestamp));
 
       // Apply timezone offset
       timestamp += deviceData.timezone_offset;
@@ -360,11 +360,11 @@ class TimeCallbacks: public BLECharacteristicCallbacks {
 
 class TimezoneCallbacks: public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *pCharacteristic) {
-    std::string value = pCharacteristic->getValue();
+    String value = pCharacteristic->getValue();
 
     if (value.length() == 4) {  // Expecting 4 bytes for timezone offset
       int32_t offset;
-      memcpy(&offset, value.data(), sizeof(offset));
+      memcpy(&offset, value.c_str(), sizeof(offset));
 
       deviceData.timezone_offset = offset;
       writeDeviceData();
