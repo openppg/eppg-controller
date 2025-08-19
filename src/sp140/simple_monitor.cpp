@@ -338,6 +338,25 @@ void checkAllSensorsWithData(const STR_ESC_TELEMETRY_140& escData,
     }
   }
 
+  // If a device reconnected, reset monitor states so they can alert fresh (like at boot)
+  if (!prevEscConnected && escConnected) {
+    USBSerial.println("[MONITOR] ESC reconnected - resetting ESC monitor states");
+    for (auto* monitor : monitors) {
+      if (monitor && monitor->getCategory() == SensorCategory::ESC) {
+        monitor->resetState();
+      }
+    }
+  }
+
+  if (!prevBmsConnected && bmsConnected) {
+    USBSerial.println("[MONITOR] BMS reconnected - resetting BMS monitor states");
+    for (auto* monitor : monitors) {
+      if (monitor && monitor->getCategory() == SensorCategory::BMS) {
+        monitor->resetState();
+      }
+    }
+  }
+
   // Update previous connection states
   prevEscConnected = escConnected;
   prevBmsConnected = bmsConnected;

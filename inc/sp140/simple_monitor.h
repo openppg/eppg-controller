@@ -117,6 +117,7 @@ struct IMonitor {
   virtual void check() = 0;
   virtual SensorID getSensorID() const = 0;
   virtual SensorCategory getCategory() const = 0;  // Each monitor knows its category
+  virtual void resetState() = 0;  // Reset internal alert state to OK
 };
 
 // Sensor monitor for analog values
@@ -154,6 +155,10 @@ struct SensorMonitor : public IMonitor {
   SensorCategory getCategory() const override {
     return category;
   }
+
+  void resetState() override {
+    last = AlertLevel::OK;
+  }
 };
 
 // New monitor for boolean conditions
@@ -188,6 +193,10 @@ struct BooleanMonitor : public IMonitor {
 
     SensorCategory getCategory() const override {
         return category;
+    }
+
+    void resetState() override {
+        lastState = !alertOnTrue;  // Reset to the non-alerting state
     }
 };
 
