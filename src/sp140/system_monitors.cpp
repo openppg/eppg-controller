@@ -20,8 +20,7 @@ void addInternalMonitors() {
 
 void addAltimeterMonitors() {
   // Barometer Temperature monitor disabled for now.
-  // TODO:
-  // The BMP barometer shares the I2C bus with other peripherals; without a
+  // TODO: The BMP barometer shares the I2C bus with other peripherals; without a
   // global I2C mutex the `Wire` driver can log "Unfinished Repeated Start"
   // errors when transactions from multiple tasks interleave.  Until we
   // introduce a proper mutex (or move barometer access into a dedicated

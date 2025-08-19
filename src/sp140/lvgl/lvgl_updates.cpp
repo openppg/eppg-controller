@@ -450,19 +450,19 @@ void updateLvglMainScreen(
 
         // Tens digit (only show if >= 10kW)
         if (tens > 0) {
-          snprintf(power_digit_buffers[0], 2, "%d", tens);
+          snprintf(power_digit_buffers[0], sizeof(power_digit_buffers[0]), "%d", tens);
           lv_label_set_text(power_char_labels[0], power_digit_buffers[0]);
         }
 
         // Ones digit (always show)
-        snprintf(power_digit_buffers[1], 2, "%d", ones);
+        snprintf(power_digit_buffers[1], sizeof(power_digit_buffers[1]), "%d", ones);
         lv_label_set_text(power_char_labels[1], power_digit_buffers[1]);
 
         // Decimal point
         lv_label_set_text(power_char_labels[2], ".");
 
         // Tenths digit
-        snprintf(power_digit_buffers[3], 2, "%d", decimal_part);
+        snprintf(power_digit_buffers[3], sizeof(power_digit_buffers[3]), "%d", decimal_part);
         lv_label_set_text(power_char_labels[3], power_digit_buffers[3]);
 
         // Unit label is static and already set to "kW"
@@ -545,31 +545,31 @@ void updateLvglMainScreen(
 
       // Thousands digit
       if (thousands > 0) {
-        snprintf(digit_buffers[0], 2, "%d", thousands);
+        snprintf(digit_buffers[0], sizeof(digit_buffers[0]), "%d", thousands);
         lv_label_set_text(altitude_char_labels[0], digit_buffers[0]);
       }
 
       // Hundreds digit
       if (thousands > 0 || hundreds > 0) {
-        snprintf(digit_buffers[1], 2, "%d", hundreds);
+        snprintf(digit_buffers[1], sizeof(digit_buffers[1]), "%d", hundreds);
         lv_label_set_text(altitude_char_labels[1], digit_buffers[1]);
       }
 
       // Tens digit
       if (whole_part >= 10) {
-        snprintf(digit_buffers[2], 2, "%d", tens);
+        snprintf(digit_buffers[2], sizeof(digit_buffers[2]), "%d", tens);
         lv_label_set_text(altitude_char_labels[2], digit_buffers[2]);
       }
 
       // Ones digit (always show)
-      snprintf(digit_buffers[3], 2, "%d", ones);
+      snprintf(digit_buffers[3], sizeof(digit_buffers[3]), "%d", ones);
       lv_label_set_text(altitude_char_labels[3], digit_buffers[3]);
 
       // Decimal point
       lv_label_set_text(altitude_char_labels[4], ".");
 
       // Tenths digit
-      snprintf(digit_buffers[5], 2, "%d", decimal_part);
+      snprintf(digit_buffers[5], sizeof(digit_buffers[5]), "%d", decimal_part);
       lv_label_set_text(altitude_char_labels[5], digit_buffers[5]);
 
       // Adjust width of position 4 back to narrow for meters (decimal point)
@@ -614,30 +614,30 @@ void updateLvglMainScreen(
 
       // Ten-thousands digit in position 0
       if (ten_thousands > 0) {
-        snprintf(digit_buffers_ft[0], 2, "%d", ten_thousands);
+        snprintf(digit_buffers_ft[0], sizeof(digit_buffers_ft[0]), "%d", ten_thousands);
         lv_label_set_text(altitude_char_labels[0], digit_buffers_ft[0]);
       }
 
       // Thousands digit in position 1
       if (ten_thousands > 0 || thousands > 0) {
-        snprintf(digit_buffers_ft[1], 2, "%d", thousands);
+        snprintf(digit_buffers_ft[1], sizeof(digit_buffers_ft[1]), "%d", thousands);
         lv_label_set_text(altitude_char_labels[1], digit_buffers_ft[1]);
       }
 
       // Hundreds digit in position 2
       if (ten_thousands > 0 || thousands > 0 || hundreds > 0) {
-        snprintf(digit_buffers_ft[2], 2, "%d", hundreds);
+        snprintf(digit_buffers_ft[2], sizeof(digit_buffers_ft[2]), "%d", hundreds);
         lv_label_set_text(altitude_char_labels[2], digit_buffers_ft[2]);
       }
 
       // Tens digit in position 3
       if (feet >= 10) {
-        snprintf(digit_buffers_ft[3], 2, "%d", tens);
+        snprintf(digit_buffers_ft[3], sizeof(digit_buffers_ft[3]), "%d", tens);
         lv_label_set_text(altitude_char_labels[3], digit_buffers_ft[3]);
       }
 
       // Ones digit in position 4 (always show) - now has normal width
-      snprintf(digit_buffers_ft[4], 2, "%d", ones);
+      snprintf(digit_buffers_ft[4], sizeof(digit_buffers_ft[4]), "%d", ones);
       lv_label_set_text(altitude_char_labels[4], digit_buffers_ft[4]);
 
       // Feet unit in position 6 (same as meters, with proper spacing)
