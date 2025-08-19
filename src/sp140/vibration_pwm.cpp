@@ -2,7 +2,7 @@
 #include "sp140/esp32s3-config.h"
 #include "sp140/lvgl/lvgl_updates.h"
 
-const int VIBE_PWM_PIN = 46;  // TODO: move to config
+// Pin is configured via s3_config.vibe_pwm
 const int VIBE_PWM_FREQ = 1000;  // Adjust as needed
 const int VIBE_PWM_RESOLUTION = 8;  // 8-bit resolution
 
