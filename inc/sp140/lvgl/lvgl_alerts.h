@@ -1,5 +1,5 @@
-#ifndef LVGL_ALERTS_H
-#define LVGL_ALERTS_H
+#ifndef INC_SP140_LVGL_LVGL_ALERTS_H_
+#define INC_SP140_LVGL_LVGL_ALERTS_H_
 
 #include <lvgl.h>
 #include "../simple_monitor.h"
@@ -30,4 +30,4 @@ void lv_showAlertText(SensorID id, bool critical);
 void lv_showAlertTextWithLevel(SensorID id, AlertLevel level, bool critical);
 void lv_hideAlertText();
 
-#endif // LVGL_ALERTS_H
+#endif  // INC_SP140_LVGL_LVGL_ALERTS_H_

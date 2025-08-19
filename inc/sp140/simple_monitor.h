@@ -100,12 +100,18 @@ struct SerialLogger : ILogger {
 // Multi-sink logger – forwards events to every registered ILogger sink
 struct MultiLogger : ILogger {
   std::vector<ILogger*> sinks;
-  void addSink(ILogger* s) { if (s) sinks.push_back(s); }
+  void addSink(ILogger* s) {
+    if (s) sinks.push_back(s);
+  }
   void log(SensorID id, AlertLevel lvl, float v) override {
-    for (auto* s : sinks) { s->log(id, lvl, v); }
+    for (auto* s : sinks) {
+      s->log(id, lvl, v);
+    }
   }
   void log(SensorID id, AlertLevel lvl, bool v) override {
-    for (auto* s : sinks) { s->log(id, lvl, v); }
+    for (auto* s : sinks) {
+      s->log(id, lvl, v);
+    }
   }
 };
 

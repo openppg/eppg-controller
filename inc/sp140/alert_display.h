@@ -20,7 +20,7 @@ struct AlertCounts {
 struct AlertEvent {
   SensorID sensorId;
   AlertLevel level;   // New level (OK, WARN_*, CRIT_*)
-  uint32_t timestamp; // When event was generated (millis)
+  uint32_t timestamp;  // When event was generated (millis)
 };
 
 // Global queues

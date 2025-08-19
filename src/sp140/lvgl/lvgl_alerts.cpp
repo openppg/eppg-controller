@@ -24,7 +24,7 @@ void loadAlertSnapshot(const AlertSnapshot& snap) {
   }
   const char* txt = sensorIDToAbbreviation(static_cast<SensorID>(snap.ids[0]));
   lv_label_set_text(alert_text_label, txt);
-  lv_obj_set_style_text_color(alert_text_label, snap.criticalMode ? lv_color_make(255,0,0) : lv_color_make(255,165,0), 0);
+  lv_obj_set_style_text_color(alert_text_label, snap.criticalMode ? lv_color_make(255, 0, 0) : lv_color_make(255, 165, 0), 0);
   lv_obj_clear_flag(alert_text_label, LV_OBJ_FLAG_HIDDEN);
 }
 
@@ -105,7 +105,7 @@ void updateAlertCounterDisplay(const AlertCounts& counts) {
   if (counts.warningCount > 0) {
     char buf[4];
     if (counts.warningCount > 9) {
-      strcpy(buf, "9+");
+      snprintf(buf, sizeof(buf), "9+");
     } else {
       snprintf(buf, sizeof(buf), "%u", counts.warningCount);
     }
@@ -119,7 +119,7 @@ void updateAlertCounterDisplay(const AlertCounts& counts) {
   if (counts.criticalCount > 0) {
     char buf[4];
     if (counts.criticalCount > 9) {
-      strcpy(buf, "9+");
+      snprintf(buf, sizeof(buf), "9+");
     } else {
       snprintf(buf, sizeof(buf), "%u", counts.criticalCount);
     }
@@ -173,10 +173,10 @@ void lv_showAlertTextWithLevel(SensorID id, AlertLevel level, bool critical) {
     // Make warning text darker and slightly larger for readability
     lv_obj_set_style_text_font(alert_text_label, &lv_font_montserrat_16, 0);
     // Dark orange for better readability over light background
-    lv_obj_set_style_text_color(alert_text_label, lv_color_make(200,100,0), 0);
+    lv_obj_set_style_text_color(alert_text_label, lv_color_make(200, 100, 0), 0);
   }
   if (critical) {
-    lv_obj_set_style_text_color(alert_text_label, lv_color_make(255,0,0), 0);
+    lv_obj_set_style_text_color(alert_text_label, lv_color_make(255, 0, 0), 0);
   }
   lv_obj_clear_flag(alert_text_label, LV_OBJ_FLAG_HIDDEN);
 }

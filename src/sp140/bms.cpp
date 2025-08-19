@@ -29,7 +29,7 @@ void updateBMSData() {
     if (xSemaphoreTake(spiBusMutex, pdMS_TO_TICKS(150)) != pdTRUE) {
       // SPI bus timeout - display might be doing long operation
       USBSerial.println("[BMS] SPI bus timeout - skipping BMS update cycle");
-      return; // Use stale BMS data this cycle rather than hang
+      return;  // Use stale BMS data this cycle rather than hang
     }
   }
   digitalWrite(bmsCS, LOW);
@@ -80,7 +80,7 @@ void updateBMSData() {
 
   bmsTelemetryData.lastUpdateMs = millis();
   unsigned long dur = bmsTelemetryData.lastUpdateMs - tStart;
-  if (dur > 80) { // warn if BMS update is taking longer than a frame
+  if (dur > 80) {  // warn if BMS update is taking longer than a frame
     USBSerial.print("Warn: BMS update slow ");
     USBSerial.print(dur);
     USBSerial.println("ms");

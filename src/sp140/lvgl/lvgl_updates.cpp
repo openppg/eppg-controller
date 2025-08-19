@@ -184,16 +184,16 @@ static void critical_border_flash_timer_cb(lv_timer_t* timer) {
     uint8_t current_opa = lv_obj_get_style_border_opa(critical_border, LV_PART_MAIN);
     if (current_opa == LV_OPA_100) {
       lv_obj_set_style_border_opa(critical_border, LV_OPA_0, LV_PART_MAIN);
-      lv_timer_set_period(timer, 700); // Off duration
+      lv_timer_set_period(timer, 700);  // Off duration
       // Invalidate entire screen when hiding to ensure clean removal of border pixels
       lv_obj_invalidate(lv_scr_act());
     } else {
       lv_obj_set_style_border_opa(critical_border, LV_OPA_100, LV_PART_MAIN);
-      lv_timer_set_period(timer, 300); // On duration
+      lv_timer_set_period(timer, 300);  // On duration
 
       // Trigger vibration pulse in sync with border "on"
       if (ENABLE_VIBE) {
-        pulseVibration(300, 200); // 300ms pulse, intensity 200
+        pulseVibration(300, 200);  // 300ms pulse, intensity 200
       }
       // Invalidate the border area when showing
       lv_obj_invalidate(critical_border);
@@ -207,7 +207,7 @@ void startCriticalBorderFlash() {
   if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
     if (critical_border != NULL && !isFlashingCriticalBorder) {
       isFlashingCriticalBorder = true;
-      lv_obj_set_style_border_opa(critical_border, LV_OPA_100, LV_PART_MAIN); // Start visible
+      lv_obj_set_style_border_opa(critical_border, LV_OPA_100, LV_PART_MAIN);  // Start visible
       critical_border_flash_timer = lv_timer_create(critical_border_flash_timer_cb, 300, NULL);
     }
     xSemaphoreGive(lvglMutex);
@@ -238,8 +238,8 @@ bool isCriticalBorderFlashing() {
 void startCriticalBorderFlashDirect() {
   if (critical_border != NULL && !isFlashingCriticalBorder) {
     isFlashingCriticalBorder = true;
-    lv_obj_set_style_border_opa(critical_border, LV_OPA_100, LV_PART_MAIN); // Start visible
-    lv_obj_invalidate(critical_border); // Ensure clean initial draw
+    lv_obj_set_style_border_opa(critical_border, LV_OPA_100, LV_PART_MAIN);  // Start visible
+    lv_obj_invalidate(critical_border);  // Ensure clean initial draw
     critical_border_flash_timer = lv_timer_create(critical_border_flash_timer_cb, 300, NULL);
     // Force immediate refresh for clean start
     lv_refr_now(lv_disp_get_default());
@@ -253,7 +253,7 @@ void stopCriticalBorderFlashDirect() {
   }
   if (critical_border != NULL) {
     lv_obj_set_style_border_opa(critical_border, LV_OPA_0, LV_PART_MAIN);
-    lv_obj_invalidate(lv_scr_act()); // Ensure clean removal of border
+    lv_obj_invalidate(lv_scr_act());  // Ensure clean removal of border
     // Force immediate refresh for clean stop
     lv_refr_now(lv_disp_get_default());
   }
@@ -329,7 +329,6 @@ void updateLvglMainScreen(
   float altitude, bool armed, bool cruising,
   unsigned int armedStartMillis
 ) {
-
   bool darkMode = (deviceData.theme == 1);
   float batteryPercent = unifiedBatteryData.soc;
   float totalVolts = unifiedBatteryData.volts;
@@ -534,7 +533,7 @@ void updateLvglMainScreen(
       }
 
       // Determine the leftmost digit position needed
-      int leftmost_pos = 3; // ones position (always needed)
+      int leftmost_pos = 3;  // ones position (always needed)
       if (whole_part >= 10) leftmost_pos = 2;      // tens
       if (whole_part >= 100) leftmost_pos = 1;     // hundreds
       if (whole_part >= 1000) leftmost_pos = 0;    // thousands
@@ -602,7 +601,7 @@ void updateLvglMainScreen(
       }
 
       // Determine the leftmost digit position needed
-      int leftmost_pos = 4; // ones position (always needed for feet)
+      int leftmost_pos = 4;  // ones position (always needed for feet)
       if (feet >= 10) leftmost_pos = 3;        // tens
       if (feet >= 100) leftmost_pos = 2;       // hundreds
       if (feet >= 1000) leftmost_pos = 1;      // thousands
@@ -825,6 +824,5 @@ void updateLvglMainScreenWithTestData(const STR_DEVICE_DATA_140_V1& deviceData) 
     testAltitude,
     testArmed,
     testCruising,
-    testArmedStartMillis
-  );
+    testArmedStartMillis);
 }

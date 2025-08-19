@@ -92,7 +92,7 @@ void lvgl_flush_cb(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* color
     if (xSemaphoreTake(spiBusMutex, pdMS_TO_TICKS(200)) != pdTRUE) {
       // SPI bus timeout - BMS might be doing long operation, skip display flush
       USBSerial.println("[DISPLAY] SPI bus timeout - skipping display flush");
-      return; // Skip this display update rather than hang
+      return;  // Skip this display update rather than hang
     }
   }
   tft_driver->startWrite();

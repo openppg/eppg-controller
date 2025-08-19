@@ -1,5 +1,5 @@
-#ifndef LVGL_CORE_H
-#define LVGL_CORE_H
+#ifndef INC_SP140_LVGL_LVGL_CORE_H_
+#define INC_SP140_LVGL_LVGL_CORE_H_
 
 #include <lvgl.h>
 #include <Adafruit_ST7735.h>
@@ -38,4 +38,4 @@ void lv_tick_handler();
 void updateLvgl();
 void displayLvglSplash(const STR_DEVICE_DATA_140_V1& deviceData, int duration);
 
-#endif // LVGL_CORE_H
+#endif  // INC_SP140_LVGL_LVGL_CORE_H_

@@ -1,5 +1,5 @@
-#ifndef LVGL_MAIN_SCREEN_H
-#define LVGL_MAIN_SCREEN_H
+#ifndef INC_SP140_LVGL_LVGL_MAIN_SCREEN_H_
+#define INC_SP140_LVGL_LVGL_MAIN_SCREEN_H_
 
 #include <lvgl.h>
 #include "lvgl_core.h"
@@ -74,4 +74,4 @@ lv_obj_t* createTempBackground(lv_obj_t* parent, int x, int y, int width, int he
 // Main screen setup function
 void setupMainScreen(bool darkMode);
 
-#endif // LVGL_MAIN_SCREEN_H
+#endif  // INC_SP140_LVGL_LVGL_MAIN_SCREEN_H_

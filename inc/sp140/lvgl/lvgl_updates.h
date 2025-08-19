@@ -1,5 +1,5 @@
-#ifndef LVGL_UPDATES_H
-#define LVGL_UPDATES_H
+#ifndef INC_SP140_LVGL_LVGL_UPDATES_H_
+#define INC_SP140_LVGL_LVGL_UPDATES_H_
 
 #include <lvgl.h>
 #include <freertos/FreeRTOS.h>
@@ -73,4 +73,4 @@ bool isCriticalBorderFlashing();
 void startCriticalBorderFlashDirect();
 void stopCriticalBorderFlashDirect();
 
-#endif // LVGL_UPDATES_H
+#endif  // INC_SP140_LVGL_LVGL_UPDATES_H_

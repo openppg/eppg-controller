@@ -27,7 +27,7 @@ STR_BMS_TELEMETRY_140 monitoringBmsData = {};
 static void setupLoggerSinks() {
   static bool sinksInit = false;
   if (sinksInit) return;
-  multiLogger.addSink(&serialLogger); // Serial output for debug
+  multiLogger.addSink(&serialLogger);  // Serial output for debug
   multiLogger.addSink(&uiLogger);     // UI event sink
   sinksInit = true;
 }
@@ -149,7 +149,7 @@ const char* sensorIDToAbbreviation(SensorID id) {
     case SensorID::ESC_OverVolt_Error: return "MC-RE-6";     // Bit 6
     case SensorID::ESC_VoltageDrop_Error: return "MC-RE-7";  // Bit 7
     // ESC Running Warnings - with bit numbers
-    case SensorID::ESC_ThrottleSat_Warning: return "MC-RW-5"; // Bit 5
+    case SensorID::ESC_ThrottleSat_Warning: return "MC-RW-5";  // Bit 5
     // ESC Self-Check Errors - with bit numbers
     case SensorID::ESC_MotorCurrentOut_Error: return "MC-SE-0";  // Bit 0
     case SensorID::ESC_TotalCurrentOut_Error: return "MC-SE-1";  // Bit 1

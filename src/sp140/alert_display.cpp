@@ -35,7 +35,7 @@ void initAlertDisplay() {
   // Create queues – small, non-blocking
   alertEventQueue  = xQueueCreate(20, sizeof(AlertEvent));
   alertCarouselQueue = xQueueCreate(1, sizeof(AlertSnapshot));
-  alertUIQueue = xQueueCreate(1, sizeof(AlertUIUpdate)); // Unified queue for synchronized updates
+  alertUIQueue = xQueueCreate(1, sizeof(AlertUIUpdate));  // Unified queue for synchronized updates
 
   if (!alertEventQueue || !alertCarouselQueue || !alertUIQueue) {
     USBSerial.println("[AlertDisplay] Failed creating queues");
@@ -53,7 +53,7 @@ void initAlertDisplay() {
 void sendAlertEvent(SensorID id, AlertLevel level) {
   if (!alertEventQueue) return;
   AlertEvent ev{ id, level, millis() };
-  xQueueSend(alertEventQueue, &ev, 0); // best-effort, drop if full
+  xQueueSend(alertEventQueue, &ev, 0);  // best-effort, drop if full
 }
 
 // ------------ Internal implementation -------------
@@ -92,8 +92,7 @@ static void alertAggregationTask(void* parameter) {
           xQueueOverwrite(alertUIQueue, &update);
         }
       }
-    }
-    else {
+    } else {
       // If list empty ensure label hidden once
       static bool hideSent = false;
       if (!hideSent) {
@@ -110,7 +109,7 @@ static void alertAggregationTask(void* parameter) {
 }
 
 static void recalcCountsAndPublish() {
-  AlertCounts counts{0,0};
+  AlertCounts counts{0, 0};
   std::vector<SensorID> critList;
   std::vector<SensorID> warnList;
   for (const auto& kv : g_currentLevels) {
