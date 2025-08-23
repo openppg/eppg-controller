@@ -352,7 +352,7 @@ void updateLvglMainScreen(
 
     // Set color based on percentage
     lv_color_t batteryColor = LVGL_RED;
-    if (batteryPercent >= bmsSOCThresholds.warnLow) {
+    if (batteryPercent > bmsSOCThresholds.warnLow) {
       batteryColor = LVGL_GREEN;
     } else if (batteryPercent >= bmsSOCThresholds.critLow) {
       batteryColor = LVGL_YELLOW;
