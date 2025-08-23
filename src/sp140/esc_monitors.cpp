@@ -84,12 +84,13 @@ void addESCMonitors() {
   monitors.push_back(escVoltageDropError);
 
   // Individual ESC Running Warning Monitors
-  static BooleanMonitor* escThrottleSatWarning = new BooleanMonitor(
-    SensorID::ESC_ThrottleSat_Warning,
-    SensorCategory::ESC,
-    []() { return hasThrottleSatWarning(monitoringEscData.running_error); },
-    true, AlertLevel::WARN_HIGH, &multiLogger);
-  monitors.push_back(escThrottleSatWarning);
+  // ESC Throttle Saturation Warning - DISABLED
+  // static BooleanMonitor* escThrottleSatWarning = new BooleanMonitor(
+  //   SensorID::ESC_ThrottleSat_Warning,
+  //   SensorCategory::ESC,
+  //   []() { return hasThrottleSatWarning(monitoringEscData.running_error); },
+  //   true, AlertLevel::WARN_HIGH, &multiLogger);
+  // monitors.push_back(escThrottleSatWarning);
 
   // Individual ESC Self-Check Error Monitors (All Critical)
   static BooleanMonitor* escMotorCurrentOutError = new BooleanMonitor(

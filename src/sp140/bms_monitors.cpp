@@ -106,15 +106,15 @@ void addBMSMonitors() {
     &multiLogger);
   monitors.push_back(bmsVoltageDifferential);
 
-  // Charge MOS (Alert when OFF)
-  static BooleanMonitor* bmsChargeMos = new BooleanMonitor(
-    SensorID::BMS_Charge_MOS,
-    SensorCategory::BMS,
-    []() { return monitoringBmsData.is_charge_mos; },
-    false,  // Alert when false
-    AlertLevel::CRIT_HIGH,
-    &multiLogger);
-  monitors.push_back(bmsChargeMos);
+  // Charge MOS (Alert when OFF) - DISABLED
+  // static BooleanMonitor* bmsChargeMos = new BooleanMonitor(
+  //   SensorID::BMS_Charge_MOS,
+  //   SensorCategory::BMS,
+  //   []() { return monitoringBmsData.is_charge_mos; },
+  //   false,  // Alert when false
+  //   AlertLevel::CRIT_HIGH,
+  //   &multiLogger);
+  // monitors.push_back(bmsChargeMos);
 
   // Discharge MOS (Alert when OFF)
   static BooleanMonitor* bmsDischargeMos = new BooleanMonitor(
