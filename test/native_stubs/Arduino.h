@@ -36,3 +36,12 @@ typedef void* QueueHandle_t;
 inline void delay(unsigned long ms) {
   std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 }
+
+// Minimal GPIO/ADC stubs for native builds
+#ifndef INPUT
+#define INPUT 0
+#endif
+
+inline void pinMode(int, int) {}
+inline int analogRead(int) { return 0; }
+inline void analogReadResolution(int) {}

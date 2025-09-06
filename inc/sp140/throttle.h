@@ -17,6 +17,12 @@
  */
 int limitedThrottle(int current, int last, int threshold);
 
+// Initialize throttle input pin and ADC settings
+void initThrottleInput();
+
+// Read raw throttle value (0-4095)
+uint16_t readThrottleRaw();
+
 /**
  * Checks if throttle is in safe position (below threshold)
  *

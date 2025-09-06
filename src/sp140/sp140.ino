@@ -9,7 +9,6 @@
 #include <Adafruit_NeoPixel.h>        // RGB LED
 #include <ArduinoJson.h>
 #include <CircularBuffer.hpp>      // smooth out readings
-#include <ResponsiveAnalogRead.h>  // smoothing for throttle
 #include <SPI.h>
 #include <TimeLib.h>  // convert time to hours mins etc
 #include <Wire.h>
@@ -86,7 +85,6 @@ HardwareConfig board_config;
 bool bmsCanInitialized = false;
 bool escTwaiInitialized = false;
 
-ResponsiveAnalogRead* pot;
 
 UnifiedBatteryData unifiedBatteryData = {0.0f, 0.0f, 0.0f};
 
@@ -556,7 +554,7 @@ void bmsTask(void *pvParameters) {
 void loadHardwareConfig() {
   board_config = s3_config;  // ESP32S3 is only supported board
 
-  pot = new ResponsiveAnalogRead(board_config.throttle_pin, false);
+  // Throttle input is initialized via initThrottleInput()
 }
 
 void printBootMessage() {
@@ -581,8 +579,8 @@ void setupLED() {
 }
 
 void setupAnalogRead() {
-  //analogReadResolution(12);   // M0 family chips provides 12bit ADC resolution
-  pot->setAnalogResolution(4096);
+  // Initialize throttle ADC input (12-bit range on ESP32)
+  initThrottleInput();
 }
 
 void setupWatchdog() {
@@ -992,8 +990,7 @@ void toggleCruise() {
       // Check if throttle is engaged (not at zero)
       if (throttleEngaged()) {
         // Check if throttle is too high to activate cruise
-        pot->update();  // Ensure we have the latest value
-        int currentPotVal = pot->getValue();
+        int currentPotVal = readThrottleRaw();
         const int activationThreshold = (int)(4095 * CRUISE_ACTIVATION_MAX_POT_PERCENTAGE);  // Calculate 70% threshold
 
         if (currentPotVal > activationThreshold) {
@@ -1021,8 +1018,7 @@ void toggleCruise() {
 }
 
 bool throttleSafe(int threshold = POT_ENGAGEMENT_LEVEL) {
-  pot->update();
-  return pot->getRawValue() < threshold;
+  return readThrottleRaw() < threshold;
 }
 
 /**
@@ -1109,10 +1105,9 @@ void handleThrottle() {
   }
 
   // Read and buffer potentiometer values
-  pot->update();
-  int potVal = pot->getValue();     // Raw potentiometer value (0-4095)
-  potBuffer.push(potVal);           // Add raw value to buffer
-  int potLvl = averagePotBuffer();  // Calculate smoothed value
+  int potVal = readThrottleRaw();    // Raw potentiometer value (0-4095)
+  potBuffer.push(potVal);            // Add raw value to buffer
+  int potLvl = averagePotBuffer();   // Calculate smoothed value
 
   // Handle throttle based on current device state
   switch (currentState) {
@@ -1189,7 +1184,7 @@ bool armSystem() {
 }
 
 void afterCruiseStart() {
-  cruisedPotVal = pot->getValue();  // Store the raw pot value (0-4095) at activation
+  cruisedPotVal = readThrottleRaw();  // Store the raw pot value (0-4095) at activation
   cruisedAtMillis = millis();
 
   // Determine the maximum PWM based on the current flight mode (Chill/Sport)
@@ -1215,8 +1210,7 @@ void afterCruiseStart() {
 void afterCruiseEnd() {
   // Instead of clearing the buffer which causes throttle to drop to 0,
   // pre-populate it with the current throttle position to ensure smooth transition
-  pot->update();
-  int currentPotVal = pot->getValue();
+  int currentPotVal = readThrottleRaw();
 
   // Pre-fill the buffer with current pot value for smooth transition
   potBuffer.clear();  // Clear first
