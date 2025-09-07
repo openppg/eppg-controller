@@ -1084,33 +1084,27 @@ void handleThrottle() {
     }
   }
 
-  // Read raw pot and convert to PWM immediately (PWM-first pipeline)
-  int potValRaw = readThrottleRaw();    // 0-4095
-  int targetPwm = potRawToPwm(potValRaw);
-  // Smooth in PWM domain using ring buffer
-  throttleFilterPush(targetPwm);
-  int pwmAvg = throttleFilterAverage();
+  int finalPwm;
 
   // Handle throttle based on current device state
   switch (currentState) {
     case DISARMED:
-      setESCThrottle(ESC_DISARMED_PWM);
-      prevPwm = ESC_MIN_PWM;  // Reset throttle memory when disarmed
-      throttleFilterClear();      // Clear the buffer when disarmed
+      resetThrottleState(prevPwm);
+      finalPwm = ESC_DISARMED_PWM;
       break;
 
     case ARMED_CRUISING:
-      handleCruisingThrottle(currentCruiseThrottlePWM, potValRaw);
+      handleCruisingThrottle(currentCruiseThrottlePWM, readThrottleRaw());
+      finalPwm = currentCruiseThrottlePWM;  // Use cruise PWM
       break;
 
     case ARMED:
-      // Apply ramping + clamping via throttle helpers
-      {
-        int finalPwm = applyModeRampClamp(pwmAvg, prevPwm, deviceData.performance_mode);
-        setESCThrottle(finalPwm);
-      }
+      int smoothedPwm = getSmoothedThrottlePwm();
+      finalPwm = applyModeRampClamp(smoothedPwm, prevPwm, deviceData.performance_mode);
       break;
   }
+
+  setESCThrottle(finalPwm);
 
     // Read/Sync ESC Telemetry (runs in all armed states)
   readESCTelemetry();

@@ -99,3 +99,28 @@ int throttleFilterAverage() {
   }
   return sum / pwmBuffer.size();  // Integer division is fine for PWM values
 }
+
+/**
+ * Read throttle input and return smoothed PWM value.
+ * This is the core throttle processing pipeline without any state logic.
+ *
+ * @return Smoothed PWM value from throttle input
+ */
+int getSmoothedThrottlePwm() {
+  // Read and convert raw pot to PWM
+  int potValRaw = readThrottleRaw();
+  int targetPwm = potRawToPwm(potValRaw);
+
+  // Smooth in PWM domain using ring buffer
+  throttleFilterPush(targetPwm);
+  return throttleFilterAverage();
+}
+
+/**
+ * Reset throttle state for clean startup/disarm.
+ * Clears smoothing buffer and resets previous PWM tracking.
+ */
+void resetThrottleState(int& prevPwm) {
+  prevPwm = ESC_MIN_PWM;
+  throttleFilterClear();
+}

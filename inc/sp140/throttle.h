@@ -90,6 +90,22 @@ bool throttleSafe(int threshold);
 bool throttleEngaged();
 
 /**
+ * Read throttle input and return smoothed PWM value.
+ * This is the core throttle processing pipeline without any state logic.
+ *
+ * @return Smoothed PWM value from throttle input
+ */
+int getSmoothedThrottlePwm();
+
+/**
+ * Reset throttle state for clean startup/disarm.
+ * Clears smoothing buffer and resets previous PWM tracking.
+ *
+ * @param prevPwm Reference to previous PWM variable to reset
+ */
+void resetThrottleState(int& prevPwm);
+
+/**
  * Main throttle handling function - processes throttle input
  * and applies appropriate limits based on device state
  */
