@@ -45,3 +45,14 @@ inline void delay(unsigned long ms) {
 inline void pinMode(int, int) {}
 inline int analogRead(int) { return 0; }
 inline void analogReadResolution(int) {}
+
+// Math helpers
+#ifndef constrain
+template <typename T>
+inline T constrain(T x, T a, T b) { return x < a ? a : (x > b ? b : x); }
+#endif
+
+// Arduino-style map helper
+inline long map(long x, long in_min, long in_max, long out_min, long out_max) {
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
