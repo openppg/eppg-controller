@@ -14,7 +14,7 @@ static const Thresholds motorTempThresholds = {.warnLow = -20, .warnHigh = 105, 
 // -- BMS Thresholds --
 static const Thresholds bmsTempThresholds = {.warnLow = -10, .warnHigh = 50, .critLow = -15, .critHigh = 60};
 static const Thresholds bmsCellTempThresholds = {.warnLow = -10, .warnHigh = 50, .critLow = -15, .critHigh = 56};
-static const Thresholds bmsHighCellVoltageThresholds = {.warnLow = 0.0, .warnHigh = 4.18, .critLow = 0.0, .critHigh = 4.20};
+static const Thresholds bmsHighCellVoltageThresholds = {.warnLow = 0.0, .warnHigh = 4.19, .critLow = 0.0, .critHigh = 4.20};
 static const Thresholds bmsLowCellVoltageThresholds = {.warnLow = 3.2, .warnHigh = 4.5, .critLow = 3.0, .critHigh = 4.8};
 static const Thresholds bmsSOCThresholds = {.warnLow = 15.0, .warnHigh = 101.0, .critLow = 5.0, .critHigh = 110.0};
 static const Thresholds bmsTotalVoltageThresholds = {.warnLow = 79.2, .warnHigh = 100.4, .critLow = 69.6, .critHigh = 100.8};
