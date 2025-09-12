@@ -70,10 +70,14 @@ enum class SensorID {
 // Alert levels
 enum class AlertLevel { OK, WARN_LOW, WARN_HIGH, CRIT_LOW, CRIT_HIGH, INFO };
 
-// Threshold set
+// Threshold set with hysteresis support
 struct Thresholds {
   float warnLow, warnHigh;
   float critLow, critHigh;
+
+  // Hysteresis value - must be positive
+  // This defines the deadband around all thresholds to prevent bouncing
+  float hysteresis;
 };
 
 // Logger interface
@@ -164,6 +168,67 @@ struct SensorMonitor : public IMonitor {
 
   void resetState() override {
     last = AlertLevel::OK;
+  }
+};
+
+// Enhanced sensor monitor with hysteresis to prevent alert bouncing
+struct HysteresisSensorMonitor : public SensorMonitor {
+  // Constructor - inherits all member variables from SensorMonitor
+  HysteresisSensorMonitor(SensorID i, SensorCategory cat, Thresholds t, std::function<float()> r, ILogger* l)
+    : SensorMonitor(i, cat, t, r, l) {}
+
+  void check() override {
+    float v = read();
+    AlertLevel now = last;  // Start with current state
+
+    // Hysteresis logic to prevent bouncing
+    switch (last) {
+      case AlertLevel::OK:
+        // From OK, we can transition to warnings/criticals
+        if      (v <= thr.critLow)  now = AlertLevel::CRIT_LOW;
+        else if (v <= thr.warnLow)  now = AlertLevel::WARN_LOW;
+        else if (v >= thr.critHigh) now = AlertLevel::CRIT_HIGH;
+        else if (v >= thr.warnHigh) now = AlertLevel::WARN_HIGH;
+        break;
+
+      case AlertLevel::WARN_LOW:
+        // From WARN_LOW, need to go below warnLow - hysteresis to clear
+        // Or escalate to critical if still below critLow + hysteresis
+        if (v <= thr.critLow + thr.hysteresis) now = AlertLevel::CRIT_LOW;
+        else if (v > thr.warnLow + thr.hysteresis) now = AlertLevel::OK;
+        break;
+
+      case AlertLevel::WARN_HIGH:
+        // From WARN_HIGH, need to go below warnHigh - hysteresis to clear
+        // Or escalate to critical if still above critHigh - hysteresis
+        if (v >= thr.critHigh - thr.hysteresis) now = AlertLevel::CRIT_HIGH;
+        else if (v < thr.warnHigh - thr.hysteresis) now = AlertLevel::OK;
+        break;
+
+      case AlertLevel::CRIT_LOW:
+        // From CRIT_LOW, need to go above critLow + hysteresis to de-escalate
+        if (v > thr.critLow + thr.hysteresis) {
+          if (v <= thr.warnLow + thr.hysteresis) now = AlertLevel::WARN_LOW;
+          else now = AlertLevel::OK;
+        }
+        break;
+
+      case AlertLevel::CRIT_HIGH:
+        // From CRIT_HIGH, need to go below critHigh - hysteresis to de-escalate
+        if (v < thr.critHigh - thr.hysteresis) {
+          if (v >= thr.warnHigh - thr.hysteresis) now = AlertLevel::WARN_HIGH;
+          else now = AlertLevel::OK;
+        }
+        break;
+
+      default:
+        break;
+    }
+
+    if (now != last) {
+      logger->log(id, now, v);
+      last = now;
+    }
   }
 };
 

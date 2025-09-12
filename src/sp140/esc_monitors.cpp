@@ -11,8 +11,8 @@ extern MultiLogger multiLogger;
 extern STR_ESC_TELEMETRY_140 monitoringEscData;
 
 void addESCMonitors() {
-  // ESC MOS Temperature Monitor
-  static SensorMonitor* escMosTemp = new SensorMonitor(
+  // ESC MOS Temperature Monitor - with hysteresis
+  static HysteresisSensorMonitor* escMosTemp = new HysteresisSensorMonitor(
     SensorID::ESC_MOS_Temp,
     SensorCategory::ESC,
     escMosTempThresholds,
@@ -20,8 +20,8 @@ void addESCMonitors() {
     &multiLogger);
   monitors.push_back(escMosTemp);
 
-  // ESC MCU Temperature Monitor
-  static SensorMonitor* escMcuTemp = new SensorMonitor(
+  // ESC MCU Temperature Monitor - with hysteresis
+  static HysteresisSensorMonitor* escMcuTemp = new HysteresisSensorMonitor(
     SensorID::ESC_MCU_Temp,
     SensorCategory::ESC,
     escMcuTempThresholds,
@@ -29,8 +29,8 @@ void addESCMonitors() {
     &multiLogger);
   monitors.push_back(escMcuTemp);
 
-  // ESC Capacitor Temperature Monitor
-  static SensorMonitor* escCapTemp = new SensorMonitor(
+  // ESC Capacitor Temperature Monitor - with hysteresis
+  static HysteresisSensorMonitor* escCapTemp = new HysteresisSensorMonitor(
     SensorID::ESC_CAP_Temp,
     SensorCategory::ESC,
     escCapTempThresholds,
@@ -38,8 +38,8 @@ void addESCMonitors() {
     &multiLogger);
   monitors.push_back(escCapTemp);
 
-  // Motor Temperature Monitor
-  static SensorMonitor* motorTemp = new SensorMonitor(
+  // Motor Temperature Monitor - with hysteresis
+  static HysteresisSensorMonitor* motorTemp = new HysteresisSensorMonitor(
     SensorID::Motor_Temp,
     SensorCategory::ESC,
     motorTempThresholds,

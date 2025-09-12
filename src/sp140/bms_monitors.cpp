@@ -10,8 +10,8 @@ extern MultiLogger multiLogger;
 extern STR_BMS_TELEMETRY_140 monitoringBmsData;
 
 void addBMSMonitors() {
-  // BMS MOSFET Temperature (Warning: 50°C, Critical: 60°C)
-  static SensorMonitor* bmsMosTemp = new SensorMonitor(
+  // BMS MOSFET Temperature (Warning: 50°C, Critical: 60°C) - with hysteresis
+  static HysteresisSensorMonitor* bmsMosTemp = new HysteresisSensorMonitor(
     SensorID::BMS_MOS_Temp,
     SensorCategory::BMS,
     bmsTempThresholds,
@@ -19,8 +19,8 @@ void addBMSMonitors() {
     &multiLogger);
   monitors.push_back(bmsMosTemp);
 
-  // BMS Balance Resistor Temperature (Warning: 50°C, Critical: 60°C)
-  static SensorMonitor* bmsBalanceTemp = new SensorMonitor(
+  // BMS Balance Resistor Temperature (Warning: 50°C, Critical: 60°C) - with hysteresis
+  static HysteresisSensorMonitor* bmsBalanceTemp = new HysteresisSensorMonitor(
     SensorID::BMS_Balance_Temp,
     SensorCategory::BMS,
     bmsTempThresholds,
@@ -28,8 +28,8 @@ void addBMSMonitors() {
     &multiLogger);
   monitors.push_back(bmsBalanceTemp);
 
-  // T1-T4 Cell Temperature Sensors (Warning: 50°C, Critical: 56°C)
-  static SensorMonitor* bmsT1Temp = new SensorMonitor(
+  // T1-T4 Cell Temperature Sensors (Warning: 50°C, Critical: 56°C) - with hysteresis
+  static HysteresisSensorMonitor* bmsT1Temp = new HysteresisSensorMonitor(
     SensorID::BMS_T1_Temp,
     SensorCategory::BMS,
     bmsCellTempThresholds,
@@ -37,7 +37,7 @@ void addBMSMonitors() {
     &multiLogger);
   monitors.push_back(bmsT1Temp);
 
-  static SensorMonitor* bmsT2Temp = new SensorMonitor(
+  static HysteresisSensorMonitor* bmsT2Temp = new HysteresisSensorMonitor(
     SensorID::BMS_T2_Temp,
     SensorCategory::BMS,
     bmsCellTempThresholds,
@@ -45,7 +45,7 @@ void addBMSMonitors() {
     &multiLogger);
   monitors.push_back(bmsT2Temp);
 
-  static SensorMonitor* bmsT3Temp = new SensorMonitor(
+  static HysteresisSensorMonitor* bmsT3Temp = new HysteresisSensorMonitor(
     SensorID::BMS_T3_Temp,
     SensorCategory::BMS,
     bmsCellTempThresholds,
@@ -53,7 +53,7 @@ void addBMSMonitors() {
     &multiLogger);
   monitors.push_back(bmsT3Temp);
 
-  static SensorMonitor* bmsT4Temp = new SensorMonitor(
+  static HysteresisSensorMonitor* bmsT4Temp = new HysteresisSensorMonitor(
     SensorID::BMS_T4_Temp,
     SensorCategory::BMS,
     bmsCellTempThresholds,
