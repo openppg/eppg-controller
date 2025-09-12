@@ -656,14 +656,11 @@ void updateLvglMainScreen(
       if (batteryTemp >= bmsTempThresholds.critHigh) {
         lv_obj_add_style(batt_temp_bg, &style_critical, 0);
         lv_obj_clear_flag(batt_temp_bg, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_style_bg_opa(batt_temp_bg, LV_OPA_100, LV_PART_MAIN);
       } else if (batteryTemp >= bmsTempThresholds.warnHigh) {
         lv_obj_add_style(batt_temp_bg, &style_warning, 0);
         lv_obj_clear_flag(batt_temp_bg, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_style_bg_opa(batt_temp_bg, LV_OPA_100, LV_PART_MAIN);
       } else {
         lv_obj_add_flag(batt_temp_bg, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_style_bg_opa(batt_temp_bg, LV_OPA_0, LV_PART_MAIN);
       }
     } else {
       lv_label_set_text(batt_temp_label, "-");
@@ -682,14 +679,11 @@ void updateLvglMainScreen(
       if (escTemp >= escMosTempThresholds.critHigh) {
         lv_obj_add_style(esc_temp_bg, &style_critical, 0);
         lv_obj_clear_flag(esc_temp_bg, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_style_bg_opa(esc_temp_bg, LV_OPA_100, LV_PART_MAIN);
       } else if (escTemp >= escMosTempThresholds.warnHigh) {
         lv_obj_add_style(esc_temp_bg, &style_warning, 0);
         lv_obj_clear_flag(esc_temp_bg, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_style_bg_opa(esc_temp_bg, LV_OPA_100, LV_PART_MAIN);
       } else {
         lv_obj_add_flag(esc_temp_bg, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_style_bg_opa(esc_temp_bg, LV_OPA_0, LV_PART_MAIN);
       }
     } else {
       lv_label_set_text(esc_temp_label, "-");
@@ -708,14 +702,11 @@ void updateLvglMainScreen(
       if (motorTemp >= motorTempThresholds.critHigh) {
         lv_obj_add_style(motor_temp_bg, &style_critical, 0);
         lv_obj_clear_flag(motor_temp_bg, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_style_bg_opa(motor_temp_bg, LV_OPA_100, LV_PART_MAIN);
       } else if (motorTemp >= motorTempThresholds.warnHigh) {
         lv_obj_add_style(motor_temp_bg, &style_warning, 0);
         lv_obj_clear_flag(motor_temp_bg, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_style_bg_opa(motor_temp_bg, LV_OPA_100, LV_PART_MAIN);
       } else {
         lv_obj_add_flag(motor_temp_bg, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_style_bg_opa(motor_temp_bg, LV_OPA_0, LV_PART_MAIN);
       }
     } else {
       lv_label_set_text(motor_temp_label, "-");
