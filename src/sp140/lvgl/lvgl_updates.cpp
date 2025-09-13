@@ -653,7 +653,6 @@ void updateLvglMainScreen(
 
     if (bmsTelemetry.bmsState == TelemetryState::CONNECTED) {
       lv_label_set_text_fmt(batt_temp_label, "%d", static_cast<int>(batteryTemp));
-
       if (batteryTemp >= bmsTempThresholds.critHigh) {
         lv_obj_add_style(batt_temp_bg, &style_critical, 0);
         lv_obj_clear_flag(batt_temp_bg, LV_OBJ_FLAG_HIDDEN);

@@ -1,9 +1,10 @@
+// Use the native Arduino stubs provided by the repo and the real CircularBuffer
 #include <gtest/gtest.h>
+#include "../native_stubs/Arduino.h"
 
-// Create minimal stubs for ESP32 dependencies to avoid linking issues
-#define ARDUINO_H  // Prevent Arduino.h from being included
-
-// Include the actual source file
+// Include the real implementations under test
+#include "../../inc/sp140/shared-config.h"
+#include "../../inc/sp140/throttle.h"
 #include "../../src/sp140/throttle.cpp"
 
 TEST(ThrottleTest, LimitedThrottleNoLimiting) {
@@ -119,6 +120,83 @@ TEST(ThrottleTest, LimitedThrottleSequentialCalls) {
 
     current = limitedThrottle(1035, current, threshold);
     EXPECT_EQ(current, 1035);  // 1100 - 65 (reaches target)
+}
+
+// Test potRawToPwm mapping function
+TEST(ThrottleTest, PotRawToPwmMapping) {
+    // Test basic mapping from ADC range (0-4095) to PWM range (1035-1950)
+    EXPECT_EQ(potRawToPwm(0), 1035);        // Min ADC -> Min PWM
+    EXPECT_EQ(potRawToPwm(4095), 1950);     // Max ADC -> Max PWM
+    EXPECT_EQ(potRawToPwm(2047), 1492);     // Mid ADC -> Mid PWM (approx)
+
+    // Test quarter points
+    EXPECT_EQ(potRawToPwm(1024), 1263);     // 25% -> 25% of range
+    EXPECT_EQ(potRawToPwm(3072), 1721);     // 75% -> 75% of range
+}
+
+// Test applyModeRampClamp function
+TEST(ThrottleTest, ApplyModeRampClamp) {
+    int prevPwm;
+
+    // Test CHILL mode (mode 0) - slower ramp, lower max
+    prevPwm = 1035;
+    int result = applyModeRampClamp(1500, prevPwm, 0);
+    EXPECT_EQ(prevPwm, result);  // prevPwm should be updated
+    EXPECT_EQ(result, 1045);     // Should ramp by CHILL_MODE_RAMP_RATE (10)
+
+    // Test SPORT mode (mode 1) - faster ramp, higher max
+    prevPwm = 1035;
+    result = applyModeRampClamp(1500, prevPwm, 1);
+    EXPECT_EQ(result, 1062);     // Should ramp by SPORT_MODE_RAMP_RATE (27)
+
+    // Test CHILL mode max PWM clamping
+    prevPwm = 1840;
+    result = applyModeRampClamp(1900, prevPwm, 0);
+    EXPECT_EQ(result, 1850);     // Should clamp to CHILL_MODE_MAX_PWM
+
+    // Test SPORT mode allows higher PWM
+    prevPwm = 1840;
+    result = applyModeRampClamp(1900, prevPwm, 1);
+    EXPECT_EQ(result, 1867);     // Should ramp by 27, not clamp yet
+}
+
+// Test throttle filter functions
+TEST(ThrottleTest, ThrottleFiltering) {
+    // Clear buffer first
+    throttleFilterClear();
+
+    // Empty buffer should return 0
+    EXPECT_EQ(throttleFilterAverage(), 0);
+
+    // Add some values and test averaging
+    throttleFilterPush(1000);
+    EXPECT_EQ(throttleFilterAverage(), 1000);
+
+    throttleFilterPush(1200);
+    EXPECT_EQ(throttleFilterAverage(), 1100);  // (1000+1200)/2
+
+    throttleFilterPush(1400);
+    EXPECT_EQ(throttleFilterAverage(), 1200);  // (1000+1200+1400)/3
+
+    // Test reset functionality
+    throttleFilterReset(1500);
+    EXPECT_EQ(throttleFilterAverage(), 1500);  // Should be filled with 1500
+}
+
+// Test resetThrottleState function
+TEST(ThrottleTest, ResetThrottleState) {
+    int prevPwm = 1500;
+
+    // Add some values to buffer first
+    throttleFilterPush(1200);
+    throttleFilterPush(1300);
+    throttleFilterPush(1400);
+
+    // Reset should clear buffer and reset prevPwm
+    resetThrottleState(prevPwm);
+
+    EXPECT_EQ(prevPwm, 1035);              // Should reset to ESC_MIN_PWM
+    EXPECT_EQ(throttleFilterAverage(), 0); // Buffer should be empty
 }
 
 int main(int argc, char **argv) {

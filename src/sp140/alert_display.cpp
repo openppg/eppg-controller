@@ -197,11 +197,12 @@ static void recalcCountsAndPublish() {
  */
 static void handleAlertVibration(const AlertCounts& newCounts, const AlertCounts& previousCounts) {
   // Handle warning transitions (only when no critical alerts)
-  if (newCounts.criticalCount == 0 &&
-      previousCounts.warningCount == 0 && newCounts.warningCount > 0) {
-    // Short delay to sync with UI
-    vTaskDelay(pdMS_TO_TICKS(100));
-    // Transition from 0 warnings to >0 warnings - trigger double pulse
-    executeVibePattern(VIBE_DOUBLE_PULSE);
+  if (newCounts.criticalCount == 0) {
+    const int deltaWarnings = static_cast<int>(newCounts.warningCount) - static_cast<int>(previousCounts.warningCount);
+    if (deltaWarnings > 0) {
+      // Any increase in warnings: another double pulse
+      vTaskDelay(pdMS_TO_TICKS(100));
+      executeVibePattern(VIBE_DOUBLE_PULSE);
+    }
   }
 }

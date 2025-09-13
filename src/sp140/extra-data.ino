@@ -2,6 +2,7 @@
 // OpenPPG
 
 #include <Preferences.h>  // Add ESP32 Preferences library
+#include "../../inc/sp140/throttle.h"
 
 /**
  * WebSerial Protocol Documentation
@@ -282,9 +283,8 @@ class ScreenRotationCallbacks: public BLECharacteristicCallbacks {
 
 class ThrottleValueCallbacks: public BLECharacteristicCallbacks {
   void onRead(BLECharacteristic *pCharacteristic) {
-    // Return the current pot value when read
-    pot->update();
-    uint16_t potVal = pot->getValue();
+    // Return the current pot value when read (raw ADC)
+    uint16_t potVal = readThrottleRaw();
     pCharacteristic->setValue((uint8_t*)&potVal, sizeof(potVal));
   }
 

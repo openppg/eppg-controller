@@ -9,7 +9,6 @@
 #include <Adafruit_NeoPixel.h>        // RGB LED
 #include <ArduinoJson.h>
 #include <CircularBuffer.hpp>      // smooth out readings
-#include <ResponsiveAnalogRead.h>  // smoothing for throttle
 #include <SPI.h>
 #include <TimeLib.h>  // convert time to hours mins etc
 #include <Wire.h>
@@ -61,10 +60,7 @@ int8_t bmsCS = MCP_CS;
 #define BUTTON_SEQUENCE_TIMEOUT_MS 1500  // Time window for arm/disarm sequence
 #define PERFORMANCE_MODE_HOLD_MS 3000   // Longer hold time for performance mode
 
-// Throttle control constants
-#define CHILL_MODE_MAX_PWM 1850   // 85% max power in chill mode
-#define CHILL_MODE_RAMP_RATE 50   // How fast throttle can increase per cycle in chill mode
-#define SPORT_MODE_RAMP_RATE 120  // How fast throttle can increase per cycle in sport mode
+// Throttle control constants moved to inc/sp140/throttle.h
 
 #define DECEL_MULTIPLIER 2.0     // How much faster deceleration is vs acceleration
 #define CRUISE_MAX_PERCENTAGE 0.60  // Maximum cruise throttle as a percentage of the total ESC range (e.g., 0.60 = 60%)
@@ -86,11 +82,10 @@ HardwareConfig board_config;
 bool bmsCanInitialized = false;
 bool escTwaiInitialized = false;
 
-ResponsiveAnalogRead* pot;
 
 UnifiedBatteryData unifiedBatteryData = {0.0f, 0.0f, 0.0f};
 
-CircularBuffer<int, 8> potBuffer;
+// Throttle PWM smoothing buffer is managed in throttle.cpp
 
 Adafruit_NeoPixel pixels(1, 21, NEO_GRB + NEO_KHZ800);
 uint32_t led_color = LED_RED;  // current LED color
@@ -556,7 +551,7 @@ void bmsTask(void *pvParameters) {
 void loadHardwareConfig() {
   board_config = s3_config;  // ESP32S3 is only supported board
 
-  pot = new ResponsiveAnalogRead(board_config.throttle_pin, false);
+  // Throttle input is initialized via initThrottleInput()
 }
 
 void printBootMessage() {
@@ -581,8 +576,8 @@ void setupLED() {
 }
 
 void setupAnalogRead() {
-  //analogReadResolution(12);   // M0 family chips provides 12bit ADC resolution
-  pot->setAnalogResolution(4096);
+  // Initialize throttle ADC input (12-bit range on ESP32)
+  initThrottleInput();
 }
 
 void setupWatchdog() {
@@ -921,7 +916,7 @@ void disarmESC() {
 
 // reset smoothing
 void resetSmoothing() {
-  potBuffer.clear();
+      throttleFilterClear();
 }
 
 void resumeLEDTask() {
@@ -992,8 +987,7 @@ void toggleCruise() {
       // Check if throttle is engaged (not at zero)
       if (throttleEngaged()) {
         // Check if throttle is too high to activate cruise
-        pot->update();  // Ensure we have the latest value
-        int currentPotVal = pot->getValue();
+        int currentPotVal = readThrottleRaw();
         const int activationThreshold = (int)(4095 * CRUISE_ACTIVATION_MAX_POT_PERCENTAGE);  // Calculate 70% threshold
 
         if (currentPotVal > activationThreshold) {
@@ -1021,8 +1015,7 @@ void toggleCruise() {
 }
 
 bool throttleSafe(int threshold = POT_ENGAGEMENT_LEVEL) {
-  pot->update();
-  return pot->getRawValue() < threshold;
+  return readThrottleRaw() < threshold;
 }
 
 /**
@@ -1066,24 +1059,7 @@ void handleCruisingThrottle(uint16_t& currentCruiseThrottlePWM, int potVal) {
   }
 }
 
-/**
- * Handles throttle control when in normal ARMED state (non-cruise)
- * @param potLvl Smoothed potentiometer value
- * @param prevPotLvl Reference to previous potentiometer level for ramping
- */
-void handleArmedThrottle(int potLvl, int& prevPotLvl) {
-  // Apply throttle limits based on performance mode
-  int rampRate = deviceData.performance_mode == 0 ? CHILL_MODE_RAMP_RATE : SPORT_MODE_RAMP_RATE;
-  int maxPWM = deviceData.performance_mode == 0 ? CHILL_MODE_MAX_PWM : ESC_MAX_PWM;
-
-  // Apply throttle ramping limits using the smoothed value
-  potLvl = limitedThrottle(potLvl, prevPotLvl, rampRate);
-
-  // Map throttle value to PWM range using the smoothed value
-  int localThrottlePWM = map(potLvl, 0, 4095, ESC_MIN_PWM, maxPWM);
-  setESCThrottle(localThrottlePWM);
-  prevPotLvl = potLvl;  // Store smoothed value locally for next iteration
-}
+// (moved throttling logic into throttle.cpp helpers)
 
 /**
  * Main throttle handling function - processes potentiometer input and controls ESC based on device state
@@ -1096,7 +1072,7 @@ void handleArmedThrottle(int potLvl, int& prevPotLvl) {
  */
 void handleThrottle() {
   static uint16_t currentCruiseThrottlePWM = ESC_MIN_PWM;
-  static int prevPotLvl = 0;  // Local static variable for throttle smoothing
+  static int prevPwm = ESC_MIN_PWM;  // Previous PWM for ramping
   uint16_t newPWM;
 
   // Check for throttle updates from cruise activation
@@ -1108,28 +1084,27 @@ void handleThrottle() {
     }
   }
 
-  // Read and buffer potentiometer values
-  pot->update();
-  int potVal = pot->getValue();     // Raw potentiometer value (0-4095)
-  potBuffer.push(potVal);           // Add raw value to buffer
-  int potLvl = averagePotBuffer();  // Calculate smoothed value
+  int finalPwm;
 
   // Handle throttle based on current device state
   switch (currentState) {
     case DISARMED:
-      setESCThrottle(ESC_DISARMED_PWM);
-      prevPotLvl = 0;     // Reset throttle memory when disarmed
-      potBuffer.clear();  // Clear the buffer when disarmed
+      resetThrottleState(prevPwm);
+      finalPwm = ESC_DISARMED_PWM;
       break;
 
     case ARMED_CRUISING:
-      handleCruisingThrottle(currentCruiseThrottlePWM, potVal);
+      handleCruisingThrottle(currentCruiseThrottlePWM, readThrottleRaw());
+      finalPwm = currentCruiseThrottlePWM;  // Use cruise PWM
       break;
 
     case ARMED:
-      handleArmedThrottle(potLvl, prevPotLvl);
+      int smoothedPwm = getSmoothedThrottlePwm();
+      finalPwm = applyModeRampClamp(smoothedPwm, prevPwm, deviceData.performance_mode);
       break;
   }
+
+  setESCThrottle(finalPwm);
 
     // Read/Sync ESC Telemetry (runs in all armed states)
   readESCTelemetry();
@@ -1159,16 +1134,7 @@ bool throttleEngaged() {
 }
 
 // average the pot buffer
-int averagePotBuffer() {
-  if (potBuffer.isEmpty()) {
-    return 0;
-  }
-  int sum = 0;
-  for (decltype(potBuffer)::index_t i = 0; i < potBuffer.size(); i++) {
-    sum += potBuffer[i];
-  }
-  return sum / potBuffer.size();
-}
+// averagePotBuffer moved to throttle.cpp as throttleFilterAverage()
 
 // get the PPG ready to fly
 bool armSystem() {
@@ -1189,7 +1155,7 @@ bool armSystem() {
 }
 
 void afterCruiseStart() {
-  cruisedPotVal = pot->getValue();  // Store the raw pot value (0-4095) at activation
+  cruisedPotVal = readThrottleRaw();  // Store the raw pot value (0-4095) at activation
   cruisedAtMillis = millis();
 
   // Determine the maximum PWM based on the current flight mode (Chill/Sport)
@@ -1215,14 +1181,11 @@ void afterCruiseStart() {
 void afterCruiseEnd() {
   // Instead of clearing the buffer which causes throttle to drop to 0,
   // pre-populate it with the current throttle position to ensure smooth transition
-  pot->update();
-  int currentPotVal = pot->getValue();
+  int currentPotVal = readThrottleRaw();
+  int currentPwmVal = potRawToPwm(currentPotVal);
 
   // Pre-fill the buffer with current pot value for smooth transition
-  potBuffer.clear();  // Clear first
-  for (int i = 0; i < 8; i++) {  // Buffer size is 8
-    potBuffer.push(currentPotVal);
-  }
+  throttleFilterReset(currentPwmVal);
 
   cruisedPotVal = 0;
   //pulseVibeMotor();

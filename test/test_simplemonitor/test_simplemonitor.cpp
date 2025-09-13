@@ -130,12 +130,12 @@ TEST(SimpleMonitor, BMSVoltageAlerts) {
   highCellMon.check(); // OK
   EXPECT_TRUE(logger.entries.empty());
 
-  fakeVoltage = 4.15f; // Warn
+  fakeVoltage = 4.19f; // Warn
   highCellMon.check();
   ASSERT_EQ(logger.entries.size(), 1u);
   EXPECT_EQ(logger.entries.back().lvl, AlertLevel::WARN_HIGH);
 
-  fakeVoltage = 4.25f; // Crit
+  fakeVoltage = 4.21f; // Crit
   highCellMon.check();
   ASSERT_EQ(logger.entries.size(), 2u);
   EXPECT_EQ(logger.entries.back().lvl, AlertLevel::CRIT_HIGH);
@@ -375,7 +375,7 @@ TEST(SimpleMonitor, ESCTemperatureAlerts) {
     motorTempMon.check();
     EXPECT_TRUE(logger.entries.empty());
 
-    fakeTemp = 95.0f; // Warn High
+    fakeTemp = 110.0f; // Warn High
     motorTempMon.check();
     ASSERT_EQ(logger.entries.size(), 1u);
     EXPECT_EQ(logger.entries.back().lvl, AlertLevel::WARN_HIGH);

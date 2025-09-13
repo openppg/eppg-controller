@@ -73,7 +73,8 @@ lv_obj_t* createTempBackground(lv_obj_t* parent, int x, int y, int width, int he
   lv_obj_set_pos(bg, x, y);
   lv_obj_set_style_border_width(bg, 0, LV_PART_MAIN);
   lv_obj_set_style_radius(bg, 0, LV_PART_MAIN);
-  lv_obj_set_style_bg_opa(bg, LV_OPA_0, LV_PART_MAIN);
+  // Default to opaque background; visibility controlled by HIDDEN flag in updates
+  lv_obj_set_style_bg_opa(bg, LV_OPA_100, LV_PART_MAIN);
   lv_obj_set_style_shadow_width(bg, 0, LV_PART_MAIN);
   lv_obj_set_style_outline_width(bg, 0, LV_PART_MAIN);
   lv_obj_set_style_pad_all(bg, 0, LV_PART_MAIN);
