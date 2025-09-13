@@ -16,13 +16,6 @@
 // ESP32S3 (CAN) specific libraries here
 #include "esp_task_wdt.h"
 
-#ifdef WIFI_DEBUG
-  #include "Insights.h"
-  #include "WiFi.h"
-  #include "inttypes.h"
-  #include "esp_err.h"
-#endif
-
 #include "../../inc/sp140/globals.h"  // device config
 #include "../../inc/sp140/esc.h"
 #include "../../inc/sp140/lvgl/lvgl_core.h"
@@ -61,8 +54,6 @@ int8_t bmsCS = MCP_CS;
 #define PERFORMANCE_MODE_HOLD_MS 3000   // Longer hold time for performance mode
 
 // Throttle control constants moved to inc/sp140/throttle.h
-
-#define DECEL_MULTIPLIER 2.0     // How much faster deceleration is vs acceleration
 #define CRUISE_MAX_PERCENTAGE 0.60  // Maximum cruise throttle as a percentage of the total ESC range (e.g., 0.60 = 60%)
 #define CRUISE_DISENGAGE_POT_THRESHOLD_PERCENTAGE 0.80  // Current pot must be >= this % of activation value to disengage
 #define CRUISE_DISENGAGE_GRACE_PERIOD_MS 2000  // Delay before checking pot disengagement after cruise activation
@@ -620,16 +611,12 @@ void setup() {
   setupWatchdog();
   setup140();
 
-#ifdef WIFI_DEBUG
-  setupWiFi();
-#endif
   setLEDColor(LED_YELLOW);  // Booting up
 
   // First initialize the shared SPI bus
   setupSPI(board_config);
 
   // Then setup the display - use LVGL display instead of the old one
-  // setupDisplay(deviceData, board_config, hardwareSPI);
   // Pass hardcoded pin values for DC and RST
   setupLvglDisplay(deviceData, board_config.tft_dc, board_config.tft_rst, hardwareSPI);
 

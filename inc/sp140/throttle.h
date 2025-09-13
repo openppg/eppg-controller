@@ -24,15 +24,6 @@
 #define SPORT_MODE_RAMP_RATE 27   // us/tick in sport mode (~0.68s 1035->1950)
 
 /**
- * Throttle easing function based on threshold/performance mode
- * Limits how quickly throttle can increase or decrease
- *
- * @param current Current throttle value
- * @param last Previous throttle value
- * @param threshold Maximum allowed change per cycle
- * @return Limited throttle value
- */
-/**
  * Limits how quickly a value may change between ticks.
  * - Caps acceleration to `threshold` per tick.
  * - Caps deceleration to `threshold * DECEL_MULTIPLIER` per tick.
