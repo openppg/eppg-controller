@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pio)",
+      "Bash(pio run)",
+      "Bash(cpplint:*)"
+    ],
+    "deny": []
+  }
+}

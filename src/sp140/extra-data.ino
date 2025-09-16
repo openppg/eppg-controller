@@ -2,6 +2,7 @@
 // OpenPPG
 
 #include <Preferences.h>  // Add ESP32 Preferences library
+#include "../../inc/sp140/throttle.h"
 
 /**
  * WebSerial Protocol Documentation
@@ -137,7 +138,7 @@ static BLECharacteristic* pBMSCellVoltages = nullptr;
 void updateThrottleBLE(int value) {
   // Handle disconnecting
   if (!deviceConnected && oldDeviceConnected) {
-    delay(500);  // give the bluetooth stack the chance to get things ready
+    vTaskDelay(pdMS_TO_TICKS(500));  // give the bluetooth stack the chance to get things ready
     pServer->startAdvertising();  // restart advertising
     USBSerial.println("Start advertising");
     oldDeviceConnected = deviceConnected;
@@ -153,7 +154,7 @@ void updateThrottleBLE(int value) {
     try {
       pThrottleCharacteristic->setValue((uint8_t*)&value, sizeof(value));
       pThrottleCharacteristic->notify();
-      delay(5);  // prevent bluetooth stack congestion - can be as low as 3ms
+      vTaskDelay(pdMS_TO_TICKS(5));  // prevent bluetooth stack congestion - can be as low as 3ms
     } catch (...) {
       USBSerial.println("Error sending BLE notification");
     }
@@ -282,9 +283,8 @@ class ScreenRotationCallbacks: public BLECharacteristicCallbacks {
 
 class ThrottleValueCallbacks: public BLECharacteristicCallbacks {
   void onRead(BLECharacteristic *pCharacteristic) {
-    // Return the current pot value when read
-    pot->update();
-    uint16_t potVal = pot->getValue();
+    // Return the current pot value when read (raw ADC)
+    uint16_t potVal = readThrottleRaw();
     pCharacteristic->setValue((uint8_t*)&potVal, sizeof(potVal));
   }
 

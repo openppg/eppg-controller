@@ -1,6 +1,7 @@
 #include "sp140/bms.h"
 #include "sp140/structs.h"
 #include "sp140/globals.h"
+#include "sp140/lvgl/lvgl_core.h"  // for spiBusMutex
 
 STR_BMS_TELEMETRY_140 bmsTelemetryData = {
   .bmsState = TelemetryState::NOT_CONNECTED
@@ -23,9 +24,18 @@ void updateBMSData() {
   // TODO track bms incrementing cycle count
   // Ensure display CS is deselected and BMS CS is selected
   digitalWrite(displayCS, HIGH);
+  // Take the shared SPI mutex to prevent contention with TFT flush
+  if (spiBusMutex != NULL) {
+    if (xSemaphoreTake(spiBusMutex, pdMS_TO_TICKS(150)) != pdTRUE) {
+      // SPI bus timeout - display might be doing long operation
+      USBSerial.println("[BMS] SPI bus timeout - skipping BMS update cycle");
+      return;  // Use stale BMS data this cycle rather than hang
+    }
+  }
   digitalWrite(bmsCS, LOW);
 
   // USBSerial.println("Updating BMS Data");
+  unsigned long tStart = millis();
   bms_can->update();
 
   // Basic measurements
@@ -52,17 +62,36 @@ void updateBMSData() {
 
   // Battery status
   bmsTelemetryData.is_charging = bms_can->isBatteryCharging();
+  bmsTelemetryData.is_charge_mos = bms_can->isChargeMOSStatus();
+  bmsTelemetryData.is_discharge_mos = bms_can->isDischargeMOSStatus();
 
   // Populate individual cell voltages
   for (uint8_t i = 0; i < BMS_CELLS_NUM; i++) {
     bmsTelemetryData.cell_voltages[i] = bms_can->getCellVoltage(i);
   }
 
+  // Populate individual temperature sensors
+  bmsTelemetryData.mos_temperature = bms_can->getTemperature(0);      // BMS MOSFET
+  bmsTelemetryData.balance_temperature = bms_can->getTemperature(1);  // BMS Balance resistors
+  bmsTelemetryData.t1_temperature = bms_can->getTemperature(2);       // Cell probe 1
+  bmsTelemetryData.t2_temperature = bms_can->getTemperature(3);       // Cell probe 2
+  bmsTelemetryData.t3_temperature = bms_can->getTemperature(4);       // Cell probe 3
+  bmsTelemetryData.t4_temperature = bms_can->getTemperature(5);       // Cell probe 4
+
   bmsTelemetryData.lastUpdateMs = millis();
+  unsigned long dur = bmsTelemetryData.lastUpdateMs - tStart;
+  if (dur > 80) {  // warn if BMS update is taking longer than a frame
+    USBSerial.print("Warn: BMS update slow ");
+    USBSerial.print(dur);
+    USBSerial.println("ms");
+  }
   // printBMSData();
 
-  // Deselect BMS CS when done
+  // Deselect BMS CS when done and release mutex
   digitalWrite(bmsCS, HIGH);
+  if (spiBusMutex != NULL) {
+    xSemaphoreGive(spiBusMutex);
+  }
 }
 
 void printBMSData() {

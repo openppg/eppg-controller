@@ -4,7 +4,7 @@
 
 Arduino based logic for OpenPPG SP140 Throttle Controller
 
-#### This master branch is only for testing the latest firmware for the and SP140 controllers running the ESP32-S3 processor.
+#### This master branch is only for testing the latest firmware for the SP140 controllers running the ESP32-S3 processor.
 
 X4 code has been migrated to a separate repo - https://github.com/openppg/x4-controller
 
