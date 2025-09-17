@@ -7,7 +7,7 @@
 #include "sp140/shared-config.h"
 
 // Constants
-#define VARIO_BUFFER_SIZE 10  // Number of samples to average for vertical speed
+#define VARIO_BUFFER_SIZE 25  // Number of samples to average for vertical speed
 #define MAX_VERTICAL_SPEED 250.0f  // Maximum vertical speed to display (m/s)
 
 // Set up the barometer

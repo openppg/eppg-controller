@@ -758,7 +758,7 @@ void updateLvglMainScreen(
   static uint32_t lastAltitudeTime = 0;
   uint32_t currentTime = millis();
 
-  if (currentTime - lastAltitudeTime > 500) {  // Update climb rate every 500ms
+  if (currentTime - lastAltitudeTime > 200) {  // Update climb rate every 200ms
     float climbRate = 0.0f;
     if (lastAltitudeTime > 0) {  // Skip first calculation
       float altitudeChange = altitude - lastAltitude;

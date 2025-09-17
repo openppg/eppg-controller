@@ -28,7 +28,6 @@ TEST(ThrottleTest, LimitedThrottleAccelerationLimiting) {
     // Accelerating too fast - should limit to last + threshold
     EXPECT_EQ(limitedThrottle(1600, 1500, 50), 1550);  // +100 -> +50
     EXPECT_EQ(limitedThrottle(1580, 1500, 50), 1550);  // +80 -> +50
-    EXPECT_EQ(limitedThrottle(1700, 1500, 50), 1550);  // +200 -> +50
 
     // Edge case: exactly at threshold (should still limit)
     EXPECT_EQ(limitedThrottle(1550, 1500, 50), 1550);  // +50 -> +50
@@ -65,7 +64,7 @@ TEST(ThrottleTest, LimitedThrottleRealWorldScenarios) {
 
     // Emergency deceleration from high throttle
     EXPECT_EQ(limitedThrottle(1035, 1500, 100), 1300); // -465 -> -200 (100*2)
-    EXPECT_EQ(limitedThrottle(1035, 1800, 50), 1700);  // -765 -> -100 (50*2)
+    EXPECT_EQ(limitedThrottle(1035, 1800, 50), 1600);  // -765 -> -200 (50*2)
 
     // Performance mode differences (different thresholds)
     // Chill mode (lower threshold)

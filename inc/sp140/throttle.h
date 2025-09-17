@@ -19,8 +19,8 @@
 
 // Throttle control (PWM-first) constants
 // Ramping in PWM microseconds per tick (~20ms per tick in throttle task)
-#define CHILL_MODE_MAX_PWM 1850   // 85% max power in chill mode
-#define CHILL_MODE_RAMP_RATE 10   // us/tick in chill mode (~1.6s 1035->1850)
+#define CHILL_MODE_MAX_PWM 1600   // 70% max power in chill mode
+#define CHILL_MODE_RAMP_RATE 8   // us/tick in chill mode (~1.6s 1035->1600)
 #define SPORT_MODE_RAMP_RATE 27   // us/tick in sport mode (~0.68s 1035->1950)
 
 /**
