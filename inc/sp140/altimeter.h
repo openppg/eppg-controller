@@ -25,4 +25,7 @@ void setGroundAltitude(const STR_DEVICE_DATA_140_V1& deviceData);
 // Get the temperature in degrees Celsius
 float getBaroTemperature();
 
+// Get the pressure in hPa
+float getBaroPressure();
+
 #endif  // INC_SP140_ALTIMETER_H_

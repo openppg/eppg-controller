@@ -7,12 +7,12 @@ Adafruit_BMP3XX bmp;
 bool bmpPresent = false;
 float groundAltitude = 0;
 
-// Buffer to store altitude readings with timestamps
 struct AltitudeReading {
   float altitude;
   unsigned long timestamp;
 };
 
+// Buffer to store altitude readings with timestamps
 CircularBuffer<AltitudeReading, VARIO_BUFFER_SIZE> altitudeBuffer;
 
 float getAltitude(const STR_DEVICE_DATA_140_V1& deviceData) {
@@ -63,6 +63,14 @@ void setGroundAltitude(const STR_DEVICE_DATA_140_V1& deviceData) {
 float getBaroTemperature() {
   if (bmpPresent) {
     return bmp.readTemperature();
+  }
+  return __FLT_MIN__;  // Return a very small number if BMP is not present
+}
+
+// Get the pressure in hPa
+float getBaroPressure() {
+  if (bmpPresent) {
+    return bmp.readPressure() / 100.0f;  // Convert Pa to hPa
   }
   return __FLT_MIN__;  // Return a very small number if BMP is not present
 }
