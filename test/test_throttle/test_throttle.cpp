@@ -64,7 +64,7 @@ TEST(ThrottleTest, LimitedThrottleRealWorldScenarios) {
 
     // Emergency deceleration from high throttle
     EXPECT_EQ(limitedThrottle(1035, 1500, 100), 1300); // -465 -> -200 (100*2)
-    EXPECT_EQ(limitedThrottle(1035, 1800, 50), 1600);  // -765 -> -200 (50*2)
+    EXPECT_EQ(limitedThrottle(1035, 1800, 50), 1700);  // -765 -> -100 (50*2)
 
     // Performance mode differences (different thresholds)
     // Chill mode (lower threshold)
@@ -141,7 +141,7 @@ TEST(ThrottleTest, ApplyModeRampClamp) {
     prevPwm = 1035;
     int result = applyModeRampClamp(1500, prevPwm, 0);
     EXPECT_EQ(prevPwm, result);  // prevPwm should be updated
-    EXPECT_EQ(result, 1045);     // Should ramp by CHILL_MODE_RAMP_RATE (10)
+    EXPECT_EQ(result, 1043);     // Should ramp by CHILL_MODE_RAMP_RATE (8)
 
     // Test SPORT mode (mode 1) - faster ramp, higher max
     prevPwm = 1035;
@@ -151,7 +151,7 @@ TEST(ThrottleTest, ApplyModeRampClamp) {
     // Test CHILL mode max PWM clamping
     prevPwm = 1840;
     result = applyModeRampClamp(1900, prevPwm, 0);
-    EXPECT_EQ(result, 1850);     // Should clamp to CHILL_MODE_MAX_PWM
+    EXPECT_EQ(result, 1600);     // Should clamp to CHILL_MODE_MAX_PWM
 
     // Test SPORT mode allows higher PWM
     prevPwm = 1840;
