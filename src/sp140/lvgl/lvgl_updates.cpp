@@ -293,9 +293,9 @@ void updateClimbRateIndicator(float climbRate) {
     lv_color_make(75, 0, 130)      // Dark purple (again)
   };
 
-  if (climbRate >= 0.05f) {
+  if (climbRate >= 0.15f) {
     // Positive climb rate - fill sections above center line
-    int sectionsToFill = (int)(climbRate / 0.1f);
+    int sectionsToFill = (int)(climbRate / 0.3f);
     if (sectionsToFill > 6) sectionsToFill = 6;
 
     for (int i = 0; i < sectionsToFill; i++) {
@@ -305,9 +305,9 @@ void updateClimbRateIndicator(float climbRate) {
         lv_obj_set_style_bg_color(climb_rate_fill_sections[sectionIndex], positive_colors[i], LV_PART_MAIN);
       }
     }
-  } else if (climbRate <= -0.05f) {
+  } else if (climbRate <= -0.15f) {
     // Negative climb rate - fill sections below center line
-    int sectionsToFill = (int)(-climbRate / 0.1f);
+    int sectionsToFill = (int)(-climbRate / 0.3f);
     if (sectionsToFill > 6) sectionsToFill = 6;
 
     for (int i = 0; i < sectionsToFill; i++) {
@@ -318,7 +318,7 @@ void updateClimbRateIndicator(float climbRate) {
       }
     }
   }
-  // If climb rate is between -0.05 and +0.05, no sections are filled (neutral)
+  // If climb rate is between -0.15 and +0.15, no sections are filled (neutral)
 }
 
 void updateLvglMainScreen(
@@ -758,7 +758,7 @@ void updateLvglMainScreen(
   static uint32_t lastAltitudeTime = 0;
   uint32_t currentTime = millis();
 
-  if (currentTime - lastAltitudeTime > 500) {  // Update climb rate every 500ms
+  if (currentTime - lastAltitudeTime > 200) {  // Update climb rate every 200ms
     float climbRate = 0.0f;
     if (lastAltitudeTime > 0) {  // Skip first calculation
       float altitudeChange = altitude - lastAltitude;

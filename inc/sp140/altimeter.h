@@ -7,7 +7,7 @@
 #include "sp140/shared-config.h"
 
 // Constants
-#define VARIO_BUFFER_SIZE 10  // Number of samples to average for vertical speed
+#define VARIO_BUFFER_SIZE 25  // Number of samples to average for vertical speed
 #define MAX_VERTICAL_SPEED 250.0f  // Maximum vertical speed to display (m/s)
 
 // Set up the barometer
@@ -24,5 +24,8 @@ void setGroundAltitude(const STR_DEVICE_DATA_140_V1& deviceData);
 
 // Get the temperature in degrees Celsius
 float getBaroTemperature();
+
+// Get the pressure in hPa
+float getBaroPressure();
 
 #endif  // INC_SP140_ALTIMETER_H_

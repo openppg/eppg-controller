@@ -590,8 +590,16 @@ void setupBLE() {
 
 // Read saved data from Preferences
 void refreshDeviceData() {
+  // Try to initialize preferences, with corruption recovery
   if (!preferences.begin(PREFS_NAMESPACE, false)) {
-    USBSerial.println(F("Failed to initialize Preferences"));
+    USBSerial.println(F("Failed to initialize Preferences - may be corrupted"));
+
+    // Try to clear corrupted preferences and start fresh
+    preferences.begin(PREFS_NAMESPACE, false);
+    preferences.clear();
+    preferences.end();
+
+    USBSerial.println(F("Cleared potentially corrupted preferences, using defaults"));
     resetDeviceData();
     return;
   }
@@ -604,7 +612,9 @@ void refreshDeviceData() {
     return;
   }
 
-  // Load all values from preferences
+  // Load all values from preferences with validation
+  bool dataValid = true;
+
   deviceData.version_major = preferences.getUChar(KEY_VERSION_MAJOR, VERSION_MAJOR);
   deviceData.version_minor = preferences.getUChar(KEY_VERSION_MINOR, VERSION_MINOR);
   deviceData.screen_rotation = preferences.getUChar(KEY_SCREEN_ROTATION, DEFAULT_SCREEN_ROTATION);
@@ -617,10 +627,24 @@ void refreshDeviceData() {
   deviceData.revision = preferences.getUChar(KEY_REVISION, 3);  // Default to ESP32-S3
   deviceData.timezone_offset = preferences.getInt(KEY_TIMEZONE_OFFSET, 0);
 
+  // Validate critical display-related settings
+  if (deviceData.screen_rotation != 1 && deviceData.screen_rotation != 3) {
+    USBSerial.println(F("Warning: Invalid screen rotation detected, using default"));
+    deviceData.screen_rotation = DEFAULT_SCREEN_ROTATION;
+    dataValid = false;
+  }
+
+  if (deviceData.theme > 1) {
+    USBSerial.println(F("Warning: Invalid theme detected, using default"));
+    deviceData.theme = DEFAULT_THEME;
+    dataValid = false;
+  }
+
   preferences.end();
 
   // Ensure values are within valid ranges
-  if (sanitizeDeviceData()) {
+  if (sanitizeDeviceData() || !dataValid) {
+    USBSerial.println(F("Sanitized corrupted preference values"));
     writeDeviceData();  // Save sanitized values
   }
 
@@ -634,21 +658,27 @@ void writeDeviceData() {
     return;
   }
 
-  // Save all values to preferences
-  preferences.putUChar(KEY_VERSION_MAJOR, deviceData.version_major);
-  preferences.putUChar(KEY_VERSION_MINOR, deviceData.version_minor);
-  preferences.putUChar(KEY_SCREEN_ROTATION, deviceData.screen_rotation);
-  preferences.putFloat(KEY_SEA_PRESSURE, deviceData.sea_pressure);
-  preferences.putBool(KEY_METRIC_TEMP, deviceData.metric_temp);
-  preferences.putBool(KEY_METRIC_ALT, deviceData.metric_alt);
-  preferences.putUChar(KEY_PERFORMANCE_MODE, deviceData.performance_mode);
-  preferences.putUChar(KEY_THEME, deviceData.theme);
-  preferences.putUShort(KEY_ARMED_TIME, deviceData.armed_time);
-  preferences.putUChar(KEY_REVISION, deviceData.revision);
-  preferences.putInt(KEY_TIMEZONE_OFFSET, deviceData.timezone_offset);
+  // Save all values to preferences with error checking
+  bool success = true;
+  success &= (preferences.putUChar(KEY_VERSION_MAJOR, deviceData.version_major) > 0);
+  success &= (preferences.putUChar(KEY_VERSION_MINOR, deviceData.version_minor) > 0);
+  success &= (preferences.putUChar(KEY_SCREEN_ROTATION, deviceData.screen_rotation) > 0);
+  success &= (preferences.putFloat(KEY_SEA_PRESSURE, deviceData.sea_pressure) > 0);
+  success &= (preferences.putBool(KEY_METRIC_TEMP, deviceData.metric_temp) > 0);
+  success &= (preferences.putBool(KEY_METRIC_ALT, deviceData.metric_alt) > 0);
+  success &= (preferences.putUChar(KEY_PERFORMANCE_MODE, deviceData.performance_mode) > 0);
+  success &= (preferences.putUChar(KEY_THEME, deviceData.theme) > 0);
+  success &= (preferences.putUShort(KEY_ARMED_TIME, deviceData.armed_time) > 0);
+  success &= (preferences.putUChar(KEY_REVISION, deviceData.revision) > 0);
+  success &= (preferences.putInt(KEY_TIMEZONE_OFFSET, deviceData.timezone_offset) > 0);
 
-  preferences.end();
-  USBSerial.println(F("Device data saved to Preferences"));
+  if (success) {
+    preferences.end();
+    USBSerial.println(F("Device data saved to Preferences"));
+  } else {
+    preferences.end();
+    USBSerial.println(F("Warning: Some preferences may not have been saved correctly"));
+  }
 }
 
 // Reset Preferences and deviceData to factory defaults
@@ -689,9 +719,9 @@ void parse_serial_commands() {
 
     DeserializationError error = deserializeJson(doc, USBSerial);
 
+    // Handle parsing results
     if (error) {
-      USBSerial.print("JSON parse error: ");
-      USBSerial.println(error.c_str());
+      // Silently ignore non-JSON input or parsing errors
       return;
     }
 
@@ -738,8 +768,8 @@ void parse_serial_commands() {
 
       sanitizeDeviceData();
       writeDeviceData();
-      //resetRotation(deviceData.screen_rotation);
-      //setTheme(deviceData.theme);
+      // resetRotation(deviceData.screen_rotation);
+      // setTheme(deviceData.theme);
 
       send_device_data();
     }

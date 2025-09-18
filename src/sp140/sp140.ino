@@ -874,18 +874,6 @@ void buttonHandlerTask(void* parameter) {
           buttonPressStartTime = currentTime;
         }
       }
-
-      // Debug current state
-      if (buttonPressed) {
-        uint32_t currentHoldTime = currentTime - buttonPressStartTime;
-        if (currentHoldTime % 500 == 0) {  // Print every 500ms
-          USBSerial.print("Current hold time: ");
-          USBSerial.print(currentHoldTime);
-          USBSerial.println("ms");
-          USBSerial.print("Arm sequence: ");
-          USBSerial.println(armSequenceStarted ? "ACTIVE" : "INACTIVE");
-        }
-      }
     }
 
     vTaskDelay(pdMS_TO_TICKS(10));

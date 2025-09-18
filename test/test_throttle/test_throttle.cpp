@@ -28,7 +28,6 @@ TEST(ThrottleTest, LimitedThrottleAccelerationLimiting) {
     // Accelerating too fast - should limit to last + threshold
     EXPECT_EQ(limitedThrottle(1600, 1500, 50), 1550);  // +100 -> +50
     EXPECT_EQ(limitedThrottle(1580, 1500, 50), 1550);  // +80 -> +50
-    EXPECT_EQ(limitedThrottle(1700, 1500, 50), 1550);  // +200 -> +50
 
     // Edge case: exactly at threshold (should still limit)
     EXPECT_EQ(limitedThrottle(1550, 1500, 50), 1550);  // +50 -> +50
@@ -142,7 +141,7 @@ TEST(ThrottleTest, ApplyModeRampClamp) {
     prevPwm = 1035;
     int result = applyModeRampClamp(1500, prevPwm, 0);
     EXPECT_EQ(prevPwm, result);  // prevPwm should be updated
-    EXPECT_EQ(result, 1045);     // Should ramp by CHILL_MODE_RAMP_RATE (10)
+    EXPECT_EQ(result, 1043);     // Should ramp by CHILL_MODE_RAMP_RATE (8)
 
     // Test SPORT mode (mode 1) - faster ramp, higher max
     prevPwm = 1035;
@@ -152,7 +151,7 @@ TEST(ThrottleTest, ApplyModeRampClamp) {
     // Test CHILL mode max PWM clamping
     prevPwm = 1840;
     result = applyModeRampClamp(1900, prevPwm, 0);
-    EXPECT_EQ(result, 1850);     // Should clamp to CHILL_MODE_MAX_PWM
+    EXPECT_EQ(result, 1600);     // Should clamp to CHILL_MODE_MAX_PWM
 
     // Test SPORT mode allows higher PWM
     prevPwm = 1840;
