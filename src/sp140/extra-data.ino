@@ -900,10 +900,12 @@ void updateESCTelemetryBLE(const STR_ESC_TELEMETRY_140& telemetry) {
     float mos_temp;
     float cap_temp;
     float mcu_temp;
+    float motor_temp;
   } temps = {
     telemetry.mos_temp,
     telemetry.cap_temp,
-    telemetry.mcu_temp
+    telemetry.mcu_temp,
+    telemetry.motor_temp
   };
   pESCTemps->setValue((uint8_t*)&temps, sizeof(temps));
 }
