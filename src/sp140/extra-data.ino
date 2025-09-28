@@ -109,6 +109,8 @@ Preferences preferences;
 #define BMS_LOW_TEMP_UUID           "26CD6E8A-175D-4C8E-B487-DEFF0B034F2A"
 #define BMS_FAILURE_LEVEL_UUID      "396C768B-F348-44CC-9D46-92388F25A557"
 #define BMS_VOLTAGE_DIFF_UUID       "1C45825B-7C81-430B-8D5F-B644FFFC71BB"
+#define BMS_CHARGE_MOS_UUID         "8BADF137-FFF5-4FBC-9DD7-DFCEAFB0EDF9"
+#define BMS_DISCHARGE_MOS_UUID      "D044DEDA-BE72-4B84-A61F-49861501BE9B"
 #define BMS_CELL_VOLTAGES_UUID      "4337e58b-8462-49b2-b061-c3bf379ef4af"
 
 // ESC Characteristic UUIDs
@@ -134,6 +136,8 @@ static BLECharacteristic* pBMSLowTemp = nullptr;
 static BLECharacteristic* pBMSFailureLevel = nullptr;
 static BLECharacteristic* pBMSVoltageDiff = nullptr;
 static BLECharacteristic* pBMSCellVoltages = nullptr;
+static BLECharacteristic* pBMSChargeMos = nullptr;
+static BLECharacteristic* pBMSDischargeMos = nullptr;
 
 void updateThrottleBLE(int value) {
   // Handle disconnecting
@@ -188,6 +192,14 @@ void updateBMSTelemetry(const STR_BMS_TELEMETRY_140& telemetry) {
   if (pBMSLowTemp) pBMSLowTemp->setValue(lowTemp);
   if (pBMSFailureLevel) pBMSFailureLevel->setValue((uint8_t*)&telemetry.battery_failure_level, sizeof(uint8_t));
   if (pBMSVoltageDiff) pBMSVoltageDiff->setValue(voltageDiff);
+  if (pBMSChargeMos) {
+    uint8_t chargeMos = telemetry.is_charge_mos ? 1 : 0;
+    pBMSChargeMos->setValue(&chargeMos, sizeof(chargeMos));
+  }
+  if (pBMSDischargeMos) {
+    uint8_t dischargeMos = telemetry.is_discharge_mos ? 1 : 0;
+    pBMSDischargeMos->setValue(&dischargeMos, sizeof(dischargeMos));
+  }
 
   // Update cell voltages characteristic
   if (pBMSCellVoltages != nullptr) {
@@ -220,6 +232,8 @@ void updateBMSTelemetry(const STR_BMS_TELEMETRY_140& telemetry) {
     if (pBMSLowTemp) pBMSLowTemp->notify();
     if (pBMSFailureLevel) pBMSFailureLevel->notify();
     if (pBMSVoltageDiff) pBMSVoltageDiff->notify();
+    if (pBMSChargeMos) pBMSChargeMos->notify();
+    if (pBMSDischargeMos) pBMSDischargeMos->notify();
   }
 }
 
@@ -540,6 +554,16 @@ void setupBLE() {
   pBMSCellVoltages = pBMSService->createCharacteristic(
       BLEUUID(BMS_CELL_VOLTAGES_UUID),
       BLECharacteristic::PROPERTY_READ // Only READ property for debugging
+  );
+
+  pBMSChargeMos = pBMSService->createCharacteristic(
+      BLEUUID(BMS_CHARGE_MOS_UUID),
+      BLECharacteristic::PROPERTY_READ
+  );
+
+  pBMSDischargeMos = pBMSService->createCharacteristic(
+      BLEUUID(BMS_DISCHARGE_MOS_UUID),
+      BLECharacteristic::PROPERTY_READ
   );
 
   // Set initial value for pBMSCellVoltages (array of zeros)
