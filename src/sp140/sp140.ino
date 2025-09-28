@@ -94,26 +94,22 @@ volatile bool uiReady = false;
 
 SemaphoreHandle_t eepromSemaphore;
 SemaphoreHandle_t stateMutex;
+SemaphoreHandle_t lvglMutex;
 
-// Add near other queue declarations
-QueueHandle_t bleStateQueue = NULL;
-QueueHandle_t deviceStateQueue = NULL;
-
-// Add struct for BLE state updates
+// BLE state propagation
 struct BLEStateUpdate {
   uint8_t state;
   bool needsNotify;
 };
-
-// Add new task handle
+QueueHandle_t bleStateQueue = NULL;
 TaskHandle_t bleStateUpdateTaskHandle = NULL;
+
+// Device state broadcast
+QueueHandle_t deviceStateQueue = NULL;
 TaskHandle_t deviceStateUpdateTaskHandle = NULL;
 
-// Add near other task handles
+// WebSerial worker
 TaskHandle_t webSerialTaskHandle = NULL;
-
-// Add mutex for LVGL thread safety
-SemaphoreHandle_t lvglMutex;
 
 // Variable to track the current screen page
 ScreenPage currentScreenPage = MAIN_SCREEN;

@@ -10,7 +10,7 @@
 
 namespace {
 
-class MyServerCallbacks : public BLEServerCallbacks {
+class BleServerConnectionCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer* server) override {
     deviceConnected = true;
     USBSerial.println("Device connected");
@@ -30,7 +30,7 @@ class MyServerCallbacks : public BLEServerCallbacks {
 void setupBLE() {
   BLEDevice::init("OpenPPG Controller");
   pServer = BLEDevice::createServer();
-  pServer->setCallbacks(new MyServerCallbacks());
+  pServer->setCallbacks(new BleServerConnectionCallbacks());
 
   initConfigBleService(pServer);
   initBmsBleService(pServer);
