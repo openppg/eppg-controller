@@ -206,7 +206,7 @@ void parse_serial_commands() {
       return;
     }
 
-    if (doc.containsKey("command")) {
+    if (!doc["command"].isNull()) {
       String command = doc["command"].as<String>();
 
       if (command == "reboot") {
@@ -220,31 +220,33 @@ void parse_serial_commands() {
     }
 
     // Handle device settings updates
-    if (doc.containsKey("settings")) {
-      JsonObject settings = doc["settings"];
+    if (!doc["settings"].isNull()) {
+      JsonObject settings = doc["settings"].as<JsonObject>();
 
-      if (settings.containsKey("screen_rot")) {
-        deviceData.screen_rotation = settings["screen_rot"].as<unsigned int>();
-      }
+      if (!settings.isNull()) {
+        if (!settings["screen_rot"].isNull()) {
+          deviceData.screen_rotation = settings["screen_rot"].as<unsigned int>();
+        }
 
-      if (settings.containsKey("sea_pressure")) {
-        deviceData.sea_pressure = settings["sea_pressure"].as<float>();
-      }
+        if (!settings["sea_pressure"].isNull()) {
+          deviceData.sea_pressure = settings["sea_pressure"].as<float>();
+        }
 
-      if (settings.containsKey("metric_temp")) {
-        deviceData.metric_temp = settings["metric_temp"].as<bool>();
-      }
+        if (!settings["metric_temp"].isNull()) {
+          deviceData.metric_temp = settings["metric_temp"].as<bool>();
+        }
 
-      if (settings.containsKey("metric_alt")) {
-        deviceData.metric_alt = settings["metric_alt"].as<bool>();
-      }
+        if (!settings["metric_alt"].isNull()) {
+          deviceData.metric_alt = settings["metric_alt"].as<bool>();
+        }
 
-      if (settings.containsKey("performance_mode")) {
-        deviceData.performance_mode = settings["performance_mode"].as<int>();
-      }
+        if (!settings["performance_mode"].isNull()) {
+          deviceData.performance_mode = settings["performance_mode"].as<int>();
+        }
 
-      if (settings.containsKey("theme")) {
-        deviceData.theme = settings["theme"].as<int>();
+        if (!settings["theme"].isNull()) {
+          deviceData.theme = settings["theme"].as<int>();
+        }
       }
 
       sanitizeDeviceData();
