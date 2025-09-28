@@ -27,6 +27,11 @@
 #include "../../inc/sp140/debug.h"
 #include "../../inc/sp140/simple_monitor.h"
 #include "../../inc/sp140/alert_display.h"
+#include "../../inc/sp140/ble.h"
+#include "../../inc/sp140/ble/ble_core.h"
+#include "../../inc/sp140/ble/bms_service.h"
+#include "../../inc/sp140/ble/config_service.h"
+#include "../../inc/sp140/ble/esc_service.h"
 
 #include "../../inc/sp140/buzzer.h"
 #include "../../inc/sp140/device_state.h"
