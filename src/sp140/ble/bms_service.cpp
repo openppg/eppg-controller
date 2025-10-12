@@ -21,6 +21,7 @@ BLECharacteristic* pBMSVoltageDiff = nullptr;
 BLECharacteristic* pBMSCellVoltages = nullptr;
 BLECharacteristic* pBMSChargeMos = nullptr;
 BLECharacteristic* pBMSDischargeMos = nullptr;
+BLECharacteristic* pBMSTemperatures = nullptr;
 
 }  // namespace
 
@@ -71,6 +72,10 @@ void initBmsBleService(BLEServer* server) {
   pBMSDischargeMos = pBmsService->createCharacteristic(
       BLEUUID(BMS_DISCHARGE_MOS_UUID), BLECharacteristic::PROPERTY_READ);
 
+  pBMSTemperatures = pBmsService->createCharacteristic(
+      BLEUUID(BMS_TEMPERATURES_UUID),
+      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+
   // Ensure characteristics have deterministic startup values.
   uint16_t initial_cell_values[BMS_CELLS_NUM] = {0};
   pBMSCellVoltages->setValue(
@@ -80,6 +85,10 @@ void initBmsBleService(BLEServer* server) {
   uint8_t initial_flag = 0;
   pBMSChargeMos->setValue(&initial_flag, sizeof(initial_flag));
   pBMSDischargeMos->setValue(&initial_flag, sizeof(initial_flag));
+
+  uint8_t initial_temps[17] = {0};
+  initial_temps[0] = 0x00;  // No valid sensors initially (bitmap = 0x00)
+  pBMSTemperatures->setValue(initial_temps, 17);
 
   pBmsService->start();
 }
