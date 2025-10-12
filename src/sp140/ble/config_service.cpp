@@ -160,7 +160,7 @@ class TimezoneCallbacks : public BLECharacteristicCallbacks {
 
 }  // namespace
 
-void initConfigBleService(BLEServer* server) {
+void initConfigBleService(BLEServer* server, const std::string& uniqueId) {
   BLEService* configService = server->createService(BLEUUID(CONFIG_SERVICE_UUID), 30);
 
   BLECharacteristic* unixTime = configService->createCharacteristic(
@@ -230,6 +230,10 @@ void initConfigBleService(BLEServer* server) {
   BLECharacteristic* manufacturer = deviceInfoService->createCharacteristic(
       BLEUUID(MANUFACTURER_NAME_UUID), BLECharacteristic::PROPERTY_READ);
   manufacturer->setValue("OpenPPG");
+
+  BLECharacteristic* uniqueIdCharacteristic = deviceInfoService->createCharacteristic(
+      BLEUUID(DEVICE_UNIQUE_ID_UUID), BLECharacteristic::PROPERTY_READ);
+  uniqueIdCharacteristic->setValue(uniqueId);  // Already uppercase string
 
   configService->start();
   deviceInfoService->start();

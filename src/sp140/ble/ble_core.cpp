@@ -32,7 +32,14 @@ void setupBLE() {
   pServer = BLEDevice::createServer();
   pServer->setCallbacks(new BleServerConnectionCallbacks());
 
-  initConfigBleService(pServer);
+  BLEAddress bleAddress = BLEDevice::getAddress();
+  std::string uniqueId = bleAddress.toString();
+  std::transform(uniqueId.begin(), uniqueId.end(), uniqueId.begin(),
+                 [](unsigned char c) {
+                   return static_cast<char>(std::toupper(c));
+                 });
+
+  initConfigBleService(pServer, uniqueId);
   initBmsBleService(pServer);
   initEscBleService(pServer);
 
