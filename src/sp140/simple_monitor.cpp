@@ -123,6 +123,7 @@ const char* sensorIDToString(SensorID id) {
     case SensorID::BMS_Voltage_Differential: return "BMS_Voltage_Differential";
     case SensorID::BMS_Charge_MOS: return "BMS_Charge_MOS";
     case SensorID::BMS_Discharge_MOS: return "BMS_Discharge_MOS";
+    case SensorID::BMS_CAN_Init_Failure: return "BMS_CAN_Init_Failure";
 
     // Altimeter
     case SensorID::Baro_Temp: return "Baro_Temp";
@@ -180,6 +181,7 @@ const char* sensorIDToAbbreviation(SensorID id) {
     case SensorID::BMS_Voltage_Differential:return "BC-dV";
     case SensorID::BMS_Charge_MOS:          return "BC-CHG";
     case SensorID::BMS_Discharge_MOS:       return "BC-DSG";
+    case SensorID::BMS_CAN_Init_Failure:   return "BC-CAN";
 
     // Altimeter
     case SensorID::Baro_Temp: return "BARO-T";

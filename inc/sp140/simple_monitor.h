@@ -59,6 +59,7 @@ enum class SensorID {
   BMS_Voltage_Differential,
   BMS_Charge_MOS,
   BMS_Discharge_MOS,
+  BMS_CAN_Init_Failure,
 
   // Altimeter
   Baro_Temp,
