@@ -127,6 +127,7 @@ const char* sensorIDToString(SensorID id) {
 
     // Altimeter
     case SensorID::Baro_Temp: return "Baro_Temp";
+    case SensorID::Baro_Init_Failure: return "Baro_Init_Failure";
 
     // Internal
     case SensorID::CPU_Temp: return "CPU_Temp";
@@ -185,6 +186,7 @@ const char* sensorIDToAbbreviation(SensorID id) {
 
     // Altimeter
     case SensorID::Baro_Temp: return "BARO-T";
+    case SensorID::Baro_Init_Failure: return "BARO-I";
 
     // Internal
     case SensorID::CPU_Temp: return "CPU-T";

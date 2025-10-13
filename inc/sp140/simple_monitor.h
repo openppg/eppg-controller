@@ -63,6 +63,7 @@ enum class SensorID {
 
   // Altimeter
   Baro_Temp,
+  Baro_Init_Failure,
 
   // Internal
   CPU_Temp
