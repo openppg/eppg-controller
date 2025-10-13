@@ -44,6 +44,7 @@ enum class SensorID {
   ESC_MotorIDet2_Error,       // Bit 11: motor_i_det2_bad
   ESC_SwHwIncompat_Error,     // Bit 13: sw_hw_incompatible
   ESC_BootloaderBad_Error,    // Bit 14: bootloader_unsupported
+  ESC_TWAI_Init_Failure,      // TWAI/CAN bus initialization failure
 
   // BMS
   BMS_MOS_Temp,

@@ -108,6 +108,7 @@ const char* sensorIDToString(SensorID id) {
     case SensorID::ESC_MotorIDet2_Error: return "ESC_MotorIDet2_Error";
     case SensorID::ESC_SwHwIncompat_Error: return "ESC_SwHwIncompat_Error";
     case SensorID::ESC_BootloaderBad_Error: return "ESC_BootloaderBad_Error";
+    case SensorID::ESC_TWAI_Init_Failure: return "ESC_TWAI_Init_Failure";
 
     // BMS
     case SensorID::BMS_MOS_Temp: return "BMS_MOS_Temp";
@@ -167,6 +168,7 @@ const char* sensorIDToAbbreviation(SensorID id) {
     case SensorID::ESC_MotorIDet2_Error: return "MC-SE-11";     // Bit 11
     case SensorID::ESC_SwHwIncompat_Error: return "MC-SE-13";   // Bit 13
     case SensorID::ESC_BootloaderBad_Error: return "MC-SE-14";  // Bit 14
+    case SensorID::ESC_TWAI_Init_Failure: return "MC-CAN";      // CAN/TWAI init failure
 
     // BMS (Battery Management System)
     case SensorID::BMS_MOS_Temp:            return "BC-F";
