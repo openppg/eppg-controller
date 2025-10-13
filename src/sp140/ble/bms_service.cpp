@@ -4,6 +4,7 @@
 
 #include "sp140/ble.h"
 #include "sp140/ble/ble_ids.h"
+#include "sp140/ble/ble_utils.h"
 
 namespace {
 
@@ -21,6 +22,11 @@ BLECharacteristic* pBMSVoltageDiff = nullptr;
 BLECharacteristic* pBMSCellVoltages = nullptr;
 BLECharacteristic* pBMSChargeMos = nullptr;
 BLECharacteristic* pBMSDischargeMos = nullptr;
+
+// Track previous values to only notify on change
+uint8_t lastFailureLevel = 0;
+uint8_t lastChargeMos = 0;
+uint8_t lastDischargeMos = 0;
 
 }  // namespace
 
@@ -57,7 +63,8 @@ void initBmsBleService(BLEServer* server) {
       BLEUUID(BMS_LOW_TEMP_UUID), BLECharacteristic::PROPERTY_READ);
 
   pBMSFailureLevel = pBmsService->createCharacteristic(
-      BLEUUID(BMS_FAILURE_LEVEL_UUID), BLECharacteristic::PROPERTY_READ);
+      BLEUUID(BMS_FAILURE_LEVEL_UUID), BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+  pBMSFailureLevel->addDescriptor(new BLE2902());
 
   pBMSVoltageDiff = pBmsService->createCharacteristic(
       BLEUUID(BMS_VOLTAGE_DIFF_UUID), BLECharacteristic::PROPERTY_READ);
@@ -66,10 +73,12 @@ void initBmsBleService(BLEServer* server) {
       BLEUUID(BMS_CELL_VOLTAGES_UUID), BLECharacteristic::PROPERTY_READ);
 
   pBMSChargeMos = pBmsService->createCharacteristic(
-      BLEUUID(BMS_CHARGE_MOS_UUID), BLECharacteristic::PROPERTY_READ);
+      BLEUUID(BMS_CHARGE_MOS_UUID), BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+  pBMSChargeMos->addDescriptor(new BLE2902());
 
   pBMSDischargeMos = pBmsService->createCharacteristic(
-      BLEUUID(BMS_DISCHARGE_MOS_UUID), BLECharacteristic::PROPERTY_READ);
+      BLEUUID(BMS_DISCHARGE_MOS_UUID), BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+  pBMSDischargeMos->addDescriptor(new BLE2902());
 
   // Ensure characteristics have deterministic startup values.
   uint16_t initial_cell_values[BMS_CELLS_NUM] = {0};
@@ -107,21 +116,7 @@ void updateBMSTelemetry(const STR_BMS_TELEMETRY_140& telemetry) {
   if (pBMSLowCell) pBMSLowCell->setValue(lowCell);
   if (pBMSHighTemp) pBMSHighTemp->setValue(highTemp);
   if (pBMSLowTemp) pBMSLowTemp->setValue(lowTemp);
-  if (pBMSFailureLevel) {
-    uint8_t failureLevel = telemetry.battery_failure_level;
-    pBMSFailureLevel->setValue(&failureLevel, sizeof(failureLevel));
-  }
   if (pBMSVoltageDiff) pBMSVoltageDiff->setValue(voltageDiff);
-
-  if (pBMSChargeMos) {
-    uint8_t chargeMos = telemetry.is_charge_mos ? 1 : 0;
-    pBMSChargeMos->setValue(&chargeMos, sizeof(chargeMos));
-  }
-
-  if (pBMSDischargeMos) {
-    uint8_t dischargeMos = telemetry.is_discharge_mos ? 1 : 0;
-    pBMSDischargeMos->setValue(&dischargeMos, sizeof(dischargeMos));
-  }
 
   if (pBMSCellVoltages) {
     uint16_t cell_millivolts[BMS_CELLS_NUM];
@@ -132,6 +127,11 @@ void updateBMSTelemetry(const STR_BMS_TELEMETRY_140& telemetry) {
         reinterpret_cast<uint8_t*>(cell_millivolts),
         BMS_CELLS_NUM * sizeof(uint16_t));
   }
+
+  // Handle state-change characteristics - only notify on change
+  setAndNotifyOnChange(pBMSFailureLevel, telemetry.battery_failure_level, lastFailureLevel);
+  setAndNotifyOnChange(pBMSChargeMos, static_cast<uint8_t>(telemetry.is_charge_mos ? 1 : 0), lastChargeMos);
+  setAndNotifyOnChange(pBMSDischargeMos, static_cast<uint8_t>(telemetry.is_discharge_mos ? 1 : 0), lastDischargeMos);
 
   if (!deviceConnected) {
     return;  // No notifications needed without a subscriber.
@@ -145,8 +145,6 @@ void updateBMSTelemetry(const STR_BMS_TELEMETRY_140& telemetry) {
   if (pBMSLowCell) pBMSLowCell->notify();
   if (pBMSHighTemp) pBMSHighTemp->notify();
   if (pBMSLowTemp) pBMSLowTemp->notify();
-  if (pBMSFailureLevel) pBMSFailureLevel->notify();
   if (pBMSVoltageDiff) pBMSVoltageDiff->notify();
-  if (pBMSChargeMos) pBMSChargeMos->notify();
-  if (pBMSDischargeMos) pBMSDischargeMos->notify();
+  // Note: pBMSFailureLevel, pBMSChargeMos, pBMSDischargeMos notify separately above, only on change
 }
