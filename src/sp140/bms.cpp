@@ -157,3 +157,160 @@ void printBMSData() {
     USBSerial.println(" V");
   }
 }
+
+void printBMSMultiBatteryDebug() {
+  // Check if BMS is currently connected and the object exists
+  if (bms_can == nullptr || !bmsCanInitialized) return;
+
+  // Ensure display CS is deselected and BMS CS is selected
+  digitalWrite(displayCS, HIGH);
+  // Take the shared SPI mutex to prevent contention with TFT flush
+  if (spiBusMutex != NULL) {
+    if (xSemaphoreTake(spiBusMutex, pdMS_TO_TICKS(150)) != pdTRUE) {
+      // SPI bus timeout - display might be doing long operation
+      USBSerial.println("[BMS Debug] SPI bus timeout - skipping debug output");
+      return;
+    }
+  }
+  digitalWrite(bmsCS, LOW);
+
+  // Get the number of batteries discovered on the CAN bus
+  uint8_t batteryCount = bms_can->getBatteryCount();
+
+  USBSerial.println("========================================");
+  USBSerial.print("Batteries Detected: ");
+  USBSerial.println(batteryCount);
+  USBSerial.println("========================================");
+
+  if (batteryCount == 0) {
+    USBSerial.println("No batteries detected. Check CAN bus connections.");
+    USBSerial.println();
+    digitalWrite(bmsCS, HIGH);
+    if (spiBusMutex != NULL) {
+      xSemaphoreGive(spiBusMutex);
+    }
+    return;
+  }
+
+  // Print individual battery data
+  USBSerial.println("\n--- Individual Battery Data ---");
+  for (uint8_t i = 0; i < batteryCount; i++) {
+    // Check if this battery is currently connected (has sent data recently)
+    if (!bms_can->isBatteryConnected(i, 1000)) {  // 1000ms timeout
+      USBSerial.print("Battery ");
+      USBSerial.print(i);
+      USBSerial.println(": DISCONNECTED");
+      continue;
+    }
+
+    // Get the Source Address for this battery
+    uint8_t sourceAddress = bms_can->getBatterySourceAddress(i);
+
+    USBSerial.println();
+    USBSerial.print("Battery ");
+    USBSerial.print(i);
+    USBSerial.print(" (SA: 0x");
+    USBSerial.print(sourceAddress, HEX);
+    USBSerial.println("):");
+
+    // Battery identification
+    USBSerial.print("  ID: ");
+    USBSerial.println(bms_can->getBatteryID(i));
+
+    // Basic telemetry
+    USBSerial.print("  SOC: ");
+    USBSerial.print(bms_can->getSOC(i));
+    USBSerial.println(" %");
+
+    USBSerial.print("  Voltage: ");
+    USBSerial.print(bms_can->getBatteryVoltage(i));
+    USBSerial.println(" V");
+
+    USBSerial.print("  Current: ");
+    USBSerial.print(bms_can->getBatteryCurrent(i));
+    USBSerial.println(" A");
+
+    USBSerial.print("  Power: ");
+    USBSerial.print(bms_can->getPower(i));
+    USBSerial.println(" kW");
+
+    // Cell voltage extremes
+    USBSerial.print("  Highest Cell: ");
+    USBSerial.print(bms_can->getHighestCellVoltage(i));
+    USBSerial.println(" V");
+
+    USBSerial.print("  Lowest Cell: ");
+    USBSerial.print(bms_can->getLowestCellVoltage(i));
+    USBSerial.println(" V");
+
+    // Temperature extremes
+    USBSerial.print("  Highest Temp: ");
+    USBSerial.print(bms_can->getHighestTemperature(i));
+    USBSerial.println(" °C");
+
+    USBSerial.print("  Lowest Temp: ");
+    USBSerial.print(bms_can->getLowestTemperature(i));
+    USBSerial.println(" °C");
+
+    // Status flags
+    USBSerial.print("  Charging: ");
+    USBSerial.println(bms_can->isBatteryCharging(i) ? "Yes" : "No");
+
+    USBSerial.print("  Ready: ");
+    USBSerial.println(bms_can->isBatteryReady(i) ? "Yes" : "No");
+
+    // Lifecycle data
+    USBSerial.print("  Cycles: ");
+    USBSerial.println(bms_can->getBatteryCycle(i));
+
+    USBSerial.print("  Energy Cycled: ");
+    USBSerial.print(bms_can->getEnergyCycle(i));
+    USBSerial.println(" Wh");
+  }
+
+  // Print aggregated system metrics
+  USBSerial.println("\n--- Aggregated System Metrics ---");
+  USBSerial.println("(Calculated across all connected batteries)");
+
+  USBSerial.print("Average SOC: ");
+  USBSerial.print(bms_can->getAverageSOC());
+  USBSerial.println(" %");
+
+  USBSerial.print("Total Voltage: ");
+  USBSerial.print(bms_can->getTotalVoltage());
+  USBSerial.println(" V");
+
+  USBSerial.print("Total Current: ");
+  USBSerial.print(bms_can->getTotalCurrent());
+  USBSerial.println(" A");
+
+  USBSerial.print("Total Power: ");
+  USBSerial.print(bms_can->getTotalPower());
+  USBSerial.println(" kW");
+
+  // System-wide cell voltage extremes
+  USBSerial.print("System Highest Cell Voltage: ");
+  USBSerial.print(bms_can->getSystemHighestCellVoltage());
+  USBSerial.println(" V");
+
+  USBSerial.print("System Lowest Cell Voltage: ");
+  USBSerial.print(bms_can->getSystemLowestCellVoltage());
+  USBSerial.println(" V");
+
+  // System-wide temperature extremes
+  USBSerial.print("System Highest Temperature: ");
+  USBSerial.print(bms_can->getSystemHighestTemperature());
+  USBSerial.println(" °C");
+
+  USBSerial.print("System Lowest Temperature: ");
+  USBSerial.print(bms_can->getSystemLowestTemperature());
+  USBSerial.println(" °C");
+
+  USBSerial.println();
+
+  // Deselect BMS CS when done and release mutex
+  digitalWrite(bmsCS, HIGH);
+  if (spiBusMutex != NULL) {
+    xSemaphoreGive(spiBusMutex);
+  }
+}

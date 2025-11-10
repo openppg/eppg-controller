@@ -497,6 +497,8 @@ void uiTask(void *pvParameters) {
 void bmsTask(void *pvParameters) {
   TickType_t lastWake = xTaskGetTickCount();
   const TickType_t bmsTicks = pdMS_TO_TICKS(100); // 10 Hz
+  static unsigned long lastDebugPrintMs = 0;
+  const unsigned long debugPrintIntervalMs = 2000;  // Print debug info every 2 seconds
   for (;;) {
     #ifdef SCREEN_DEBUG
       float altitude = 0;
@@ -510,6 +512,13 @@ void bmsTask(void *pvParameters) {
           bmsTelemetryData.bmsState = TelemetryState::CONNECTED;
         } else {
           bmsTelemetryData.bmsState = TelemetryState::NOT_CONNECTED;
+        }
+
+        // Print multi-battery debug info every 2 seconds
+        unsigned long currentMs = millis();
+        if (currentMs - lastDebugPrintMs >= debugPrintIntervalMs) {
+          printBMSMultiBatteryDebug();
+          lastDebugPrintMs = currentMs;
         }
       }
 

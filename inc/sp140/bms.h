@@ -17,3 +17,4 @@ extern BMS_CAN* bms_can;
 // BMS functions
 void updateBMSData();
 void printBMSData();
+void printBMSMultiBatteryDebug();
