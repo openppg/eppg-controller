@@ -314,6 +314,9 @@ volatile uint32_t lastBmsRunMs = 0;
 
 #pragma message "Warning: OpenPPG software is in beta"
 
+// Build date/time for logging
+const char* buildDate = __DATE__ " " __TIME__;
+
 // Initialize shared SPI and chip select pins
 void setupSPI(const HardwareConfig& board_config) {
   USBSerial.println("Setting up SPI bus");
@@ -588,6 +591,8 @@ void setupWatchdog() {
 
 void setup() {
   USBSerial.begin(115200);  // This is for debug output and WebSerial
+  USBSerial.print("Build date/time: ");
+  USBSerial.println(buildDate);
 
   // Pull CSB (pin 42) high to activate I2C mode
   // temporary fix TODO remove
