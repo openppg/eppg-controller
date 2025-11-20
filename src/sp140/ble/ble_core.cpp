@@ -1,6 +1,7 @@
 #include "sp140/ble/ble_core.h"
 
 #include <Arduino.h>
+#include "esp_gatt_common_api.h"  // For esp_ble_gatt_set_local_mtu
 
 #include "sp140/ble.h"
 #include "sp140/ble/ble_ids.h"
@@ -28,7 +29,11 @@ class BleServerConnectionCallbacks : public BLEServerCallbacks {
 }  // namespace
 
 void setupBLE() {
+  // Raise max MTU to a phone-friendly size (185 works on iOS; Android can go higher).
+  BLEDevice::setMTU(185);
   BLEDevice::init("OpenPPG Controller");
+  // Bluedroid server accepts up to 517 by default; cap the local MTU explicitly.
+  esp_ble_gatt_set_local_mtu(185);
   pServer = BLEDevice::createServer();
   pServer->setCallbacks(new BleServerConnectionCallbacks());
 
