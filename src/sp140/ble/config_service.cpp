@@ -12,6 +12,7 @@
 
 #include "sp140/ble.h"
 #include "sp140/ble/ble_ids.h"
+#include "sp140/ble/ble_utils.h"
 #include "sp140/device_state.h"
 #include "sp140/globals.h"
 #include "sp140/throttle.h"
