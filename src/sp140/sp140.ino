@@ -750,7 +750,7 @@ void setupTasks() {
   xTaskCreate(
     webSerialTask,
     "WebSerial",
-    1280,
+    3072,  // Larger stack for ArduinoJson parsing & CDC handling
     NULL,
     1,
     &webSerialTaskHandle);
