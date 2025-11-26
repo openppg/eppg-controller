@@ -159,6 +159,79 @@ class TimezoneCallbacks : public BLECharacteristicCallbacks {
   }
 };
 
+class ThemeCallbacks : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic* characteristic) override {
+    std::string value = characteristic->getValue();
+    if (value.length() != 1) {
+      USBSerial.println("Invalid value length - expected 1 byte");
+      return;
+    }
+
+    uint8_t theme = value[0];
+    if (theme > 1) {
+      USBSerial.println("Invalid theme value - must be 0 or 1");
+      return;
+    }
+
+    deviceData.theme = theme;
+    ::writeDeviceData();
+    USBSerial.println("Theme setting saved to Preferences");
+  }
+
+  void onRead(BLECharacteristic* characteristic) override {
+    characteristic->setValue(&deviceData.theme, sizeof(deviceData.theme));
+  }
+};
+
+class SeaPressureCallbacks : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic* characteristic) override {
+    std::string value = characteristic->getValue();
+    if (value.length() != sizeof(float)) {
+      USBSerial.println("Invalid sea pressure length");
+      return;
+    }
+
+    float pressure;
+    memcpy(&pressure, value.data(), sizeof(pressure));
+
+    // Validate range: 300.0 - 1200.0 hPa/mbar
+    if (pressure < 300.0f || pressure > 1200.0f) {
+      USBSerial.println("Invalid sea pressure value - must be between 300.0 and 1200.0");
+      return;
+    }
+
+    deviceData.sea_pressure = pressure;
+    ::writeDeviceData();
+    USBSerial.print("Sea pressure set to: ");
+    USBSerial.println(pressure);
+  }
+
+  void onRead(BLECharacteristic* characteristic) override {
+    characteristic->setValue(
+        reinterpret_cast<uint8_t*>(&deviceData.sea_pressure),
+        sizeof(deviceData.sea_pressure));
+  }
+};
+
+class MetricTempCallbacks : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic* characteristic) override {
+    std::string value = characteristic->getValue();
+    if (value.length() != 1) {
+      USBSerial.println("Invalid value length - expected 1 byte");
+      return;
+    }
+
+    deviceData.metric_temp = (value[0] != 0);
+    ::writeDeviceData();
+    USBSerial.println("Metric temp setting saved to Preferences");
+  }
+
+  void onRead(BLECharacteristic* characteristic) override {
+    uint8_t metricTempValue = deviceData.metric_temp ? 1 : 0;
+    characteristic->setValue(&metricTempValue, sizeof(metricTempValue));
+  }
+};
+
 }  // namespace
 
 void initConfigBleService(BLEServer* server, const std::string& uniqueId) {
@@ -203,6 +276,27 @@ void initConfigBleService(BLEServer* server, const std::string& uniqueId) {
   screenRotation->setCallbacks(new ScreenRotationCallbacks());
   int screenValue = (deviceData.screen_rotation == 1) ? 1 : 3;
   screenRotation->setValue(screenValue);
+
+  BLECharacteristic* theme = configService->createCharacteristic(
+      BLEUUID(THEME_UUID),
+      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
+  theme->setCallbacks(new ThemeCallbacks());
+  theme->setValue(&deviceData.theme, sizeof(deviceData.theme));
+
+  BLECharacteristic* seaPressure = configService->createCharacteristic(
+      BLEUUID(SEA_PRESSURE_UUID),
+      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
+  seaPressure->setCallbacks(new SeaPressureCallbacks());
+  seaPressure->setValue(
+      reinterpret_cast<uint8_t*>(&deviceData.sea_pressure),
+      sizeof(deviceData.sea_pressure));
+
+  BLECharacteristic* metricTemp = configService->createCharacteristic(
+      BLEUUID(METRIC_TEMP_UUID),
+      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
+  metricTemp->setCallbacks(new MetricTempCallbacks());
+  uint8_t metricTempValue = deviceData.metric_temp ? 1 : 0;
+  metricTemp->setValue(&metricTempValue, sizeof(metricTempValue));
 
   BLECharacteristic* firmwareVersion = configService->createCharacteristic(
       BLEUUID(FW_VERSION_UUID), BLECharacteristic::PROPERTY_READ);
