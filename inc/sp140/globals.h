@@ -24,5 +24,6 @@ extern STR_BMS_TELEMETRY_140 bmsTelemetryData;
 // Hardware/Connection Status Flags
 extern bool bmsCanInitialized;
 extern bool escTwaiInitialized;
+extern bool bmpPresent;
 
 #endif  // INC_SP140_GLOBALS_H_

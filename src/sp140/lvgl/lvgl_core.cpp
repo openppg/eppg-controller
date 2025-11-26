@@ -15,14 +15,10 @@ SemaphoreHandle_t spiBusMutex = NULL;
 
 void setupLvglBuffer() {
   // Initialize LVGL library
-  USBSerial.println("Initializing LVGL");
   lv_init();
-  USBSerial.println("LVGL initialized");
 
   // Setup double buffer for LVGL to reduce tearing
-  USBSerial.println("Setting up LVGL double buffer");
   lv_disp_draw_buf_init(&draw_buf, buf, buf2, LVGL_BUFFER_SIZE);
-  USBSerial.println("LVGL double buffer initialized");
 }
 
 void setupLvglDisplay(
@@ -31,7 +27,7 @@ void setupLvglDisplay(
   int8_t rst_pin,
   SPIClass* spi
 ) {
-  USBSerial.println("Setting up LVGL display");
+  USBSerial.println("Initializing display system");
 
   // Create SPI bus mutex on first use if not already created
   if (spiBusMutex == NULL) {
@@ -65,6 +61,7 @@ void setupLvglDisplay(
 
   // Register the display driver
   lv_disp_drv_register(&disp_drv);
+  USBSerial.println("Display driver registered");
 
   // Set LVGL default theme - using default font
   lv_theme_t* theme = lv_theme_default_init(

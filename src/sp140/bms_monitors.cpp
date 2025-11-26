@@ -9,6 +9,9 @@ extern MultiLogger multiLogger;
 // External references to thread-safe data copies
 extern STR_BMS_TELEMETRY_140 monitoringBmsData;
 
+// External reference to BMS CAN initialization status
+extern bool bmsCanInitialized;
+
 void addBMSMonitors() {
   // BMS MOSFET Temperature (Warning: 50°C, Critical: 60°C) - with hysteresis
   static HysteresisSensorMonitor* bmsMosTemp = new HysteresisSensorMonitor(
@@ -125,4 +128,14 @@ void addBMSMonitors() {
     AlertLevel::CRIT_HIGH,
     &multiLogger);
   monitors.push_back(bmsDischargeMos);
+
+  // BMS CAN Initialization (Alert when failed)
+  static BooleanMonitor* bmsCanInitFailure = new BooleanMonitor(
+    SensorID::BMS_CAN_Init_Failure,
+    SensorCategory::BMS,
+    []() { return bmsCanInitialized; },
+    false,  // Alert when false (i.e., when initialization failed)
+    AlertLevel::WARN_HIGH,
+    &multiLogger);
+  monitors.push_back(bmsCanInitFailure);
 }
