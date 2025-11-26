@@ -315,6 +315,9 @@ volatile uint32_t lastBmsRunMs = 0;
 
 #pragma message "Warning: OpenPPG software is in beta"
 
+// Build date/time for logging
+const char* buildDate = __DATE__ " " __TIME__;
+
 // Initialize shared SPI and chip select pins
 void setupSPI(const HardwareConfig& board_config) {
   USBSerial.println("Setting up SPI bus");
@@ -589,6 +592,8 @@ void setupWatchdog() {
 
 void setup() {
   USBSerial.begin(115200);  // This is for debug output and WebSerial
+  USBSerial.print("Build date/time: ");
+  USBSerial.println(buildDate);
 
   // Pull CSB (pin 42) high to activate I2C mode
   // temporary fix TODO remove
@@ -774,7 +779,9 @@ void setup140() {
   const int SDA_PIN = 44;
   const int SCL_PIN = 41;
   Wire.setPins(SDA_PIN, SCL_PIN);
-  setupAltimeter(board_config.alt_wire);
+  if (!setupAltimeter(board_config.alt_wire)) {
+    USBSerial.println("Error initializing BMP3xx barometer");
+  }
   if (ENABLE_VIBE) {
     initVibeMotor();
   }

@@ -10,7 +10,19 @@ extern MultiLogger multiLogger;
 // External references to thread-safe data copies
 extern STR_ESC_TELEMETRY_140 monitoringEscData;
 
+// External reference to ESC TWAI initialization status
+extern bool escTwaiInitialized;
+
 void addESCMonitors() {
+  // ESC TWAI Initialization (Alert when failed)
+  static BooleanMonitor* escTwaiInitFailure = new BooleanMonitor(
+    SensorID::ESC_TWAI_Init_Failure,
+    SensorCategory::ESC,
+    []() { return escTwaiInitialized; },
+    false,  // Alert when false (i.e., when initialization failed)
+    AlertLevel::CRIT_HIGH,  // Critical since ESC won't work without TWAI
+    &multiLogger);
+  monitors.push_back(escTwaiInitFailure);
   // ESC MOS Temperature Monitor - with hysteresis
   static HysteresisSensorMonitor* escMosTemp = new HysteresisSensorMonitor(
     SensorID::ESC_MOS_Temp,

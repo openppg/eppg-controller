@@ -7,6 +7,9 @@
 extern std::vector<IMonitor*> monitors;
 extern MultiLogger multiLogger;
 
+// External reference to BMP sensor status
+extern bool bmpPresent;
+
 void addInternalMonitors() {
   // ESP32-S3 CPU Temperature (Warning: 50°C, Critical: 80°C) - with hysteresis
   static HysteresisSensorMonitor* cpuTemp = new HysteresisSensorMonitor(
@@ -19,6 +22,16 @@ void addInternalMonitors() {
 }
 
 void addAltimeterMonitors() {
+  // BMP3xx Initialization (Alert when failed)
+  static BooleanMonitor* bmpInitFailure = new BooleanMonitor(
+    SensorID::Baro_Init_Failure,
+    SensorCategory::ALTIMETER,
+    []() { return bmpPresent; },
+    false,  // Alert when false (i.e., when initialization failed)
+    AlertLevel::WARN_HIGH,
+    &multiLogger);
+  monitors.push_back(bmpInitFailure);
+
   // Barometer Temperature monitor disabled for now.
   // TODO: The BMP barometer shares the I2C bus with other peripherals; without a
   // global I2C mutex the `Wire` driver can log "Unfinished Repeated Start"

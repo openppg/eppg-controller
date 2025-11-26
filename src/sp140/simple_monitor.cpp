@@ -108,6 +108,7 @@ const char* sensorIDToString(SensorID id) {
     case SensorID::ESC_MotorIDet2_Error: return "ESC_MotorIDet2_Error";
     case SensorID::ESC_SwHwIncompat_Error: return "ESC_SwHwIncompat_Error";
     case SensorID::ESC_BootloaderBad_Error: return "ESC_BootloaderBad_Error";
+    case SensorID::ESC_TWAI_Init_Failure: return "ESC_TWAI_Init_Failure";
 
     // BMS
     case SensorID::BMS_MOS_Temp: return "BMS_MOS_Temp";
@@ -123,9 +124,11 @@ const char* sensorIDToString(SensorID id) {
     case SensorID::BMS_Voltage_Differential: return "BMS_Voltage_Differential";
     case SensorID::BMS_Charge_MOS: return "BMS_Charge_MOS";
     case SensorID::BMS_Discharge_MOS: return "BMS_Discharge_MOS";
+    case SensorID::BMS_CAN_Init_Failure: return "BMS_CAN_Init_Failure";
 
     // Altimeter
     case SensorID::Baro_Temp: return "Baro_Temp";
+    case SensorID::Baro_Init_Failure: return "Baro_Init_Failure";
 
     // Internal
     case SensorID::CPU_Temp: return "CPU_Temp";
@@ -165,6 +168,7 @@ const char* sensorIDToAbbreviation(SensorID id) {
     case SensorID::ESC_MotorIDet2_Error: return "MC-SE-11";     // Bit 11
     case SensorID::ESC_SwHwIncompat_Error: return "MC-SE-13";   // Bit 13
     case SensorID::ESC_BootloaderBad_Error: return "MC-SE-14";  // Bit 14
+    case SensorID::ESC_TWAI_Init_Failure: return "MC-CAN";      // CAN/TWAI init failure
 
     // BMS (Battery Management System)
     case SensorID::BMS_MOS_Temp:            return "BC-F";
@@ -180,9 +184,11 @@ const char* sensorIDToAbbreviation(SensorID id) {
     case SensorID::BMS_Voltage_Differential:return "BC-dV";
     case SensorID::BMS_Charge_MOS:          return "BC-CHG";
     case SensorID::BMS_Discharge_MOS:       return "BC-DSG";
+    case SensorID::BMS_CAN_Init_Failure:   return "BC-CAN";
 
     // Altimeter
     case SensorID::Baro_Temp: return "BARO-T";
+    case SensorID::Baro_Init_Failure: return "BARO-I";
 
     // Internal
     case SensorID::CPU_Temp: return "CPU-T";
