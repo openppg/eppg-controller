@@ -13,7 +13,7 @@ jobs:
         with:
           show-progress: false
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: 3.x
       - run: pip install cpplint
@@ -33,7 +33,7 @@ jobs:
           git config --global credential.helper store
           echo "https://oauth2:${{ secrets.GH_TOKEN }}@github.com" > ~/.git-credentials
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: 3.x
       - name: Install Platform IO
@@ -57,7 +57,7 @@ jobs:
           git config --global credential.helper store
           echo "https://oauth2:${{ secrets.GH_TOKEN }}@github.com" > ~/.git-credentials
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: 3.x
       - name: Install Platform IO
