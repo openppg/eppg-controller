@@ -9,11 +9,12 @@ jobs:
     name: CPP Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
+          token: ${{ github.token }}
           show-progress: false
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: 3.x
       - run: pip install cpplint
@@ -23,7 +24,7 @@ jobs:
     name: PlatformIO Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           token: ${{ secrets.GH_TOKEN }}
           persist-credentials: true
@@ -33,7 +34,7 @@ jobs:
           git config --global credential.helper store
           echo "https://oauth2:${{ secrets.GH_TOKEN }}@github.com" > ~/.git-credentials
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: 3.x
       - name: Install Platform IO
@@ -47,7 +48,7 @@ jobs:
     name: PlatformIO Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           token: ${{ secrets.GH_TOKEN }}
           persist-credentials: true
@@ -57,7 +58,7 @@ jobs:
           git config --global credential.helper store
           echo "https://oauth2:${{ secrets.GH_TOKEN }}@github.com" > ~/.git-credentials
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: 3.x
       - name: Install Platform IO
@@ -80,7 +81,7 @@ jobs:
             0xe000 /home/runner/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin \
             0x10000 .pio/build/OpenPPG-CESP32S3-CAN-SP140/firmware.bin
       - name: Archive ESP32S3 Firmware
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: OpenPPG-CESP32S3-CAN-SP140-firmware
           path: .pio/build/OpenPPG-CESP32S3-CAN-SP140/full-controller-firmware.bin
