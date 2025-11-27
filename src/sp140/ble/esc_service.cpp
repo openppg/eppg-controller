@@ -57,7 +57,7 @@ void initEscBleService(BLEServer* server) {
 }
 
 void updateESCTelemetryBLE(const STR_ESC_TELEMETRY_140& telemetry) {
-  if (pEscService == nullptr || !deviceConnected) {
+  if (pEscService == nullptr) {
     return;
   }
 

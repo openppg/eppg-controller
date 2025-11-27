@@ -35,7 +35,8 @@ void setupBLE() {
   // Bluedroid server accepts up to 517 by default; cap the local MTU explicitly.
   esp_ble_gatt_set_local_mtu(185);
   pServer = BLEDevice::createServer();
-  pServer->setCallbacks(new BleServerConnectionCallbacks());
+  static BleServerConnectionCallbacks serverCallbacks;
+  pServer->setCallbacks(&serverCallbacks);
 
   BLEAddress bleAddress = BLEDevice::getAddress();
   std::string uniqueId = bleAddress.toString();

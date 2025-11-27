@@ -240,12 +240,14 @@ void initConfigBleService(BLEServer* server, const std::string& uniqueId) {
   BLECharacteristic* unixTime = configService->createCharacteristic(
       BLEUUID(UNIX_TIME_UUID),
       BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
-  unixTime->setCallbacks(new TimeCallbacks());
+  static TimeCallbacks timeCallbacks;
+  unixTime->setCallbacks(&timeCallbacks);
 
   BLECharacteristic* timezone = configService->createCharacteristic(
       BLEUUID(TIMEZONE_UUID),
       BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
-  timezone->setCallbacks(new TimezoneCallbacks());
+  static TimezoneCallbacks timezoneCallbacks;
+  timezone->setCallbacks(&timezoneCallbacks);
   timezone->setValue(reinterpret_cast<uint8_t*>(&deviceData.timezone_offset),
                      sizeof(deviceData.timezone_offset));
 
@@ -259,34 +261,39 @@ void initConfigBleService(BLEServer* server, const std::string& uniqueId) {
   BLECharacteristic* metricAlt = configService->createCharacteristic(
       BLEUUID(METRIC_ALT_UUID),
       BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
-  metricAlt->setCallbacks(new MetricAltCallbacks());
+  static MetricAltCallbacks metricAltCallbacks;
+  metricAlt->setCallbacks(&metricAltCallbacks);
   int metricAltValue = deviceData.metric_alt ? 1 : 0;
   metricAlt->setValue(metricAltValue);
 
   BLECharacteristic* performanceMode = configService->createCharacteristic(
       BLEUUID(PERFORMANCE_MODE_UUID),
       BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
-  performanceMode->setCallbacks(new PerformanceModeCallbacks());
+  static PerformanceModeCallbacks performanceModeCallbacks;
+  performanceMode->setCallbacks(&performanceModeCallbacks);
   int performanceValue = deviceData.performance_mode ? 1 : 0;
   performanceMode->setValue(performanceValue);
 
   BLECharacteristic* screenRotation = configService->createCharacteristic(
       BLEUUID(SCREEN_ROTATION_UUID),
       BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
-  screenRotation->setCallbacks(new ScreenRotationCallbacks());
+  static ScreenRotationCallbacks screenRotationCallbacks;
+  screenRotation->setCallbacks(&screenRotationCallbacks);
   int screenValue = (deviceData.screen_rotation == 1) ? 1 : 3;
   screenRotation->setValue(screenValue);
 
   BLECharacteristic* theme = configService->createCharacteristic(
       BLEUUID(THEME_UUID),
       BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
-  theme->setCallbacks(new ThemeCallbacks());
+  static ThemeCallbacks themeCallbacks;
+  theme->setCallbacks(&themeCallbacks);
   theme->setValue(&deviceData.theme, sizeof(deviceData.theme));
 
   BLECharacteristic* seaPressure = configService->createCharacteristic(
       BLEUUID(SEA_PRESSURE_UUID),
       BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
-  seaPressure->setCallbacks(new SeaPressureCallbacks());
+  static SeaPressureCallbacks seaPressureCallbacks;
+  seaPressure->setCallbacks(&seaPressureCallbacks);
   seaPressure->setValue(
       reinterpret_cast<uint8_t*>(&deviceData.sea_pressure),
       sizeof(deviceData.sea_pressure));
@@ -294,7 +301,8 @@ void initConfigBleService(BLEServer* server, const std::string& uniqueId) {
   BLECharacteristic* metricTemp = configService->createCharacteristic(
       BLEUUID(METRIC_TEMP_UUID),
       BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
-  metricTemp->setCallbacks(new MetricTempCallbacks());
+  static MetricTempCallbacks metricTempCallbacks;
+  metricTemp->setCallbacks(&metricTempCallbacks);
   uint8_t metricTempValue = deviceData.metric_temp ? 1 : 0;
   metricTemp->setValue(&metricTempValue, sizeof(metricTempValue));
 
@@ -318,7 +326,8 @@ void initConfigBleService(BLEServer* server, const std::string& uniqueId) {
       BLECharacteristic::PROPERTY_WRITE |
       BLECharacteristic::PROPERTY_NOTIFY |
       BLECharacteristic::PROPERTY_INDICATE);
-  pThrottleCharacteristic->setCallbacks(new ThrottleValueCallbacks());
+  static ThrottleValueCallbacks throttleValueCallbacks;
+  pThrottleCharacteristic->setCallbacks(&throttleValueCallbacks);
   pThrottleCharacteristic->addDescriptor(new BLE2902());
 
   BLEService* deviceInfoService = server->createService(BLEUUID(DEVICE_INFO_SERVICE_UUID), 10);
@@ -335,20 +344,7 @@ void initConfigBleService(BLEServer* server, const std::string& uniqueId) {
 }
 
 void updateThrottleBLE(int value) {
-  if (!deviceConnected && oldDeviceConnected) {
-    vTaskDelay(pdMS_TO_TICKS(500));
-    if (pServer != nullptr) {
-      pServer->startAdvertising();
-    }
-    USBSerial.println("Start advertising");
-    oldDeviceConnected = deviceConnected;
-  }
-
-  if (deviceConnected && !oldDeviceConnected) {
-    oldDeviceConnected = deviceConnected;
-  }
-
-  if (!deviceConnected || pThrottleCharacteristic == nullptr) {
+  if (pThrottleCharacteristic == nullptr || !deviceConnected) {
     return;
   }
 

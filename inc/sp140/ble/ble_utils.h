@@ -3,8 +3,8 @@
 
 #include <BLECharacteristic.h>
 
-// Forward declare deviceConnected from ble.h
-extern bool deviceConnected;
+// Forward declare deviceConnected from ble.h (volatile for thread safety)
+extern volatile bool deviceConnected;
 
 /**
  * Sets a BLE characteristic value and conditionally notifies only when the value changes.

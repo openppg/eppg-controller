@@ -10,7 +10,7 @@
 extern BLECharacteristic* pThrottleCharacteristic;
 extern BLECharacteristic* pDeviceStateCharacteristic;
 extern BLEServer* pServer;
-extern bool deviceConnected;
-extern bool oldDeviceConnected;
+extern volatile bool deviceConnected;
+extern volatile bool oldDeviceConnected;
 
 #endif  // INC_SP140_BLE_H_
