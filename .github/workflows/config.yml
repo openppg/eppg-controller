@@ -21,7 +21,6 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: 3.x
-          cache: 'pip'
       - run: pip install cpplint
       - run: cpplint --linelength 140 --filter=-legal/copyright,-runtime/int,-build/include_subdir,-readability/casting,-readability/todo,-build/include_order,-build/include_what_you_use --recursive ./inc/ ./lib/ ./src/
 
@@ -44,7 +43,6 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: 3.x
-          cache: 'pip'
       - name: Generate cache key
         id: cache-key
         run: echo "key=pio-${{ hashFiles('platformio.ini') }}" >> $GITHUB_OUTPUT
@@ -82,7 +80,6 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: 3.x
-          cache: 'pip'
       - name: Restore PlatformIO cache
         uses: actions/cache@v4
         with:
@@ -117,7 +114,6 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: 3.x
-          cache: 'pip'
       - name: Restore PlatformIO cache
         uses: actions/cache@v4
         with:
