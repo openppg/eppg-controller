@@ -1140,19 +1140,12 @@ void afterCruiseStart() {
   cruisedPotVal = readThrottleRaw();  // Store the raw pot value (0-4095) at activation
   cruisedAtMillis = millis();
 
-  // Determine the maximum PWM based on the current flight mode (Chill/Sport)
-  int maxPwmForCurrentMode = (deviceData.performance_mode == 0) ? CHILL_MODE_MAX_PWM : ESC_MAX_PWM;
+  // Calculate cruise PWM using the same mapping as normal throttle
+  // (prevents throttle drop when activating cruise in chill mode)
+  uint16_t initialCruisePWM = calculateCruisePwm(
+      cruisedPotVal, deviceData.performance_mode, CRUISE_MAX_PERCENTAGE);
 
-  // Calculate the PWM corresponding to the potentiometer value *at the time of activation*, respecting the current flight mode's maximum PWM.
-  uint16_t calculatedActivationPWM = map(cruisedPotVal, 0, 4095, ESC_MIN_PWM, maxPwmForCurrentMode);
-
-  // Calculate the absolute maximum PWM allowed for cruise control (e.g., 60% of full ESC range)
-  uint16_t absoluteMaxCruisePWM = ESC_MIN_PWM + (uint16_t)((ESC_MAX_PWM - ESC_MIN_PWM) * CRUISE_MAX_PERCENTAGE);
-
-  // Determine the actual PWM to use for cruise: the lower of the calculated activation PWM and the absolute cap.
-  uint16_t initialCruisePWM = min(calculatedActivationPWM, absoluteMaxCruisePWM);
-
-  // Send the capped initialCruisePWM value to the throttle task via queue
+  // Send the cruise PWM value to the throttle task via queue
   if (xQueueSend(throttleUpdateQueue, &initialCruisePWM, pdMS_TO_TICKS(100)) != pdTRUE) {
     USBSerial.println("Failed to queue initial cruise throttle PWM");
   }
