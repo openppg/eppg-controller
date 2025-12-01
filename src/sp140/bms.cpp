@@ -21,17 +21,19 @@ void updateBMSData() {
   // Check if BMS is currently connected and the object exists
   if (bms_can == nullptr || !bmsCanInitialized) return;
 
-  // TODO track bms incrementing cycle count
-  // Ensure display CS is deselected and BMS CS is selected
-  digitalWrite(displayCS, HIGH);
   // Take the shared SPI mutex to prevent contention with TFT flush
+  // Must acquire mutex BEFORE manipulating any CS pins to avoid corrupting
+  // an in-progress display transaction
   if (spiBusMutex != NULL) {
-    if (xSemaphoreTake(spiBusMutex, pdMS_TO_TICKS(150)) != pdTRUE) {
+    if (xSemaphoreTake(spiBusMutex, pdMS_TO_TICKS(SPI_MUTEX_TIMEOUT_MS)) != pdTRUE) {
       // SPI bus timeout - display might be doing long operation
       USBSerial.println("[BMS] SPI bus timeout - skipping BMS update cycle");
       return;  // Use stale BMS data this cycle rather than hang
     }
   }
+
+  // Now safe to manipulate CS pins - we own the bus
+  digitalWrite(displayCS, HIGH);
   digitalWrite(bmsCS, LOW);
 
   // USBSerial.println("Updating BMS Data");

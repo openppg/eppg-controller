@@ -44,6 +44,12 @@ void setupLvglDisplay(
     // Initialize the display
     tft_driver->initR(INITR_BLACKTAB);
     tft_driver->setRotation(deviceData.screen_rotation);
+
+    // Set SPI speed for display transactions - ST7735 can handle up to 15-20 MHz
+    // This is used by beginTransaction() internally, not the global SPI frequency
+    // Same as shared SPI speed of the MCP2515
+    tft_driver->setSPISpeed(10000000);  // 10 MHz - conservative and reliable
+
     tft_driver->fillScreen(ST77XX_BLACK);
   }
 
@@ -83,7 +89,7 @@ void lvgl_flush_cb(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* color
   // Set drawing window
   // Guard shared SPI bus for display flush
   if (spiBusMutex != NULL) {
-    if (xSemaphoreTake(spiBusMutex, pdMS_TO_TICKS(200)) != pdTRUE) {
+    if (xSemaphoreTake(spiBusMutex, pdMS_TO_TICKS(SPI_MUTEX_TIMEOUT_MS)) != pdTRUE) {
       // SPI bus timeout - BMS might be doing long operation, skip display flush
       USBSerial.println("[DISPLAY] SPI bus timeout - skipping display flush");
       // Always signal LVGL that the flush is complete, even when we bail out
