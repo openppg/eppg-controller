@@ -2,7 +2,7 @@
 #pragma once
 
 #define VERSION_MAJOR 7
-#define VERSION_MINOR 3
+#define VERSION_MINOR 4
 
 // Define a version string
 #define VERSION_STRING STRINGIFY(VERSION_MAJOR) "." STRINGIFY(VERSION_MINOR)
