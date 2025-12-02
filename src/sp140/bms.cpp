@@ -10,11 +10,8 @@ STR_BMS_TELEMETRY_140 bmsTelemetryData = {
 // Initialize bms_can as nullptr, to be set in initBMSCAN
 BMS_CAN* bms_can = nullptr;
 
-// These are defined in sp140.ino
-extern int8_t displayCS;
-extern int8_t bmsCS;
-
 // BMS initialization is now handled in sp140.ino
+// CS pins are managed by the respective libraries, no manual manipulation needed
 
 // Update BMS data and populate unified battery data
 void updateBMSData() {
@@ -22,8 +19,8 @@ void updateBMSData() {
   if (bms_can == nullptr || !bmsCanInitialized) return;
 
   // Take the shared SPI mutex to prevent contention with TFT flush
-  // Must acquire mutex BEFORE manipulating any CS pins to avoid corrupting
-  // an in-progress display transaction
+  // CS pins are managed by the respective libraries (Adafruit_ST7735 and MCP2515)
+  // We only need the mutex to prevent overlapping transactions
   if (spiBusMutex != NULL) {
     if (xSemaphoreTake(spiBusMutex, pdMS_TO_TICKS(SPI_MUTEX_TIMEOUT_MS)) != pdTRUE) {
       // SPI bus timeout - display might be doing long operation
@@ -32,9 +29,7 @@ void updateBMSData() {
     }
   }
 
-  // Now safe to manipulate CS pins - we own the bus
-  digitalWrite(displayCS, HIGH);
-  digitalWrite(bmsCS, LOW);
+  // CS is handled by BMS_CAN library internally
 
   // USBSerial.println("Updating BMS Data");
   unsigned long tStart = millis();
@@ -89,8 +84,7 @@ void updateBMSData() {
   }
   // printBMSData();
 
-  // Deselect BMS CS when done and release mutex
-  digitalWrite(bmsCS, HIGH);
+  // Release mutex - CS is handled by BMS_CAN library
   if (spiBusMutex != NULL) {
     xSemaphoreGive(spiBusMutex);
   }

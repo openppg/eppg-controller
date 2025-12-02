@@ -80,39 +80,35 @@ void setupLvglDisplay(
   lv_disp_set_theme(lv_disp_get_default(), theme);
 }
 
-// Optimize the flush callback to minimize SPI transfers
-// CS pin management is handled here where actual SPI communication occurs
+// LVGL flush callback - sends pixel data to display
+// CS pin is managed by the Adafruit driver via startWrite()/endWrite()
+// We only manage the mutex to prevent concurrent SPI access with BMS
 void lvgl_flush_cb(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* color_p) {
   uint32_t w = (area->x2 - area->x1 + 1);
   uint32_t h = (area->y2 - area->y1 + 1);
 
-  // Set drawing window
-  // Guard shared SPI bus for display flush
+  // Guard shared SPI bus - mutex only, CS handled by driver
   if (spiBusMutex != NULL) {
     if (xSemaphoreTake(spiBusMutex, pdMS_TO_TICKS(SPI_MUTEX_TIMEOUT_MS)) != pdTRUE) {
-      // SPI bus timeout - BMS might be doing long operation, skip display flush
-      USBSerial.println("[DISPLAY] SPI bus timeout - skipping display flush");
-      // Always signal LVGL that the flush is complete, even when we bail out
+      // SPI bus timeout - BMS might be doing long operation
+      USBSerial.println("[DISPLAY] SPI bus timeout - skipping frame");
+      // Must still signal LVGL that flush is complete to prevent hang
       lv_disp_flush_ready(disp);
-      // Ensure CS returns high in case the pin was previously asserted elsewhere
-      digitalWrite(displayCS, HIGH);
-      return;  // Skip this display update rather than hang
+      return;
     }
   }
 
-  // Make sure display CS is selected only after the mutex is held so we don't
-  // leave the line asserted if we time out acquiring the bus.
-  digitalWrite(displayCS, LOW);
+  // startWrite() handles: beginTransaction + CS LOW
   tft_driver->startWrite();
   tft_driver->setAddrWindow(area->x1, area->y1, w, h);
 
-  // Push colors - using DMA if available
+  // Push pixels to display
   uint32_t len = w * h;
   tft_driver->writePixels((uint16_t*)color_p, len);  // NOLINT(readability/casting)
+
+  // endWrite() handles: CS HIGH + endTransaction
   tft_driver->endWrite();
 
-  // Deselect display CS when done
-  digitalWrite(displayCS, HIGH);
   if (spiBusMutex != NULL) {
     xSemaphoreGive(spiBusMutex);
   }

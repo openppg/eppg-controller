@@ -1236,9 +1236,7 @@ void updateESCBLETask(void *pvParameters) {
 bool initBMSCAN(SPIClass* spi) {
   USBSerial.println("Initializing BMS CAN...");
 
-  // Ensure Display CS is HIGH (deselected) before working with BMS
-  digitalWrite(displayCS, HIGH);
-
+  // CS pins are managed by libraries - no manual manipulation needed
   // Create the BMS_CAN instance with the provided SPI
   bms_can = new BMS_CAN(bmsCS, MCP_BAUDRATE, spi);
 
