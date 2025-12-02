@@ -87,7 +87,6 @@ volatile DeviceState currentState = DISARMED;
 // Add volatile bool flag to control UI drawing start
 volatile bool uiReady = false;
 
-SemaphoreHandle_t eepromSemaphore;
 SemaphoreHandle_t stateMutex;
 
 // Add near other queue declarations
@@ -197,6 +196,10 @@ void bleStateUpdateTask(void* parameter) {
   BLEStateUpdate update;
 
   while (true) {
+    if (bleStateQueue == NULL) {
+      vTaskDelay(pdMS_TO_TICKS(1000));
+      continue;
+    }
     if (xQueueReceive(bleStateQueue, &update, portMAX_DELAY) == pdTRUE) {
       if (pDeviceStateCharacteristic != nullptr) {
         // Add delay to give BLE stack breathing room
@@ -222,6 +225,10 @@ void deviceStateUpdateTask(void* parameter) {
   uint8_t state;
 
   while (true) {
+    if (deviceStateQueue == NULL) {
+      vTaskDelay(pdMS_TO_TICKS(1000));
+      continue;
+    }
     if (xQueueReceive(deviceStateQueue, &state, portMAX_DELAY) == pdTRUE) {
       if (pDeviceStateCharacteristic != nullptr && deviceConnected) {
         vTaskDelay(pdMS_TO_TICKS(20));  // Give BLE stack breathing room
@@ -439,7 +446,7 @@ void refreshDisplay() {
 
     // Handle synchronized alert updates (counter + display together)
     AlertUIUpdate alertUpdate;
-    if (xQueueReceive(alertUIQueue, &alertUpdate, 0) == pdTRUE) {
+    if (alertUIQueue != NULL && xQueueReceive(alertUIQueue, &alertUpdate, 0) == pdTRUE) {
       // Update counter and display atomically
       updateAlertCounterDisplay(alertUpdate.counts);
 
@@ -475,6 +482,10 @@ void refreshDisplay() {
 void monitoringTask(void *pvParameters) {
   TelemetrySnapshot snap;
   for (;;) {
+    if (telemetrySnapshotQueue == NULL) {
+      vTaskDelay(pdMS_TO_TICKS(1000));
+      continue;
+    }
     if (xQueueReceive(telemetrySnapshotQueue, &snap, pdMS_TO_TICKS(100)) == pdTRUE) {
       // Run monitors using the fresh snapshot
       if (monitoringEnabled) {
@@ -504,8 +515,12 @@ void bmsTask(void *pvParameters) {
     #ifdef SCREEN_DEBUG
       float altitude = 0;
       generateFakeTelemetry(escTelemetryData, bmsTelemetryData, unifiedBatteryData, altitude);
-      xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);
-      xQueueOverwrite(escTelemetryQueue, &escTelemetryData);
+      if (bmsTelemetryQueue != NULL) {
+        xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);
+      }
+      if (escTelemetryQueue != NULL) {
+        xQueueOverwrite(escTelemetryQueue, &escTelemetryData);
+      }
     #else
       if (bmsCanInitialized) {
         updateBMSData();
@@ -634,8 +649,6 @@ void setup() {
   #endif
 
   initESC();
-  eepromSemaphore = xSemaphoreCreateBinary();
-  xSemaphoreGive(eepromSemaphore);
   stateMutex = xSemaphoreCreateMutex();
   setESCThrottle(ESC_DISARMED_PWM);
   initVibeMotor();
@@ -1058,7 +1071,7 @@ void handleThrottle() {
   uint16_t newPWM;
 
   // Check for throttle updates from cruise activation
-  if (xQueueReceive(throttleUpdateQueue, &newPWM, 0) == pdTRUE) {
+  if (throttleUpdateQueue != NULL && xQueueReceive(throttleUpdateQueue, &newPWM, 0) == pdTRUE) {
     if (currentState == ARMED_CRUISING) {
       currentCruiseThrottlePWM = newPWM;
       USBSerial.print("Cruise PWM initialized/updated to: ");
@@ -1146,7 +1159,9 @@ void afterCruiseStart() {
       cruisedPotVal, deviceData.performance_mode, CRUISE_MAX_PERCENTAGE);
 
   // Send the cruise PWM value to the throttle task via queue
-  if (xQueueSend(throttleUpdateQueue, &initialCruisePWM, pdMS_TO_TICKS(100)) != pdTRUE) {
+  if (throttleUpdateQueue == NULL) {
+    USBSerial.println("throttleUpdateQueue is NULL!");
+  } else if (xQueueSend(throttleUpdateQueue, &initialCruisePWM, pdMS_TO_TICKS(100)) != pdTRUE) {
     USBSerial.println("Failed to queue initial cruise throttle PWM");
   }
 
@@ -1177,6 +1192,10 @@ void audioTask(void* parameter) {
   MelodyRequest request;
 
   for (;;) {
+    if (melodyQueue == NULL) {
+      vTaskDelay(pdMS_TO_TICKS(1000));
+      continue;
+    }
     if (xQueueReceive(melodyQueue, &request, portMAX_DELAY) == pdTRUE) {
       if (!ENABLE_BUZZ) continue;
 

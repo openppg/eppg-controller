@@ -299,7 +299,9 @@ class ThrottleValueCallbacks: public BLECharacteristicCallbacks {
 
       // Validate PWM range
       if (newPWM >= ESC_MIN_PWM && newPWM <= ESC_MAX_PWM) {
-        if (xQueueSend(throttleUpdateQueue, &newPWM, pdMS_TO_TICKS(100)) != pdTRUE) {
+        if (throttleUpdateQueue == NULL) {
+          USBSerial.println("throttleUpdateQueue is NULL!");
+        } else if (xQueueSend(throttleUpdateQueue, &newPWM, pdMS_TO_TICKS(100)) != pdTRUE) {
           USBSerial.println("Failed to queue throttle update");
         }
       }

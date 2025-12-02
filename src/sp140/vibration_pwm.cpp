@@ -40,6 +40,10 @@ void vibeTask(void* parameter) {
   VibeRequest request;
 
   for (;;) {
+    if (vibeQueue == NULL) {
+      vTaskDelay(pdMS_TO_TICKS(1000));
+      continue;
+    }
     if (xQueueReceive(vibeQueue, &request, portMAX_DELAY) == pdTRUE) {
       if (ENABLE_VIBE) {
         // Turn on vibration with specified intensity
