@@ -21,7 +21,7 @@
 
 // Shared SPI bus mutex timeout - use same value for all SPI users
 // to ensure predictable behavior and prevent priority inversion
-#define SPI_MUTEX_TIMEOUT_MS 150
+#define SPI_MUTEX_TIMEOUT_MS 300
 
 // Core LVGL globals
 extern int8_t displayCS;  // Display chip select pin
