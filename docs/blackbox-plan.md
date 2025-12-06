@@ -92,7 +92,6 @@
 - `0xE3`: Cruise end - payload = 0
 - `0xE4`: Performance mode change - payload = new_mode
 - `0xE5`: Altitude zeroed - payload = 0
-- `0xE6`: User bookmark - payload = bookmark_id
 
 _Note: Using `esp_timer_get_time()` (int64_t µs) for timestamps. Provides ~292,000 years before overflow._
 
@@ -129,8 +128,8 @@ coredump, data, coredump,0x7F0000,0x10000,
 ```
 
 **Capacity**: 1.5 MB SPIFFS - ~10% filesystem overhead = **~1.35 MB usable**
-- At 610 B/s armed = ~37 minutes continuous flight
-- With state-based logging (20 Hz armed / 1 Hz disarmed) = **45+ minutes flight + hours of ground time**
+- At 326 B/s armed (10 Hz) = **~69 minutes** continuous flight
+- With state-based logging (10 Hz armed / 1 Hz disarmed) = **60–90 minutes** flight + hours of ground time
 
 **Access API**:
 ```cpp
@@ -408,13 +407,7 @@ Downloads multiple blocks sequentially with ACK between blocks for flow control.
 {"bb": "erase_confirm", "ok": true, "blocks_erased": 512}
 ```
 
-### 6. **Bookmark** - Mark flight boundary
-```json
-{"bb": "bookmark", "name": "Flight 3 - Sunset Ridge"}
-```
-Inserts special event frame to denote user-marked boundary.
-
-### 7. **Pause/Resume** - Control logging
+### 6. **Pause/Resume** - Control logging
 ```json
 {"bb": "pause"}
 {"bb": "resume"}
