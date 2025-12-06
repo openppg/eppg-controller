@@ -49,8 +49,47 @@ blackbox,   data, 0x40,     0x5F0000, 0x200000,
 
 **Access API**: `esp_partition_find_first(ESP_PARTITION_TYPE_DATA, 0x40, "blackbox")`
 
+## Code Architecture (async, flight-safe)
+
+**Module Structure**: `inc/sp140/blackbox.h` + `src/sp140/blackbox.cpp`
+
+**Task Priority & Core Assignment**:
+```
+Priority 3 (Critical):  throttleTask, watchdogTask         [Core 0]
+Priority 2 (Important): uiTask, bmsTask, vibeTask          [Core 1]
+Priority 1 (Background): BLE, monitoring, audio, webSerial, blackboxWriter [Core 1]
+```
+
+**Queues** (async producer/consumer pattern):
+- `blackboxFastQueue`: 256 frames (droppable, non-blocking send)
+- `blackboxSlowQueue`: 16 frames (important, 10ms timeout)
+- `blackboxEventQueue`: 32 frames (critical, 10ms timeout)
+
+**Producer Pattern** (similar to existing `pushTelemetrySnapshot()`):
+- Called from `throttleTask` and `bmsTask` with state-based decimation
+- Non-blocking `xQueueSend(..., 0)` for fast frames → drops if full, **never blocks flight control**
+- Short timeout for slow/event frames (important but not real-time critical)
+
+**Consumer Pattern** (similar to `updateBLETask`):
+- `blackboxWriterTask()` runs at priority 1 on core 1 (background)
+- Drains queues: Events > Slow > Fast (priority order)
+- Accumulates into 4KB staging buffer
+- Writes to flash when buffer full, pre-erases next block asynchronously
+- Yields frequently (`vTaskDelay`) to avoid starving other background tasks
+
+**Event Capture** (via MultiLogger sink):
+- `BlackBoxEventLogger : ILogger` registered into existing `multiLogger`
+- Automatically captures all 70+ sensor alert transitions
+- No manual hooks needed—leverages existing monitoring infrastructure
+
+**Integration Points**:
+1. `setup()`: Call `initBlackBox()` after monitoring system
+2. `setupTasks()`: Create `blackboxWriterTask()` with priority 1, core 1
+3. `throttleTask()`: Add decimation counter + `pushBlackboxFastFrame()`
+4. `bmsTask()`: Add 1Hz sampling + `pushBlackboxSlowFrame()`
+
 ## Runtime Pipeline
-- **Producers**: Existing `pushTelemetrySnapshot()` keeps monitoring queue separate; add dedicated logger queue (len **256** frames = 5s buffer @ 50Hz) for burst protection during flash erases.
+- **Producers**: State-based decimation in flight-critical tasks; async queue push with backpressure protection
 - **Fast frame builder**: Runs inside `throttleTask` at 50 Hz with **state-based decimation**:
   ```cpp
   static uint8_t blackboxCounter = 0;
@@ -75,16 +114,159 @@ blackbox,   data, 0x40,     0x5F0000, 0x200000,
 - **Writer task** (low prio, core 1): Drains queues into 4 KB staging buffer in **SRAM** (no PSRAM on FN8 variant). Pre-erases next block asynchronously; writes current block, then marks header closed with CRC32.
 - **Backpressure**: If queue near full (>90%), drop only fast frames; never drop slow, cell, or event frames.
 
-## Serial Offload Protocol (reuses webSerialTask, DISARMED gate)
-**Commands** (JSON, added to existing `parse_serial_commands()`):
-- `{"bb":"manifest"}` → Returns: `{head_seq, tail_seq, num_flights, block_size:4096, total_size, free_blocks}`.
-- `{"bb":"read","seq":N,"offset":O,"len":L}` → Stream binary block data in 256-byte chunks with per-chunk CRC32.
-- `{"bb":"erase"}` → Full ring erase (requires confirmation: `{"bb":"erase_confirm","token":XXXX}`).
-- `{"bb":"bookmark"}` → Insert event marker at current write position to denote flight boundary.
+## Serial Offload Protocol (USB CDC, DISARMED gate)
 
-**Flow Control**: Window-based (send 4KB chunk, wait for `{"ack":true}` before next). Resume supported via `seq+offset` on connection loss. Timeout: 5s per chunk.
+**Integration**: Add `handleBlackboxCommand()` to existing `parse_serial_commands()` in `webSerialTask`
 
-**Decoder**: Python script (`blackbox_decode.py`) to pull manifest, read all blocks, parse record types, output CSV/JSON for analysis tools.
+**Commands** (JSON over USB):
+
+### 1. **Manifest** - Get ring buffer status
+```json
+{"bb": "manifest"}
+```
+**Response**:
+```json
+{
+  "bb": "manifest",
+  "ok": true,
+  "partition_size": 2097152,
+  "block_size": 4096,
+  "total_blocks": 512,
+  "used_blocks": 234,
+  "head_block": 456,
+  "tail_block": 222,
+  "flights": [
+    {"id": 1, "start_block": 222, "end_block": 300, "duration_sec": 1420},
+    {"id": 2, "start_block": 301, "end_block": 455, "duration_sec": 1680}
+  ]
+}
+```
+
+### 2. **Read Block** - Stream block data
+```json
+{"bb": "read", "block": 222, "chunk_size": 256}
+```
+**Response** (binary chunks with JSON wrapper):
+```json
+{"bb":"read_start","block":222,"total_chunks":16}
+// ... binary chunk 1 (256 bytes) ...
+{"bb":"read_chunk","block":222,"chunk":1,"crc32":"0xABCD1234"}
+// ... binary chunk 2 (256 bytes) ...
+{"bb":"read_chunk","block":222,"chunk":2,"crc32":"0x5678EFAB"}
+// ... continues for all 16 chunks ...
+{"bb":"read_done","block":222}
+```
+
+### 3. **Read Range** - Smart bulk download
+```json
+{"bb": "read_range", "start_block": 222, "end_block": 455}
+```
+Downloads multiple blocks sequentially with ACK between blocks for flow control.
+
+### 4. **Stats** - Quick diagnostics
+```json
+{"bb": "stats"}
+```
+**Response**:
+```json
+{
+  "bb": "stats",
+  "ok": true,
+  "queue_fast_used": 12,
+  "queue_slow_used": 2,
+  "queue_event_used": 0,
+  "frames_dropped_fast": 234,
+  "frames_logged_total": 125456,
+  "current_block": 456,
+  "bytes_written_total": 1957888,
+  "uptime_sec": 12456
+}
+```
+
+### 5. **Erase** - Clear ring buffer
+```json
+{"bb": "erase"}
+```
+**Response** (requires confirmation):
+```json
+{"bb": "erase", "confirm_required": true, "token": "A3F9B2"}
+```
+**Confirm**:
+```json
+{"bb": "erase_confirm", "token": "A3F9B2"}
+```
+**Response**:
+```json
+{"bb": "erase_confirm", "ok": true, "blocks_erased": 512}
+```
+
+### 6. **Bookmark** - Mark flight boundary
+```json
+{"bb": "bookmark", "name": "Flight 3 - Sunset Ridge"}
+```
+Inserts special event frame to denote user-marked boundary.
+
+### 7. **Pause/Resume** - Control logging
+```json
+{"bb": "pause"}
+{"bb": "resume"}
+```
+Useful for ground testing without filling buffer.
+
+**Flow Control Strategy**:
+- **Block-level ACK**: After each block downloaded, wait for `{"ack": true}` from host
+- **Timeout**: 5s per block; if no ACK, resend last block
+- **Resume**: Track last successful block in manifest, resume from there
+- **Throttling**: Add 10ms delay between chunks to avoid USB buffer overflow
+
+**Safety Gates**:
+- All commands **require DISARMED state** (checked in `webSerialTask`)
+- Erase requires two-step confirmation with random token
+- Read commands never interfere with writing (read from partition directly)
+
+**Python Host Tools**:
+
+### `blackbox_pull.py` - Download tool
+```bash
+# Pull all flight data
+python blackbox_pull.py --port /dev/ttyACM0 --output flights.bb
+
+# Pull specific range
+python blackbox_pull.py --port /dev/ttyACM0 --blocks 222-455 --output flight2.bb
+
+# Check stats only
+python blackbox_pull.py --port /dev/ttyACM0 --stats
+```
+
+### `blackbox_decode.py` - Parser/analyzer
+```bash
+# Decode to CSV
+python blackbox_decode.py flights.bb --format csv --output flights.csv
+
+# Decode to JSON
+python blackbox_decode.py flights.bb --format json --output flights.json
+
+# Generate summary
+python blackbox_decode.py flights.bb --summary
+# Output: Flight 1: 23:42 duration, max alt 450m, max throttle 87%, 3 warnings
+
+# Filter by time range
+python blackbox_decode.py flights.bb --start 12:30:00 --end 12:45:00 --output segment.csv
+```
+
+### `blackbox_plot.py` - Visualization
+```bash
+# Generate plots
+python blackbox_plot.py flights.csv --output flight_analysis.html
+# Creates interactive plots: altitude, throttle, temps, voltage, current over time
+```
+
+**Protocol Advantages**:
+- ✅ **Resume-friendly**: Can restart download mid-flight if USB disconnects
+- ✅ **Efficient**: Only downloads used blocks, not empty space
+- ✅ **Safe**: DISARMED gate prevents mid-flight interference
+- ✅ **Debuggable**: JSON responses easy to inspect with serial monitor
+- ✅ **Flexible**: Can pull entire ring or specific flights
 
 ## Recovery and Wear
 - On boot: scan from superblock head forward until first empty/invalid; rebuild head/tail; latest valid superblock wins.
@@ -143,16 +325,21 @@ This state-based approach provides excellent coverage for typical paramotor oper
    - Add cell voltage differential monitor for snapshots
    - Register `BlackBoxLogger` sink into `multiLogger` for automatic event capture
 
-4) **Storage manager** (`BlackBoxManager` class):
-   - `init()`: Locate partition via `esp_partition_find_first()`, scan for head/tail
-   - `eraseSector()`, `writeSector()`, `readSector()` wrappers
-   - Ring advancement logic with superblock updates
-   - Pre-erase next block asynchronously to avoid task delays
+4) **Storage manager** (internal to `blackbox.cpp`):
+   - Locate partition: `esp_partition_find_first(ESP_PARTITION_TYPE_DATA, 0x40, "blackbox")`
+   - Maintain ring state: head/tail block indices, current write offset
+   - Superblock management: Dual copies (blocks 0 & 1) with alternating updates
+   - Pre-erase next block asynchronously to avoid blocking writer task
+   - Block operations: `readBlock()`, `writeBlock()`, `eraseBlock()`
+   - Flight detection: Insert boundary markers on ARM/DISARM transitions
 
-5) **Serial offload**:
-   - Extend `parse_serial_commands()` with `bb:*` commands
-   - Implement chunked read with CRC validation
-   - Add flow control (ACK/NACK per 4KB window)
+5) **Serial offload** (extend `parse_serial_commands()`):
+   - Add `handleBlackboxCommand(doc)` for `{"bb": ...}` commands
+   - Implement manifest generation (scan superblocks, build flight list)
+   - Chunked block reader with CRC32 per chunk (256B chunks × 16 = 4KB)
+   - Flow control: Block-level ACK with 5s timeout, resume support
+   - Safety: All commands gated on `currentState == DISARMED`
+   - Erase: Two-step confirmation with random token
 
 6) **Testing**:
    - Max-rate logging stress test (verify no frame drops in normal flight)
@@ -161,10 +348,12 @@ This state-based approach provides excellent coverage for typical paramotor oper
    - Offload resume on USB disconnect/reconnect
    - Wear distribution analysis (verify even erase counts)
 
-7) **Host tools**:
-   - Python script: `blackbox_pull.py` (manifest → bulk read → verify CRC)
-   - Python script: `blackbox_decode.py` (parse binary → CSV/JSON output)
-   - Optional: Web-based visualization (altitude/throttle/temps over time)
+7) **Host tools** (Python, in `scripts/` directory):
+   - `blackbox_pull.py`: Download via USB CDC (manifest → block range → verify CRC → save .bb file)
+   - `blackbox_decode.py`: Parse binary .bb file → CSV/JSON with timestamp alignment
+   - `blackbox_plot.py`: Generate interactive HTML plots (Plotly) for flight analysis
+   - `blackbox_stats.py`: Quick summary (duration, max alt, warnings, battery usage)
+   - All tools support resume on disconnect, progress bars, error recovery
 
 ## Migration Notes (for existing users)
 - **OTA updates**: Settings preserved automatically (NVS location unchanged) ✅
