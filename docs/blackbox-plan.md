@@ -3,20 +3,19 @@
 **Hardware**: M5Stack Stamp-S3A (ESP32-S3FN8: 8 MB Flash, NO PSRAM, 512 KB SRAM)
 **Goal**: Capture 60+ minute flights with rolling storage, survive power loss, and offload over USB serial without affecting real-time control.
 
-## Signals and Rates (state-based logging)
 - **Fast path** (50 Hz actual in `throttleTask`):
-  - **ARMED/CRUISING**: Decimate to **10 Hz** for flight data (100ms resolution)
-  - **DISARMED**: Decimate to **1 Hz** for diagnostics/boot monitoring
-  - Fields: timestamp64, device state, performance_mode, throttle PWM (final), ESC volts/amps/eRPM, wattHoursUsed, altitude + vertical speed (if baro valid).
-- **Slow path** (10 Hz in `bmsTask`, **sample at 1 Hz** for logging): pack V/I/P, SOC, highest/lowest cell V, delta V, max temps (MOS/MCU/CAP/Motor + BMS MOS/balance/T1–T4), charge/discharge MOS flags, battery cycle, ESC/BMS connection state.
-- **Cell detail** (every 20 s or when `voltage_differential` changes > 10 mV from last snapshot): full 24-cell table as uint16 mV.
+  - **ARMED/CRUISING**: Decimate to **1 Hz** for flight data (10× reduction for max duration)
+  - **DISARMED**: Optional minimal logging (see capacity notes)
+  - Fields: timestamp64, device state, performance_mode, throttle PWM (final), ESC volts/amps/eRPM, ESC temp max, BMS temp max.
+- **Slow path** (10 Hz in `bmsTask`, **sample at 0.1 Hz** for logging): pack V/I/P, SOC, highest/lowest cell V, delta V, altitude (0.1 Hz), wattHoursUsed (cumulative), max temps (MOS/MCU/CAP/Motor + BMS MOS/balance/T1–T4), charge/discharge MOS flags, battery cycle, ESC/BMS connection state.
+- **Cell detail**: Every **100 s** (10× original) or when `voltage_differential` changes > 10 mV from last snapshot: full 24-cell table as uint16 mV.
 - **Events** (edge-triggered via MultiLogger sink): state transitions (DISARMED/ARMED/CRUISING), ESC/BMS connect/disconnect, running_error/selfcheck_error changes, MOS open/close, altitude zero reset on arm, cruise activation/deactivation with PWM value, performance mode changes, button sequences.
 
 ## Record Types (fixed, quantized)
 
 **All frames start with type byte for unambiguous parsing:**
 
-- **Fast frame** (type=0x01) **28 B**:
+- **Fast frame** (type=0x01) **20 B** (now logged at **1 Hz** when armed, 0.2 Hz disarmed):
   ```cpp
   struct BlackboxFastFrame {
     uint8_t type;               // 1 B - 0x01
@@ -26,16 +25,12 @@
     uint16_t v_pack_centivolts; // 2 B - voltage * 100
     int16_t i_pack_deciamps;    // 2 B - current * 10 (signed for regen)
     uint16_t erpm_hundreds;     // 2 B - eRPM / 100
-    uint16_t wh_centiwatthours; // 2 B - wattHoursUsed * 100
-    int16_t alt_decimeters;     // 2 B - relative altitude * 10
-    int16_t vsi_cm_per_sec;     // 2 B - vertical speed * 100
-    uint8_t esc_temp_max;       // 1 B - max of MOS/MCU/CAP/Motor temps
-    uint8_t bms_temp_max;       // 1 B - max BMS temp
-    uint8_t padding;            // 1 B - align to 28 B
+    uint8_t esc_temp_max;       // 1 B - max of ESC temps
+    uint8_t bms_temp_max;       // 1 B - max of BMS temps
   };
   ```
 
-- **Slow frame** (type=0x02) **36 B**:
+- **Slow frame** (type=0x02) **40 B** (0.1 Hz sampling):
   ```cpp
   struct BlackboxSlowFrame {
     uint8_t type;               // 1 B - 0x02
@@ -55,6 +50,8 @@
     uint8_t bms_t2_temp;        // 1 B - BMS T2 temp
     uint8_t bms_t3_temp;        // 1 B - BMS T3 temp
     uint8_t bms_t4_temp;        // 1 B - BMS T4 temp
+    int16_t alt_decimeters;     // 2 B - relative altitude * 10 (1 Hz)
+    uint16_t wh_centiwatthours; // 2 B - wattHoursUsed * 100 (cumulative)
     uint32_t battery_cycle;     // 4 B - cycle count
     uint16_t running_error;     // 2 B - ESC running error bitmask
     uint16_t selfcheck_error;   // 2 B - ESC selfcheck error bitmask
@@ -502,47 +499,32 @@ uint32_t crc = esp_rom_crc32_le(0, data, length);
 - Check `SPIFFS.totalBytes()` and `SPIFFS.usedBytes()` for capacity monitoring
 - Use `SPIFFS.gc()` periodically to reclaim space from deleted files
 
-## Capacity Check (1.35 MB in SPIFFS, 69+ min flight window)
+## Capacity Check (1.35 MB in SPIFFS, ~14-hour continuous)
 
 **Data rates (state-based)**:
 
-**When ARMED** (10 Hz resolution):
-- Fast frames: 28 B × 10 Hz = 280 B/s
-- Slow frames: 36 B × 1 Hz = 36 B/s
-- Cell snapshots: ~60 B every 20s = 3 B/s
+- **When ARMED** (1 Hz fast, 0.1 Hz slow):
+- Fast frames: 20 B × 1 Hz = 20 B/s
+- Slow frames: 40 B × 0.1 Hz = 4 B/s
+- Cell snapshots: ~60 B every 100s = 0.6 B/s
 - Events: ~16 B × 0.1 Hz avg = 1.6 B/s
-- Block overhead: ~5 B/s
-- **Total while armed: ~326 B/s**
-
-**When DISARMED** (minimal logging):
-- Fast frames: 28 B × 1 Hz = 28 B/s
-- Slow frames: 36 B × 1 Hz = 36 B/s
-- Cell snapshots: ~3 B/s
-- Events: ~1.6 B/s (rare when disarmed)
 - Block overhead: ~1 B/s
-- **Total while disarmed: ~70 B/s**
+- **Total while armed: ~27 B/s**
+
+- **When DISARMED**:
+  - **Minimal**: fast OFF, slow 0.02 Hz (every 50 s), cells every 300 s → ~1.3 B/s
+  - **Off**: only events → ~0.2 B/s
 
 **Capacity with 1.35 MB SPIFFS**:
-1. **Continuous armed flight**: 1.35 MB ÷ 326 B/s = **69 minutes** of pure flight data
-2. **Typical single flight** (45 min armed + 30 min ground):
-   - Armed: 45 min × 326 B/s = 880 KB
-   - Disarmed: 30 min × 70 B/s = 126 KB
-   - Total: 1,006 KB → **Fits with 350 KB margin**
-3. **Multiple flights** (with rolling overwrite):
-   - 2× 30-minute flights + ground time = **60+ minutes total flight data**
-   - Oldest data rolls off as new data comes in
-4. **Long endurance flight**: 60+ minutes continuous → fully captured ✅
-
-**This is sufficient for**:
-- ✅ Long paramotor flights (up to 69 min continuous)
-- ✅ Full crash analysis at 100ms resolution (excellent for flight dynamics)
-- ✅ Multiple flight sessions in a day (rolling buffer)
-- ✅ Typical use case: entire flying session captured
-
-**10 Hz Resolution Context**:
-- Aviation flight data recorders typically use 1-4 Hz
-- 100ms captures all meaningful flight dynamics
-- Sufficient to analyze: throttle response, altitude changes, temperature trends, crash sequences
+1. **Continuous armed flight**: 1.35 MB ÷ 27 B/s ≈ **50,000 s ≈ 833 minutes (~13.9 hours)**
+2. **Typical flying day** (~1 h flight + ~20 min ground on-time, minimal disarmed logging ~1.3 B/s):
+   - Armed (1 h): ~97 KB
+   - Disarmed (0.33 h): ~1.6 KB
+   - Total per day: ~99 KB → **~13–14 days history** before rollover
+3. **If disarmed logging is OFF**:
+   - Armed (1 h): ~97 KB
+   - Total per day: ~97 KB → **~14 days history** before rollover
+4. **Extended endurance**: ~14 hours continuous armed logging at 1 Hz fast / 0.1 Hz slow ✅
 
 ## Integration Steps
 1) **SPIFFS setup** (no partition changes needed!):
