@@ -3,8 +3,11 @@
 **Hardware**: M5Stack Stamp-S3A (ESP32-S3FN8: 8 MB Flash, NO PSRAM, 512 KB SRAM)
 **Goal**: Capture 60+ minute flights with rolling storage, survive power loss, and offload over USB serial without affecting real-time control.
 
-## Signals and Rates (from current code)
-- **Fast path** (50 Hz actual in `throttleTask`, **decimate to 20 Hz** for logging): timestamp64, device state, performance_mode, throttle PWM (final), ESC volts/amps/eRPM, wattHoursUsed, altitude + vertical speed (if baro valid).
+## Signals and Rates (state-based logging)
+- **Fast path** (50 Hz actual in `throttleTask`):
+  - **ARMED/CRUISING**: Decimate to **20 Hz** for high-resolution flight data
+  - **DISARMED**: Decimate to **1 Hz** for diagnostics/boot monitoring
+  - Fields: timestamp64, device state, performance_mode, throttle PWM (final), ESC volts/amps/eRPM, wattHoursUsed, altitude + vertical speed (if baro valid).
 - **Slow path** (10 Hz in `bmsTask`, **sample at 1 Hz** for logging): pack V/I/P, SOC, highest/lowest cell V, delta V, max temps (MOS/MCU/CAP/Motor + BMS MOS/balance/T1–T4), charge/discharge MOS flags, battery cycle, ESC/BMS connection state.
 - **Cell detail** (every 20 s or when `voltage_differential` changes > 10 mV from last snapshot): full 24-cell table as uint16 mV.
 - **Events** (edge-triggered via MultiLogger sink): state transitions (DISARMED/ARMED/CRUISING), ESC/BMS connect/disconnect, running_error/selfcheck_error changes, MOS open/close, altitude zero reset on arm, cruise activation/deactivation with PWM value, performance mode changes, button sequences.
@@ -48,7 +51,23 @@ blackbox,   data, 0x40,     0x5F0000, 0x200000,
 
 ## Runtime Pipeline
 - **Producers**: Existing `pushTelemetrySnapshot()` keeps monitoring queue separate; add dedicated logger queue (len **256** frames = 5s buffer @ 50Hz) for burst protection during flash erases.
-- **Fast frame builder**: Runs inside `throttleTask` at 50 Hz; **decimates to 20 Hz** (log every 3rd sample) before quantizing and pushing to logger queue (droppable on overflow).
+- **Fast frame builder**: Runs inside `throttleTask` at 50 Hz with **state-based decimation**:
+  ```cpp
+  static uint8_t blackboxCounter = 0;
+  if (currentState == DISARMED) {
+    // Log at 1 Hz when disarmed (every 50th sample)
+    if (++blackboxCounter >= 50) {
+      blackboxCounter = 0;
+      pushBlackboxFastFrame();
+    }
+  } else {  // ARMED or ARMED_CRUISING
+    // Log at 20 Hz during flight (every 3rd sample)
+    if (++blackboxCounter >= 3) {
+      blackboxCounter = 0;
+      pushBlackboxFastFrame();
+    }
+  }
+  ```
 - **Slow frame builder**: Runs in `bmsTask` at 10 Hz; **samples at 1 Hz** for logging; pushes non-droppable slow frame.
 - **Cell snapshot builder**: Triggered when `abs(voltage_differential - lastLoggedDelta) > 0.010f` (10 mV change in max-min cell spread).
 - **wattHoursUsed integration**: Calculate in `bmsTask` using `wattHoursUsed += unifiedBatteryData.power * 1000.0f * (dt_hours)` for fast frame logging.
@@ -72,17 +91,36 @@ blackbox,   data, 0x40,     0x5F0000, 0x200000,
 - Power loss: at most lose current writing block; closed blocks are CRC-checked.
 - Wear leveling: rotate blocks evenly; count erases in RAM per flight, persist occasionally.
 
-## Capacity Check (2 MB partition, 63 min rolling window)
-**Data rates**:
+## Capacity Check (2 MB partition, 2+ hour flight window)
+
+**Data rates (state-based)**:
+
+**When ARMED** (full resolution):
 - Fast frames: 28 B × 20 Hz = 560 B/s
 - Slow frames: 40 B × 1 Hz = 40 B/s
 - Cell snapshots: ~64 B every 20s = 3.2 B/s
 - Events: ~16 B × 0.1 Hz avg = 1.6 B/s
-- Block overhead: (32 B header + 4 B CRC) / 4096 B = 0.9% = ~5.5 B/s
-- **Total: ~610 B/s**
+- Block overhead: ~5.5 B/s
+- **Total while armed: ~610 B/s**
 
-**Capacity**: 2 MB ÷ 610 B/s = **3,440 seconds ≈ 57 minutes**
-With optimization: **~63 minutes** rolling window (excellent for typical 20-45 min flights + margin for crash analysis).
+**When DISARMED** (minimal logging):
+- Fast frames: 28 B × 1 Hz = 28 B/s
+- Slow frames: 40 B × 1 Hz = 40 B/s
+- Cell snapshots: ~3.2 B/s
+- Events: ~1.6 B/s (rare when disarmed)
+- Block overhead: ~1 B/s
+- **Total while disarmed: ~74 B/s**
+
+**Blended Capacity Examples**:
+1. **Continuous armed flight**: 2 MB ÷ 610 B/s = **57 minutes** of pure flight data
+2. **Typical usage** (30 min armed + 90 min disarmed):
+   - Armed: 30 min × 610 B/s = 1,098 KB
+   - Disarmed: 90 min × 74 B/s = 400 KB
+   - Total: 1,498 KB → **Leaves 500 KB for additional flights**
+   - **Can store 2+ hours of mixed usage** (multiple flights + ground time)
+3. **Multiple short flights**: 5× 20-minute flights + ground time between = **2+ hours total**
+
+This state-based approach provides excellent coverage for typical paramotor operations while maintaining full resolution where it matters most—during actual flight.
 
 ## Integration Steps
 1) **Partition setup**:
@@ -98,7 +136,9 @@ With optimization: **~63 minutes** rolling window (excellent for typical 20-45 m
 3) **Runtime logging**:
    - Add `wattHoursUsed` integration in `bmsTask` (power × time accumulation)
    - Create `blackboxQueue` (256 frames, droppable) and writer task
-   - Decimate `throttleTask` to 20 Hz logging (counter: log every 3rd call)
+   - Implement **state-based decimation** in `throttleTask`:
+     - 20 Hz (every 3rd sample) when ARMED/CRUISING
+     - 1 Hz (every 50th sample) when DISARMED
    - Sample `bmsTask` at 1 Hz for slow frames
    - Add cell voltage differential monitor for snapshots
    - Register `BlackBoxLogger` sink into `multiLogger` for automatic event capture
