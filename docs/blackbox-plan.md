@@ -5,7 +5,7 @@
 
 ## Signals and Rates (state-based logging)
 - **Fast path** (50 Hz actual in `throttleTask`):
-  - **ARMED/CRUISING**: Decimate to **20 Hz** for high-resolution flight data
+  - **ARMED/CRUISING**: Decimate to **10 Hz** for flight data (100ms resolution)
   - **DISARMED**: Decimate to **1 Hz** for diagnostics/boot monitoring
   - Fields: timestamp64, device state, performance_mode, throttle PWM (final), ESC volts/amps/eRPM, wattHoursUsed, altitude + vertical speed (if baro valid).
 - **Slow path** (10 Hz in `bmsTask`, **sample at 1 Hz** for logging): pack V/I/P, SOC, highest/lowest cell V, delta V, max temps (MOS/MCU/CAP/Motor + BMS MOS/balance/T1–T4), charge/discharge MOS flags, battery cycle, ESC/BMS connection state.
@@ -13,41 +13,198 @@
 - **Events** (edge-triggered via MultiLogger sink): state transitions (DISARMED/ARMED/CRUISING), ESC/BMS connect/disconnect, running_error/selfcheck_error changes, MOS open/close, altitude zero reset on arm, cruise activation/deactivation with PWM value, performance mode changes, button sequences.
 
 ## Record Types (fixed, quantized)
-- **Fast frame** ~28 B: {ts64 (µs), state8, mode8, throttle16, v_pack16 (0.01 V), i_pack16 (0.1 A), rpm16, wh16 (0.01 Wh), alt16 (0.1 m), vsi16 (0.01 m/s), esc_temp_max8, flags8}.
-- **Slow frame** ~36–44 B: {ts64 (µs), v_pack16, i_pack16, p_pack16 (0.1 W), soc8 (0.5%), v_hi16, v_lo16, dv16, mos_temp8, mcu_temp8, cap_temp8, motor_temp8, bms_mos8, balance8, t1..t4 temps8, charge_mos1, discharge_mos1, bmsState2, escState2}.
-- **Cell snapshot** ~64 B: {ts64 (µs), v_min16 + idx8, v_max16 + idx8, 24x uint16 mV}.
-- **Event frame** 12–16 B: {ts64 (µs), event_id8, payload (bitfield or small ints)}.
 
-_Note: Using 64-bit microsecond timestamps via `esp_timer_get_time()` to avoid 49.7-day rollover issues with 32-bit `millis()`._
+**All frames start with type byte for unambiguous parsing:**
 
-## Flash Layout (ESP32-S3FN8: 8 MB total)
+- **Fast frame** (type=0x01) **28 B**:
+  ```cpp
+  struct BlackboxFastFrame {
+    uint8_t type;               // 1 B - 0x01
+    uint8_t state_mode;         // 1 B - state (3 bits) | mode (1 bit) | flags (4 bits)
+    int64_t timestamp_us;       // 8 B - esp_timer_get_time()
+    uint16_t throttle_pwm;      // 2 B - ESC PWM microseconds
+    uint16_t v_pack_centivolts; // 2 B - voltage * 100
+    int16_t i_pack_deciamps;    // 2 B - current * 10 (signed for regen)
+    uint16_t erpm_hundreds;     // 2 B - eRPM / 100
+    uint16_t wh_centiwatthours; // 2 B - wattHoursUsed * 100
+    int16_t alt_decimeters;     // 2 B - relative altitude * 10
+    int16_t vsi_cm_per_sec;     // 2 B - vertical speed * 100
+    uint8_t esc_temp_max;       // 1 B - max of MOS/MCU/CAP/Motor temps
+    uint8_t bms_temp_max;       // 1 B - max BMS temp
+    uint8_t padding;            // 1 B - align to 28 B
+  };
+  ```
 
-**Partition Table** (`partitions.csv`):
+- **Slow frame** (type=0x02) **36 B**:
+  ```cpp
+  struct BlackboxSlowFrame {
+    uint8_t type;               // 1 B - 0x02
+    uint8_t flags;              // 1 B - charge_mos, discharge_mos, bms_conn, esc_conn
+    int64_t timestamp_us;       // 8 B
+    uint16_t v_cell_hi_mv;      // 2 B - highest cell mV
+    uint16_t v_cell_lo_mv;      // 2 B - lowest cell mV
+    uint16_t v_cell_diff_mv;    // 2 B - differential mV
+    uint8_t soc_half_percent;   // 1 B - SOC * 2 (0-200 = 0-100%)
+    uint8_t esc_mos_temp;       // 1 B - ESC MOS temp
+    uint8_t esc_mcu_temp;       // 1 B - ESC MCU temp
+    uint8_t esc_cap_temp;       // 1 B - ESC CAP temp
+    uint8_t motor_temp;         // 1 B - Motor temp
+    uint8_t bms_mos_temp;       // 1 B - BMS MOS temp
+    uint8_t bms_balance_temp;   // 1 B - BMS balance temp
+    uint8_t bms_t1_temp;        // 1 B - BMS T1 temp
+    uint8_t bms_t2_temp;        // 1 B - BMS T2 temp
+    uint8_t bms_t3_temp;        // 1 B - BMS T3 temp
+    uint8_t bms_t4_temp;        // 1 B - BMS T4 temp
+    uint32_t battery_cycle;     // 4 B - cycle count
+    uint16_t running_error;     // 2 B - ESC running error bitmask
+    uint16_t selfcheck_error;   // 2 B - ESC selfcheck error bitmask
+  };
+  ```
+
+- **Cell snapshot** (type=0x03) **60 B**:
+  ```cpp
+  struct BlackboxCellFrame {
+    uint8_t type;               // 1 B - 0x03
+    uint8_t cell_count;         // 1 B - number of valid cells (usually 24)
+    int64_t timestamp_us;       // 8 B
+    uint16_t cells_mv[24];      // 48 B - cell voltages in mV
+    uint8_t min_idx;            // 1 B - index of lowest cell
+    uint8_t max_idx;            // 1 B - index of highest cell
+  };
+  ```
+
+- **Event frame** (type=0x04) **16 B**:
+  ```cpp
+  struct BlackboxEventFrame {
+    uint8_t type;               // 1 B - 0x04
+    uint8_t event_id;           // 1 B - SensorID or special event code
+    int64_t timestamp_us;       // 8 B
+    uint8_t alert_level;        // 1 B - AlertLevel enum
+    uint8_t reserved;           // 1 B - padding
+    int32_t payload;            // 4 B - value (float*10 or int or bitfield)
+  };
+  ```
+
+**Special Event IDs** (0xE0-0xFF range, above SensorID enum):
+- `0xE0`: Flight start (ARM transition) - payload = flight_session_id
+- `0xE1`: Flight end (DISARM transition) - payload = duration_sec
+- `0xE2`: Cruise start - payload = cruise_pwm
+- `0xE3`: Cruise end - payload = 0
+- `0xE4`: Performance mode change - payload = new_mode
+- `0xE5`: Altitude zeroed - payload = 0
+- `0xE6`: User bookmark - payload = bookmark_id
+
+_Note: Using `esp_timer_get_time()` (int64_t µs) for timestamps. Provides ~292,000 years before overflow._
+
+## Flash Layout (using existing SPIFFS partition - NO custom partitions.csv)
+
+**Using Default 8 MB Partition** (from `default_8MB.csv`):
 ```csv
-# Name,     Type, SubType,  Offset,   Size,     Flags
-nvs,        data, nvs,      0x9000,   0x5000,
-otadata,    data, ota,      0xe000,   0x2000,
-app0,       app,  ota_0,    0x10000,  0x2A0000,
-app1,       app,  ota_1,    0x2B0000, 0x2A0000,
-spiffs,     data, spiffs,   0x550000, 0xA0000,
-blackbox,   data, 0x40,     0x5F0000, 0x200000,
+# Name,   Type, SubType, Offset,  Size, Flags
+nvs,      data, nvs,     0x9000,  0x5000,
+otadata,  data, ota,     0xe000,  0x2000,
+app0,     app,  ota_0,   0x10000, 0x330000,
+app1,     app,  ota_1,   0x340000,0x330000,
+spiffs,   data, spiffs,  0x670000,0x180000,
+coredump, data, coredump,0x7F0000,0x10000,
 ```
 
-**Breakdown**:
-- `nvs`: 20 KB (unchanged location for safe OTA upgrades, preserves Preferences)
-- `otadata`: 8 KB (OTA control)
-- `app0/app1`: 2.7 MB each (current build: 1.4 MB, 93% headroom for growth)
-- `spiffs`: 640 KB (assets/fonts)
-- `blackbox`: **2 MB** (custom data, subtype 0x40)
-- Total: ~7.7 MB of 8 MB
+**Strategy**: Write blackbox data as raw binary files in **existing SPIFFS partition** (1.5 MB).
 
-**Block Structure**:
+**Advantages**:
+- ✅ **No partition table changes** - existing users can OTA update safely
+- ✅ **No settings reset** - NVS untouched
+- ✅ **Simpler deployment** - works with current flash layout
+- ✅ **Debuggable** - can mount SPIFFS and inspect files
+
+**SPIFFS Layout**:
+```
+/spiffs/
+├── blackbox/
+│   ├── super.bin      (4 KB - superblock with ring state)
+│   ├── block_000.bin  (4 KB - data block)
+│   ├── block_001.bin  (4 KB - data block)
+│   └── ...            (up to ~370 blocks)
+└── (other assets if any)
+```
+
+**Capacity**: 1.5 MB SPIFFS - ~10% filesystem overhead = **~1.35 MB usable**
+- At 610 B/s armed = ~37 minutes continuous flight
+- With state-based logging (20 Hz armed / 1 Hz disarmed) = **45+ minutes flight + hours of ground time**
+
+**Access API**:
+```cpp
+#include <SPIFFS.h>
+
+bool initBlackBox() {
+  if (!SPIFFS.begin(true)) {  // true = format if mount fails
+    return false;
+  }
+  SPIFFS.mkdir("/blackbox");
+  return true;
+}
+```
+
+**Block Structure** (same format, stored as files):
 - 4 KB erase blocks (ESP32-S3 flash sector size)
-- Block header (per 4 KB): magic (4B), block_seq (4B), flight_session_id (2B), start_ts (8B), record_count (2B), CRC32 (4B), state (1B: empty|writing|closed), reserved (7B pad to align).
-- Two superblocks (block 0 and 1) store head/tail block indices and flight counter; update only on block close (alternate copies for power-loss safety).
-- True ring: when head catches tail, erase tail and advance.
+- Block header (32 B, at start of each block):
+  ```cpp
+  struct BlackboxBlockHeader {
+    uint32_t magic;             // 4 B - 0xBB0X0001 ("BlackBox v1")
+    uint32_t block_seq;         // 4 B - monotonic sequence number
+    uint16_t flight_session_id; // 2 B - increments on each ARM
+    uint8_t state;              // 1 B - 0=empty, 1=writing, 2=closed
+    uint8_t record_count;       // 1 B - number of frames in block (max ~140)
+    int64_t first_timestamp;    // 8 B - timestamp of first frame
+    int64_t last_timestamp;     // 8 B - timestamp of last frame
+    uint32_t crc32;             // 4 B - CRC of header + all frames
+  };
+  ```
+- **Usable space per block**: 4096 - 32 = 4064 bytes for frames
+- **Block filling**: Frames written sequentially. When next frame won't fit, pad remainder with 0xFF, compute CRC, mark block closed, advance to next block.
 
-**Access API**: `esp_partition_find_first(ESP_PARTITION_TYPE_DATA, 0x40, "blackbox")`
+**Superblock Structure** (blocks 0 and 1, alternating writes):
+```cpp
+struct BlackboxSuperblock {
+  uint32_t magic;             // 4 B - 0xBB0XFFFE
+  uint32_t version;           // 4 B - format version
+  uint32_t write_count;       // 4 B - increments each superblock write (for freshness)
+  uint32_t head_block;        // 4 B - next block to write
+  uint32_t tail_block;        // 4 B - oldest valid block
+  uint16_t current_flight_id; // 2 B - current/last flight session
+  uint16_t total_flights;     // 2 B - total flights recorded
+  uint32_t total_erases;      // 4 B - cumulative erase count (wear tracking)
+  uint32_t crc32;             // 4 B - CRC of superblock
+  uint8_t reserved[4064];     // Pad to 4KB
+};
+```
+- On boot: Read both superblocks, use one with higher `write_count` and valid CRC
+- On block close: Write to alternate superblock (0→1→0→1...)
+- Ring wrap: When head catches tail, erase tail block, increment tail, then write head
+
+**File Operations** (instead of raw partition access):
+```cpp
+// Write a block
+File f = SPIFFS.open("/blackbox/block_042.bin", "w");
+f.write(stagingBuffer, 4096);
+f.close();
+
+// Read a block
+File f = SPIFFS.open("/blackbox/block_042.bin", "r");
+f.read(buffer, 4096);
+f.close();
+
+// Delete oldest block (ring wrap)
+SPIFFS.remove("/blackbox/block_000.bin");
+```
+
+**Trade-offs vs Raw Partition**:
+- ❌ Slightly slower writes (filesystem overhead)
+- ❌ ~10% space overhead for filesystem metadata
+- ❌ Less predictable timing (wear leveling)
+- ✅ Much simpler deployment
+- ✅ Can inspect files for debugging
+- ✅ SPIFFS handles wear leveling automatically
 
 ## Code Architecture (async, flight-safe)
 
@@ -86,7 +243,58 @@ Priority 1 (Background): BLE, monitoring, audio, webSerial, blackboxWriter [Core
 1. `setup()`: Call `initBlackBox()` after monitoring system
 2. `setupTasks()`: Create `blackboxWriterTask()` with priority 1, core 1
 3. `throttleTask()`: Add decimation counter + `pushBlackboxFastFrame()`
-4. `bmsTask()`: Add 1Hz sampling + `pushBlackboxSlowFrame()`
+4. `bmsTask()`: Add 1Hz sampling + `pushBlackboxSlowFrame()` + cell snapshot trigger
+5. `changeDeviceState()`: Emit flight start/end events on ARM/DISARM
+
+**Code Changes Required** (issues found in codebase review):
+
+1. **Track final throttle PWM** - Currently `finalPwm` is local to `handleThrottle()`. Add:
+   ```cpp
+   // In globals.h
+   extern volatile uint16_t lastThrottlePwm;
+
+   // In sp140.ino handleThrottle(), after setESCThrottle(finalPwm):
+   lastThrottlePwm = finalPwm;
+   ```
+
+2. **Implement wattHoursUsed calculation** - Currently declared but never updated:
+   ```cpp
+   // In bmsTask(), add after battery data update:
+   static uint32_t lastWattHourUpdate = 0;
+   uint32_t now = millis();
+   if (lastWattHourUpdate > 0 && unifiedBatteryData.power > 0) {
+     float hours = (now - lastWattHourUpdate) / 3600000.0f;
+     wattHoursUsed += unifiedBatteryData.power * 1000.0f * hours;  // kW to W
+   }
+   lastWattHourUpdate = now;
+   ```
+
+3. **Cell snapshot trigger** - Add to `bmsTask()`:
+   ```cpp
+   static float lastLoggedDelta = 0;
+   if (abs(bmsTelemetryData.voltage_differential - lastLoggedDelta) > 0.010f) {
+     pushBlackboxCellFrame(bmsTelemetryData);
+     lastLoggedDelta = bmsTelemetryData.voltage_differential;
+   }
+   ```
+
+4. **Flight boundary events** - Add to `changeDeviceState()`:
+   ```cpp
+   if (newState == ARMED && oldState == DISARMED) {
+     emitBlackboxEvent(0xE0, currentFlightId);  // Flight start
+   } else if (newState == DISARMED && oldState != DISARMED) {
+     uint32_t duration = (millis() - armedAtMillis) / 1000;
+     emitBlackboxEvent(0xE1, duration);  // Flight end
+   }
+   ```
+
+**RAM Usage Estimate**:
+- Fast queue: 256 × 28 B = 7,168 B
+- Slow queue: 16 × 36 B = 576 B
+- Event queue: 32 × 16 B = 512 B
+- Staging buffer: 4,096 B
+- BlackBox state: ~100 B
+- **Total: ~12.5 KB** (of ~320 KB available heap - OK ✅)
 
 ## Runtime Pipeline
 - **Producers**: State-based decimation in flight-critical tasks; async queue push with backpressure protection
@@ -100,16 +308,16 @@ Priority 1 (Background): BLE, monitoring, audio, webSerial, blackboxWriter [Core
       pushBlackboxFastFrame();
     }
   } else {  // ARMED or ARMED_CRUISING
-    // Log at 20 Hz during flight (every 3rd sample)
-    if (++blackboxCounter >= 3) {
+    // Log at 10 Hz during flight (every 5th sample @ 50 Hz)
+    if (++blackboxCounter >= 5) {
       blackboxCounter = 0;
       pushBlackboxFastFrame();
     }
   }
   ```
 - **Slow frame builder**: Runs in `bmsTask` at 10 Hz; **samples at 1 Hz** for logging; pushes non-droppable slow frame.
-- **Cell snapshot builder**: Triggered when `abs(voltage_differential - lastLoggedDelta) > 0.010f` (10 mV change in max-min cell spread).
-- **wattHoursUsed integration**: Calculate in `bmsTask` using `wattHoursUsed += unifiedBatteryData.power * 1000.0f * (dt_hours)` for fast frame logging.
+- **Cell snapshot builder**: Triggered in `bmsTask` when `abs(voltage_differential - lastLoggedDelta) > 0.010f` (10 mV change in max-min cell spread). Uses existing `bmsTelemetryData.cell_voltages[]` array.
+- **wattHoursUsed integration**: Calculate in `bmsTask` using time-delta accumulation. Reset to 0 on DISARM.
 - **Event hook**: Register `BlackBoxLogger : ILogger` sink into existing `multiLogger` to capture all 70+ sensor events automatically on alert edges.
 - **Writer task** (low prio, core 1): Drains queues into 4 KB staging buffer in **SRAM** (no PSRAM on FN8 variant). Pre-erases next block asynchronously; writes current block, then marks header closed with CRC32.
 - **Backpressure**: If queue near full (>90%), drop only fast frames; never drop slow, cell, or event frames.
@@ -269,46 +477,85 @@ python blackbox_plot.py flights.csv --output flight_analysis.html
 - ✅ **Flexible**: Can pull entire ring or specific flights
 
 ## Recovery and Wear
-- On boot: scan from superblock head forward until first empty/invalid; rebuild head/tail; latest valid superblock wins.
-- Power loss: at most lose current writing block; closed blocks are CRC-checked.
-- Wear leveling: rotate blocks evenly; count erases in RAM per flight, persist occasionally.
 
-## Capacity Check (2 MB partition, 2+ hour flight window)
+**Boot Recovery**:
+1. Read superblock 0 and 1, verify CRC on each
+2. Use superblock with higher `write_count` and valid CRC
+3. If both invalid, scan all blocks for valid headers, rebuild ring state
+4. Start writing from `head_block` position
+
+**Power Loss Handling**:
+- Closed blocks: CRC-verified, always recoverable
+- Writing block: May be partially written, detected by:
+  - `state == 1` (writing) in header
+  - CRC mismatch
+  - Frame with invalid type byte (0xFF from unprogrammed flash)
+- Recovery: Discard writing block, rewind to last closed block
+
+**Wear Leveling**:
+- SPIFFS handles wear leveling automatically (built-in)
+- Track `total_writes` in superblock for monitoring
+- Expected life: SPIFFS distributes writes across partition
+- No manual wear management needed
+
+**CRC Implementation**: Use ESP32 ROM CRC32 for speed:
+```cpp
+#include "esp_rom_crc.h"
+uint32_t crc = esp_rom_crc32_le(0, data, length);
+```
+
+**SPIFFS Considerations**:
+- Mount with `SPIFFS.begin(true)` to auto-format if corrupted
+- Check `SPIFFS.totalBytes()` and `SPIFFS.usedBytes()` for capacity monitoring
+- Use `SPIFFS.gc()` periodically to reclaim space from deleted files
+
+## Capacity Check (1.35 MB in SPIFFS, 69+ min flight window)
 
 **Data rates (state-based)**:
 
-**When ARMED** (full resolution):
-- Fast frames: 28 B × 20 Hz = 560 B/s
-- Slow frames: 40 B × 1 Hz = 40 B/s
-- Cell snapshots: ~64 B every 20s = 3.2 B/s
+**When ARMED** (10 Hz resolution):
+- Fast frames: 28 B × 10 Hz = 280 B/s
+- Slow frames: 36 B × 1 Hz = 36 B/s
+- Cell snapshots: ~60 B every 20s = 3 B/s
 - Events: ~16 B × 0.1 Hz avg = 1.6 B/s
-- Block overhead: ~5.5 B/s
-- **Total while armed: ~610 B/s**
+- Block overhead: ~5 B/s
+- **Total while armed: ~326 B/s**
 
 **When DISARMED** (minimal logging):
 - Fast frames: 28 B × 1 Hz = 28 B/s
-- Slow frames: 40 B × 1 Hz = 40 B/s
-- Cell snapshots: ~3.2 B/s
+- Slow frames: 36 B × 1 Hz = 36 B/s
+- Cell snapshots: ~3 B/s
 - Events: ~1.6 B/s (rare when disarmed)
 - Block overhead: ~1 B/s
-- **Total while disarmed: ~74 B/s**
+- **Total while disarmed: ~70 B/s**
 
-**Blended Capacity Examples**:
-1. **Continuous armed flight**: 2 MB ÷ 610 B/s = **57 minutes** of pure flight data
-2. **Typical usage** (30 min armed + 90 min disarmed):
-   - Armed: 30 min × 610 B/s = 1,098 KB
-   - Disarmed: 90 min × 74 B/s = 400 KB
-   - Total: 1,498 KB → **Leaves 500 KB for additional flights**
-   - **Can store 2+ hours of mixed usage** (multiple flights + ground time)
-3. **Multiple short flights**: 5× 20-minute flights + ground time between = **2+ hours total**
+**Capacity with 1.35 MB SPIFFS**:
+1. **Continuous armed flight**: 1.35 MB ÷ 326 B/s = **69 minutes** of pure flight data
+2. **Typical single flight** (45 min armed + 30 min ground):
+   - Armed: 45 min × 326 B/s = 880 KB
+   - Disarmed: 30 min × 70 B/s = 126 KB
+   - Total: 1,006 KB → **Fits with 350 KB margin**
+3. **Multiple flights** (with rolling overwrite):
+   - 2× 30-minute flights + ground time = **60+ minutes total flight data**
+   - Oldest data rolls off as new data comes in
+4. **Long endurance flight**: 60+ minutes continuous → fully captured ✅
 
-This state-based approach provides excellent coverage for typical paramotor operations while maintaining full resolution where it matters most—during actual flight.
+**This is sufficient for**:
+- ✅ Long paramotor flights (up to 69 min continuous)
+- ✅ Full crash analysis at 100ms resolution (excellent for flight dynamics)
+- ✅ Multiple flight sessions in a day (rolling buffer)
+- ✅ Typical use case: entire flying session captured
+
+**10 Hz Resolution Context**:
+- Aviation flight data recorders typically use 1-4 Hz
+- 100ms captures all meaningful flight dynamics
+- Sufficient to analyze: throttle response, altitude changes, temperature trends, crash sequences
 
 ## Integration Steps
-1) **Partition setup**:
-   - Create `partitions.csv` in project root (see Flash Layout section)
-   - Add `board_build.partitions = partitions.csv` to `platformio.ini`
-   - Document OTA-safe upgrade path (NVS location unchanged)
+1) **SPIFFS setup** (no partition changes needed!):
+   - Add `SPIFFS` to lib_deps if not present (usually built-in)
+   - Call `SPIFFS.begin(true)` in `setup()` before `initBlackBox()`
+   - Create `/blackbox/` directory on first run
 
 2) **Data structures**:
    - Define packed structs for fast/slow/cell/event frames with `#pragma pack(push,1)`
@@ -319,19 +566,20 @@ This state-based approach provides excellent coverage for typical paramotor oper
    - Add `wattHoursUsed` integration in `bmsTask` (power × time accumulation)
    - Create `blackboxQueue` (256 frames, droppable) and writer task
    - Implement **state-based decimation** in `throttleTask`:
-     - 20 Hz (every 3rd sample) when ARMED/CRUISING
-     - 1 Hz (every 50th sample) when DISARMED
+     - **10 Hz** (every 5th sample @ 50 Hz) when ARMED/CRUISING
+     - **1 Hz** (every 50th sample) when DISARMED
    - Sample `bmsTask` at 1 Hz for slow frames
    - Add cell voltage differential monitor for snapshots
    - Register `BlackBoxLogger` sink into `multiLogger` for automatic event capture
 
 4) **Storage manager** (internal to `blackbox.cpp`):
-   - Locate partition: `esp_partition_find_first(ESP_PARTITION_TYPE_DATA, 0x40, "blackbox")`
-   - Maintain ring state: head/tail block indices, current write offset
-   - Superblock management: Dual copies (blocks 0 & 1) with alternating updates
-   - Pre-erase next block asynchronously to avoid blocking writer task
-   - Block operations: `readBlock()`, `writeBlock()`, `eraseBlock()`
+   - Initialize SPIFFS: `SPIFFS.begin(true)` with auto-format
+   - Create `/blackbox/` directory if not exists
+   - Maintain ring state in `/blackbox/super.bin`
+   - Block files: `/blackbox/block_NNN.bin` (NNN = 000-369)
+   - Ring management: Track head/tail indices, delete oldest when full
    - Flight detection: Insert boundary markers on ARM/DISARM transitions
+   - **No pre-erase needed** - SPIFFS handles this internally
 
 5) **Serial offload** (extend `parse_serial_commands()`):
    - Add `handleBlackboxCommand(doc)` for `{"bb": ...}` commands
@@ -356,10 +604,13 @@ This state-based approach provides excellent coverage for typical paramotor oper
    - All tools support resume on disconnect, progress bars, error recovery
 
 ## Migration Notes (for existing users)
-- **OTA updates**: Settings preserved automatically (NVS location unchanged) ✅
-- **USB flash updates**: Settings will reset unless backed up first
-- **Recommended flow**:
-  1. Add `{"command":"backup_settings"}` to return current config JSON
-  2. User saves JSON before flashing
-  3. Add `{"command":"restore_settings", "settings":{...}}` to restore post-flash
-  4. Document process in release notes
+- **OTA updates**: Settings preserved automatically ✅
+- **USB flash updates**: Settings preserved (same partition layout) ✅
+- **SPIFFS data**: May be cleared on first boot if format needed, but this only affects blackbox data (not settings)
+- **No backup/restore needed** - using existing partition table means seamless upgrades!
+
+## Future Expansion
+If more capacity is needed later, can migrate to custom partition:
+- Create `partitions.csv` with dedicated 2-3 MB blackbox partition
+- Announce as major version update with migration instructions
+- Keep SPIFFS approach as fallback/compatibility mode
