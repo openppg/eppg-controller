@@ -466,6 +466,67 @@ python blackbox_plot.py flights.csv --output flight_analysis.html
 - ✅ **Debuggable**: JSON responses easy to inspect with serial monitor
 - ✅ **Flexible**: Can pull entire ring or specific flights
 
+## BLE Offload (to be finalized)
+- **Use GATT, binary ** with three characteristics:
+  - `bb_control` (Write/Notify): commands, acks, errors, progress
+  - `bb_data` (Notify/Indicate): bulk data chunks
+  - `bb_status` (Notify): async status (gates, queue pressure, last error)
+
+- **Control frame format** (little-endian):
+  ```
+  uint8  cmd_id
+  uint8  reserved
+  uint16 payload_len
+  uint8[payload_len] payload
+  ```
+
+- **Commands (cmd_id)**:
+  - `0x01 MANIFEST_REQ`      (no payload)
+  - `0x02 READ_RANGE_REQ`    {uint32 start_block, uint32 end_block}
+  - `0x03 RESUME_REQ`        {uint32 block, uint16 chunk}
+  - `0x04 PAUSE_REQ`         (no payload)
+  - `0x05 RESUME_STREAM_REQ` (no payload)
+  - `0x06 ERASE_REQ`         {uint32 token} (host-generated)
+  - `0x07 ERASE_CONFIRM`     {uint32 token}
+  - `0x10 STATS_REQ`         (no payload)
+
+- **Responses / events on `bb_control`**:
+  - `0x81 MANIFEST_RSP`  {uint32 total_blocks, uint32 used_blocks, uint32 head, uint32 tail, uint16 flight_count, ...compact flight summaries...}
+  - `0x82 READ_RANGE_ACK` {uint32 start_block, uint32 end_block}
+  - `0x83 RESUME_ACK`     {uint32 block, uint16 chunk}
+  - `0x84 PAUSE_ACK`
+  - `0x85 RESUME_STREAM_ACK`
+  - `0x86 ERASE_CHALLENGE` {uint32 token}
+  - `0x87 ERASE_DONE`      {uint32 blocks_erased}
+  - `0x90 STATS_RSP`       {queue depths, drops, bytes sent, last_error}
+  - `0xE0 ERROR`           {uint8 error_code, uint8 detail}
+  - `0xE1 GATE`            {uint8 reason_bitmask} // e.g., 0x01=ARMED, 0x02=low_batt
+
+- **Data chunks on `bb_data`** (per notification):
+  ```
+  uint32 block_id
+  uint16 chunk_idx      // 0..15 for 4KB block with 256B chunks
+  uint16 chunk_len      // <= MTU - header - CRC
+  uint32 crc32_le       // over payload only
+  uint8[chunk_len] payload  // raw block bytes
+  ```
+
+- **Flow**:
+  1) Host sends READ_RANGE_REQ.
+  2) Device streams chunks block-by-block on `bb_data`.
+  3) Host ACKs each block on `bb_control` (or RESUME_REQ after reconnect).
+
+- **Gates & Safety**:
+  - DISARM required; optional battery threshold
+  - Throttle send rate (e.g., 10–20 ms between notifies)
+  - Pause on queue pressure or state change; send GATE with reason
+  - CRC per chunk; host retries bad chunks
+
+- **Why binary**:
+  - MTU/throughput-friendly; no JSON parse overhead
+  - Reuses existing 4KB block format; no repack
+  - Resume-capable with minimal state
+
 ## Recovery and Wear
 
 **Boot Recovery**:
