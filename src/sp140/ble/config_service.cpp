@@ -256,7 +256,6 @@ void initConfigBleService(NimBLEServer* server, const std::string& uniqueId) {
       NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
   uint8_t initialState = DISARMED;
   pDeviceStateCharacteristic->setValue(&initialState, sizeof(initialState));
-  pDeviceStateCharacteristic->createDescriptor(NimBLEUUID((uint16_t)0x2902));
 
   NimBLECharacteristic* metricAlt = configService->createCharacteristic(
       NimBLEUUID(METRIC_ALT_UUID),
@@ -328,7 +327,6 @@ void initConfigBleService(NimBLEServer* server, const std::string& uniqueId) {
       NIMBLE_PROPERTY::INDICATE);
   static ThrottleValueCallbacks throttleValueCallbacks;
   pThrottleCharacteristic->setCallbacks(&throttleValueCallbacks);
-  pThrottleCharacteristic->createDescriptor(NimBLEUUID((uint16_t)0x2902));
 
   NimBLEService* deviceInfoService = server->createService(NimBLEUUID(DEVICE_INFO_SERVICE_UUID), 10);
   NimBLECharacteristic* manufacturer = deviceInfoService->createCharacteristic(

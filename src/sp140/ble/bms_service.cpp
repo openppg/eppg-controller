@@ -65,7 +65,6 @@ void initBmsBleService(NimBLEServer* server) {
 
   pBMSFailureLevel = pBmsService->createCharacteristic(
       NimBLEUUID(BMS_FAILURE_LEVEL_UUID), NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
-  pBMSFailureLevel->createDescriptor(NimBLEUUID((uint16_t)0x2902));
 
   pBMSVoltageDiff = pBmsService->createCharacteristic(
       NimBLEUUID(BMS_VOLTAGE_DIFF_UUID), NIMBLE_PROPERTY::READ);
@@ -75,11 +74,9 @@ void initBmsBleService(NimBLEServer* server) {
 
   pBMSChargeMos = pBmsService->createCharacteristic(
       NimBLEUUID(BMS_CHARGE_MOS_UUID), NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
-  pBMSChargeMos->createDescriptor(NimBLEUUID((uint16_t)0x2902));
 
   pBMSDischargeMos = pBmsService->createCharacteristic(
       NimBLEUUID(BMS_DISCHARGE_MOS_UUID), NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
-  pBMSDischargeMos->createDescriptor(NimBLEUUID((uint16_t)0x2902));
 
   pBMSTemperatures = pBmsService->createCharacteristic(
       NimBLEUUID(BMS_TEMPERATURES_UUID),
