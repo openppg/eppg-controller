@@ -3,9 +3,9 @@
 
 #include "sp140/structs.h"
 
-class BLEServer;
+class NimBLEServer;
 
-void initEscBleService(BLEServer* server);
+void initEscBleService(NimBLEServer* server);
 void updateESCTelemetryBLE(const STR_ESC_TELEMETRY_140& telemetry);
 
 #endif  // INC_SP140_BLE_ESC_SERVICE_H_

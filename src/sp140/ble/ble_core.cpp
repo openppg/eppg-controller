@@ -1,7 +1,6 @@
 #include "sp140/ble/ble_core.h"
 
 #include <Arduino.h>
-#include "esp_gatt_common_api.h"  // For esp_ble_gatt_set_local_mtu
 
 #include "sp140/ble.h"
 #include "sp140/ble/ble_ids.h"
@@ -11,16 +10,16 @@
 
 namespace {
 
-class BleServerConnectionCallbacks : public BLEServerCallbacks {
-  void onConnect(BLEServer* server) override {
+class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
+  void onConnect(NimBLEServer* server) override {
     deviceConnected = true;
     USBSerial.println("Device connected");
   }
 
-  void onDisconnect(BLEServer* server) override {
+  void onDisconnect(NimBLEServer* server) override {
     deviceConnected = false;
     USBSerial.println("Device disconnected");
-    BLEAdvertising* advertising = server->getAdvertising();
+    NimBLEAdvertising* advertising = server->getAdvertising();
     advertising->start();
     USBSerial.println("Started advertising");
   }
@@ -29,16 +28,17 @@ class BleServerConnectionCallbacks : public BLEServerCallbacks {
 }  // namespace
 
 void setupBLE() {
-  // Raise max MTU to a phone-friendly size (185 works on iOS; Android can go higher).
-  BLEDevice::setMTU(185);
-  BLEDevice::init("OpenPPG Controller");
-  // Bluedroid server accepts up to 517 by default; cap the local MTU explicitly.
-  esp_ble_gatt_set_local_mtu(185);
-  pServer = BLEDevice::createServer();
+  // Initialize NimBLE with device name
+  NimBLEDevice::init("OpenPPG Controller");
+  
+  // Set MTU to a phone-friendly size (185 works on iOS; Android can go higher)
+  NimBLEDevice::setMTU(185);
+  
+  pServer = NimBLEDevice::createServer();
   static BleServerConnectionCallbacks serverCallbacks;
   pServer->setCallbacks(&serverCallbacks);
 
-  BLEAddress bleAddress = BLEDevice::getAddress();
+  NimBLEAddress bleAddress = NimBLEDevice::getAddress();
   std::string uniqueId = bleAddress.toString();
   std::transform(uniqueId.begin(), uniqueId.end(), uniqueId.begin(),
                  [](unsigned char c) {
@@ -49,9 +49,9 @@ void setupBLE() {
   initBmsBleService(pServer);
   initEscBleService(pServer);
 
-  BLEAdvertising* advertising = pServer->getAdvertising();
-  advertising->addServiceUUID(BLEUUID(CONFIG_SERVICE_UUID));
-  advertising->addServiceUUID(BLEUUID(BMS_TELEMETRY_SERVICE_UUID));
+  NimBLEAdvertising* advertising = pServer->getAdvertising();
+  advertising->addServiceUUID(NimBLEUUID(CONFIG_SERVICE_UUID));
+  advertising->addServiceUUID(NimBLEUUID(BMS_TELEMETRY_SERVICE_UUID));
   advertising->setScanResponse(false);
   advertising->setMinPreferred(0x0);
   advertising->start();
@@ -65,6 +65,6 @@ void restartBLEAdvertising() {
     return;
   }
 
-  BLEAdvertising* advertising = pServer->getAdvertising();
+  NimBLEAdvertising* advertising = pServer->getAdvertising();
   advertising->start();
 }
