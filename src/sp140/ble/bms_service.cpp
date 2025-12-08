@@ -37,7 +37,7 @@ void initBmsBleService(NimBLEServer* server) {
     return;
   }
 
-  pBmsService = server->createService(NimBLEUUID(BMS_TELEMETRY_SERVICE_UUID), 30);
+  pBmsService = server->createService(NimBLEUUID(BMS_TELEMETRY_SERVICE_UUID));
 
   pBMSSOC = pBmsService->createCharacteristic(
       NimBLEUUID(BMS_SOC_UUID), NIMBLE_PROPERTY::READ);

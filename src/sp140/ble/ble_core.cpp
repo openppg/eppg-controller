@@ -11,12 +11,15 @@
 namespace {
 
 class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
-  void onConnect(NimBLEServer* server) override {
+  void onConnect(NimBLEServer* server, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     deviceConnected = true;
     USBSerial.println("Device connected");
   }
 
-  void onDisconnect(NimBLEServer* server) override {
+  void onDisconnect(NimBLEServer* server, NimBLEConnInfo& connInfo, int reason) override {
+    (void)connInfo;
+    (void)reason;
     deviceConnected = false;
     USBSerial.println("Device disconnected");
     NimBLEAdvertising* advertising = server->getAdvertising();
@@ -30,10 +33,10 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
 void setupBLE() {
   // Initialize NimBLE with device name
   NimBLEDevice::init("OpenPPG Controller");
-  
+
   // Set MTU to a phone-friendly size (185 works on iOS; Android can go higher)
   NimBLEDevice::setMTU(185);
-  
+
   pServer = NimBLEDevice::createServer();
   static BleServerConnectionCallbacks serverCallbacks;
   pServer->setCallbacks(&serverCallbacks);
@@ -52,8 +55,7 @@ void setupBLE() {
   NimBLEAdvertising* advertising = pServer->getAdvertising();
   advertising->addServiceUUID(NimBLEUUID(CONFIG_SERVICE_UUID));
   advertising->addServiceUUID(NimBLEUUID(BMS_TELEMETRY_SERVICE_UUID));
-  advertising->setScanResponse(false);
-  advertising->setMinPreferred(0x0);
+  advertising->enableScanResponse(false);
   advertising->start();
 
   USBSerial.println("BLE device ready");

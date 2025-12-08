@@ -27,7 +27,7 @@ void initEscBleService(NimBLEServer* server) {
     return;
   }
 
-  pEscService = server->createService(NimBLEUUID(ESC_TELEMETRY_SERVICE_UUID), 20);
+  pEscService = server->createService(NimBLEUUID(ESC_TELEMETRY_SERVICE_UUID));
 
   pESCVoltage = pEscService->createCharacteristic(
       NimBLEUUID(ESC_VOLTAGE_UUID), NIMBLE_PROPERTY::READ);

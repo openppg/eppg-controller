@@ -25,7 +25,8 @@ extern volatile DeviceState currentState;
 namespace {
 
 class MetricAltCallbacks : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic* characteristic) override {
+  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.length() != 1) {
       USBSerial.println("Invalid value length - expected 1 byte");
@@ -39,7 +40,8 @@ class MetricAltCallbacks : public NimBLECharacteristicCallbacks {
 };
 
 class PerformanceModeCallbacks : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic* characteristic) override {
+  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.length() != 1) {
       USBSerial.println("Invalid value length - expected 1 byte");
@@ -59,7 +61,8 @@ class PerformanceModeCallbacks : public NimBLECharacteristicCallbacks {
 };
 
 class ScreenRotationCallbacks : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic* characteristic) override {
+  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.length() != 1) {
       USBSerial.println("Invalid value length - expected 1 byte");
@@ -79,12 +82,14 @@ class ScreenRotationCallbacks : public NimBLECharacteristicCallbacks {
 };
 
 class ThrottleValueCallbacks : public NimBLECharacteristicCallbacks {
-  void onRead(NimBLECharacteristic* characteristic) override {
+  void onRead(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     uint16_t potVal = readThrottleRaw();
     characteristic->setValue(reinterpret_cast<uint8_t*>(&potVal), sizeof(potVal));
   }
 
-  void onWrite(NimBLECharacteristic* characteristic) override {
+  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     if (currentState != ARMED_CRUISING) {
       return;  // Only allow updates while in cruise mode
     }
@@ -106,7 +111,8 @@ class ThrottleValueCallbacks : public NimBLECharacteristicCallbacks {
 };
 
 class TimeCallbacks : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic* characteristic) override {
+  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.length() != sizeof(time_t)) {
       USBSerial.println("Invalid timestamp length");
@@ -128,7 +134,8 @@ class TimeCallbacks : public NimBLECharacteristicCallbacks {
     }
   }
 
-  void onRead(NimBLECharacteristic* characteristic) override {
+  void onRead(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     time_t now;
     time(&now);
     now -= deviceData.timezone_offset;
@@ -137,7 +144,8 @@ class TimeCallbacks : public NimBLECharacteristicCallbacks {
 };
 
 class TimezoneCallbacks : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic* characteristic) override {
+  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.length() != sizeof(int32_t)) {
       USBSerial.println("Invalid timezone offset length");
@@ -152,7 +160,8 @@ class TimezoneCallbacks : public NimBLECharacteristicCallbacks {
     USBSerial.println(offset);
   }
 
-  void onRead(NimBLECharacteristic* characteristic) override {
+  void onRead(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     characteristic->setValue(
         reinterpret_cast<uint8_t*>(&deviceData.timezone_offset),
         sizeof(deviceData.timezone_offset));
@@ -160,7 +169,8 @@ class TimezoneCallbacks : public NimBLECharacteristicCallbacks {
 };
 
 class ThemeCallbacks : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic* characteristic) override {
+  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.length() != 1) {
       USBSerial.println("Invalid value length - expected 1 byte");
@@ -178,13 +188,15 @@ class ThemeCallbacks : public NimBLECharacteristicCallbacks {
     USBSerial.println("Theme setting saved to Preferences");
   }
 
-  void onRead(NimBLECharacteristic* characteristic) override {
+  void onRead(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     characteristic->setValue(&deviceData.theme, sizeof(deviceData.theme));
   }
 };
 
 class SeaPressureCallbacks : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic* characteristic) override {
+  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.length() != sizeof(float)) {
       USBSerial.println("Invalid sea pressure length");
@@ -206,7 +218,8 @@ class SeaPressureCallbacks : public NimBLECharacteristicCallbacks {
     USBSerial.println(pressure);
   }
 
-  void onRead(NimBLECharacteristic* characteristic) override {
+  void onRead(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     characteristic->setValue(
         reinterpret_cast<uint8_t*>(&deviceData.sea_pressure),
         sizeof(deviceData.sea_pressure));
@@ -214,7 +227,8 @@ class SeaPressureCallbacks : public NimBLECharacteristicCallbacks {
 };
 
 class MetricTempCallbacks : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic* characteristic) override {
+  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.length() != 1) {
       USBSerial.println("Invalid value length - expected 1 byte");
@@ -226,7 +240,8 @@ class MetricTempCallbacks : public NimBLECharacteristicCallbacks {
     USBSerial.println("Metric temp setting saved to Preferences");
   }
 
-  void onRead(NimBLECharacteristic* characteristic) override {
+  void onRead(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     uint8_t metricTempValue = deviceData.metric_temp ? 1 : 0;
     characteristic->setValue(&metricTempValue, sizeof(metricTempValue));
   }
@@ -235,7 +250,7 @@ class MetricTempCallbacks : public NimBLECharacteristicCallbacks {
 }  // namespace
 
 void initConfigBleService(NimBLEServer* server, const std::string& uniqueId) {
-  NimBLEService* configService = server->createService(NimBLEUUID(CONFIG_SERVICE_UUID), 30);
+  NimBLEService* configService = server->createService(NimBLEUUID(CONFIG_SERVICE_UUID));
 
   NimBLECharacteristic* unixTime = configService->createCharacteristic(
       NimBLEUUID(UNIX_TIME_UUID),
@@ -328,7 +343,7 @@ void initConfigBleService(NimBLEServer* server, const std::string& uniqueId) {
   static ThrottleValueCallbacks throttleValueCallbacks;
   pThrottleCharacteristic->setCallbacks(&throttleValueCallbacks);
 
-  NimBLEService* deviceInfoService = server->createService(NimBLEUUID(DEVICE_INFO_SERVICE_UUID), 10);
+  NimBLEService* deviceInfoService = server->createService(NimBLEUUID(DEVICE_INFO_SERVICE_UUID));
   NimBLECharacteristic* manufacturer = deviceInfoService->createCharacteristic(
       NimBLEUUID(MANUFACTURER_NAME_UUID), NIMBLE_PROPERTY::READ);
   manufacturer->setValue("OpenPPG");

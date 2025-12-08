@@ -4,7 +4,6 @@
 #include <NimBLEDevice.h>
 #include <NimBLEUtils.h>
 #include <NimBLEServer.h>
-#include <NimBLE2902.h>
 
 // BLE globals
 extern NimBLECharacteristic* pThrottleCharacteristic;
