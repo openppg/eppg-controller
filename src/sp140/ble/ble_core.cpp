@@ -53,9 +53,12 @@ void setupBLE() {
   initEscBleService(pServer);
 
   NimBLEAdvertising* advertising = pServer->getAdvertising();
+  advertising->setName("OpenPPG Controller");
+  advertising->setDiscoverableMode(BLE_GAP_DISC_MODE_GEN);
+  advertising->setConnectableMode(BLE_GAP_CONN_MODE_UND);
   advertising->addServiceUUID(NimBLEUUID(CONFIG_SERVICE_UUID));
   advertising->addServiceUUID(NimBLEUUID(BMS_TELEMETRY_SERVICE_UUID));
-  advertising->enableScanResponse(false);
+  advertising->enableScanResponse(true);
   advertising->start();
 
   USBSerial.println("BLE device ready");
