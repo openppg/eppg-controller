@@ -3,13 +3,16 @@
 **Hardware**: M5Stack Stamp-S3A (ESP32-S3FN8: 8 MB Flash, NO PSRAM, 512 KB SRAM)
 **Goal**: Capture 60+ minute flights with rolling storage, survive power loss, and offload over USB serial without affecting real-time control.
 
-- **Fast path** (50 Hz actual in `throttleTask`):
-  - **ARMED/CRUISING**: Decimate to **1 Hz** for flight data (10× reduction for max duration)
-  - **DISARMED**: Optional minimal logging (see capacity notes)
-  - Fields: timestamp64, device state, performance_mode, throttle PWM (final), ESC volts/amps/eRPM, ESC temp max, BMS temp max.
-- **Slow path** (10 Hz in `bmsTask`, **sample at 0.1 Hz** for logging): pack V/I/P, SOC, highest/lowest cell V, delta V, altitude (0.1 Hz), wattHoursUsed (cumulative), max temps (MOS/MCU/CAP/Motor + BMS MOS/balance/T1–T4), charge/discharge MOS flags, battery cycle, ESC/BMS connection state.
-- **Cell detail**: Every **100 s** (10× original) or when `voltage_differential` changes > 10 mV from last snapshot: full 24-cell table as uint16 mV.
-- **Events** (edge-triggered via MultiLogger sink): state transitions (DISARMED/ARMED/CRUISING), ESC/BMS connect/disconnect, running_error/selfcheck_error changes, MOS open/close, altitude zero reset on arm, cruise activation/deactivation with PWM value, performance mode changes, button sequences.
+- **Flight Data** (1 Hz):
+  - **ARMED/CRUISING**: continuous logging of flight performance data
+  - **DISARMED**: low-rate heartbeat (0.2 Hz) to track ground state
+  - Fields: timestamp64, device state, performance_mode, throttle PWM, ESC volts/amps/eRPM, ESC temp max, BMS temp max.
+- **System Stats** (0.1 Hz):
+  - Periodic full system health check (10s interval)
+  - Fields: pack V/I/P, SOC, highest/lowest cell V, delta V, altitude, wattHoursUsed, max temps, cell details.
+- **Events** (Async/Immediate):
+  - Triggered via `MultiLogger` sink: state changes, errors, connection events.
+  - No sampling task dependency - logged immediately when they occur.
 
 ## Record Types (fixed, quantized)
 
@@ -125,8 +128,8 @@ coredump, data, coredump,0x7F0000,0x10000,
 ```
 
 **Capacity**: 1.5 MB SPIFFS - ~10% filesystem overhead = **~1.35 MB usable**
-- At 326 B/s armed (10 Hz) = **~69 minutes** continuous flight
-- With state-based logging (10 Hz armed / 1 Hz disarmed) = **60–90 minutes** flight + hours of ground time
+- At ~27 B/s armed (1 Hz) = **~13.9 hours** continuous flight
+- With state-based logging (1 Hz armed / 0.2 Hz disarmed) = **14+ hours** flight + days of ground time
 
 **Access API**:
 ```cpp
@@ -218,17 +221,17 @@ Priority 1 (Background): BLE, monitoring, audio, webSerial, blackboxWriter [Core
 - `blackboxSlowQueue`: 16 frames (important, 10ms timeout)
 - `blackboxEventQueue`: 32 frames (critical, 10ms timeout)
 
-**Producer Pattern** (similar to existing `pushTelemetrySnapshot()`):
-- Called from `throttleTask` and `bmsTask` with state-based decimation
-- Non-blocking `xQueueSend(..., 0)` for fast frames → drops if full, **never blocks flight control**
-- Short timeout for slow/event frames (important but not real-time critical)
+**Sampling Pattern** (Decoupled from control loops):
+- `blackboxSamplerTask()` runs at **1 Hz** (Priority 2)
+- Reads atomic globals (throttle, BMS, ESC data) - no complex locking needed for statistics
+- Pushes to `blackboxQueue`
+- **Benefit**: Zero overhead added to critical `throttleTask` or `bmsTask`
 
-**Consumer Pattern** (similar to `updateBLETask`):
-- `blackboxWriterTask()` runs at priority 1 on core 1 (background)
-- Drains queues: Events > Slow > Fast (priority order)
-- Accumulates into 4KB staging buffer
-- Writes to flash when buffer full, pre-erases next block asynchronously
-- Yields frequently (`vTaskDelay`) to avoid starving other background tasks
+**Consumer Pattern**:
+- `blackboxWriterTask()` runs at Priority 1 (Background)
+- Drains queue into 4KB staging buffer
+- Writes to flash when buffer full
+- Yields frequently
 
 **Event Capture** (via MultiLogger sink):
 - `BlackBoxEventLogger : ILogger` registered into existing `multiLogger`
@@ -236,11 +239,10 @@ Priority 1 (Background): BLE, monitoring, audio, webSerial, blackboxWriter [Core
 - No manual hooks needed—leverages existing monitoring infrastructure
 
 **Integration Points**:
-1. `setup()`: Call `initBlackBox()` after monitoring system
-2. `setupTasks()`: Create `blackboxWriterTask()` with priority 1, core 1
-3. `throttleTask()`: Add decimation counter + `pushBlackboxFastFrame()`
-4. `bmsTask()`: Add 1Hz sampling + `pushBlackboxSlowFrame()` + cell snapshot trigger
-5. `changeDeviceState()`: Emit flight start/end events on ARM/DISARM
+1. `setup()`: Call `initBlackBox()`
+2. `setupTasks()`: Create `blackboxSamplerTask()` (1 Hz) and `blackboxWriterTask()`
+3. `handleThrottle()`: Update `lastThrottlePwm` global (no logging logic here)
+4. `changeDeviceState()`: Emit flight start/end events
 
 **Code Changes Required** (issues found in codebase review):
 
@@ -292,31 +294,16 @@ Priority 1 (Background): BLE, monitoring, audio, webSerial, blackboxWriter [Core
 - BlackBox state: ~100 B
 - **Total: ~12.5 KB** (of ~320 KB available heap - OK ✅)
 
-## Runtime Pipeline
-- **Producers**: State-based decimation in flight-critical tasks; async queue push with backpressure protection
-- **Fast frame builder**: Runs inside `throttleTask` at 50 Hz with **state-based decimation**:
-  ```cpp
-  static uint8_t blackboxCounter = 0;
-  if (currentState == DISARMED) {
-    // Log at 1 Hz when disarmed (every 50th sample)
-    if (++blackboxCounter >= 50) {
-      blackboxCounter = 0;
-      pushBlackboxFastFrame();
-    }
-  } else {  // ARMED or ARMED_CRUISING
-    // Log at 10 Hz during flight (every 5th sample @ 50 Hz)
-    if (++blackboxCounter >= 5) {
-      blackboxCounter = 0;
-      pushBlackboxFastFrame();
-    }
-  }
-  ```
-- **Slow frame builder**: Runs in `bmsTask` at 10 Hz; **samples at 1 Hz** for logging; pushes non-droppable slow frame.
-- **Cell snapshot builder**: Triggered in `bmsTask` when `abs(voltage_differential - lastLoggedDelta) > 0.010f` (10 mV change in max-min cell spread). Uses existing `bmsTelemetryData.cell_voltages[]` array.
-- **wattHoursUsed integration**: Calculate in `bmsTask` using time-delta accumulation. Reset to 0 on DISARM.
-- **Event hook**: Register `BlackBoxLogger : ILogger` sink into existing `multiLogger` to capture all 70+ sensor events automatically on alert edges.
-- **Writer task** (low prio, core 1): Drains queues into 4 KB staging buffer in **SRAM** (no PSRAM on FN8 variant). Pre-erases next block asynchronously; writes current block, then marks header closed with CRC32.
-- **Backpressure**: If queue near full (>90%), drop only fast frames; never drop slow, cell, or event frames.
+**Runtime Pipeline**
+- **Sampler Task** (`blackboxSamplerTask`):
+  - Wakes every **1000 ms** (1 Hz).
+  - Checks `currentState`:
+    - **ARMED/CRUISING**: Generates `BlackboxFastFrame`.
+    - **DISARMED**: Generates `BlackboxFastFrame` every 5th cycle (0.2 Hz).
+  - Every 10th cycle (0.1 Hz): Generates `BlackboxSlowFrame` and checks cell delta for snapshots.
+  - Pushes frames to `blackboxQueue`.
+- **Event hook**: `BlackBoxLogger` sink captures async events (ARM/DISARM, Errors) immediately.
+- **Writer Task**: Drains queue, buffers to 4KB, writes to SPIFFS.
 
 ## Serial Offload Protocol (USB CDC, DISARMED gate)
 
@@ -599,14 +586,12 @@ uint32_t crc = esp_rom_crc32_le(0, data, length);
    - Implement CRC32 calculation helpers
 
 3) **Runtime logging**:
-   - Add `wattHoursUsed` integration in `bmsTask` (power × time accumulation)
-   - Create `blackboxQueue` (256 frames, droppable) and writer task
-   - Implement **state-based decimation** in `throttleTask`:
-     - **10 Hz** (every 5th sample @ 50 Hz) when ARMED/CRUISING
-     - **1 Hz** (every 50th sample) when DISARMED
-   - Sample `bmsTask` at 1 Hz for slow frames
-   - Add cell voltage differential monitor for snapshots
-   - Register `BlackBoxLogger` sink into `multiLogger` for automatic event capture
+   - Add `wattHoursUsed` integration in `bmsTask` (this stays in BMS task for accuracy)
+   - Create `blackboxSamplerTask` to run at 1 Hz:
+     - Read globals: `currentState`, `lastThrottlePwm`, `bmsTelemetryData`, `escTelemetryData`
+     - Generate and push frames
+     - Handle decimation (1Hz ARMED / 0.2Hz DISARMED) internally
+   - Register `BlackBoxLogger` sink for events
 
 4) **Storage manager** (internal to `blackbox.cpp`):
    - Initialize SPIFFS: `SPIFFS.begin(true)` with auto-format
