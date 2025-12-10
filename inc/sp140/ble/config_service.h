@@ -3,9 +3,9 @@
 
 #include <string>
 
-class BLEServer;
+class NimBLEServer;
 
-void initConfigBleService(BLEServer* server, const std::string& uniqueId);
+void initConfigBleService(NimBLEServer* server, const std::string& uniqueId);
 void updateThrottleBLE(int value);
 
 #endif  // INC_SP140_BLE_CONFIG_SERVICE_H_

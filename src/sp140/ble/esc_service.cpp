@@ -7,11 +7,11 @@
 
 namespace {
 
-BLEService* pEscService = nullptr;
-BLECharacteristic* pESCVoltage = nullptr;
-BLECharacteristic* pESCCurrent = nullptr;
-BLECharacteristic* pESCRPM = nullptr;
-BLECharacteristic* pESCTemps = nullptr;
+NimBLEService* pEscService = nullptr;
+NimBLECharacteristic* pESCVoltage = nullptr;
+NimBLECharacteristic* pESCCurrent = nullptr;
+NimBLECharacteristic* pESCRPM = nullptr;
+NimBLECharacteristic* pESCTemps = nullptr;
 
 struct EscTempsPacket {
   float mos_temp;
@@ -22,24 +22,24 @@ struct EscTempsPacket {
 
 }  // namespace
 
-void initEscBleService(BLEServer* server) {
+void initEscBleService(NimBLEServer* server) {
   if (pEscService != nullptr) {
     return;
   }
 
-  pEscService = server->createService(BLEUUID(ESC_TELEMETRY_SERVICE_UUID), 20);
+  pEscService = server->createService(NimBLEUUID(ESC_TELEMETRY_SERVICE_UUID));
 
   pESCVoltage = pEscService->createCharacteristic(
-      BLEUUID(ESC_VOLTAGE_UUID), BLECharacteristic::PROPERTY_READ);
+      NimBLEUUID(ESC_VOLTAGE_UUID), NIMBLE_PROPERTY::READ);
 
   pESCCurrent = pEscService->createCharacteristic(
-      BLEUUID(ESC_CURRENT_UUID), BLECharacteristic::PROPERTY_READ);
+      NimBLEUUID(ESC_CURRENT_UUID), NIMBLE_PROPERTY::READ);
 
   pESCRPM = pEscService->createCharacteristic(
-      BLEUUID(ESC_RPM_UUID), BLECharacteristic::PROPERTY_READ);
+      NimBLEUUID(ESC_RPM_UUID), NIMBLE_PROPERTY::READ);
 
   pESCTemps = pEscService->createCharacteristic(
-      BLEUUID(ESC_TEMPS_UUID), BLECharacteristic::PROPERTY_READ);
+      NimBLEUUID(ESC_TEMPS_UUID), NIMBLE_PROPERTY::READ);
 
   // Ensure deterministic startup values.
   float initialFloat = 0.0f;

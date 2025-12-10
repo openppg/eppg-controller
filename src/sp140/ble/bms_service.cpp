@@ -8,21 +8,21 @@
 
 namespace {
 
-BLEService* pBmsService = nullptr;
-BLECharacteristic* pBMSSOC = nullptr;
-BLECharacteristic* pBMSVoltage = nullptr;
-BLECharacteristic* pBMSCurrent = nullptr;
-BLECharacteristic* pBMSPower = nullptr;
-BLECharacteristic* pBMSHighCell = nullptr;
-BLECharacteristic* pBMSLowCell = nullptr;
-BLECharacteristic* pBMSHighTemp = nullptr;
-BLECharacteristic* pBMSLowTemp = nullptr;
-BLECharacteristic* pBMSFailureLevel = nullptr;
-BLECharacteristic* pBMSVoltageDiff = nullptr;
-BLECharacteristic* pBMSCellVoltages = nullptr;
-BLECharacteristic* pBMSChargeMos = nullptr;
-BLECharacteristic* pBMSDischargeMos = nullptr;
-BLECharacteristic* pBMSTemperatures = nullptr;
+NimBLEService* pBmsService = nullptr;
+NimBLECharacteristic* pBMSSOC = nullptr;
+NimBLECharacteristic* pBMSVoltage = nullptr;
+NimBLECharacteristic* pBMSCurrent = nullptr;
+NimBLECharacteristic* pBMSPower = nullptr;
+NimBLECharacteristic* pBMSHighCell = nullptr;
+NimBLECharacteristic* pBMSLowCell = nullptr;
+NimBLECharacteristic* pBMSHighTemp = nullptr;
+NimBLECharacteristic* pBMSLowTemp = nullptr;
+NimBLECharacteristic* pBMSFailureLevel = nullptr;
+NimBLECharacteristic* pBMSVoltageDiff = nullptr;
+NimBLECharacteristic* pBMSCellVoltages = nullptr;
+NimBLECharacteristic* pBMSChargeMos = nullptr;
+NimBLECharacteristic* pBMSDischargeMos = nullptr;
+NimBLECharacteristic* pBMSTemperatures = nullptr;
 
 // Track previous values to only notify on change
 uint8_t lastFailureLevel = 0;
@@ -31,59 +31,56 @@ uint8_t lastDischargeMos = 0;
 
 }  // namespace
 
-void initBmsBleService(BLEServer* server) {
+void initBmsBleService(NimBLEServer* server) {
   // Lazily guard against repeated init calls.
   if (pBmsService != nullptr) {
     return;
   }
 
-  pBmsService = server->createService(BLEUUID(BMS_TELEMETRY_SERVICE_UUID), 30);
+  pBmsService = server->createService(NimBLEUUID(BMS_TELEMETRY_SERVICE_UUID));
 
   pBMSSOC = pBmsService->createCharacteristic(
-      BLEUUID(BMS_SOC_UUID), BLECharacteristic::PROPERTY_READ);
+      NimBLEUUID(BMS_SOC_UUID), NIMBLE_PROPERTY::READ);
 
   pBMSVoltage = pBmsService->createCharacteristic(
-      BLEUUID(BMS_VOLTAGE_UUID), BLECharacteristic::PROPERTY_READ);
+      NimBLEUUID(BMS_VOLTAGE_UUID), NIMBLE_PROPERTY::READ);
 
   pBMSCurrent = pBmsService->createCharacteristic(
-      BLEUUID(BMS_CURRENT_UUID), BLECharacteristic::PROPERTY_READ);
+      NimBLEUUID(BMS_CURRENT_UUID), NIMBLE_PROPERTY::READ);
 
   pBMSPower = pBmsService->createCharacteristic(
-      BLEUUID(BMS_POWER_UUID), BLECharacteristic::PROPERTY_READ);
+      NimBLEUUID(BMS_POWER_UUID), NIMBLE_PROPERTY::READ);
 
   pBMSHighCell = pBmsService->createCharacteristic(
-      BLEUUID(BMS_HIGH_CELL_UUID), BLECharacteristic::PROPERTY_READ);
+      NimBLEUUID(BMS_HIGH_CELL_UUID), NIMBLE_PROPERTY::READ);
 
   pBMSLowCell = pBmsService->createCharacteristic(
-      BLEUUID(BMS_LOW_CELL_UUID), BLECharacteristic::PROPERTY_READ);
+      NimBLEUUID(BMS_LOW_CELL_UUID), NIMBLE_PROPERTY::READ);
 
   pBMSHighTemp = pBmsService->createCharacteristic(
-      BLEUUID(BMS_HIGH_TEMP_UUID), BLECharacteristic::PROPERTY_READ);
+      NimBLEUUID(BMS_HIGH_TEMP_UUID), NIMBLE_PROPERTY::READ);
 
   pBMSLowTemp = pBmsService->createCharacteristic(
-      BLEUUID(BMS_LOW_TEMP_UUID), BLECharacteristic::PROPERTY_READ);
+      NimBLEUUID(BMS_LOW_TEMP_UUID), NIMBLE_PROPERTY::READ);
 
   pBMSFailureLevel = pBmsService->createCharacteristic(
-      BLEUUID(BMS_FAILURE_LEVEL_UUID), BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
-  pBMSFailureLevel->addDescriptor(new BLE2902());
+      NimBLEUUID(BMS_FAILURE_LEVEL_UUID), NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
 
   pBMSVoltageDiff = pBmsService->createCharacteristic(
-      BLEUUID(BMS_VOLTAGE_DIFF_UUID), BLECharacteristic::PROPERTY_READ);
+      NimBLEUUID(BMS_VOLTAGE_DIFF_UUID), NIMBLE_PROPERTY::READ);
 
   pBMSCellVoltages = pBmsService->createCharacteristic(
-      BLEUUID(BMS_CELL_VOLTAGES_UUID), BLECharacteristic::PROPERTY_READ);
+      NimBLEUUID(BMS_CELL_VOLTAGES_UUID), NIMBLE_PROPERTY::READ);
 
   pBMSChargeMos = pBmsService->createCharacteristic(
-      BLEUUID(BMS_CHARGE_MOS_UUID), BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
-  pBMSChargeMos->addDescriptor(new BLE2902());
+      NimBLEUUID(BMS_CHARGE_MOS_UUID), NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
 
   pBMSDischargeMos = pBmsService->createCharacteristic(
-      BLEUUID(BMS_DISCHARGE_MOS_UUID), BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
-  pBMSDischargeMos->addDescriptor(new BLE2902());
+      NimBLEUUID(BMS_DISCHARGE_MOS_UUID), NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
 
   pBMSTemperatures = pBmsService->createCharacteristic(
-      BLEUUID(BMS_TEMPERATURES_UUID),
-      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+      NimBLEUUID(BMS_TEMPERATURES_UUID),
+      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
 
   // Ensure characteristics have deterministic startup values.
   uint16_t initial_cell_values[BMS_CELLS_NUM] = {0};

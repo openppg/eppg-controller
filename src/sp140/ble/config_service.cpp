@@ -24,8 +24,9 @@ extern volatile DeviceState currentState;
 
 namespace {
 
-class MetricAltCallbacks : public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic* characteristic) override {
+class MetricAltCallbacks : public NimBLECharacteristicCallbacks {
+  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.length() != 1) {
       USBSerial.println("Invalid value length - expected 1 byte");
@@ -38,8 +39,9 @@ class MetricAltCallbacks : public BLECharacteristicCallbacks {
   }
 };
 
-class PerformanceModeCallbacks : public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic* characteristic) override {
+class PerformanceModeCallbacks : public NimBLECharacteristicCallbacks {
+  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.length() != 1) {
       USBSerial.println("Invalid value length - expected 1 byte");
@@ -58,8 +60,9 @@ class PerformanceModeCallbacks : public BLECharacteristicCallbacks {
   }
 };
 
-class ScreenRotationCallbacks : public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic* characteristic) override {
+class ScreenRotationCallbacks : public NimBLECharacteristicCallbacks {
+  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.length() != 1) {
       USBSerial.println("Invalid value length - expected 1 byte");
@@ -78,13 +81,15 @@ class ScreenRotationCallbacks : public BLECharacteristicCallbacks {
   }
 };
 
-class ThrottleValueCallbacks : public BLECharacteristicCallbacks {
-  void onRead(BLECharacteristic* characteristic) override {
+class ThrottleValueCallbacks : public NimBLECharacteristicCallbacks {
+  void onRead(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     uint16_t potVal = readThrottleRaw();
     characteristic->setValue(reinterpret_cast<uint8_t*>(&potVal), sizeof(potVal));
   }
 
-  void onWrite(BLECharacteristic* characteristic) override {
+  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     if (currentState != ARMED_CRUISING) {
       return;  // Only allow updates while in cruise mode
     }
@@ -105,8 +110,9 @@ class ThrottleValueCallbacks : public BLECharacteristicCallbacks {
   }
 };
 
-class TimeCallbacks : public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic* characteristic) override {
+class TimeCallbacks : public NimBLECharacteristicCallbacks {
+  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.length() != sizeof(time_t)) {
       USBSerial.println("Invalid timestamp length");
@@ -128,7 +134,8 @@ class TimeCallbacks : public BLECharacteristicCallbacks {
     }
   }
 
-  void onRead(BLECharacteristic* characteristic) override {
+  void onRead(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     time_t now;
     time(&now);
     now -= deviceData.timezone_offset;
@@ -136,8 +143,9 @@ class TimeCallbacks : public BLECharacteristicCallbacks {
   }
 };
 
-class TimezoneCallbacks : public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic* characteristic) override {
+class TimezoneCallbacks : public NimBLECharacteristicCallbacks {
+  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.length() != sizeof(int32_t)) {
       USBSerial.println("Invalid timezone offset length");
@@ -152,15 +160,17 @@ class TimezoneCallbacks : public BLECharacteristicCallbacks {
     USBSerial.println(offset);
   }
 
-  void onRead(BLECharacteristic* characteristic) override {
+  void onRead(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     characteristic->setValue(
         reinterpret_cast<uint8_t*>(&deviceData.timezone_offset),
         sizeof(deviceData.timezone_offset));
   }
 };
 
-class ThemeCallbacks : public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic* characteristic) override {
+class ThemeCallbacks : public NimBLECharacteristicCallbacks {
+  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.length() != 1) {
       USBSerial.println("Invalid value length - expected 1 byte");
@@ -178,13 +188,15 @@ class ThemeCallbacks : public BLECharacteristicCallbacks {
     USBSerial.println("Theme setting saved to Preferences");
   }
 
-  void onRead(BLECharacteristic* characteristic) override {
+  void onRead(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     characteristic->setValue(&deviceData.theme, sizeof(deviceData.theme));
   }
 };
 
-class SeaPressureCallbacks : public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic* characteristic) override {
+class SeaPressureCallbacks : public NimBLECharacteristicCallbacks {
+  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.length() != sizeof(float)) {
       USBSerial.println("Invalid sea pressure length");
@@ -206,15 +218,17 @@ class SeaPressureCallbacks : public BLECharacteristicCallbacks {
     USBSerial.println(pressure);
   }
 
-  void onRead(BLECharacteristic* characteristic) override {
+  void onRead(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     characteristic->setValue(
         reinterpret_cast<uint8_t*>(&deviceData.sea_pressure),
         sizeof(deviceData.sea_pressure));
   }
 };
 
-class MetricTempCallbacks : public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic* characteristic) override {
+class MetricTempCallbacks : public NimBLECharacteristicCallbacks {
+  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.length() != 1) {
       USBSerial.println("Invalid value length - expected 1 byte");
@@ -226,7 +240,8 @@ class MetricTempCallbacks : public BLECharacteristicCallbacks {
     USBSerial.println("Metric temp setting saved to Preferences");
   }
 
-  void onRead(BLECharacteristic* characteristic) override {
+  void onRead(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
     uint8_t metricTempValue = deviceData.metric_temp ? 1 : 0;
     characteristic->setValue(&metricTempValue, sizeof(metricTempValue));
   }
@@ -234,109 +249,107 @@ class MetricTempCallbacks : public BLECharacteristicCallbacks {
 
 }  // namespace
 
-void initConfigBleService(BLEServer* server, const std::string& uniqueId) {
-  BLEService* configService = server->createService(BLEUUID(CONFIG_SERVICE_UUID), 30);
+void initConfigBleService(NimBLEServer* server, const std::string& uniqueId) {
+  NimBLEService* configService = server->createService(NimBLEUUID(CONFIG_SERVICE_UUID));
 
-  BLECharacteristic* unixTime = configService->createCharacteristic(
-      BLEUUID(UNIX_TIME_UUID),
-      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
+  NimBLECharacteristic* unixTime = configService->createCharacteristic(
+      NimBLEUUID(UNIX_TIME_UUID),
+      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
   static TimeCallbacks timeCallbacks;
   unixTime->setCallbacks(&timeCallbacks);
 
-  BLECharacteristic* timezone = configService->createCharacteristic(
-      BLEUUID(TIMEZONE_UUID),
-      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
+  NimBLECharacteristic* timezone = configService->createCharacteristic(
+      NimBLEUUID(TIMEZONE_UUID),
+      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
   static TimezoneCallbacks timezoneCallbacks;
   timezone->setCallbacks(&timezoneCallbacks);
   timezone->setValue(reinterpret_cast<uint8_t*>(&deviceData.timezone_offset),
                      sizeof(deviceData.timezone_offset));
 
   pDeviceStateCharacteristic = configService->createCharacteristic(
-      BLEUUID(DEVICE_STATE_UUID),
-      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+      NimBLEUUID(DEVICE_STATE_UUID),
+      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
   uint8_t initialState = DISARMED;
   pDeviceStateCharacteristic->setValue(&initialState, sizeof(initialState));
-  pDeviceStateCharacteristic->addDescriptor(new BLE2902());
 
-  BLECharacteristic* metricAlt = configService->createCharacteristic(
-      BLEUUID(METRIC_ALT_UUID),
-      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
+  NimBLECharacteristic* metricAlt = configService->createCharacteristic(
+      NimBLEUUID(METRIC_ALT_UUID),
+      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
   static MetricAltCallbacks metricAltCallbacks;
   metricAlt->setCallbacks(&metricAltCallbacks);
   int metricAltValue = deviceData.metric_alt ? 1 : 0;
   metricAlt->setValue(metricAltValue);
 
-  BLECharacteristic* performanceMode = configService->createCharacteristic(
-      BLEUUID(PERFORMANCE_MODE_UUID),
-      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
+  NimBLECharacteristic* performanceMode = configService->createCharacteristic(
+      NimBLEUUID(PERFORMANCE_MODE_UUID),
+      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
   static PerformanceModeCallbacks performanceModeCallbacks;
   performanceMode->setCallbacks(&performanceModeCallbacks);
   int performanceValue = deviceData.performance_mode ? 1 : 0;
   performanceMode->setValue(performanceValue);
 
-  BLECharacteristic* screenRotation = configService->createCharacteristic(
-      BLEUUID(SCREEN_ROTATION_UUID),
-      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
+  NimBLECharacteristic* screenRotation = configService->createCharacteristic(
+      NimBLEUUID(SCREEN_ROTATION_UUID),
+      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
   static ScreenRotationCallbacks screenRotationCallbacks;
   screenRotation->setCallbacks(&screenRotationCallbacks);
   int screenValue = (deviceData.screen_rotation == 1) ? 1 : 3;
   screenRotation->setValue(screenValue);
 
-  BLECharacteristic* theme = configService->createCharacteristic(
-      BLEUUID(THEME_UUID),
-      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
+  NimBLECharacteristic* theme = configService->createCharacteristic(
+      NimBLEUUID(THEME_UUID),
+      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
   static ThemeCallbacks themeCallbacks;
   theme->setCallbacks(&themeCallbacks);
   theme->setValue(&deviceData.theme, sizeof(deviceData.theme));
 
-  BLECharacteristic* seaPressure = configService->createCharacteristic(
-      BLEUUID(SEA_PRESSURE_UUID),
-      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
+  NimBLECharacteristic* seaPressure = configService->createCharacteristic(
+      NimBLEUUID(SEA_PRESSURE_UUID),
+      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
   static SeaPressureCallbacks seaPressureCallbacks;
   seaPressure->setCallbacks(&seaPressureCallbacks);
   seaPressure->setValue(
       reinterpret_cast<uint8_t*>(&deviceData.sea_pressure),
       sizeof(deviceData.sea_pressure));
 
-  BLECharacteristic* metricTemp = configService->createCharacteristic(
-      BLEUUID(METRIC_TEMP_UUID),
-      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
+  NimBLECharacteristic* metricTemp = configService->createCharacteristic(
+      NimBLEUUID(METRIC_TEMP_UUID),
+      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
   static MetricTempCallbacks metricTempCallbacks;
   metricTemp->setCallbacks(&metricTempCallbacks);
   uint8_t metricTempValue = deviceData.metric_temp ? 1 : 0;
   metricTemp->setValue(&metricTempValue, sizeof(metricTempValue));
 
-  BLECharacteristic* firmwareVersion = configService->createCharacteristic(
-      BLEUUID(FW_VERSION_UUID), BLECharacteristic::PROPERTY_READ);
+  NimBLECharacteristic* firmwareVersion = configService->createCharacteristic(
+      NimBLEUUID(FW_VERSION_UUID), NIMBLE_PROPERTY::READ);
   uint8_t versionBytes[2] = {VERSION_MAJOR, VERSION_MINOR};
   firmwareVersion->setValue(versionBytes, sizeof(versionBytes));
 
-  BLECharacteristic* hardwareRevision = configService->createCharacteristic(
-      BLEUUID(HW_REVISION_UUID), BLECharacteristic::PROPERTY_READ);
+  NimBLECharacteristic* hardwareRevision = configService->createCharacteristic(
+      NimBLEUUID(HW_REVISION_UUID), NIMBLE_PROPERTY::READ);
   hardwareRevision->setValue(&deviceData.revision, sizeof(deviceData.revision));
 
-  BLECharacteristic* armedTime = configService->createCharacteristic(
-      BLEUUID(ARMED_TIME_UUID), BLECharacteristic::PROPERTY_READ);
+  NimBLECharacteristic* armedTime = configService->createCharacteristic(
+      NimBLEUUID(ARMED_TIME_UUID), NIMBLE_PROPERTY::READ);
   armedTime->setValue(reinterpret_cast<uint8_t*>(&deviceData.armed_time),
                       sizeof(deviceData.armed_time));
 
   pThrottleCharacteristic = configService->createCharacteristic(
-      BLEUUID(THROTTLE_VALUE_UUID),
-      BLECharacteristic::PROPERTY_READ |
-      BLECharacteristic::PROPERTY_WRITE |
-      BLECharacteristic::PROPERTY_NOTIFY |
-      BLECharacteristic::PROPERTY_INDICATE);
+      NimBLEUUID(THROTTLE_VALUE_UUID),
+      NIMBLE_PROPERTY::READ |
+      NIMBLE_PROPERTY::WRITE |
+      NIMBLE_PROPERTY::NOTIFY |
+      NIMBLE_PROPERTY::INDICATE);
   static ThrottleValueCallbacks throttleValueCallbacks;
   pThrottleCharacteristic->setCallbacks(&throttleValueCallbacks);
-  pThrottleCharacteristic->addDescriptor(new BLE2902());
 
-  BLEService* deviceInfoService = server->createService(BLEUUID(DEVICE_INFO_SERVICE_UUID), 10);
-  BLECharacteristic* manufacturer = deviceInfoService->createCharacteristic(
-      BLEUUID(MANUFACTURER_NAME_UUID), BLECharacteristic::PROPERTY_READ);
+  NimBLEService* deviceInfoService = server->createService(NimBLEUUID(DEVICE_INFO_SERVICE_UUID));
+  NimBLECharacteristic* manufacturer = deviceInfoService->createCharacteristic(
+      NimBLEUUID(MANUFACTURER_NAME_UUID), NIMBLE_PROPERTY::READ);
   manufacturer->setValue("OpenPPG");
 
-  BLECharacteristic* uniqueIdCharacteristic = deviceInfoService->createCharacteristic(
-      BLEUUID(DEVICE_UNIQUE_ID_UUID), BLECharacteristic::PROPERTY_READ);
+  NimBLECharacteristic* uniqueIdCharacteristic = deviceInfoService->createCharacteristic(
+      NimBLEUUID(DEVICE_UNIQUE_ID_UUID), NIMBLE_PROPERTY::READ);
   uniqueIdCharacteristic->setValue(uniqueId);  // Already uppercase string
 
   configService->start();
