@@ -14,8 +14,8 @@
 #define ESC_MCU_CRIT 95
 #define ESC_CAP_WARN 85
 #define ESC_CAP_CRIT 100
-#define MOTOR_WARN 90
-#define MOTOR_CRIT 110
+#define MOTOR_WARN 105
+#define MOTOR_CRIT 150
 
 void initESC();
 void setESCThrottle(int throttlePWM);

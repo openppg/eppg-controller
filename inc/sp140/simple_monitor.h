@@ -195,16 +195,16 @@ struct HysteresisSensorMonitor : public SensorMonitor {
         break;
 
       case AlertLevel::WARN_LOW:
-        // From WARN_LOW, need to go below warnLow - hysteresis to clear
-        // Or escalate to critical if still below critLow + hysteresis
-        if (v <= thr.critLow + thr.hysteresis) now = AlertLevel::CRIT_LOW;
+        // From WARN_LOW, escalate to critical at exact threshold (no hysteresis)
+        // Use hysteresis only when clearing (de-escalating to OK)
+        if (v <= thr.critLow) now = AlertLevel::CRIT_LOW;
         else if (v > thr.warnLow + thr.hysteresis) now = AlertLevel::OK;
         break;
 
       case AlertLevel::WARN_HIGH:
-        // From WARN_HIGH, need to go below warnHigh - hysteresis to clear
-        // Or escalate to critical if still above critHigh - hysteresis
-        if (v >= thr.critHigh - thr.hysteresis) now = AlertLevel::CRIT_HIGH;
+        // From WARN_HIGH, escalate to critical at exact threshold (no hysteresis)
+        // Use hysteresis only when clearing (de-escalating to OK)
+        if (v >= thr.critHigh) now = AlertLevel::CRIT_HIGH;
         else if (v < thr.warnHigh - thr.hysteresis) now = AlertLevel::OK;
         break;
 
