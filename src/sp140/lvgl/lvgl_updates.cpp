@@ -389,7 +389,7 @@ void updateLvglMainScreen(
         lv_obj_set_style_text_color(voltage_left_label, LVGL_BLACK, 0);
     } else if (escConnected) {
         lv_obj_set_style_text_color(voltage_left_label, LVGL_BLACK, 0);
-        lv_label_set_text(voltage_left_label, "No BMS");
+        lv_label_set_text(voltage_left_label, "NO\nBMS");
     } else {
         lv_label_set_text(voltage_left_label, "");
     }

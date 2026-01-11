@@ -440,13 +440,21 @@ void refreshDisplay() {
     // Handle synchronized alert updates (counter + display together)
     AlertUIUpdate alertUpdate;
     if (xQueueReceive(alertUIQueue, &alertUpdate, 0) == pdTRUE) {
-      // Update counter and display atomically
+      // Update counter display
       updateAlertCounterDisplay(alertUpdate.counts);
 
-      if (alertUpdate.showDisplay) {
-        lv_showAlertTextWithLevel(alertUpdate.displayId, alertUpdate.displayLevel, alertUpdate.displayCritical);
+      // Handle critical display (top, in altitude area)
+      if (alertUpdate.showCritical) {
+        lv_showAlertTextWithLevel(alertUpdate.criticalId, alertUpdate.criticalLevel, true);
       } else {
-        lv_hideAlertText();
+        lv_hideCriticalText();
+      }
+
+      // Handle warning display (below critical)
+      if (alertUpdate.showWarning) {
+        lv_showAlertTextWithLevel(alertUpdate.warningId, alertUpdate.warningLevel, false);
+      } else {
+        lv_hideWarningText();
       }
 
       // Control critical border and vibration based on state
@@ -454,10 +462,10 @@ void refreshDisplay() {
       if (alertUpdate.criticalAlertsActive != lastCriticalState) {
         if (alertUpdate.criticalAlertsActive) {
           USBSerial.println("[UI] Starting critical border flash");
-          startCriticalBorderFlashDirect(); // Direct control - we already have the mutex
+          startCriticalBorderFlashDirect();  // Direct control - we already have the mutex
         } else {
           USBSerial.println("[UI] Stopping critical border flash");
-          stopCriticalBorderFlashDirect(); // Direct control - we already have the mutex
+          stopCriticalBorderFlashDirect();  // Direct control - we already have the mutex
         }
         lastCriticalState = alertUpdate.criticalAlertsActive;
       }

@@ -32,11 +32,15 @@ struct AlertUIUpdate {
   // Counter data
   AlertCounts counts;
 
-  // Display message data
-  SensorID displayId;       // Valid sensor when showDisplay == true
-  AlertLevel displayLevel;  // Alert level for dynamic abbreviations
-  bool displayCritical;     // true = critical colouring
-  bool showDisplay;         // false = hide label
+  // Warning display (bottom row)
+  SensorID warningId;         // Valid sensor when showWarning == true
+  AlertLevel warningLevel;    // Alert level for dynamic abbreviations
+  bool showWarning;           // false = hide warning label
+
+  // Critical display (top row, in altitude area)
+  SensorID criticalId;        // Valid sensor when showCritical == true
+  AlertLevel criticalLevel;   // Alert level for dynamic abbreviations
+  bool showCritical;          // false = hide critical label
 
   // Critical alert state (for border/vibration control)
   bool criticalAlertsActive;  // true = show red border + vibration
