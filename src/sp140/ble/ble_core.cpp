@@ -58,6 +58,7 @@ void setupBLE() {
   advertising->setConnectableMode(BLE_GAP_CONN_MODE_UND);
   advertising->addServiceUUID(NimBLEUUID(CONFIG_SERVICE_UUID));
   advertising->addServiceUUID(NimBLEUUID(BMS_TELEMETRY_SERVICE_UUID));
+  advertising->addServiceUUID(NimBLEUUID(ESC_TELEMETRY_SERVICE_UUID));
   advertising->enableScanResponse(true);
   advertising->start();
 
