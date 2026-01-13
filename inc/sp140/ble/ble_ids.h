@@ -48,4 +48,23 @@
 #define ESC_RPM_UUID               "24dc4a84-0be3-4eba-a8c3-ed9748daa599"
 #define ESC_TEMPS_UUID             "d087f190-5450-4fea-b9ff-17133a0b6f64"
 
+// ============================================================================
+// Binary Packed Telemetry Characteristics (V1)
+// High-efficiency binary telemetry for reduced BLE overhead
+// ============================================================================
+
+// Packed BMS telemetry characteristic (single binary packet per BMS)
+// For multi-BMS, multiple notifications sent with different bms_id values
+#define BMS_PACKED_TELEMETRY_UUID     "9E0F2FA4-3F2B-49C0-A6A3-3D8923062134"
+
+// Extended BMS data (cell voltages array) - separate packet for detailed data
+#define BMS_EXTENDED_TELEMETRY_UUID   "9E0F2FA5-3F2B-49C0-A6A3-3D8923062135"
+
+// Packed ESC telemetry characteristic
+#define ESC_PACKED_TELEMETRY_UUID     "C154DAEA-1984-40EA-B20F-5B23F9CBA0AA"
+
+// Controller telemetry (ESP32 sensors: altitude, baro, vario, temps)
+#define CONTROLLER_SERVICE_UUID       "F4B8E3D2-5A1C-4B9E-A3F7-2D8E91C0B5A6"
+#define CONTROLLER_TELEMETRY_UUID     "F4B8E3D3-5A1C-4B9E-A3F7-2D8E91C0B5A7"
+
 #endif  // INC_SP140_BLE_BLE_IDS_H_

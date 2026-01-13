@@ -9,6 +9,12 @@
 namespace {
 
 NimBLEService* pBmsService = nullptr;
+
+// Binary packed telemetry characteristic (V1)
+NimBLECharacteristic* pBMSPackedTelemetry = nullptr;
+
+#ifndef DISABLE_LEGACY_BLE_TELEMETRY
+// Legacy individual characteristics
 NimBLECharacteristic* pBMSSOC = nullptr;
 NimBLECharacteristic* pBMSVoltage = nullptr;
 NimBLECharacteristic* pBMSCurrent = nullptr;
@@ -28,6 +34,7 @@ NimBLECharacteristic* pBMSTemperatures = nullptr;
 uint8_t lastFailureLevel = 0;
 uint8_t lastChargeMos = 0;
 uint8_t lastDischargeMos = 0;
+#endif  // DISABLE_LEGACY_BLE_TELEMETRY
 
 }  // namespace
 
@@ -39,6 +46,20 @@ void initBmsBleService(NimBLEServer* server) {
 
   pBmsService = server->createService(NimBLEUUID(BMS_TELEMETRY_SERVICE_UUID));
 
+  // Binary packed telemetry characteristic (always enabled)
+  pBMSPackedTelemetry = pBmsService->createCharacteristic(
+      NimBLEUUID(BMS_PACKED_TELEMETRY_UUID),
+      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
+
+  // Initialize packed telemetry with zeros
+  BLE_BMS_Telemetry_V1 initialPacket = {};
+  initialPacket.version = 1;
+  pBMSPackedTelemetry->setValue(
+      reinterpret_cast<uint8_t*>(&initialPacket),
+      sizeof(BLE_BMS_Telemetry_V1));
+
+#ifndef DISABLE_LEGACY_BLE_TELEMETRY
+  // Legacy individual characteristics
   pBMSSOC = pBmsService->createCharacteristic(
       NimBLEUUID(BMS_SOC_UUID), NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
 
@@ -95,10 +116,49 @@ void initBmsBleService(NimBLEServer* server) {
   uint8_t initial_temps[17] = {0};
   initial_temps[0] = 0x00;  // No valid sensors initially (bitmap = 0x00)
   pBMSTemperatures->setValue(initial_temps, 17);
+#endif  // DISABLE_LEGACY_BLE_TELEMETRY
 
   pBmsService->start();
 }
 
+// Binary packed telemetry update (V1 protocol)
+void updateBMSPackedTelemetry(const STR_BMS_TELEMETRY_140& telemetry, uint8_t bms_id) {
+  if (pBmsService == nullptr || pBMSPackedTelemetry == nullptr) {
+    return;
+  }
+
+  BLE_BMS_Telemetry_V1 packet;
+  packet.version = 1;
+  packet.bms_id = bms_id;
+  packet.connection_state = static_cast<uint8_t>(telemetry.bmsState);
+  packet.soc = telemetry.soc;
+  packet.battery_voltage = telemetry.battery_voltage;
+  packet.battery_current = telemetry.battery_current;
+  packet.power = telemetry.power;
+  packet.highest_cell_voltage = telemetry.highest_cell_voltage;
+  packet.lowest_cell_voltage = telemetry.lowest_cell_voltage;
+  packet.highest_temperature = telemetry.highest_temperature;
+  packet.lowest_temperature = telemetry.lowest_temperature;
+  packet.voltage_differential = telemetry.voltage_differential;
+  packet.battery_failure_level = telemetry.battery_failure_level;
+  packet.is_charge_mos = telemetry.is_charge_mos ? 1 : 0;
+  packet.is_discharge_mos = telemetry.is_discharge_mos ? 1 : 0;
+  packet.is_charging = telemetry.is_charging ? 1 : 0;
+  packet.battery_cycle = telemetry.battery_cycle;
+  packet.energy_cycle = telemetry.energy_cycle;
+  packet.lastUpdateMs = static_cast<uint32_t>(telemetry.lastUpdateMs);
+
+  pBMSPackedTelemetry->setValue(
+      reinterpret_cast<uint8_t*>(&packet),
+      sizeof(BLE_BMS_Telemetry_V1));
+
+  if (deviceConnected) {
+    pBMSPackedTelemetry->notify();
+  }
+}
+
+#ifndef DISABLE_LEGACY_BLE_TELEMETRY
+// Legacy individual characteristic updates
 void updateBMSTelemetry(const STR_BMS_TELEMETRY_140& telemetry) {
   if (pBmsService == nullptr) {
     return;  // Not initialized yet.
@@ -179,3 +239,9 @@ void updateBMSTelemetry(const STR_BMS_TELEMETRY_140& telemetry) {
   if (pBMSTemperatures) pBMSTemperatures->notify();
   // Note: pBMSFailureLevel, pBMSChargeMos, pBMSDischargeMos notify separately above, only on change
 }
+#else
+// Stub when legacy telemetry is disabled
+void updateBMSTelemetry(const STR_BMS_TELEMETRY_140& telemetry) {
+  (void)telemetry;  // Suppress unused parameter warning
+}
+#endif  // DISABLE_LEGACY_BLE_TELEMETRY

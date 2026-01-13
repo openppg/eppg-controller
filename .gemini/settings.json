@@ -1,6 +1,8 @@
 {
+  "privacy": {
+    "usageStatisticsEnabled": false
+  },
   "telemetry": {
     "enabled": false
-  },
-  "usageStatisticsEnabled": false
+  }
 }

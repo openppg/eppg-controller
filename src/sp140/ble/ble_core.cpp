@@ -6,6 +6,7 @@
 #include "sp140/ble/ble_ids.h"
 #include "sp140/ble/bms_service.h"
 #include "sp140/ble/config_service.h"
+#include "sp140/ble/controller_service.h"
 #include "sp140/ble/esc_service.h"
 
 namespace {
@@ -51,6 +52,7 @@ void setupBLE() {
   initConfigBleService(pServer, uniqueId);
   initBmsBleService(pServer);
   initEscBleService(pServer);
+  initControllerBleService(pServer);
 
   NimBLEAdvertising* advertising = pServer->getAdvertising();
   advertising->setName("OpenPPG Controller");
@@ -59,6 +61,7 @@ void setupBLE() {
   advertising->addServiceUUID(NimBLEUUID(CONFIG_SERVICE_UUID));
   advertising->addServiceUUID(NimBLEUUID(BMS_TELEMETRY_SERVICE_UUID));
   advertising->addServiceUUID(NimBLEUUID(ESC_TELEMETRY_SERVICE_UUID));
+  advertising->addServiceUUID(NimBLEUUID(CONTROLLER_SERVICE_UUID));
   advertising->enableScanResponse(true);
   advertising->start();
 

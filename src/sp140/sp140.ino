@@ -31,6 +31,7 @@
 #include "../../inc/sp140/ble/ble_core.h"
 #include "../../inc/sp140/ble/bms_service.h"
 #include "../../inc/sp140/ble/config_service.h"
+#include "../../inc/sp140/ble/controller_service.h"
 #include "../../inc/sp140/ble/esc_service.h"
 
 #include "../../inc/sp140/buzzer.h"
@@ -389,8 +390,19 @@ void updateBLETask(void *pvParameters) {
 
     // Wait for new data with timeout
     if (xQueueReceive(bmsTelemetryQueue, &newBmsTelemetry, pdMS_TO_TICKS(100)) == pdTRUE) {
-        // Update BLE characteristics with the received data
+      // Update packed binary telemetry (always enabled)
+      updateBMSPackedTelemetry(newBmsTelemetry, 0);  // bms_id=0 for primary BMS
+
+      // Update legacy BLE characteristics (can be disabled with DISABLE_LEGACY_BLE_TELEMETRY)
       updateBMSTelemetry(newBmsTelemetry);
+
+      // Update controller telemetry at same 10Hz rate as BMS
+      // Gather sensor data from barometer and ESP32
+      float altitude = getAltitude(deviceData);
+      float baro_temp = getBaroTemperature();
+      float vario = getVerticalSpeed();
+      float mcu_temp = temperatureRead();  // ESP32 internal temp sensor
+      updateControllerPackedTelemetry(altitude, baro_temp, vario, mcu_temp);
     }
 
     // Add a small delay to prevent task starvation
@@ -1195,6 +1207,8 @@ void audioTask(void* parameter) {
 
 void updateESCBLETask(void *pvParameters) {
   STR_ESC_TELEMETRY_140 newEscTelemetry;
+  static unsigned long lastPackedUpdateMs = 0;
+  const unsigned long PACKED_UPDATE_INTERVAL_MS = 100;  // 10Hz for packed telemetry
 
   while (true) {
     // Add error checking for queue
@@ -1206,7 +1220,14 @@ void updateESCBLETask(void *pvParameters) {
 
     // Wait for new data with timeout
     if (xQueueReceive(escTelemetryQueue, &newEscTelemetry, pdMS_TO_TICKS(100)) == pdTRUE) {
-      // Update BLE characteristics with the received data
+      // Throttle packed telemetry to 10Hz to avoid saturating BLE bandwidth
+      unsigned long now = millis();
+      if (now - lastPackedUpdateMs >= PACKED_UPDATE_INTERVAL_MS) {
+        updateESCPackedTelemetry(newEscTelemetry);
+        lastPackedUpdateMs = now;
+      }
+
+      // Update legacy BLE characteristics (can be disabled with DISABLE_LEGACY_BLE_TELEMETRY)
       updateESCTelemetryBLE(newEscTelemetry);
     }
 

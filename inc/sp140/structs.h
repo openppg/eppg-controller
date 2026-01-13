@@ -2,6 +2,8 @@
 #ifndef INC_SP140_STRUCTS_H_
 #define INC_SP140_STRUCTS_H_
 
+#include <cstdint>
+
 #pragma pack(push, 1)
 
 // Temperature component enum
@@ -123,5 +125,67 @@ struct MelodyRequest {
   uint8_t size;
   uint16_t duration;
 };
+
+// ============================================================================
+// BLE Binary Packed Telemetry Structures (V1)
+// These structures are designed for efficient BLE transmission with minimal
+// overhead. All multi-byte values are little-endian (ESP32/ARM native).
+// ============================================================================
+
+#pragma pack(push, 1)
+
+// Binary packed BMS telemetry for BLE transmission (~65 bytes)
+// For multi-BMS systems, send separate notifications with different bms_id values
+typedef struct {
+  uint8_t version;              // Protocol version (1)
+  uint8_t bms_id;               // BMS identifier (0-3 for multi-BMS)
+  uint8_t connection_state;     // TelemetryState enum value
+  float soc;                    // State of charge (%)
+  float battery_voltage;        // Total battery voltage (V)
+  float battery_current;        // Battery current (A)
+  float power;                  // Power (kW)
+  float highest_cell_voltage;   // Highest cell voltage (V)
+  float lowest_cell_voltage;    // Lowest cell voltage (V)
+  float highest_temperature;    // Highest temperature (°C)
+  float lowest_temperature;     // Lowest temperature (°C)
+  float voltage_differential;   // Cell voltage differential (V)
+  uint8_t battery_failure_level;// Battery failure status
+  uint8_t is_charge_mos;        // Charge MOSFET state (0/1)
+  uint8_t is_discharge_mos;     // Discharge MOSFET state (0/1)
+  uint8_t is_charging;          // Charging state (0/1)
+  uint32_t battery_cycle;       // Battery cycle count
+  float energy_cycle;           // Energy per cycle (kWh)
+  uint32_t lastUpdateMs;        // Timestamp of last update
+} BLE_BMS_Telemetry_V1;
+
+// Binary packed ESC telemetry for BLE transmission (~46 bytes)
+typedef struct {
+  uint8_t version;              // Protocol version (1)
+  uint8_t connection_state;     // TelemetryState enum value
+  float volts;                  // ESC voltage (V)
+  float amps;                   // ESC current (A)
+  float mos_temp;               // MOSFET temperature (°C)
+  float cap_temp;               // Capacitor temperature (°C)
+  float mcu_temp;               // MCU temperature (°C)
+  float motor_temp;             // Motor temperature (°C)
+  int32_t eRPM;                 // Electrical RPM
+  uint16_t inPWM;               // Input PWM value
+  uint16_t running_error;       // Runtime error bitmask
+  uint16_t selfcheck_error;     // Self-check error bitmask
+  uint32_t lastUpdateMs;        // Timestamp of last update
+} BLE_ESC_Telemetry_V1;
+
+// Binary packed Controller telemetry for BLE transmission (~21 bytes)
+// Contains ESP32 sensor data and system status
+typedef struct {
+  uint8_t version;              // Protocol version (1)
+  float altitude;               // Barometric altitude (m)
+  float baro_temp;              // Barometric sensor temperature (°C)
+  float vario;                  // Vertical speed (m/s)
+  float mcu_temp;               // Internal ESP32 temperature (°C)
+  uint32_t uptime_ms;           // Time since boot (ms)
+} BLE_Controller_Telemetry_V1;
+
+#pragma pack(pop)
 
 #endif  // INC_SP140_STRUCTS_H_
