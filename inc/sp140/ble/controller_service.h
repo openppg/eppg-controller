@@ -9,7 +9,7 @@ class NimBLEServer;
 void initControllerBleService(NimBLEServer* server);
 
 // Update controller telemetry (altitude, baro, vario, mcu_temp, uptime)
-// Call this at 10Hz along with other packed telemetry updates
+// Internally throttled to 1Hz - safe to call frequently
 void updateControllerPackedTelemetry(float altitude, float baro_temp,
                                       float vario, float mcu_temp);
 

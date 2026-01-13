@@ -40,6 +40,14 @@ void updateControllerPackedTelemetry(float altitude, float baro_temp,
     return;
   }
 
+  // Throttle to 1Hz (1000ms) - controller data doesn't need high frequency
+  static unsigned long lastUpdateTime = 0;
+  unsigned long now = millis();
+  if (now - lastUpdateTime < 1000) {
+    return;
+  }
+  lastUpdateTime = now;
+
   BLE_Controller_Telemetry_V1 packet;
   packet.version = 1;
   packet.altitude = altitude;
