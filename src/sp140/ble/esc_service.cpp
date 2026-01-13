@@ -30,16 +30,16 @@ void initEscBleService(NimBLEServer* server) {
   pEscService = server->createService(NimBLEUUID(ESC_TELEMETRY_SERVICE_UUID));
 
   pESCVoltage = pEscService->createCharacteristic(
-      NimBLEUUID(ESC_VOLTAGE_UUID), NIMBLE_PROPERTY::READ);
+      NimBLEUUID(ESC_VOLTAGE_UUID), NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
 
   pESCCurrent = pEscService->createCharacteristic(
-      NimBLEUUID(ESC_CURRENT_UUID), NIMBLE_PROPERTY::READ);
+      NimBLEUUID(ESC_CURRENT_UUID), NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
 
   pESCRPM = pEscService->createCharacteristic(
-      NimBLEUUID(ESC_RPM_UUID), NIMBLE_PROPERTY::READ);
+      NimBLEUUID(ESC_RPM_UUID), NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
 
   pESCTemps = pEscService->createCharacteristic(
-      NimBLEUUID(ESC_TEMPS_UUID), NIMBLE_PROPERTY::READ);
+      NimBLEUUID(ESC_TEMPS_UUID), NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
 
   // Ensure deterministic startup values.
   float initialFloat = 0.0f;
@@ -75,4 +75,13 @@ void updateESCTelemetryBLE(const STR_ESC_TELEMETRY_140& telemetry) {
   if (pESCCurrent) pESCCurrent->setValue(current);
   if (pESCRPM) pESCRPM->setValue(rpm);
   if (pESCTemps) pESCTemps->setValue(reinterpret_cast<uint8_t*>(&temps), sizeof(temps));
+
+  if (!deviceConnected) {
+    return;  // No notifications needed without a subscriber.
+  }
+
+  if (pESCVoltage) pESCVoltage->notify();
+  if (pESCCurrent) pESCCurrent->notify();
+  if (pESCRPM) pESCRPM->notify();
+  if (pESCTemps) pESCTemps->notify();
 }
