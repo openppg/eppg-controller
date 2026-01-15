@@ -9,6 +9,7 @@ extern HardwareConfig board_config;
 
 // Internal PWM smoothing buffer (8 samples)
 static CircularBuffer<int, 8> pwmBuffer;
+static volatile uint16_t last_pot_raw = 0;
 
 /**
  * Throttle easing function based on threshold/performance mode
@@ -45,7 +46,13 @@ void initThrottleInput() {
  * Range: 0..4095 (12-bit).
  */
 uint16_t readThrottleRaw() {
-  return analogRead(board_config.throttle_pin);
+  uint16_t raw = analogRead(board_config.throttle_pin);
+  last_pot_raw = raw;
+  return raw;
+}
+
+uint16_t getLastThrottleRaw() {
+  return last_pot_raw;
 }
 
 /** Map raw ADC (0..4095) to PWM (ESC_MIN_PWM..ESC_MAX_PWM). */

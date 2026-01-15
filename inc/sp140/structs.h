@@ -175,7 +175,7 @@ typedef struct {
   uint32_t lastUpdateMs;        // Timestamp of last update
 } BLE_ESC_Telemetry_V1;
 
-// Binary packed Controller telemetry for BLE transmission (~21 bytes)
+// Binary packed Controller telemetry for BLE transmission (~23 bytes)
 // Contains ESP32 sensor data and system status
 typedef struct {
   uint8_t version;              // Protocol version (1)
@@ -183,6 +183,7 @@ typedef struct {
   float baro_temp;              // Barometric sensor temperature (°C)
   float vario;                  // Vertical speed (m/s)
   float mcu_temp;               // Internal ESP32 temperature (°C)
+  uint16_t pot_raw;             // Raw potentiometer reading (0..4095)
   uint32_t uptime_ms;           // Time since boot (ms)
 } BLE_Controller_Telemetry_V1;
 

@@ -84,7 +84,7 @@ class ScreenRotationCallbacks : public NimBLECharacteristicCallbacks {
 class ThrottleValueCallbacks : public NimBLECharacteristicCallbacks {
   void onRead(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
     (void)connInfo;
-    uint16_t potVal = readThrottleRaw();
+    uint16_t potVal = getLastThrottleRaw();
     characteristic->setValue(reinterpret_cast<uint8_t*>(&potVal), sizeof(potVal));
   }
 

@@ -4,6 +4,7 @@
 
 #include "sp140/ble.h"
 #include "sp140/ble/ble_ids.h"
+#include "sp140/throttle.h"
 
 namespace {
 
@@ -54,6 +55,7 @@ void updateControllerPackedTelemetry(float altitude, float baro_temp,
   packet.baro_temp = baro_temp;
   packet.vario = vario;
   packet.mcu_temp = mcu_temp;
+  packet.pot_raw = getLastThrottleRaw();
   packet.uptime_ms = static_cast<uint32_t>(millis());
 
   pControllerPackedTelemetry->setValue(

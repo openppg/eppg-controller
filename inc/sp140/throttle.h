@@ -41,6 +41,9 @@ void initThrottleInput();
 /** Read raw throttle value from ADC (0..4095). */
 uint16_t readThrottleRaw();
 
+/** Get the most recently sampled raw throttle value (0..4095). */
+uint16_t getLastThrottleRaw();
+
 /** Convert raw pot reading (0..4095) to PWM microseconds. */
 int potRawToPwm(uint16_t raw);
 
