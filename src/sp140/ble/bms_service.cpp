@@ -140,7 +140,7 @@ void updateBMSPackedTelemetry(const STR_BMS_TELEMETRY_140& telemetry, uint8_t bm
   packet.highest_temperature = telemetry.highest_temperature;
   packet.lowest_temperature = telemetry.lowest_temperature;
   packet.voltage_differential = telemetry.voltage_differential;
-  packet.battery_failure_level = telemetry.battery_failure_level;
+  packet.battery_fail_level = telemetry.battery_fail_level;
   packet.is_charge_mos = telemetry.is_charge_mos ? 1 : 0;
   packet.is_discharge_mos = telemetry.is_discharge_mos ? 1 : 0;
   packet.is_charging = telemetry.is_charging ? 1 : 0;
@@ -219,7 +219,7 @@ void updateBMSTelemetry(const STR_BMS_TELEMETRY_140& telemetry) {
   }
 
   // Handle state-change characteristics - only notify on change
-  setAndNotifyOnChange(pBMSFailureLevel, telemetry.battery_failure_level, lastFailureLevel);
+  setAndNotifyOnChange(pBMSFailureLevel, telemetry.battery_fail_level, lastFailureLevel);
   setAndNotifyOnChange(pBMSChargeMos, static_cast<uint8_t>(telemetry.is_charge_mos ? 1 : 0), lastChargeMos);
   setAndNotifyOnChange(pBMSDischargeMos, static_cast<uint8_t>(telemetry.is_discharge_mos ? 1 : 0), lastDischargeMos);
 

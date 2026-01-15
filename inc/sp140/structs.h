@@ -100,7 +100,7 @@ typedef struct {
   float lowest_temperature;     // Lowest temperature reading (°C)
   float energy_cycle;          // Energy per cycle (kWh)
   uint32_t battery_cycle;      // Battery cycle count
-  uint8_t battery_failure_level;  // Battery failure status
+  uint8_t battery_fail_level;  // Battery failure status
   float voltage_differential;   // Highest cell minus lowest cell voltage (V)
   unsigned long lastUpdateMs;   // Timestamp of last telemetry update
   bool is_charging;
@@ -149,7 +149,7 @@ typedef struct {
   float highest_temperature;    // Highest temperature (°C)
   float lowest_temperature;     // Lowest temperature (°C)
   float voltage_differential;   // Cell voltage differential (V)
-  uint8_t battery_failure_level;// Battery failure status
+  uint8_t battery_fail_level;   // Battery failure status
   uint8_t is_charge_mos;        // Charge MOSFET state (0/1)
   uint8_t is_discharge_mos;     // Discharge MOSFET state (0/1)
   uint8_t is_charging;          // Charging state (0/1)

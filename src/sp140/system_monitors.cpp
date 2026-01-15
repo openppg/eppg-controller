@@ -13,7 +13,7 @@ extern bool bmpPresent;
 // Cached CPU temperature to avoid "tsens: Do not configure the temp sensor when it's running!" error
 static float cachedCpuTemp = 0.0f;
 static unsigned long lastCpuTempRead = 0;
-static const unsigned long CPU_TEMP_READ_INTERVAL = 1000; // Read every 1 second
+static const unsigned long CPU_TEMP_READ_INTERVAL = 1000;  // Read every 1 second
 
 float getCachedCpuTemperature() {
   unsigned long now = millis();
