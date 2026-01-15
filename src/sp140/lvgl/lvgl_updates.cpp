@@ -387,9 +387,13 @@ void updateLvglMainScreen(
 
         // Always use black text for better readability
         lv_obj_set_style_text_color(voltage_left_label, LVGL_BLACK, 0);
+        // Restore default position when BMS is connected
+        lv_obj_align(voltage_left_label, LV_ALIGN_TOP_LEFT, 3, 12);
     } else if (escConnected) {
         lv_obj_set_style_text_color(voltage_left_label, LVGL_BLACK, 0);
         lv_label_set_text(voltage_left_label, "NO\nBMS");
+        // Move up by 10 pixels when showing NO BMS
+        lv_obj_align(voltage_left_label, LV_ALIGN_TOP_LEFT, 3, 2);
     } else {
         lv_label_set_text(voltage_left_label, "");
     }
