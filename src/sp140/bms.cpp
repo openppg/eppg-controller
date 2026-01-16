@@ -58,7 +58,7 @@ void updateBMSData() {
   // Battery statistics
   bmsTelemetryData.battery_cycle = bms_can->getBatteryCycle();
   bmsTelemetryData.energy_cycle = bms_can->getEnergyCycle();
-  bmsTelemetryData.battery_failure_level = bms_can->getBatteryFailureLevel();
+  bmsTelemetryData.battery_fail_level = bms_can->getBatteryFailureLevel();
 
   // Battery status
   bmsTelemetryData.is_charging = bms_can->isBatteryCharging();

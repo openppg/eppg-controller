@@ -41,6 +41,9 @@ void initThrottleInput();
 /** Read raw throttle value from ADC (0..4095). */
 uint16_t readThrottleRaw();
 
+/** Get the most recently sampled raw throttle value (0..4095). */
+uint16_t getLastThrottleRaw();
+
 /** Convert raw pot reading (0..4095) to PWM microseconds. */
 int potRawToPwm(uint16_t raw);
 
@@ -101,5 +104,39 @@ void resetThrottleState(int& prevPwm);
  * and applies appropriate limits based on device state
  */
 void handleThrottle();
+
+/**
+ * Calculate the cruise control PWM value from a raw pot reading.
+ * Uses the same mapping as normal throttle (full range then clamp to mode max).
+ * Also applies the absolute cruise max cap.
+ *
+ * @param potVal           Raw potentiometer value (0..4095)
+ * @param performance_mode 0 = CHILL, 1 = SPORT
+ * @param cruiseMaxPct     Maximum cruise throttle as percentage (e.g., 0.60)
+ * @return Final PWM value for cruise control
+ */
+uint16_t calculateCruisePwm(uint16_t potVal, uint8_t performance_mode, float cruiseMaxPct);
+
+/**
+ * Check if pot value is in valid range for cruise activation.
+ * Must be above engagement level (5%) and below max activation (70%).
+ *
+ * @param potVal              Raw potentiometer value (0..4095)
+ * @param engagementLevel     Minimum pot value to be considered engaged
+ * @param maxActivationPct    Maximum pot percentage for activation (e.g., 0.70)
+ * @return true if pot is in valid activation range
+ */
+bool isPotInCruiseActivationRange(uint16_t potVal, uint16_t engagementLevel, float maxActivationPct);
+
+/**
+ * Check if pot value should trigger cruise disengagement.
+ * Disengages when current pot >= threshold percentage of activation value.
+ *
+ * @param currentPotVal       Current raw potentiometer value
+ * @param activationPotVal    Pot value when cruise was activated
+ * @param thresholdPct        Percentage of activation value to trigger disengage (e.g., 0.80)
+ * @return true if cruise should disengage
+ */
+bool shouldPotDisengageCruise(uint16_t currentPotVal, uint16_t activationPotVal, float thresholdPct);
 
 #endif  // INC_SP140_THROTTLE_H_

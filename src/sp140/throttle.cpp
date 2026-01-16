@@ -9,6 +9,7 @@ extern HardwareConfig board_config;
 
 // Internal PWM smoothing buffer (8 samples)
 static CircularBuffer<int, 8> pwmBuffer;
+static volatile uint16_t last_pot_raw = 0;
 
 /**
  * Throttle easing function based on threshold/performance mode
@@ -45,7 +46,13 @@ void initThrottleInput() {
  * Range: 0..4095 (12-bit).
  */
 uint16_t readThrottleRaw() {
-  return analogRead(board_config.throttle_pin);
+  uint16_t raw = analogRead(board_config.throttle_pin);
+  last_pot_raw = raw;
+  return raw;
+}
+
+uint16_t getLastThrottleRaw() {
+  return last_pot_raw;
 }
 
 /** Map raw ADC (0..4095) to PWM (ESC_MIN_PWM..ESC_MAX_PWM). */
@@ -123,4 +130,45 @@ int getSmoothedThrottlePwm() {
 void resetThrottleState(int& prevPwm) {
   prevPwm = ESC_MIN_PWM;
   throttleFilterClear();
+}
+
+/**
+ * Calculate the cruise control PWM value from a raw pot reading.
+ * Uses the same mapping as normal throttle: map to full range first,
+ * then clamp to the mode maximum and cruise maximum.
+ *
+ * This ensures cruise maintains the actual throttle output level,
+ * not a re-mapped value that would cause throttle drop in chill mode.
+ */
+uint16_t calculateCruisePwm(uint16_t potVal, uint8_t performance_mode, float cruiseMaxPct) {
+  // Step 1: Map to full PWM range (same as normal throttle)
+  uint16_t pwm = potRawToPwm(potVal);
+
+  // Step 2: Clamp to mode maximum (chill mode caps at lower PWM)
+  int maxPwmForMode = (performance_mode == 0) ? CHILL_MODE_MAX_PWM : ESC_MAX_PWM;
+  pwm = min(pwm, (uint16_t)maxPwmForMode);
+
+  // Step 3: Apply absolute cruise max cap
+  uint16_t absoluteMaxCruisePwm = ESC_MIN_PWM + (uint16_t)((ESC_MAX_PWM - ESC_MIN_PWM) * cruiseMaxPct);
+  pwm = min(pwm, absoluteMaxCruisePwm);
+
+  return pwm;
+}
+
+/**
+ * Check if pot value is in valid range for cruise activation.
+ * Must be above engagement level and below max activation threshold.
+ */
+bool isPotInCruiseActivationRange(uint16_t potVal, uint16_t engagementLevel, float maxActivationPct) {
+  uint16_t maxActivationVal = (uint16_t)(POT_MAX_VALUE * maxActivationPct);
+  return potVal >= engagementLevel && potVal <= maxActivationVal;
+}
+
+/**
+ * Check if pot value should trigger cruise disengagement.
+ * Returns true when current pot >= threshold percentage of activation value.
+ */
+bool shouldPotDisengageCruise(uint16_t currentPotVal, uint16_t activationPotVal, float thresholdPct) {
+  uint16_t disengageThreshold = (uint16_t)(activationPotVal * thresholdPct);
+  return currentPotVal >= disengageThreshold;
 }

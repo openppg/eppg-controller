@@ -7,4 +7,7 @@
 void addInternalMonitors();
 void addAltimeterMonitors();
 
+// Thread-safe cached CPU temperature reading (updates max once per second)
+float getCachedCpuTemperature();
+
 #endif  // INC_SP140_SYSTEM_MONITORS_H_
