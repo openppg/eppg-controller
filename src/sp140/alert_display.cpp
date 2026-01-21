@@ -19,10 +19,11 @@ static AlertCounts g_currentCounts = {0, 0};
 static AlertCounts g_previousCounts = {0, 0};  // Track previous counts for transitions
 static uint32_t g_epoch = 0;
 
-// Rotation state for display
-static std::vector<SensorID> g_activeList;
-static bool g_showingCrit = false;
-static size_t g_rotateIdx = 0;
+// Rotation state for display - separate lists for warnings and criticals
+static std::vector<SensorID> g_critList;
+static std::vector<SensorID> g_warnList;
+static size_t g_critRotateIdx = 0;
+static size_t g_warnRotateIdx = 0;
 static unsigned long g_lastRotateMs = 0;
 
 // Forward declarations
@@ -56,6 +57,36 @@ void sendAlertEvent(SensorID id, AlertLevel level) {
   xQueueSend(alertEventQueue, &ev, 0);  // best-effort, drop if full
 }
 
+// Helper to build and send UI update with current state
+static void sendUIUpdate() {
+  AlertUIUpdate update;
+  update.counts = g_currentCounts;
+  update.criticalAlertsActive = (g_currentCounts.criticalCount > 0);
+  update.updateEpoch = g_epoch;
+
+  // Critical display (shows on top, in altitude area)
+  if (!g_critList.empty()) {
+    update.showCritical = true;
+    update.criticalId = g_critList[g_critRotateIdx];
+    update.criticalLevel = g_currentLevels[g_critList[g_critRotateIdx]];
+  } else {
+    update.showCritical = false;
+  }
+
+  // Warning display (shows below critical)
+  if (!g_warnList.empty()) {
+    update.showWarning = true;
+    update.warningId = g_warnList[g_warnRotateIdx];
+    update.warningLevel = g_currentLevels[g_warnList[g_warnRotateIdx]];
+  } else {
+    update.showWarning = false;
+  }
+
+  if (alertUIQueue) {
+    xQueueOverwrite(alertUIQueue, &update);
+  }
+}
+
 // ------------ Internal implementation -------------
 static void alertAggregationTask(void* parameter) {
   AlertEvent ev;
@@ -72,36 +103,28 @@ static void alertAggregationTask(void* parameter) {
       recalcCountsAndPublish();
     }
 
-    // Handle rotation every 2s if active list not empty
-    if (!g_activeList.empty()) {
+    // Handle rotation every 2s if either list not empty
+    bool hasAlerts = !g_critList.empty() || !g_warnList.empty();
+    if (hasAlerts) {
       unsigned long now = millis();
       if (now - g_lastRotateMs >= 2000) {
         g_lastRotateMs = now;
-        g_rotateIdx = (g_rotateIdx + 1) % g_activeList.size();
 
-        // Send unified update with current counts and display info
-        AlertUIUpdate update;
-        update.counts = g_currentCounts;
-        update.showDisplay = true;
-        update.displayId = g_activeList[g_rotateIdx];
-        update.displayLevel = g_currentLevels[g_activeList[g_rotateIdx]];
-        update.displayCritical = g_showingCrit;
-        update.criticalAlertsActive = (g_currentCounts.criticalCount > 0);
-        update.updateEpoch = g_epoch;
-        if (alertUIQueue) {
-          xQueueOverwrite(alertUIQueue, &update);
+        // Rotate both lists independently
+        if (!g_critList.empty()) {
+          g_critRotateIdx = (g_critRotateIdx + 1) % g_critList.size();
         }
+        if (!g_warnList.empty()) {
+          g_warnRotateIdx = (g_warnRotateIdx + 1) % g_warnList.size();
+        }
+
+        sendUIUpdate();
       }
     } else {
-      // If list empty ensure label hidden once
+      // If both lists empty, ensure labels hidden once
       static bool hideSent = false;
       if (!hideSent) {
-        AlertUIUpdate update;
-        update.counts = g_currentCounts;
-        update.showDisplay = false;
-        update.criticalAlertsActive = (g_currentCounts.criticalCount > 0);
-        update.updateEpoch = g_epoch;
-        if (alertUIQueue) xQueueOverwrite(alertUIQueue, &update);
+        sendUIUpdate();
         hideSent = true;
       }
     }
@@ -110,18 +133,18 @@ static void alertAggregationTask(void* parameter) {
 
 static void recalcCountsAndPublish() {
   AlertCounts counts{0, 0};
-  std::vector<SensorID> critList;
-  std::vector<SensorID> warnList;
+  std::vector<SensorID> newCritList;
+  std::vector<SensorID> newWarnList;
   for (const auto& kv : g_currentLevels) {
     switch (kv.second) {
       case AlertLevel::WARN_LOW:
       case AlertLevel::WARN_HIGH:
-        warnList.push_back(kv.first);
+        newWarnList.push_back(kv.first);
         counts.warningCount++;
         break;
       case AlertLevel::CRIT_LOW:
       case AlertLevel::CRIT_HIGH:
-        critList.push_back(kv.first);
+        newCritList.push_back(kv.first);
         counts.criticalCount++;
         break;
       default:
@@ -138,48 +161,33 @@ static void recalcCountsAndPublish() {
                        counts.criticalCount != g_currentCounts.criticalCount);
   g_currentCounts = counts;
 
-  // Update active list for display rotation
-  bool newShowingCrit = !critList.empty();
-  const std::vector<SensorID>& newList = newShowingCrit ? critList : warnList;
+  // Check if lists changed
+  bool critListChanged = (newCritList != g_critList);
+  bool warnListChanged = (newWarnList != g_warnList);
 
-  bool listChanged = (newShowingCrit != g_showingCrit) || (newList != g_activeList);
-
-  // Send unified update when counts change or display list changes
-  if (countsChanged || listChanged) {
-    if (listChanged) {
-      g_activeList = newList;
-      g_showingCrit = newShowingCrit;
-      g_rotateIdx = 0;
-      g_lastRotateMs = millis();
+  // Send unified update when counts change or display lists change
+  if (countsChanged || critListChanged || warnListChanged) {
+    if (critListChanged) {
+      g_critList = newCritList;
+      g_critRotateIdx = 0;
     }
-
-    AlertUIUpdate update;
-    update.counts = g_currentCounts;
-    update.criticalAlertsActive = (g_currentCounts.criticalCount > 0);
-    update.updateEpoch = g_epoch;
-
-    if (g_activeList.empty()) {
-      update.showDisplay = false;
-    } else {
-      update.showDisplay = true;
-      update.displayId = g_activeList[g_rotateIdx];
-      update.displayLevel = g_currentLevels[g_activeList[g_rotateIdx]];
-      update.displayCritical = g_showingCrit;
+    if (warnListChanged) {
+      g_warnList = newWarnList;
+      g_warnRotateIdx = 0;
     }
+    g_lastRotateMs = millis();
 
     USBSerial.printf("[Alert] Sending UI update: crit=%d warn=%d critActive=%d\n",
-                     update.counts.criticalCount, update.counts.warningCount, update.criticalAlertsActive);
+                     counts.criticalCount, counts.warningCount, (counts.criticalCount > 0));
 
-    if (alertUIQueue) {
-      xQueueOverwrite(alertUIQueue, &update);
-    }
+    sendUIUpdate();
   }
 
   // Build snapshot for carousel (critical preferred)
   AlertSnapshot snap{};
   snap.epoch = ++g_epoch;
-  snap.criticalMode = (!critList.empty()) ? 1 : 0;
-  const std::vector<SensorID>& srcList = (!critList.empty()) ? critList : warnList;
+  snap.criticalMode = (!newCritList.empty()) ? 1 : 0;
+  const std::vector<SensorID>& srcList = (!newCritList.empty()) ? newCritList : newWarnList;
   snap.count = (uint8_t)std::min<size_t>(srcList.size(), MAX_ALERT_ITEMS);
   for (uint8_t i = 0; i < snap.count; ++i) {
     snap.ids[i] = srcList[i];

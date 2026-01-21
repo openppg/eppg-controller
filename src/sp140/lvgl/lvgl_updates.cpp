@@ -333,7 +333,11 @@ void updateLvglMainScreen(
   float batteryPercent = unifiedBatteryData.soc;
   float totalVolts = unifiedBatteryData.volts;
   float lowestCellV = bmsTelemetry.lowest_cell_voltage;
-  float batteryTemp = bmsTelemetry.highest_temperature;
+  // Calculate highest cell temperature from T1-T4 only (excluding MOSFET and balance temps)
+  float batteryTemp = bmsTelemetry.t1_temperature;
+  if (bmsTelemetry.t2_temperature > batteryTemp) batteryTemp = bmsTelemetry.t2_temperature;
+  if (bmsTelemetry.t3_temperature > batteryTemp) batteryTemp = bmsTelemetry.t3_temperature;
+  if (bmsTelemetry.t4_temperature > batteryTemp) batteryTemp = bmsTelemetry.t4_temperature;
   float escTemp = escTelemetry.cap_temp;
   float motorTemp = escTelemetry.motor_temp;
   // Check if BMS or ESC is connected
@@ -383,9 +387,13 @@ void updateLvglMainScreen(
 
         // Always use black text for better readability
         lv_obj_set_style_text_color(voltage_left_label, LVGL_BLACK, 0);
+        // Restore default position when BMS is connected
+        lv_obj_align(voltage_left_label, LV_ALIGN_TOP_LEFT, 3, 12);
     } else if (escConnected) {
         lv_obj_set_style_text_color(voltage_left_label, LVGL_BLACK, 0);
-        lv_label_set_text(voltage_left_label, "No BMS");
+        lv_label_set_text(voltage_left_label, "NO\nBMS");
+        // Move up by 10 pixels when showing NO BMS
+        lv_obj_align(voltage_left_label, LV_ALIGN_TOP_LEFT, 3, 2);
     } else {
         lv_label_set_text(voltage_left_label, "");
     }
@@ -653,10 +661,10 @@ void updateLvglMainScreen(
 
     if (bmsTelemetry.bmsState == TelemetryState::CONNECTED) {
       lv_label_set_text_fmt(batt_temp_label, "%d", static_cast<int>(batteryTemp));
-      if (batteryTemp >= bmsTempThresholds.critHigh) {
+      if (batteryTemp >= bmsCellTempThresholds.critHigh) {
         lv_obj_add_style(batt_temp_bg, &style_critical, 0);
         lv_obj_clear_flag(batt_temp_bg, LV_OBJ_FLAG_HIDDEN);
-      } else if (batteryTemp >= bmsTempThresholds.warnHigh) {
+      } else if (batteryTemp >= bmsCellTempThresholds.warnHigh) {
         lv_obj_add_style(batt_temp_bg, &style_warning, 0);
         lv_obj_clear_flag(batt_temp_bg, LV_OBJ_FLAG_HIDDEN);
       } else {

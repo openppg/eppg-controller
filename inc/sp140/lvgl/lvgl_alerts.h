@@ -13,7 +13,8 @@ extern lv_obj_t* critical_counter_circle;
 extern lv_obj_t* critical_counter_label;
 
 // Alert text carousel objects
-extern lv_obj_t* alert_text_label;
+extern lv_obj_t* alert_text_label;       // For warning text
+extern lv_obj_t* critical_text_label;    // For critical text (separate so both can show)
 extern lv_timer_t* alert_cycle_timer;
 
 // Snapshot state shared between timer and external updater
@@ -29,5 +30,7 @@ void loadAlertSnapshot(const AlertSnapshot& snap);
 void lv_showAlertText(SensorID id, bool critical);
 void lv_showAlertTextWithLevel(SensorID id, AlertLevel level, bool critical);
 void lv_hideAlertText();
+void lv_hideWarningText();
+void lv_hideCriticalText();
 
 #endif  // INC_SP140_LVGL_LVGL_ALERTS_H_
