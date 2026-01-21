@@ -261,6 +261,25 @@ class PerformanceModeCallbacks: public BLECharacteristicCallbacks {
   }
 };
 
+class ThemeCallbacks: public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *pCharacteristic) {
+    std::string value = pCharacteristic->getValue();
+
+    if (value.length() == 1) {
+      uint8_t theme = value[0];
+      if (theme <= 1) {  // Ensure value is 0 or 1
+        deviceData.theme = theme;
+        writeDeviceData();
+        USBSerial.println("Theme saved to Preferences");
+      } else {
+        USBSerial.println("Invalid theme value");
+      }
+    } else {
+      USBSerial.println("Invalid value length - expected 1 byte");
+    }
+  }
+};
+
 class ScreenRotationCallbacks: public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *pCharacteristic) {
     std::string value = pCharacteristic->getValue();
@@ -431,6 +450,15 @@ void setupBLE() {
   int performanceMode = deviceData.performance_mode ? 1 : 0;
 
   pPerformanceMode->setValue(performanceMode);
+
+  BLECharacteristic *pTheme = pConfigService->createCharacteristic(
+                               BLEUUID(THEME_UUID),
+                               BLECharacteristic::PROPERTY_READ |
+                               BLECharacteristic::PROPERTY_WRITE);
+
+  pTheme->setCallbacks(new ThemeCallbacks());
+  int theme = deviceData.theme ? 1 : 0;
+  pTheme->setValue(theme);
 
   BLECharacteristic *pScreenRotation = pConfigService->createCharacteristic(
                                         BLEUUID(SCREEN_ROTATION_UUID),
