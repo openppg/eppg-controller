@@ -27,6 +27,12 @@
 #include "../../inc/sp140/debug.h"
 #include "../../inc/sp140/simple_monitor.h"
 #include "../../inc/sp140/alert_display.h"
+#include "../../inc/sp140/ble.h"
+#include "../../inc/sp140/ble/ble_core.h"
+#include "../../inc/sp140/ble/bms_service.h"
+#include "../../inc/sp140/ble/config_service.h"
+#include "../../inc/sp140/ble/controller_service.h"
+#include "../../inc/sp140/ble/esc_service.h"
 
 #include "../../inc/sp140/buzzer.h"
 #include "../../inc/sp140/device_state.h"
@@ -89,26 +95,22 @@ volatile bool uiReady = false;
 
 SemaphoreHandle_t eepromSemaphore;
 SemaphoreHandle_t stateMutex;
+SemaphoreHandle_t lvglMutex;
 
-// Add near other queue declarations
-QueueHandle_t bleStateQueue = NULL;
-QueueHandle_t deviceStateQueue = NULL;
-
-// Add struct for BLE state updates
+// BLE state propagation
 struct BLEStateUpdate {
   uint8_t state;
   bool needsNotify;
 };
-
-// Add new task handle
+QueueHandle_t bleStateQueue = NULL;
 TaskHandle_t bleStateUpdateTaskHandle = NULL;
+
+// Device state broadcast
+QueueHandle_t deviceStateQueue = NULL;
 TaskHandle_t deviceStateUpdateTaskHandle = NULL;
 
-// Add near other task handles
+// WebSerial worker
 TaskHandle_t webSerialTaskHandle = NULL;
-
-// Add mutex for LVGL thread safety
-SemaphoreHandle_t lvglMutex;
 
 // Variable to track the current screen page
 ScreenPage currentScreenPage = MAIN_SCREEN;
@@ -388,8 +390,19 @@ void updateBLETask(void *pvParameters) {
 
     // Wait for new data with timeout
     if (xQueueReceive(bmsTelemetryQueue, &newBmsTelemetry, pdMS_TO_TICKS(100)) == pdTRUE) {
-        // Update BLE characteristics with the received data
+      // Update packed binary telemetry (always enabled)
+      updateBMSPackedTelemetry(newBmsTelemetry, 0);  // bms_id=0 for primary BMS
+
+      // Update legacy BLE characteristics (can be disabled with DISABLE_LEGACY_BLE_TELEMETRY)
       updateBMSTelemetry(newBmsTelemetry);
+
+      // Update controller telemetry at same 10Hz rate as BMS
+      // Gather sensor data from barometer and ESP32
+      float altitude = getAltitude(deviceData);
+      float baro_temp = getBaroTemperature();
+      float vario = getVerticalSpeed();
+      float mcu_temp = temperatureRead();  // ESP32 internal temp sensor
+      updateControllerPackedTelemetry(altitude, baro_temp, vario, mcu_temp);
     }
 
     // Add a small delay to prevent task starvation
@@ -1148,19 +1161,12 @@ void afterCruiseStart() {
   cruisedPotVal = readThrottleRaw();  // Store the raw pot value (0-4095) at activation
   cruisedAtMillis = millis();
 
-  // Determine the maximum PWM based on the current flight mode (Chill/Sport)
-  int maxPwmForCurrentMode = (deviceData.performance_mode == 0) ? CHILL_MODE_MAX_PWM : ESC_MAX_PWM;
+  // Calculate cruise PWM using the same mapping as normal throttle
+  // (prevents throttle drop when activating cruise in chill mode)
+  uint16_t initialCruisePWM = calculateCruisePwm(
+      cruisedPotVal, deviceData.performance_mode, CRUISE_MAX_PERCENTAGE);
 
-  // Calculate the PWM corresponding to the potentiometer value *at the time of activation*, respecting the current flight mode's maximum PWM.
-  uint16_t calculatedActivationPWM = map(cruisedPotVal, 0, 4095, ESC_MIN_PWM, maxPwmForCurrentMode);
-
-  // Calculate the absolute maximum PWM allowed for cruise control (e.g., 60% of full ESC range)
-  uint16_t absoluteMaxCruisePWM = ESC_MIN_PWM + (uint16_t)((ESC_MAX_PWM - ESC_MIN_PWM) * CRUISE_MAX_PERCENTAGE);
-
-  // Determine the actual PWM to use for cruise: the lower of the calculated activation PWM and the absolute cap.
-  uint16_t initialCruisePWM = min(calculatedActivationPWM, absoluteMaxCruisePWM);
-
-  // Send the capped initialCruisePWM value to the throttle task via queue
+  // Send the cruise PWM value to the throttle task via queue
   if (xQueueSend(throttleUpdateQueue, &initialCruisePWM, pdMS_TO_TICKS(100)) != pdTRUE) {
     USBSerial.println("Failed to queue initial cruise throttle PWM");
   }
@@ -1209,6 +1215,8 @@ void audioTask(void* parameter) {
 
 void updateESCBLETask(void *pvParameters) {
   STR_ESC_TELEMETRY_140 newEscTelemetry;
+  static unsigned long lastPackedUpdateMs = 0;
+  const unsigned long PACKED_UPDATE_INTERVAL_MS = 100;  // 10Hz for packed telemetry
 
   while (true) {
     // Add error checking for queue
@@ -1220,7 +1228,14 @@ void updateESCBLETask(void *pvParameters) {
 
     // Wait for new data with timeout
     if (xQueueReceive(escTelemetryQueue, &newEscTelemetry, pdMS_TO_TICKS(100)) == pdTRUE) {
-      // Update BLE characteristics with the received data
+      // Throttle packed telemetry to 10Hz to avoid saturating BLE bandwidth
+      unsigned long now = millis();
+      if (now - lastPackedUpdateMs >= PACKED_UPDATE_INTERVAL_MS) {
+        updateESCPackedTelemetry(newEscTelemetry);
+        lastPackedUpdateMs = now;
+      }
+
+      // Update legacy BLE characteristics (can be disabled with DISABLE_LEGACY_BLE_TELEMETRY)
       updateESCTelemetryBLE(newEscTelemetry);
     }
 

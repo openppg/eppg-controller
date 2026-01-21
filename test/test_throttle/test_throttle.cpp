@@ -198,6 +198,171 @@ TEST(ThrottleTest, ResetThrottleState) {
     EXPECT_EQ(throttleFilterAverage(), 0); // Buffer should be empty
 }
 
+// Test calculateCruisePwm function - ensures cruise maintains actual throttle level
+TEST(ThrottleTest, CalculateCruisePwmBasic) {
+    // Test that cruise PWM matches normal throttle mapping
+    // potRawToPwm(2048) = 1492 (50% of full range)
+    // In chill mode, 1492 < 1600 (CHILL_MODE_MAX_PWM), so no clamping
+    // With 60% cruise cap: 1035 + 915*0.6 = 1584
+
+    // 50% pot in SPORT mode (mode 1) - should match potRawToPwm exactly
+    uint16_t result = calculateCruisePwm(2048, 1, 0.60);
+    EXPECT_EQ(result, 1492);  // Same as potRawToPwm(2048)
+
+    // 50% pot in CHILL mode (mode 0) - should also be 1492 (below chill max)
+    result = calculateCruisePwm(2048, 0, 0.60);
+    EXPECT_EQ(result, 1492);  // Not clamped, same as normal throttle
+}
+
+// Test the bug that was fixed: chill mode cruise shouldn't drop throttle
+TEST(ThrottleTest, CalculateCruisePwmChillModeNoDrop) {
+    // THE BUG: Old code did map(pot, 0, 4095, 1035, 1600) in chill mode
+    // which gave 1317 for 50% pot instead of 1492
+
+    // Verify normal throttle mapping at 50%
+    int normalThrottle = potRawToPwm(2048);
+    EXPECT_EQ(normalThrottle, 1492);
+
+    // Cruise in chill mode should match normal throttle (no drop!)
+    uint16_t cruiseThrottle = calculateCruisePwm(2048, 0, 0.60);
+    EXPECT_EQ(cruiseThrottle, normalThrottle);  // CRITICAL: Must match!
+}
+
+// Test chill mode max clamping
+TEST(ThrottleTest, CalculateCruisePwmChillModeClamping) {
+    // At high throttle in chill mode, should clamp to CHILL_MODE_MAX_PWM (1600)
+    // potRawToPwm(4095) = 1950, but chill mode caps at 1600
+
+    // 100% pot in CHILL mode - should clamp to 1600 (not 1950)
+    uint16_t result = calculateCruisePwm(4095, 0, 0.70);
+    EXPECT_EQ(result, 1600);  // Clamped to CHILL_MODE_MAX_PWM
+
+    // 80% pot in CHILL mode - potRawToPwm(3276) ≈ 1767, clamps to 1600
+    result = calculateCruisePwm(3276, 0, 0.70);
+    EXPECT_EQ(result, 1600);  // Clamped to CHILL_MODE_MAX_PWM
+}
+
+// Test cruise max percentage capping
+TEST(ThrottleTest, CalculateCruisePwmCruiseMaxCap) {
+    // Cruise max cap at 60%: 1035 + (1950-1035)*0.6 = 1035 + 549 = 1584
+
+    // In SPORT mode at high throttle, cruise cap should apply
+    // potRawToPwm(4095) = 1950, but cruise cap at 60% = 1584
+    uint16_t result = calculateCruisePwm(4095, 1, 0.60);
+    EXPECT_EQ(result, 1584);  // Capped by cruise max, not mode max
+
+    // At 70% cruise cap: 1035 + 915*0.7 = 1675
+    result = calculateCruisePwm(4095, 1, 0.70);
+    EXPECT_EQ(result, 1675);  // Higher cruise cap
+
+    // In chill mode, the lower of (chill max, cruise cap) applies
+    // Chill max = 1600, cruise cap at 70% = 1675, so 1600 wins
+    result = calculateCruisePwm(4095, 0, 0.70);
+    EXPECT_EQ(result, 1600);  // Chill mode max is lower than cruise cap
+}
+
+// Test edge cases
+TEST(ThrottleTest, CalculateCruisePwmEdgeCases) {
+    // Minimum pot value
+    uint16_t result = calculateCruisePwm(0, 0, 0.60);
+    EXPECT_EQ(result, 1035);  // ESC_MIN_PWM
+
+    result = calculateCruisePwm(0, 1, 0.60);
+    EXPECT_EQ(result, 1035);  // ESC_MIN_PWM
+
+    // Low throttle (25%) - should not be affected by any caps
+    // potRawToPwm(1024) = 1263
+    result = calculateCruisePwm(1024, 0, 0.60);
+    EXPECT_EQ(result, 1263);
+
+    result = calculateCruisePwm(1024, 1, 0.60);
+    EXPECT_EQ(result, 1263);
+}
+
+// Test cruise activation range check
+TEST(ThrottleTest, IsPotInCruiseActivationRange) {
+    // Using real values: engagement = 5% of 4095 = 204, max = 70% of 4095 = 2866
+    const uint16_t engagementLevel = 204;
+    const float maxActivationPct = 0.70;
+
+    // Below engagement level - should NOT be in range
+    EXPECT_FALSE(isPotInCruiseActivationRange(0, engagementLevel, maxActivationPct));
+    EXPECT_FALSE(isPotInCruiseActivationRange(100, engagementLevel, maxActivationPct));
+    EXPECT_FALSE(isPotInCruiseActivationRange(203, engagementLevel, maxActivationPct));
+
+    // At engagement level - should be in range
+    EXPECT_TRUE(isPotInCruiseActivationRange(204, engagementLevel, maxActivationPct));
+
+    // In valid range - should be in range
+    EXPECT_TRUE(isPotInCruiseActivationRange(500, engagementLevel, maxActivationPct));
+    EXPECT_TRUE(isPotInCruiseActivationRange(1000, engagementLevel, maxActivationPct));
+    EXPECT_TRUE(isPotInCruiseActivationRange(2000, engagementLevel, maxActivationPct));
+    EXPECT_TRUE(isPotInCruiseActivationRange(2866, engagementLevel, maxActivationPct));  // At 70%
+
+    // Above max activation - should NOT be in range
+    EXPECT_FALSE(isPotInCruiseActivationRange(2867, engagementLevel, maxActivationPct));
+    EXPECT_FALSE(isPotInCruiseActivationRange(3000, engagementLevel, maxActivationPct));
+    EXPECT_FALSE(isPotInCruiseActivationRange(4095, engagementLevel, maxActivationPct));  // Full throttle
+}
+
+// Test cruise disengagement threshold
+TEST(ThrottleTest, ShouldPotDisengageCruise) {
+    // Using 80% threshold
+    const float thresholdPct = 0.80;
+
+    // Cruise activated at 50% pot (2048)
+    // Disengage threshold = 2048 * 0.80 = 1638
+
+    // Below threshold - should NOT disengage
+    EXPECT_FALSE(shouldPotDisengageCruise(0, 2048, thresholdPct));
+    EXPECT_FALSE(shouldPotDisengageCruise(1000, 2048, thresholdPct));
+    EXPECT_FALSE(shouldPotDisengageCruise(1637, 2048, thresholdPct));
+
+    // At or above threshold - should disengage
+    EXPECT_TRUE(shouldPotDisengageCruise(1638, 2048, thresholdPct));
+    EXPECT_TRUE(shouldPotDisengageCruise(2000, 2048, thresholdPct));
+    EXPECT_TRUE(shouldPotDisengageCruise(2048, 2048, thresholdPct));  // At activation point
+    EXPECT_TRUE(shouldPotDisengageCruise(3000, 2048, thresholdPct));  // Above activation
+    EXPECT_TRUE(shouldPotDisengageCruise(4095, 2048, thresholdPct));  // Full throttle
+}
+
+// Test disengagement at different activation points
+TEST(ThrottleTest, ShouldPotDisengageCruiseVariousActivations) {
+    const float thresholdPct = 0.80;
+
+    // Low cruise (25% pot = 1024), threshold = 819
+    EXPECT_FALSE(shouldPotDisengageCruise(818, 1024, thresholdPct));
+    EXPECT_TRUE(shouldPotDisengageCruise(819, 1024, thresholdPct));
+    EXPECT_TRUE(shouldPotDisengageCruise(1024, 1024, thresholdPct));
+
+    // High cruise (60% pot = 2457), threshold = 1965
+    EXPECT_FALSE(shouldPotDisengageCruise(1964, 2457, thresholdPct));
+    EXPECT_TRUE(shouldPotDisengageCruise(1965, 2457, thresholdPct));
+    EXPECT_TRUE(shouldPotDisengageCruise(2457, 2457, thresholdPct));
+
+    // Very low cruise (10% pot = 409), threshold = 327
+    EXPECT_FALSE(shouldPotDisengageCruise(326, 409, thresholdPct));
+    EXPECT_TRUE(shouldPotDisengageCruise(327, 409, thresholdPct));
+}
+
+// Test edge case: cruise at minimum engagement
+TEST(ThrottleTest, CruiseActivationEdgeCases) {
+    const uint16_t engagementLevel = 204;  // 5% of 4095
+    const float maxActivationPct = 0.70;
+
+    // Exactly at engagement level should be valid
+    EXPECT_TRUE(isPotInCruiseActivationRange(204, engagementLevel, maxActivationPct));
+
+    // Just below engagement should be invalid
+    EXPECT_FALSE(isPotInCruiseActivationRange(203, engagementLevel, maxActivationPct));
+
+    // At max threshold (70% = 2866) should be valid
+    EXPECT_TRUE(isPotInCruiseActivationRange(2866, engagementLevel, maxActivationPct));
+
+    // Just above max threshold should be invalid
+    EXPECT_FALSE(isPotInCruiseActivationRange(2867, engagementLevel, maxActivationPct));
+}
+
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
     RUN_ALL_TESTS();

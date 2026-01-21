@@ -52,6 +52,16 @@ template <typename T>
 inline T constrain(T x, T a, T b) { return x < a ? a : (x > b ? b : x); }
 #endif
 
+#ifndef min
+template <typename T>
+inline T min(T a, T b) { return a < b ? a : b; }
+#endif
+
+#ifndef max
+template <typename T>
+inline T max(T a, T b) { return a > b ? a : b; }
+#endif
+
 // Arduino-style map helper
 inline long map(long x, long in_min, long in_max, long out_min, long out_max) {
   return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
