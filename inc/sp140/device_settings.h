@@ -14,4 +14,4 @@ void send_device_data();
 bool sanitizeDeviceData();
 void debugHardwareConfig(const HardwareConfig& config);
 
-#endif // INC_SP140_DEVICE_SETTINGS_H_
+#endif  // INC_SP140_DEVICE_SETTINGS_H_

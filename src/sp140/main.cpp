@@ -539,7 +539,7 @@ void uiTask(void *pvParameters) {
 // BMS task: ~10 Hz polling and unified battery update
 void bmsTask(void *pvParameters) {
   TickType_t lastWake = xTaskGetTickCount();
-  const TickType_t bmsTicks = pdMS_TO_TICKS(100); // 10 Hz
+  const TickType_t bmsTicks = pdMS_TO_TICKS(100);  // 10 Hz
   for (;;) {
     #ifdef SCREEN_DEBUG
       float altitude = 0;
@@ -618,7 +618,7 @@ void setupWatchdog() {
 #ifndef OPENPPG_DEBUG
   // Initialize Task Watchdog
   ESP_ERROR_CHECK(esp_task_wdt_init(3000, true));  // 3 second timeout, panic on timeout
-#endif // OPENPPG_DEBUG
+#endif  // OPENPPG_DEBUG
 }
 
 #define TAG "OpenPPG"
@@ -906,9 +906,7 @@ void buttonHandlerTask(void* parameter) {
             buttonPressStartTime = currentTime;  // Reset to prevent immediate cruise activation
           }
         }
-      }
-      // Only handle other button actions if we're not in an arm sequence
-      else if (buttonPressed) {
+      } else if (buttonPressed) {  // Only handle other button actions if we're not in an arm sequence
         uint32_t currentHoldTime = currentTime - buttonPressStartTime;
 
         // Handle performance mode (only when disarmed and held long enough)
@@ -917,9 +915,8 @@ void buttonHandlerTask(void* parameter) {
           perfModeSwitch();
           buttonPressed = false;
           buttonPressStartTime = currentTime;
-        }
-        // Handle cruise control (when armed or cruising and held long enough)
-        else if ((currentState == ARMED || currentState == ARMED_CRUISING) && currentHoldTime >= CRUISE_HOLD_TIME_MS) {
+        } else if ((currentState == ARMED || currentState == ARMED_CRUISING) && currentHoldTime >= CRUISE_HOLD_TIME_MS) {
+          // Handle cruise control (when armed or cruising and held long enough)
           USBSerial.println("Cruise control button activated");
           toggleCruise();
           buttonPressed = false;
@@ -1195,7 +1192,7 @@ void afterCruiseStart() {
     USBSerial.println("Failed to queue initial cruise throttle PWM");
   }
 
-  //pulseVibeMotor();
+  // pulseVibeMotor();
 }
 
 void afterCruiseEnd() {
@@ -1208,7 +1205,7 @@ void afterCruiseEnd() {
   throttleFilterReset(currentPwmVal);
 
   cruisedPotVal = 0;
-  //pulseVibeMotor();
+  // pulseVibeMotor();
 }
 
 void playCruiseSound() {
@@ -1229,7 +1226,9 @@ void audioTask(void* parameter) {
       for (int i = 0; i < request.size; i++) {
         startTone(request.notes[i]);
         TickType_t delayTicks = pdMS_TO_TICKS(request.duration);
-        if (delayTicks == 0) { delayTicks = 1; }  // Ensure non-zero delay
+        if (delayTicks == 0) {
+          delayTicks = 1;
+        }  // Ensure non-zero delay
         vTaskDelayUntil(&nextWakeTime, delayTicks);
       }
       stopTone();
