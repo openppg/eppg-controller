@@ -1,6 +1,7 @@
 // Copyright 2020 <Zach Whitehead>
 // OpenPPG
 #include "Arduino.h"
+#include "sp140/device_settings.h"
 
 #include "../../inc/sp140/esp32s3-config.h"
 
@@ -44,6 +45,22 @@
 // FreeRTOS task utilities for stack watermark logging
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+
+// Forward declarations
+void disarmSystem();
+bool armSystem();
+void afterCruiseEnd();
+void afterCruiseStart();
+void pushTelemetrySnapshot();
+void initButtons();
+void setup140();
+void setupTasks();
+void audioTask(void* parameter);
+void updateESCBLETask(void* parameter);
+void webSerialTask(void* parameter);
+void toggleArm();
+void toggleCruise();
+void syncESCTelemetry();
 
 // Global variable for shared SPI
 SPIClass* hardwareSPI = nullptr;
@@ -1087,7 +1104,7 @@ void handleThrottle() {
     }
   }
 
-  int finalPwm;
+  int finalPwm = ESC_DISARMED_PWM;
 
   // Handle throttle based on current device state
   switch (currentState) {

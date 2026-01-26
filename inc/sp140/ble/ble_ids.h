@@ -67,4 +67,11 @@
 #define CONTROLLER_SERVICE_UUID       "01C63B60-0891-4655-BBCA-8E745C48A175"
 #define CONTROLLER_TELEMETRY_UUID     "01C63B61-0891-4655-BBCA-8E745C48A176"
 
+// ============================================================================
+// OTA Service (Firmware Update)
+// ============================================================================
+#define OTA_SERVICE_UUID              "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
+#define OTA_CONTROL_UUID              "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
+#define OTA_DATA_UUID                 "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
+
 #endif  // INC_SP140_BLE_BLE_IDS_H_
