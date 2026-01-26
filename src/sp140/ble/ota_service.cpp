@@ -4,156 +4,229 @@
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
 #include "sp140/ble/ble_ids.h"
+#include <cstring>
 
 namespace {
 
-// OTA Commands (matching Espressif example constants where applicable)
-// Example: 0x01 = Start, 0x02 = End, 0x03 = Abort
-const uint8_t CMD_START = 0x01;
-const uint8_t CMD_END = 0x02;
-const uint8_t CMD_ABORT = 0x03;
+// Protocol Constants
+const uint16_t CMD_START = 0x0001;
+const uint16_t CMD_END = 0x0002;
+const uint16_t CMD_ACK = 0x0003;
 
-// OTA Responses
-const uint8_t RESP_SUCCESS = 0x00;
-const uint8_t RESP_ERROR_BEGIN = 0xE1;
-const uint8_t RESP_ERROR_WRITE = 0xE2;
-const uint8_t RESP_ERROR_END = 0xE3;
-const uint8_t RESP_ERROR_UNKNOWN = 0xFF;
+const uint16_t ACK_SUCCESS = 0x0000;
+const uint16_t ACK_ERR_CRC = 0x0001;
+const uint16_t ACK_ERR_SECTOR = 0x0002;
+const uint16_t ACK_ERR_LEN = 0x0003;
 
+// State
 volatile bool otaInProgress = false;
 esp_ota_handle_t updateHandle = 0;
 const esp_partition_t* updatePartition = nullptr;
-size_t receivedBytes = 0;
+volatile unsigned long lastOtaActivity = 0;
 
-// Status characteristic for notifications
-NimBLECharacteristic* pStatusChar = nullptr;
+// Buffering
+uint8_t sectorBuffer[4096];
+uint16_t sectorBufferLen = 0;
+uint16_t currentSectorIndex = 0;
 
-void sendResponse(uint8_t responseCode) {
-    if (pStatusChar) {
-        pStatusChar->setValue(&responseCode, 1);
-        pStatusChar->notify();
-        USBSerial.printf("OTA: Sent response 0x%02X\n", responseCode);
+// Notify Characteristic
+NimBLECharacteristic* pCommandChar = nullptr; 
+
+// CRC16 Implementation (Polynomial 0x8005, reversed for LE)
+// Matches Espressif's expected CRC16-ARC/Modbus
+uint16_t crc16_le(uint16_t crc, const uint8_t *buffer, size_t len) {
+    while (len--) {
+        crc ^= *buffer++;
+        for (int i = 0; i < 8; i++) {
+            if (crc & 1) crc = (crc >> 1) ^ 0xA001;
+            else crc = (crc >> 1);
+        }
+    }
+    return crc;
+}
+
+void abortOta() {
+    if (otaInProgress) {
+        if (updateHandle) esp_ota_end(updateHandle);
+        otaInProgress = false;
+        USBSerial.println("OTA: Aborted.");
+    }
+    sectorBufferLen = 0;
+    currentSectorIndex = 0;
+}
+
+void sendAck(uint16_t sector, uint16_t status) {
+    if (pCommandChar) {
+        uint8_t packet[6];
+        // Sector (2B LE)
+        packet[0] = sector & 0xFF;
+        packet[1] = (sector >> 8) & 0xFF;
+        // Status (2B LE)
+        packet[2] = status & 0xFF;
+        packet[3] = (status >> 8) & 0xFF;
+        // CRC (2B LE) - CRC of the first 4 bytes
+        uint16_t crc = crc16_le(0, packet, 4);
+        packet[4] = crc & 0xFF;
+        packet[5] = (crc >> 8) & 0xFF;
+        
+        pCommandChar->setValue(packet, 6);
+        pCommandChar->notify();
+        USBSerial.printf("OTA: Sent ACK Sector=%d Status=%d\n", sector, status);
     }
 }
 
 class OtaCommandCallback : public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic* pChar, NimBLEConnInfo& connInfo) override {
-        (void)connInfo;
         std::string value = pChar->getValue();
-        if (value.length() == 0) return;
+        if (value.length() < 4) return; // Min length check
 
-        uint8_t command = value[0];
+        lastOtaActivity = millis();
+        const uint8_t* data = (const uint8_t*)value.data();
+        
+        uint16_t cmdId = data[0] | (data[1] << 8);
 
-        if (command == CMD_START) {
-            USBSerial.println("OTA: Start command received");
-            
+        if (cmdId == CMD_START) {
+            USBSerial.println("OTA: CMD_START");
             updatePartition = esp_ota_get_next_update_partition(nullptr);
             if (!updatePartition) {
-                USBSerial.println("OTA Error: No update partition found");
-                sendResponse(RESP_ERROR_BEGIN);
+                USBSerial.println("OTA Error: No partition");
                 return;
             }
-
-            USBSerial.printf("OTA: Writing to partition subtype %d at offset 0x%x\n", 
-                             updatePartition->subtype, updatePartition->address);
-
+            
             esp_err_t err = esp_ota_begin(updatePartition, OTA_SIZE_UNKNOWN, &updateHandle);
             if (err != ESP_OK) {
-                USBSerial.printf("OTA Error: esp_ota_begin failed (0x%x)\n", err);
-                sendResponse(RESP_ERROR_BEGIN);
-                return;
+                USBSerial.printf("OTA Error: Begin failed 0x%x\n", err);
+                return; 
             }
 
             otaInProgress = true;
-            receivedBytes = 0;
-            sendResponse(RESP_SUCCESS);
+            sectorBufferLen = 0;
+            currentSectorIndex = 0;
+            
+            // Send Command Response (ID=3, Payload=Success)
+            uint8_t response[6] = {
+                0x03, 0x00, // ID = 3 (Response)
+                0x00, 0x00, // Payload = 0 (Success)
+                0x00, 0x00  // CRC placeholder (TODO: calculate if strictly needed)
+            };
+            pChar->setValue(response, 6);
+            pChar->notify();
 
-        } else if (command == CMD_END) {
-            USBSerial.println("OTA: End command received");
-
-            if (!otaInProgress) {
-                 sendResponse(RESP_ERROR_UNKNOWN);
-                 return;
+        } else if (cmdId == CMD_END) {
+            USBSerial.println("OTA: CMD_END");
+            if (otaInProgress) {
+                if (esp_ota_end(updateHandle) == ESP_OK) {
+                    if (esp_ota_set_boot_partition(updatePartition) == ESP_OK) {
+                        USBSerial.println("OTA Success. Restarting...");
+                        
+                        uint8_t response[6] = { 0x03, 0x00, 0x00, 0x00, 0x00, 0x00 };
+                        pChar->setValue(response, 6);
+                        pChar->notify();
+                        
+                        delay(500);
+                        ESP.restart();
+                    }
+                }
+                abortOta();
             }
-
-            esp_err_t err = esp_ota_end(updateHandle);
-            if (err != ESP_OK) {
-                USBSerial.printf("OTA Error: esp_ota_end failed (0x%x)\n", err);
-                sendResponse(RESP_ERROR_END);
-                otaInProgress = false;
-                return;
-            }
-
-            err = esp_ota_set_boot_partition(updatePartition);
-            if (err != ESP_OK) {
-                USBSerial.printf("OTA Error: set_boot_partition failed (0x%x)\n", err);
-                sendResponse(RESP_ERROR_END);
-                otaInProgress = false;
-                return;
-            }
-
-            USBSerial.println("OTA: Success! Restarting...");
-            sendResponse(RESP_SUCCESS);
-            delay(1000);
-            ESP.restart();
-
-        } else if (command == CMD_ABORT) {
-             USBSerial.println("OTA: Abort command received");
-             if (otaInProgress) {
-                 esp_ota_end(updateHandle);
-                 otaInProgress = false;
-             }
-             sendResponse(RESP_SUCCESS);
         }
     }
 };
 
 class OtaDataCallback : public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic* pChar, NimBLEConnInfo& connInfo) override {
-        (void)connInfo;
         if (!otaInProgress) return;
+        
+        std::string valStr = pChar->getValue();
+        size_t len = valStr.length();
+        const uint8_t* data = (const uint8_t*)valStr.data();
 
-        std::string value = pChar->getValue();
-        if (value.length() > 0) {
-            esp_err_t err = esp_ota_write(updateHandle, value.data(), value.length());
-            if (err != ESP_OK) {
-                USBSerial.printf("OTA Error: Write failed (0x%x)\n", err);
-                sendResponse(RESP_ERROR_WRITE);
-                // Abort?
-            } else {
-                receivedBytes += value.length();
-                if (receivedBytes % 10240 < value.length()) {
-                     USBSerial.printf("OTA: Received %d bytes\n", receivedBytes);
-                }
+        if (len < 3) return; // Header: Sector(2) + Seq(1)
+
+        lastOtaActivity = millis();
+
+        uint16_t sector = data[0] | (data[1] << 8);
+        uint8_t seq = data[2];
+        const uint8_t* payload = data + 3;
+        size_t payloadLen = len - 3;
+
+        if (sector != currentSectorIndex) {
+            // Silently ignore or warn? Official app might retry if we don't ACK.
+            // But if we send ACK_ERR_SECTOR, it forces resync.
+            USBSerial.printf("OTA Warn: Sector mismatch exp %d got %d\n", currentSectorIndex, sector);
+            sendAck(sector, ACK_ERR_SECTOR);
+            return;
+        }
+
+        if (seq == 0xFF) { // Last packet of sector: Payload contains Data + CRC16(2)
+            if (payloadLen < 2) return;
+            
+            size_t actualDataLen = payloadLen - 2;
+            
+            if (sectorBufferLen + actualDataLen > sizeof(sectorBuffer)) {
+                sendAck(sector, ACK_ERR_LEN);
+                sectorBufferLen = 0; // Reset buffer
+                return;
             }
+
+            memcpy(sectorBuffer + sectorBufferLen, payload, actualDataLen);
+            sectorBufferLen += actualDataLen;
+
+            // Verify CRC
+            // CRC is at the end of the packet payload
+            uint16_t rxCrc = payload[actualDataLen] | (payload[actualDataLen + 1] << 8);
+            uint16_t calcCrc = crc16_le(0, sectorBuffer, sectorBufferLen);
+
+            if (rxCrc == calcCrc) {
+                // Write to flash
+                esp_err_t err = esp_ota_write(updateHandle, sectorBuffer, sectorBufferLen);
+                if (err == ESP_OK) {
+                    sendAck(sector, ACK_SUCCESS);
+                    currentSectorIndex++;
+                    sectorBufferLen = 0;
+                } else {
+                    USBSerial.printf("OTA Error: Write failed 0x%x\n", err);
+                    abortOta();
+                }
+            } else {
+                USBSerial.printf("OTA Error: CRC fail exp 0x%04X got 0x%04X\n", rxCrc, calcCrc);
+                sendAck(sector, ACK_ERR_CRC);
+                sectorBufferLen = 0; // Reset for retry
+            }
+
+        } else { // Normal packet
+            if (sectorBufferLen + payloadLen > sizeof(sectorBuffer)) {
+                USBSerial.println("OTA Error: Buffer overflow");
+                // Don't ACK, let client retry or timeout
+                return; 
+            }
+            memcpy(sectorBuffer + sectorBufferLen, payload, payloadLen);
+            sectorBufferLen += payloadLen;
         }
     }
 };
+
+static OtaCommandCallback cmdCallback;
+static OtaDataCallback dataCallback;
 
 } // namespace
 
 void initOtaBleService(NimBLEServer* pServer) {
     NimBLEService* pService = pServer->createService(OTA_SERVICE_UUID);
 
-    // Command Characteristic (Write)
-    NimBLECharacteristic* pCommandChar = pService->createCharacteristic(
+    // Command (Write + Notify for ACKs)
+    pCommandChar = pService->createCharacteristic(
         OTA_COMMAND_UUID,
-        NIMBLE_PROPERTY::WRITE
+        NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::NOTIFY
     );
-    pCommandChar->setCallbacks(new OtaCommandCallback());
+    pCommandChar->setCallbacks(&cmdCallback);
 
-    // Status Characteristic (Notify)
-    pStatusChar = pService->createCharacteristic(
-        OTA_STATUS_UUID,
-        NIMBLE_PROPERTY::NOTIFY
-    );
-
-    // Data Characteristic (Write No Response)
+    // Data (Write No Response)
     NimBLECharacteristic* pDataChar = pService->createCharacteristic(
         OTA_DATA_UUID,
-        NIMBLE_PROPERTY::WRITE_NR // Write No Response for speed
+        NIMBLE_PROPERTY::WRITE_NR
     );
-    pDataChar->setCallbacks(new OtaDataCallback());
+    pDataChar->setCallbacks(&dataCallback);
 
     pService->start();
 }
