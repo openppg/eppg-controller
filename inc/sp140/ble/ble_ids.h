@@ -67,11 +67,11 @@
 #define CONTROLLER_SERVICE_UUID       "01C63B60-0891-4655-BBCA-8E745C48A175"
 #define CONTROLLER_TELEMETRY_UUID     "01C63B61-0891-4655-BBCA-8E745C48A176"
 
-// Espressif Standard OTA Service UUIDs
-// Compatible with official Espressif BLE OTA apps (requires Sector/CRC protocol)
+// Espressif Standard OTA Service UUIDs (Android esp-ble-ota-android app)
 static const NimBLEUUID OTA_SERVICE_UUID("00008018-0000-1000-8000-00805f9b34fb");
-static const NimBLEUUID OTA_COMMAND_UUID("0000801a-0000-1000-8000-00805f9b34fb"); // Command (Write/Notify)
-static const NimBLEUUID OTA_STATUS_UUID("0000801a-0000-1000-8000-00805f9b34fb");  // Status (Notify) - effectively same as Command in this protocol
-static const NimBLEUUID OTA_DATA_UUID("00008019-0000-1000-8000-00805f9b34fb");    // Data (Write)
+static const NimBLEUUID OTA_RECV_FW_UUID("00008020-0000-1000-8000-00805f9b34fb");   // Firmware data (Write/Indicate)
+static const NimBLEUUID OTA_PROGRESS_UUID("00008021-0000-1000-8000-00805f9b34fb");  // Progress (Indicate)
+static const NimBLEUUID OTA_COMMAND_UUID("00008022-0000-1000-8000-00805f9b34fb");   // Command (Write/Indicate)
+static const NimBLEUUID OTA_CUSTOMER_UUID("00008023-0000-1000-8000-00805f9b34fb");  // Customer (Indicate)
 
 #endif  // INC_SP140_BLE_BLE_IDS_H_

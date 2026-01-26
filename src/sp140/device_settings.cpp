@@ -214,7 +214,7 @@ void parse_serial_commands() {
     if (!doc["command"].isNull()) {
       String command = doc["command"].as<String>();
 
-      if (command == "reboot") {
+      if (command == "reboot" || command == "rbl") {
         USBSerial.println("Rebooting");
         ESP.restart();
         return;
