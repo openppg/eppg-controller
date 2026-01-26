@@ -17,6 +17,7 @@
 #include "sp140/globals.h"
 #include "sp140/throttle.h"
 #include "version.h"
+#include "sp140/ble/ota_service.h"
 
 extern void writeDeviceData();
 extern QueueHandle_t throttleUpdateQueue;
@@ -363,7 +364,9 @@ void updateThrottleBLE(int value) {
 
   try {
     pThrottleCharacteristic->setValue(reinterpret_cast<uint8_t*>(&value), sizeof(value));
-    pThrottleCharacteristic->notify();
+    if (!isOtaInProgress()) {
+      pThrottleCharacteristic->notify();
+    }
     vTaskDelay(pdMS_TO_TICKS(5));
   } catch (...) {
     USBSerial.println("Error sending BLE notification");

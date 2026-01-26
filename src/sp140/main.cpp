@@ -2,6 +2,7 @@
 // OpenPPG
 #include "Arduino.h"
 #include "sp140/device_settings.h"
+#include "sp140/ble/ota_service.h"
 
 #include "../../inc/sp140/esp32s3-config.h"
 
@@ -225,7 +226,7 @@ void bleStateUpdateTask(void* parameter) {
         pDeviceStateCharacteristic->setValue(&update.state, sizeof(update.state));
 
         // Only notify if requested and connected
-        if (update.needsNotify && deviceConnected) {
+        if (update.needsNotify && deviceConnected && !isOtaInProgress()) {
           vTaskDelay(pdMS_TO_TICKS(10));  // Additional delay before notify
           pDeviceStateCharacteristic->notify();
         }

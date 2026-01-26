@@ -68,10 +68,11 @@
 #define CONTROLLER_TELEMETRY_UUID     "01C63B61-0891-4655-BBCA-8E745C48A176"
 
 // ============================================================================
-// OTA Service (Firmware Update)
+// OTA Service (Firmware Update) - Espressif Standard
 // ============================================================================
-#define OTA_SERVICE_UUID              "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
-#define OTA_CONTROL_UUID              "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
-#define OTA_DATA_UUID                 "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
+#define OTA_SERVICE_UUID              "00008018-0000-1000-8000-00805F9B34FB"
+#define OTA_DATA_UUID                 "00008019-0000-1000-8000-00805F9B34FB" // RX: Firmware data
+#define OTA_STATUS_UUID               "0000801A-0000-1000-8000-00805F9B34FB" // TX: Notifications/Status
+#define OTA_COMMAND_UUID              "0000801B-0000-1000-8000-00805F9B34FB" // RX: Commands (Start/End)
 
 #endif  // INC_SP140_BLE_BLE_IDS_H_
