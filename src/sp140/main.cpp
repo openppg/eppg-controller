@@ -3,6 +3,7 @@
 #include "Arduino.h"
 #include "sp140/device_settings.h"
 #include "sp140/ble/ota_service.h"
+#include "esp_ota_ops.h"
 
 #include "../../inc/sp140/esp32s3-config.h"
 
@@ -760,6 +761,11 @@ void setup() {
 
   // Simple instrumentation to detect UI/BMS latency
   USBSerial.println("Init complete. UI + BMS loop running");
+
+  // Confirm successful boot to prevent OTA rollback
+  if (esp_ota_mark_app_valid_cancel_rollback() == ESP_OK) {
+    USBSerial.println("OTA: Firmware marked valid - Rollback cancelled");
+  }
 
   // Enable sensor monitoring after splash screen and UI setup
   // This gives BMS/ESC time to initialize and start providing valid data
