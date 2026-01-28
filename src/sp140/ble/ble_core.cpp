@@ -66,10 +66,9 @@ void setupBLE() {
   advertising->addServiceUUID(NimBLEUUID(CONTROLLER_SERVICE_UUID));
   advertising->addServiceUUID(NimBLEUUID(OTA_SERVICE_UUID));
   advertising->enableScanResponse(true);
-  advertising->start();
+  // Note: Advertising is deferred until after splash screen
 
-  USBSerial.println("BLE device ready");
-  USBSerial.println("Waiting for a client connection...");
+  USBSerial.println("BLE device ready (advertising deferred)");
 }
 
 void restartBLEAdvertising() {

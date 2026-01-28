@@ -116,6 +116,9 @@ SemaphoreHandle_t eepromSemaphore;
 SemaphoreHandle_t stateMutex;
 SemaphoreHandle_t lvglMutex;
 
+// Startup synchronization - tasks wait for this before starting main loops
+SemaphoreHandle_t startupSyncSemaphore = NULL;
+
 // BLE state propagation
 struct BLEStateUpdate {
   uint8_t state;
@@ -526,6 +529,13 @@ void monitoringTask(void *pvParameters) {
 
 // UI task: fixed 25 Hz refresh and snapshot publish
 void uiTask(void *pvParameters) {
+  // Wait for setup to complete before starting
+  if (startupSyncSemaphore != NULL) {
+    xSemaphoreTake(startupSyncSemaphore, portMAX_DELAY);
+    // Give it back so other tasks can also take it
+    xSemaphoreGive(startupSyncSemaphore);
+  }
+
   TickType_t lastWake = xTaskGetTickCount();
   const TickType_t uiTicks = pdMS_TO_TICKS(50);  // 20 Hz
   for (;;) {
@@ -645,6 +655,12 @@ void setup() {
     USBSerial.println("Error creating LVGL mutex");
   }
 
+  // Create startup sync semaphore - tasks wait for this before running
+  startupSyncSemaphore = xSemaphoreCreateBinary();
+  if (startupSyncSemaphore == NULL) {
+    USBSerial.println("Error creating startup sync semaphore");
+  }
+
   refreshDeviceData();
   printBootMessage();
   const esp_partition_t* running = esp_ota_get_running_partition();
@@ -725,7 +741,6 @@ void setup() {
   initSimpleMonitor();
 
   setupTasks();  // Create all tasks after queues and BLE are initialized
-  vTaskDelay(pdMS_TO_TICKS(50));  // Let tasks settle before splash screen
 
   pulseVibeMotor();
   if (digitalRead(board_config.button_top) == LOW) {  // LOW means pressed since it's INPUT_PULLUP
@@ -766,6 +781,14 @@ void setup() {
   send_device_data();
   // Signal that the UI is ready for updates from tasks
   uiReady = true;
+  // Signal all tasks that setup is complete - they can now start their main loops
+  if (startupSyncSemaphore != NULL) {
+    xSemaphoreGive(startupSyncSemaphore);
+    USBSerial.println("Tasks released - startup complete");
+  }
+  // Start BLE advertising now that splash is complete
+  restartBLEAdvertising();
+  USBSerial.println("BLE advertising started");
 
   // Simple instrumentation to detect UI/BMS latency
   USBSerial.println("Init complete. UI + BMS loop running");
