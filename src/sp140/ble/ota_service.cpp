@@ -40,16 +40,20 @@ NimBLECharacteristic* pProgressChar = nullptr;
 NimBLECharacteristic* pCommandChar = nullptr;
 NimBLECharacteristic* pCustomerChar = nullptr;
 
-// CRC16 Implementation (Polynomial 0x8005, reversed for LE)
-uint16_t crc16_le(uint16_t crc, const uint8_t *buffer, size_t len) {
-    while (len--) {
-        crc ^= *buffer++;
-        for (int i = 0; i < 8; i++) {
-            if (crc & 1) crc = (crc >> 1) ^ 0xA001;
-            else crc = (crc >> 1);
+// CRC16-CCITT (poly 0x1021, init 0) to match Espressif Android app
+uint16_t crc16_ccitt(const uint8_t* buffer, size_t len) {
+    uint16_t crc16 = 0;
+    for (size_t i = 0; i < len; ++i) {
+        crc16 ^= static_cast<uint16_t>(buffer[i]) << 8;
+        for (int bit = 0; bit < 8; ++bit) {
+            if (crc16 & 0x8000) {
+                crc16 = static_cast<uint16_t>((crc16 << 1) ^ 0x1021);
+            } else {
+                crc16 = static_cast<uint16_t>(crc16 << 1);
+            }
         }
     }
-    return crc;
+    return crc16;
 }
 
 void sendAck(uint16_t sector, uint16_t status, uint16_t expectedSector = 0) {
@@ -86,7 +90,7 @@ void sendCommandResponse(uint16_t ackId, uint16_t status) {
         packet[4] = status & 0xFF;
         packet[5] = (status >> 8) & 0xFF;
 
-        uint16_t crc = crc16_le(0, packet, 18);
+        uint16_t crc = crc16_ccitt(packet, 18);
         packet[18] = crc & 0xFF;
         packet[19] = (crc >> 8) & 0xFF;
 
@@ -123,7 +127,7 @@ class OtaCommandCallback : public NimBLECharacteristicCallbacks {
 
         // Verify CRC
         uint16_t rxCrc = data[18] | (data[19] << 8);
-        uint16_t calcCrc = crc16_le(0, data, 18);
+        uint16_t calcCrc = crc16_ccitt(data, 18);
         if (rxCrc != calcCrc) {
             USBSerial.printf("OTA Error: CMD CRC Fail Exp %04X Got %04X\n", rxCrc, calcCrc);
             sendCommandResponse(cmdId, 0x0001);  // Reject (Status 1)
@@ -241,7 +245,7 @@ class OtaDataCallback : public NimBLECharacteristicCallbacks {
 
             // Verify CRC
             uint16_t rxCrc = payload[actualDataLen] | (payload[actualDataLen + 1] << 8);
-            uint16_t calcCrc = crc16_le(0, sectorBuffer, sectorBufferLen);
+            uint16_t calcCrc = crc16_ccitt(sectorBuffer, sectorBufferLen);
 
             if (rxCrc == calcCrc) {
                 esp_err_t err = esp_ota_write(updateHandle, sectorBuffer, sectorBufferLen);
