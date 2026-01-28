@@ -725,6 +725,7 @@ void setup() {
   initSimpleMonitor();
 
   setupTasks();  // Create all tasks after queues and BLE are initialized
+  vTaskDelay(pdMS_TO_TICKS(50));  // Let tasks settle before splash screen
 
   pulseVibeMotor();
   if (digitalRead(board_config.button_top) == LOW) {  // LOW means pressed since it's INPUT_PULLUP
