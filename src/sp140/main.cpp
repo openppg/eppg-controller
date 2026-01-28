@@ -647,6 +647,13 @@ void setup() {
 
   refreshDeviceData();
   printBootMessage();
+  const esp_partition_t* running = esp_ota_get_running_partition();
+  const esp_partition_t* boot = esp_ota_get_boot_partition();
+  if (running != nullptr && boot != nullptr) {
+    USBSerial.printf("OTA: Running partition %s @ 0x%06lx, boot %s @ 0x%06lx\n",
+                     running->label, (unsigned long)running->address,
+                     boot->label, (unsigned long)boot->address);
+  }
   setupBarometer();
 
   loadHardwareConfig();

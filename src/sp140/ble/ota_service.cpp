@@ -33,6 +33,7 @@ uint8_t sectorBuffer[4096];
 uint16_t sectorBufferLen = 0;
 uint16_t currentSectorIndex = 0;
 size_t receivedBytes = 0;
+uint32_t packetCount = 0;
 
 // OTA characteristics
 NimBLECharacteristic* pRecvFwChar = nullptr;
@@ -69,7 +70,7 @@ void sendAck(uint16_t sector, uint16_t status, uint16_t expectedSector = 0) {
         packet[5] = (expectedSector >> 8) & 0xFF;
 
         pRecvFwChar->setValue(packet, 6);
-        pRecvFwChar->indicate();
+        pRecvFwChar->notify();
         USBSerial.printf("OTA: Sent ACK Sector=%d Status=%d\n", sector, status);
     }
 }
@@ -95,7 +96,7 @@ void sendCommandResponse(uint16_t ackId, uint16_t status) {
         packet[19] = (crc >> 8) & 0xFF;
 
         pCommandChar->setValue(packet, 20);
-        pCommandChar->indicate();
+        pCommandChar->notify();
         USBSerial.printf("OTA: Sent CMD Response AckId=%d Status=%d\n", ackId, status);
     }
 }
@@ -216,6 +217,13 @@ class OtaDataCallback : public NimBLECharacteristicCallbacks {
 
         if (len < 3) return;  // Header: Sector(2) + Seq(1)
 
+        packetCount++;
+        if (packetCount % 100 == 0) {
+            USBSerial.printf("OTA: Received %lu packets (sector %u)\n",
+                             static_cast<unsigned long>(packetCount),
+                             static_cast<unsigned int>(currentSectorIndex));
+        }
+
         uint16_t sector = data[0] | (data[1] << 8);
         uint8_t seq = data[2];
         const uint8_t* payload = data + 3;
@@ -252,6 +260,9 @@ class OtaDataCallback : public NimBLECharacteristicCallbacks {
                 if (err == ESP_OK) {
                     receivedBytes += sectorBufferLen;
                     sendAck(sector, ACK_SUCCESS);
+                    USBSerial.printf("OTA: Sector %u written (%u bytes total)\n",
+                                     static_cast<unsigned int>(currentSectorIndex),
+                                     static_cast<unsigned int>(receivedBytes));
                     currentSectorIndex++;
                     sectorBufferLen = 0;
                 } else {
@@ -293,23 +304,30 @@ void initOtaBleService(NimBLEServer* pServer) {
     // Firmware data (Write No Response + Indicate for ACKs)
     pRecvFwChar = pService->createCharacteristic(
         OTA_RECV_FW_UUID,
-        NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR | NIMBLE_PROPERTY::INDICATE);
+        NIMBLE_PROPERTY::WRITE |
+        NIMBLE_PROPERTY::WRITE_NR |
+        NIMBLE_PROPERTY::NOTIFY |
+        NIMBLE_PROPERTY::INDICATE);
     pRecvFwChar->setCallbacks(&dataCallback);
 
     // Progress (Indicate only; app subscribes)
     pProgressChar = pService->createCharacteristic(
         OTA_PROGRESS_UUID,
+        NIMBLE_PROPERTY::NOTIFY |
         NIMBLE_PROPERTY::INDICATE);
 
     // Command (Write + Indicate)
     pCommandChar = pService->createCharacteristic(
         OTA_COMMAND_UUID,
-        NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::INDICATE);
+        NIMBLE_PROPERTY::WRITE |
+        NIMBLE_PROPERTY::NOTIFY |
+        NIMBLE_PROPERTY::INDICATE);
     pCommandChar->setCallbacks(&cmdCallback);
 
     // Customer (Indicate only; app subscribes)
     pCustomerChar = pService->createCharacteristic(
         OTA_CUSTOMER_UUID,
+        NIMBLE_PROPERTY::NOTIFY |
         NIMBLE_PROPERTY::INDICATE);
 
     pService->start();
