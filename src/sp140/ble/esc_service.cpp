@@ -4,6 +4,7 @@
 
 #include "sp140/ble.h"
 #include "sp140/ble/ble_ids.h"
+#include "sp140/ble/ota_service.h"
 
 namespace {
 
@@ -103,7 +104,7 @@ void updateESCPackedTelemetry(const STR_ESC_TELEMETRY_140& telemetry) {
       reinterpret_cast<uint8_t*>(&packet),
       sizeof(BLE_ESC_Telemetry_V1));
 
-  if (deviceConnected) {
+  if (deviceConnected && !isOtaInProgress()) {
     pESCPackedTelemetry->notify();
   }
 }
@@ -130,7 +131,7 @@ void updateESCTelemetryBLE(const STR_ESC_TELEMETRY_140& telemetry) {
   if (pESCRPM) pESCRPM->setValue(rpm);
   if (pESCTemps) pESCTemps->setValue(reinterpret_cast<uint8_t*>(&temps), sizeof(temps));
 
-  if (!deviceConnected) {
+  if (!deviceConnected || isOtaInProgress()) {
     return;  // No notifications needed without a subscriber.
   }
 

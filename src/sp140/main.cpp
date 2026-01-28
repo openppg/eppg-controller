@@ -1,6 +1,9 @@
 // Copyright 2020 <Zach Whitehead>
 // OpenPPG
 #include "Arduino.h"
+#include "sp140/device_settings.h"
+#include "sp140/ble/ota_service.h"
+#include "esp_ota_ops.h"
 
 #include "../../inc/sp140/esp32s3-config.h"
 
@@ -44,6 +47,22 @@
 // FreeRTOS task utilities for stack watermark logging
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+
+// Forward declarations
+void disarmSystem();
+bool armSystem();
+void afterCruiseEnd();
+void afterCruiseStart();
+void pushTelemetrySnapshot();
+void initButtons();
+void setup140();
+void setupTasks();
+void audioTask(void* parameter);
+void updateESCBLETask(void* parameter);
+void webSerialTask(void* parameter);
+void toggleArm();
+void toggleCruise();
+void syncESCTelemetry();
 
 // Global variable for shared SPI
 SPIClass* hardwareSPI = nullptr;
@@ -208,7 +227,7 @@ void bleStateUpdateTask(void* parameter) {
         pDeviceStateCharacteristic->setValue(&update.state, sizeof(update.state));
 
         // Only notify if requested and connected
-        if (update.needsNotify && deviceConnected) {
+        if (update.needsNotify && deviceConnected && !isOtaInProgress()) {
           vTaskDelay(pdMS_TO_TICKS(10));  // Additional delay before notify
           pDeviceStateCharacteristic->notify();
         }
@@ -520,7 +539,7 @@ void uiTask(void *pvParameters) {
 // BMS task: ~10 Hz polling and unified battery update
 void bmsTask(void *pvParameters) {
   TickType_t lastWake = xTaskGetTickCount();
-  const TickType_t bmsTicks = pdMS_TO_TICKS(100); // 10 Hz
+  const TickType_t bmsTicks = pdMS_TO_TICKS(100);  // 10 Hz
   for (;;) {
     #ifdef SCREEN_DEBUG
       float altitude = 0;
@@ -599,7 +618,7 @@ void setupWatchdog() {
 #ifndef OPENPPG_DEBUG
   // Initialize Task Watchdog
   ESP_ERROR_CHECK(esp_task_wdt_init(3000, true));  // 3 second timeout, panic on timeout
-#endif // OPENPPG_DEBUG
+#endif  // OPENPPG_DEBUG
 }
 
 #define TAG "OpenPPG"
@@ -628,6 +647,13 @@ void setup() {
 
   refreshDeviceData();
   printBootMessage();
+  const esp_partition_t* running = esp_ota_get_running_partition();
+  const esp_partition_t* boot = esp_ota_get_boot_partition();
+  if (running != nullptr && boot != nullptr) {
+    USBSerial.printf("OTA: Running partition %s @ 0x%06lx, boot %s @ 0x%06lx\n",
+                     running->label, (unsigned long)running->address,
+                     boot->label, (unsigned long)boot->address);
+  }
   setupBarometer();
 
   loadHardwareConfig();
@@ -742,6 +768,11 @@ void setup() {
 
   // Simple instrumentation to detect UI/BMS latency
   USBSerial.println("Init complete. UI + BMS loop running");
+
+  // Confirm successful boot to prevent OTA rollback
+  if (esp_ota_mark_app_valid_cancel_rollback() == ESP_OK) {
+    USBSerial.println("OTA: Firmware marked valid - Rollback cancelled");
+  }
 
   // Enable sensor monitoring after splash screen and UI setup
   // This gives BMS/ESC time to initialize and start providing valid data
@@ -882,9 +913,7 @@ void buttonHandlerTask(void* parameter) {
             buttonPressStartTime = currentTime;  // Reset to prevent immediate cruise activation
           }
         }
-      }
-      // Only handle other button actions if we're not in an arm sequence
-      else if (buttonPressed) {
+      } else if (buttonPressed) {  // Only handle other button actions if we're not in an arm sequence
         uint32_t currentHoldTime = currentTime - buttonPressStartTime;
 
         // Handle performance mode (only when disarmed and held long enough)
@@ -893,9 +922,8 @@ void buttonHandlerTask(void* parameter) {
           perfModeSwitch();
           buttonPressed = false;
           buttonPressStartTime = currentTime;
-        }
-        // Handle cruise control (when armed or cruising and held long enough)
-        else if ((currentState == ARMED || currentState == ARMED_CRUISING) && currentHoldTime >= CRUISE_HOLD_TIME_MS) {
+        } else if ((currentState == ARMED || currentState == ARMED_CRUISING) && currentHoldTime >= CRUISE_HOLD_TIME_MS) {
+          // Handle cruise control (when armed or cruising and held long enough)
           USBSerial.println("Cruise control button activated");
           toggleCruise();
           buttonPressed = false;
@@ -1087,7 +1115,7 @@ void handleThrottle() {
     }
   }
 
-  int finalPwm;
+  int finalPwm = ESC_DISARMED_PWM;
 
   // Handle throttle based on current device state
   switch (currentState) {
@@ -1171,7 +1199,7 @@ void afterCruiseStart() {
     USBSerial.println("Failed to queue initial cruise throttle PWM");
   }
 
-  //pulseVibeMotor();
+  // pulseVibeMotor();
 }
 
 void afterCruiseEnd() {
@@ -1184,7 +1212,7 @@ void afterCruiseEnd() {
   throttleFilterReset(currentPwmVal);
 
   cruisedPotVal = 0;
-  //pulseVibeMotor();
+  // pulseVibeMotor();
 }
 
 void playCruiseSound() {
@@ -1205,7 +1233,9 @@ void audioTask(void* parameter) {
       for (int i = 0; i < request.size; i++) {
         startTone(request.notes[i]);
         TickType_t delayTicks = pdMS_TO_TICKS(request.duration);
-        if (delayTicks == 0) { delayTicks = 1; }  // Ensure non-zero delay
+        if (delayTicks == 0) {
+          delayTicks = 1;
+        }  // Ensure non-zero delay
         vTaskDelayUntil(&nextWakeTime, delayTicks);
       }
       stopTone();
