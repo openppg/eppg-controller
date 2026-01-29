@@ -34,3 +34,14 @@ float watts = 0;
 float wattHoursUsed = 0;
 
 STR_DEVICE_DATA_140_V1 deviceData;
+
+// Altimeter telemetry - single writer (altimeter task), multiple readers
+AltimeterTelemetry altimeterData = {
+  .altitude = 0.0f,
+  .temperature = 0.0f,
+  .pressure = 0.0f,
+  .verticalSpeed = 0.0f,
+  .lastUpdate = 0,
+  .connected = false
+};
+

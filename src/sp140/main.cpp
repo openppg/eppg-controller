@@ -151,6 +151,7 @@ extern TaskHandle_t throttleTaskHandle;
 extern TaskHandle_t watchdogTaskHandle;
 extern TaskHandle_t uiTaskHandle;
 extern TaskHandle_t bmsTaskHandle;
+extern TaskHandle_t altimeterTaskHandle;
 extern TaskHandle_t monitoringTaskHandle;
 extern TaskHandle_t audioTaskHandle;
 extern TaskHandle_t webSerialTaskHandle;
@@ -177,6 +178,7 @@ static void stackWatermarkLoggerTask(void* parameter) {
       {"watchdog", &watchdogTaskHandle},
       {"UI", &uiTaskHandle},
       {"BMS", &bmsTaskHandle},
+      {"Altimeter", &altimeterTaskHandle},
       {"Monitoring", &monitoringTaskHandle},
       {"Audio", &audioTaskHandle},
       {"WebSerial", &webSerialTaskHandle},
@@ -310,6 +312,7 @@ TaskHandle_t throttleTaskHandle = NULL;
 TaskHandle_t watchdogTaskHandle = NULL;
 TaskHandle_t uiTaskHandle = NULL;
 TaskHandle_t bmsTaskHandle = NULL;
+TaskHandle_t altimeterTaskHandle = NULL;  // Altimeter sensor task
 TaskHandle_t vibeTaskHandle = NULL;  // Vibration motor task
 TaskHandle_t monitoringTaskHandle = NULL;  // Sensor monitoring task
 
@@ -415,10 +418,10 @@ void updateBLETask(void *pvParameters) {
       updateBMSTelemetry(newBmsTelemetry);
 
       // Update controller telemetry at same 10Hz rate as BMS
-      // Gather sensor data from barometer and ESP32
-      float altitude = getAltitude(deviceData);
-      float baro_temp = getBaroTemperature();
-      float vario = getVerticalSpeed();
+      // Read from altimeter telemetry (no I2C blocking)
+      float altitude = altimeterData.altitude;
+      float baro_temp = altimeterData.temperature;
+      float vario = altimeterData.verticalSpeed;
       float mcu_temp = temperatureRead();  // ESP32 internal temp sensor
       updateControllerPackedTelemetry(altitude, baro_temp, vario, mcu_temp);
     }
@@ -435,8 +438,8 @@ void refreshDisplay() {
   }
 
   if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(40)) == pdTRUE) {
-    // Get the current relative altitude (updates buffer for vario)
-    const float currentRelativeAltitude = getAltitude(deviceData);
+    // Read from altimeter telemetry (no I2C blocking)
+    const float currentRelativeAltitude = altimeterData.altitude;
 
     // Determine the altitude to show on the display
     float altitudeToShow = 0.0f;  // Default to 0
@@ -581,6 +584,29 @@ void bmsTask(void *pvParameters) {
   }
 }
 
+// Altimeter task: ~10 Hz polling of BMP3XX sensor via I2C
+// Single writer - prevents I2C bus contention
+void altimeterTask(void* pvParameters) {
+  TickType_t lastWake = xTaskGetTickCount();
+  const TickType_t altimeterTicks = pdMS_TO_TICKS(100);  // 10 Hz
+
+  for (;;) {
+    if (bmpPresent) {
+      // Single I2C read cycle - no contention with other tasks
+      altimeterData.altitude = getAltitude(deviceData);
+      altimeterData.temperature = getBaroTemperature();
+      altimeterData.pressure = getBaroPressure();
+      altimeterData.verticalSpeed = getVerticalSpeed();
+      altimeterData.lastUpdate = millis();
+      altimeterData.connected = true;
+    } else {
+      altimeterData.connected = false;
+    }
+
+    vTaskDelayUntil(&lastWake, altimeterTicks);
+  }
+}
+
 void loadHardwareConfig() {
   board_config = s3_config;  // ESP32S3 is only supported board
 
@@ -720,6 +746,7 @@ void setupTasks() {
   // Core 1 tasks (UI, communications)
   xTaskCreatePinnedToCore(uiTask, "UI", 5888, NULL, 2, &uiTaskHandle, 1);
   xTaskCreatePinnedToCore(bmsTask, "BMS", 2304, NULL, 2, &bmsTaskHandle, 1);
+  xTaskCreatePinnedToCore(altimeterTask, "Altimeter", 2048, NULL, 2, &altimeterTaskHandle, 1);
   xTaskCreatePinnedToCore(bleStateUpdateTask, "BLEStateUpdate", 8192, NULL, 1, &bleStateUpdateTaskHandle, 1);
   xTaskCreatePinnedToCore(audioTask, "Audio", 1536, NULL, 1, &audioTaskHandle, 1);
   xTaskCreatePinnedToCore(vibeTask, "Vibration", 1536, NULL, 2, &vibeTaskHandle, 1);

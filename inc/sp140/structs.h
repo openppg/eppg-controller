@@ -119,6 +119,16 @@ typedef struct {
 } STR_BMS_TELEMETRY_140;
 #pragma pack(pop)
 
+// Altimeter telemetry - read by multiple tasks, written by altimeter task only
+struct AltimeterTelemetry {
+  float altitude;           // Relative altitude AGL (meters)
+  float temperature;        // Barometer temperature (°C)
+  float pressure;           // Barometric pressure (hPa)
+  float verticalSpeed;      // Vertical speed (m/s)
+  unsigned long lastUpdate; // Timestamp of last reading (millis)
+  bool connected;           // Sensor available and responding
+};
+
 // Add this struct definition near other structs
 struct MelodyRequest {
   uint16_t* notes;
