@@ -725,7 +725,7 @@ void setupTasks() {
   xTaskCreatePinnedToCore(vibeTask, "Vibration", 1536, NULL, 2, &vibeTaskHandle, 1);
 
   // Unpinned tasks (can run on either core)
-  xTaskCreate(blinkLEDTask, "blinkLed", 2560, NULL, 1, &blinkLEDTaskHandle);
+  xTaskCreate(blinkLEDTask, "blinkLed", 2048, NULL, 1, &blinkLEDTaskHandle);
   xTaskCreate(updateBLETask, "BLE Update Task", 8192, NULL, 1, NULL);
   xTaskCreate(deviceStateUpdateTask, "State Update Task", 2048, NULL, 1, &deviceStateUpdateTaskHandle);
   xTaskCreate(updateESCBLETask, "ESC BLE Update Task", 8192, NULL, 1, NULL);
