@@ -903,9 +903,15 @@ void setup() {
   // Enable sensor monitoring
   enableMonitoring();
 
-  // Confirm successful boot to prevent OTA rollback
-  if (esp_ota_mark_app_valid_cancel_rollback() == ESP_OK) {
-    USBSerial.println("OTA: Firmware marked valid - Rollback cancelled");
+  // Check if this is first boot after OTA update and validate if needed
+  esp_ota_img_states_t ota_state;
+  if (esp_ota_get_state_partition(running, &ota_state) == ESP_OK) {
+    if (ota_state == ESP_OTA_IMG_PENDING_VERIFY) {
+      // First boot after OTA - if we made it this far, firmware is good
+      USBSerial.println("OTA: First boot after update - validating firmware");
+      esp_ota_mark_app_valid_cancel_rollback();
+      USBSerial.println("OTA: Firmware marked valid - Rollback protection active");
+    }
   }
 
   USBSerial.println("=== Boot complete ===");
