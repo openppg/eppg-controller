@@ -5,6 +5,7 @@
 #include "sp140/ble.h"
 #include "sp140/ble/ble_ids.h"
 #include "sp140/ble/ble_utils.h"
+#include "sp140/ble/ota_service.h"
 
 namespace {
 
@@ -152,7 +153,7 @@ void updateBMSPackedTelemetry(const STR_BMS_TELEMETRY_140& telemetry, uint8_t bm
       reinterpret_cast<uint8_t*>(&packet),
       sizeof(BLE_BMS_Telemetry_V1));
 
-  if (deviceConnected) {
+  if (deviceConnected && !isOtaInProgress()) {
     pBMSPackedTelemetry->notify();
   }
 }
@@ -223,8 +224,8 @@ void updateBMSTelemetry(const STR_BMS_TELEMETRY_140& telemetry) {
   setAndNotifyOnChange(pBMSChargeMos, static_cast<uint8_t>(telemetry.is_charge_mos ? 1 : 0), lastChargeMos);
   setAndNotifyOnChange(pBMSDischargeMos, static_cast<uint8_t>(telemetry.is_discharge_mos ? 1 : 0), lastDischargeMos);
 
-  if (!deviceConnected) {
-    return;  // No notifications needed without a subscriber.
+  if (!deviceConnected || isOtaInProgress()) {
+    return;  // No notifications needed without a subscriber or if OTA is running.
   }
 
   if (pBMSSOC) pBMSSOC->notify();

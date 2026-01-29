@@ -11,7 +11,7 @@
 #define MAX_VERTICAL_SPEED 250.0f  // Maximum vertical speed to display (m/s)
 
 // Set up the barometer
-bool setupAltimeter(bool alt_wire = false);
+bool setupAltimeter();
 
 // Get the altitude (in meters)
 float getAltitude(const STR_DEVICE_DATA_140_V1& deviceData);

@@ -1,6 +1,9 @@
 // Copyright 2020 <Zach Whitehead>
 // OpenPPG
 #include "Arduino.h"
+#include "sp140/device_settings.h"
+#include "sp140/ble/ota_service.h"
+#include "esp_ota_ops.h"
 
 #include "../../inc/sp140/esp32s3-config.h"
 
@@ -45,6 +48,22 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+// Forward declarations
+void disarmSystem();
+bool armSystem();
+void afterCruiseEnd();
+void afterCruiseStart();
+void pushTelemetrySnapshot();
+void setupTasks();
+void createAllSyncPrimitives();
+void createAllQueues();
+void audioTask(void* parameter);
+void updateESCBLETask(void* parameter);
+void webSerialTask(void* parameter);
+void toggleArm();
+void toggleCruise();
+void syncESCTelemetry();
+
 // Global variable for shared SPI
 SPIClass* hardwareSPI = nullptr;
 
@@ -80,7 +99,7 @@ bool bmsCanInitialized = false;
 bool escTwaiInitialized = false;
 
 
-UnifiedBatteryData unifiedBatteryData = {0.0f, 0.0f, 0.0f};
+UnifiedBatteryData unifiedBatteryData = {0.0f, 0.0f, 0.0f, 0.0f};  // volts, amps, power, soc
 
 // Throttle PWM smoothing buffer is managed in throttle.cpp
 
@@ -89,9 +108,6 @@ uint32_t led_color = LED_RED;  // current LED color
 
 // Global variable for device state
 volatile DeviceState currentState = DISARMED;
-
-// Add volatile bool flag to control UI drawing start
-volatile bool uiReady = false;
 
 SemaphoreHandle_t eepromSemaphore;
 SemaphoreHandle_t stateMutex;
@@ -143,6 +159,7 @@ extern TaskHandle_t deviceStateUpdateTaskHandle;
 extern TaskHandle_t buttonTaskHandle;
 extern TaskHandle_t vibeTaskHandle;
 
+#ifdef OPENPPG_DEBUG
 static TaskHandle_t stackLoggerTaskHandle = NULL;
 static const uint32_t STACK_LOGGER_INTERVAL_MS = 5000;  // Log every 5 seconds
 
@@ -189,6 +206,7 @@ static void stackWatermarkLoggerTask(void* parameter) {
     vTaskDelay(pdMS_TO_TICKS(STACK_LOGGER_INTERVAL_MS));
   }
 }
+#endif  // OPENPPG_DEBUG
 
 // Forward declarations for tasks defined in other compilation units
 extern void vibeTask(void* parameter);
@@ -208,7 +226,7 @@ void bleStateUpdateTask(void* parameter) {
         pDeviceStateCharacteristic->setValue(&update.state, sizeof(update.state));
 
         // Only notify if requested and connected
-        if (update.needsNotify && deviceConnected) {
+        if (update.needsNotify && deviceConnected && !isOtaInProgress()) {
           vTaskDelay(pdMS_TO_TICKS(10));  // Additional delay before notify
           pDeviceStateCharacteristic->notify();
         }
@@ -411,8 +429,8 @@ void updateBLETask(void *pvParameters) {
 }
 
 void refreshDisplay() {
-  // Prevent drawing until setup() signals UI is ready
-  if (!uiReady || main_screen == NULL) {
+  // Guard against calls before main_screen is set up
+  if (main_screen == NULL) {
     return;
   }
 
@@ -505,7 +523,7 @@ void monitoringTask(void *pvParameters) {
   }
 }
 
-// UI task: fixed 25 Hz refresh and snapshot publish
+// UI task: fixed 20 Hz refresh and snapshot publish
 void uiTask(void *pvParameters) {
   TickType_t lastWake = xTaskGetTickCount();
   const TickType_t uiTicks = pdMS_TO_TICKS(50);  // 20 Hz
@@ -520,7 +538,7 @@ void uiTask(void *pvParameters) {
 // BMS task: ~10 Hz polling and unified battery update
 void bmsTask(void *pvParameters) {
   TickType_t lastWake = xTaskGetTickCount();
-  const TickType_t bmsTicks = pdMS_TO_TICKS(100); // 10 Hz
+  const TickType_t bmsTicks = pdMS_TO_TICKS(100);  // 10 Hz
   for (;;) {
     #ifdef SCREEN_DEBUG
       float altitude = 0;
@@ -599,224 +617,303 @@ void setupWatchdog() {
 #ifndef OPENPPG_DEBUG
   // Initialize Task Watchdog
   ESP_ERROR_CHECK(esp_task_wdt_init(3000, true));  // 3 second timeout, panic on timeout
-#endif // OPENPPG_DEBUG
+#endif  // OPENPPG_DEBUG
 }
 
 #define TAG "OpenPPG"
 
+// =============================================================================
+// BOOT PHASE HELPER FUNCTIONS
+// =============================================================================
 
 /**
- * Initializes the necessary components and configurations for the device setup.
- * This function is called once at the beginning of the program execution.
+ * Phase 2a: Create all RTOS mutexes and semaphores
+ * Must be called before any tasks are created
  */
+void createAllSyncPrimitives() {
+  USBSerial.println("Creating sync primitives...");
 
-void setup() {
-  USBSerial.begin(115200);  // This is for debug output and WebSerial
-  USBSerial.print("Build date/time: ");
-  USBSerial.println(buildDate);
-
-  // Pull CSB (pin 42) high to activate I2C mode
-  // temporary fix TODO remove
-  digitalWrite(42, HIGH);
-  pinMode(42, OUTPUT);
-
-  // Initialize LVGL mutex before anything else
+  // LVGL display mutex - protects all LVGL operations
   lvglMutex = xSemaphoreCreateMutex();
   if (lvglMutex == NULL) {
     USBSerial.println("Error creating LVGL mutex");
   }
 
-  refreshDeviceData();
-  printBootMessage();
-  setupBarometer();
-
-  loadHardwareConfig();
-  setupLED();  // Defaults to RED
-  setupAnalogRead();
-  initButtons();
-  setupWatchdog();
-  setup140();
-
-  setLEDColor(LED_YELLOW);  // Booting up
-
-  // First initialize the shared SPI bus
-  setupSPI(board_config);
-
-  // Then setup the display - use LVGL display instead of the old one
-  // Pass hardcoded pin values for DC and RST
-  setupLvglDisplay(deviceData, board_config.tft_dc, board_config.tft_rst, hardwareSPI);
-
-  // Initialise alert display aggregation & UI
-  initAlertDisplay();
-
-  #ifndef SCREEN_DEBUG
-    // Pass the hardware SPI instance to the BMS_CAN initialization
-    initBMSCAN(hardwareSPI);
-  #endif
-
-  initESC();
-  eepromSemaphore = xSemaphoreCreateBinary();
-  xSemaphoreGive(eepromSemaphore);
+  // State mutex - protects device state transitions
   stateMutex = xSemaphoreCreateMutex();
-  setESCThrottle(ESC_DISARMED_PWM);
-  initVibeMotor();
+  if (stateMutex == NULL) {
+    USBSerial.println("Error creating state mutex");
+  }
 
-  // Create all queues first
+  // EEPROM semaphore - guards Preferences writes
+  eepromSemaphore = xSemaphoreCreateBinary();
+  if (eepromSemaphore == NULL) {
+    USBSerial.println("Error creating EEPROM semaphore");
+  } else {
+    xSemaphoreGive(eepromSemaphore);  // Start in "available" state
+  }
+}
+
+/**
+ * Phase 2b: Create all RTOS queues
+ * Must be called before any tasks are created
+ */
+void createAllQueues() {
+  USBSerial.println("Creating queues...");
+
+  // BMS telemetry queue (size 1, overwrite semantics)
   bmsTelemetryQueue = xQueueCreate(1, sizeof(STR_BMS_TELEMETRY_140));
   if (bmsTelemetryQueue == NULL) {
     USBSerial.println("Error creating BMS telemetry queue");
   }
 
+  // Throttle update queue
   throttleUpdateQueue = xQueueCreate(1, sizeof(uint16_t));
   if (throttleUpdateQueue == NULL) {
     USBSerial.println("Error creating throttle update queue");
   }
 
+  // ESC telemetry queue
   escTelemetryQueue = xQueueCreate(1, sizeof(STR_ESC_TELEMETRY_140));
   if (escTelemetryQueue == NULL) {
     USBSerial.println("Error creating ESC telemetry queue");
   }
 
+  // BLE state queue
   bleStateQueue = xQueueCreate(5, sizeof(BLEStateUpdate));
   if (bleStateQueue == NULL) {
     USBSerial.println("Error creating BLE state queue");
   }
 
+  // Device state queue
   deviceStateQueue = xQueueCreate(1, sizeof(uint8_t));
   if (deviceStateQueue == NULL) {
     USBSerial.println("Error creating device state queue");
   }
 
-  // Snapshot queue for monitoring (size 1)
+  // Telemetry snapshot queue for monitoring
   telemetrySnapshotQueue = xQueueCreate(1, sizeof(TelemetrySnapshot));
   if (telemetrySnapshotQueue == NULL) {
     USBSerial.println("Error creating telemetry snapshot queue");
   }
 
-    setupBLE();
-
-  // Initialize the simple monitoring system (but keep it disabled initially)
-  initSimpleMonitor();
-
-  setupTasks();  // Create all tasks after queues and BLE are initialized
-
-  pulseVibeMotor();
-  if (digitalRead(board_config.button_top) == LOW) {  // LOW means pressed since it's INPUT_PULLUP
-    perfModeSwitch();
+  // Melody queue for audio task - MUST be created before audioTask
+  melodyQueue = xQueueCreate(5, sizeof(MelodyRequest));
+  if (melodyQueue == NULL) {
+    USBSerial.println("Error creating melody queue");
   }
-  setLEDColor(LED_GREEN);
-
-  // Show LVGL splash screen
-  if (xSemaphoreTake(lvglMutex, portMAX_DELAY) == pdTRUE) {
-    displayLvglSplash(deviceData, 2000);
-    // Don't release mutex here yet
-  } else {
-    USBSerial.println("Failed to acquire LVGL mutex for splash");
-    // If we failed mutex, maybe skip main screen setup? Or attempt anyway?
-    // Let's assume splash failed but we try to proceed.
-  }
-
-  // Setup the main screen UI elements AFTER the splash
-  USBSerial.println("Setting up main screen after splash");
-  if (main_screen == NULL) {  // Check if it wasn't somehow created already
-    setupMainScreen(deviceData.theme == 1);
-  }
-
-  // Explicitly load the main screen to make it active
-  if (main_screen != NULL) {
-      lv_scr_load(main_screen);
-      USBSerial.println("Main screen loaded");
-  } else {
-     USBSerial.println("Error: Main screen object is NULL after setup attempt.");
-  }
-
-  // Release the mutex if it was taken for the splash
-  if (lvglMutex != NULL && xSemaphoreGetMutexHolder(lvglMutex) == xTaskGetCurrentTaskHandle()) {
-      xSemaphoreGive(lvglMutex);
-  }
-
-  // Send initial device data after setup
-  send_device_data();
-  // Signal that the UI is ready for updates from tasks
-  uiReady = true;
-
-  // Simple instrumentation to detect UI/BMS latency
-  USBSerial.println("Init complete. UI + BMS loop running");
-
-  // Enable sensor monitoring after splash screen and UI setup
-  // This gives BMS/ESC time to initialize and start providing valid data
-  enableMonitoring();
 }
 
-// set up all the main threads/tasks with core 0 affinity
+/**
+ * Phase 6: Create all FreeRTOS tasks
+ * Called AFTER all hardware, UI, and services are initialized
+ * Tasks can start running immediately - no sync semaphores needed
+ */
 void setupTasks() {
-  xTaskCreate(blinkLEDTask, "blinkLed", 2560, NULL, 1, &blinkLEDTaskHandle);
+  USBSerial.println("Creating tasks...");
+
+  // Core 0 tasks (safety-critical, real-time)
   xTaskCreatePinnedToCore(throttleTask, "throttle", 4352, NULL, 3, &throttleTaskHandle, 0);
-  // Split UI and BMS into dedicated tasks
+  xTaskCreatePinnedToCore(watchdogTask, "watchdog", 1536, NULL, 3, &watchdogTaskHandle, 0);
+  xTaskCreatePinnedToCore(buttonHandlerTask, "ButtonHandler", 4096, NULL, 2, &buttonTaskHandle, 0);
+
+  // Core 1 tasks (UI, communications)
   xTaskCreatePinnedToCore(uiTask, "UI", 5888, NULL, 2, &uiTaskHandle, 1);
   xTaskCreatePinnedToCore(bmsTask, "BMS", 2304, NULL, 2, &bmsTaskHandle, 1);
+  xTaskCreatePinnedToCore(bleStateUpdateTask, "BLEStateUpdate", 8192, NULL, 1, &bleStateUpdateTaskHandle, 1);
+  xTaskCreatePinnedToCore(audioTask, "Audio", 1536, NULL, 1, &audioTaskHandle, 1);
+  xTaskCreatePinnedToCore(vibeTask, "Vibration", 1536, NULL, 2, &vibeTaskHandle, 1);
+
+  // Unpinned tasks (can run on either core)
+  xTaskCreate(blinkLEDTask, "blinkLed", 2560, NULL, 1, &blinkLEDTaskHandle);
   xTaskCreate(updateBLETask, "BLE Update Task", 8192, NULL, 1, NULL);
   xTaskCreate(deviceStateUpdateTask, "State Update Task", 2048, NULL, 1, &deviceStateUpdateTaskHandle);
-  // Create BLE update task with high priority but on core 1
-  xTaskCreatePinnedToCore(bleStateUpdateTask, "BLEStateUpdate", 8192, NULL, 1, &bleStateUpdateTaskHandle, 1);
-
-  // Create melody queue
-  melodyQueue = xQueueCreate(5, sizeof(MelodyRequest));
-
-  // Create audio task - pin to core 1 to avoid interference with throttle
-  xTaskCreatePinnedToCore(audioTask, "Audio", 1536, NULL, 1, &audioTaskHandle, 1);
-
-  // Add hardware watchdog task on core 0 (highest priority among low-prio group)
-  xTaskCreatePinnedToCore(watchdogTask, "watchdog", 1536, NULL, 3, &watchdogTaskHandle, 0);
-
   xTaskCreate(updateESCBLETask, "ESC BLE Update Task", 8192, NULL, 1, NULL);
-
-  // Create WebSerial task
-  xTaskCreate(
-    webSerialTask,
-    "WebSerial",
-    3072,  // Larger stack for ArduinoJson parsing & CDC handling
-    NULL,
-    1,
-    &webSerialTaskHandle);
-
-  // Create monitoring task
+  xTaskCreate(webSerialTask, "WebSerial", 3072, NULL, 1, &webSerialTaskHandle);
   xTaskCreate(monitoringTask, "Monitoring", 4864, NULL, 1, &monitoringTaskHandle);
-
-  // Create vibration task (centralized here after initVibeMotor)
-  xTaskCreatePinnedToCore(vibeTask, "Vibration", 1536, NULL, 2, &vibeTaskHandle, 1);
 
   #ifdef OPENPPG_DEBUG
     // Create periodic stack watermark logger (low priority)
     xTaskCreatePinnedToCore(stackWatermarkLoggerTask, "StackLogger", 3072, NULL, 1, &stackLoggerTaskHandle, 1);
   #endif
+
+  USBSerial.println("All tasks created");
 }
 
-void setup140() {
-  if (ENABLE_BUZZ) {
-    initBuzz();
+// =============================================================================
+// MAIN SETUP FUNCTION - PHASED BOOT SEQUENCE
+// =============================================================================
+
+/**
+ * Initializes the device in deterministic phases.
+ * No tasks are created until all their dependencies exist.
+ */
+void setup() {
+  // =========================================================================
+  // PHASE 1: Serial and Early Config
+  // =========================================================================
+  USBSerial.begin(115200);
+  USBSerial.print("Build date/time: ");
+  USBSerial.println(buildDate);
+
+  // Load device config from EEPROM first - may contain pin mappings
+  refreshDeviceData();
+  printBootMessage();
+
+  // Log OTA partition info
+  const esp_partition_t* running = esp_ota_get_running_partition();
+  const esp_partition_t* boot = esp_ota_get_boot_partition();
+  if (running != nullptr && boot != nullptr) {
+    USBSerial.printf("OTA: Running partition %s @ 0x%06lx, boot %s @ 0x%06lx\n",
+                     running->label, (unsigned long)running->address,
+                     boot->label, (unsigned long)boot->address);
   }
+
+  // =========================================================================
+  // PHASE 2: Create ALL RTOS Primitives (before any tasks)
+  // =========================================================================
+  createAllSyncPrimitives();
+  createAllQueues();
+
+  // =========================================================================
+  // PHASE 3: Hardware Initialization
+  // =========================================================================
+  USBSerial.println("Initializing hardware...");
+
+  // Temporary fix for BMP3xx I2C mode - TODO remove
+  digitalWrite(42, HIGH);
+  pinMode(42, OUTPUT);
+
+  // Load board-specific hardware config
+  loadHardwareConfig();
+
+  // I2C bus setup for altimeter
   const int SDA_PIN = 44;
   const int SCL_PIN = 41;
   Wire.setPins(SDA_PIN, SCL_PIN);
-  if (!setupAltimeter(board_config.alt_wire)) {
+
+  // Initialize peripherals
+  setupBarometer();
+  if (!setupAltimeter()) {
     USBSerial.println("Error initializing BMP3xx barometer");
+  }
+
+  setupLED();  // Defaults to RED
+  setupAnalogRead();
+  pinMode(board_config.button_top, INPUT_PULLUP);  // Button GPIO only, task created later
+  setupWatchdog();
+
+  // Buzzer and vibration motor
+  if (ENABLE_BUZZ) {
+    initBuzz();
   }
   if (ENABLE_VIBE) {
     initVibeMotor();
   }
+
+  setLEDColor(LED_YELLOW);  // Indicate boot in progress
+
+  // SPI bus (shared between display and BMS CAN)
+  setupSPI(board_config);
+
+  // Display initialization
+  setupLvglDisplay(deviceData, board_config.tft_dc, board_config.tft_rst, hardwareSPI);
+  initAlertDisplay();
+
+  // BMS CAN interface
+  #ifndef SCREEN_DEBUG
+    initBMSCAN(hardwareSPI);
+  #endif
+
+  // ESC interface
+  initESC();
+  setESCThrottle(ESC_DISARMED_PWM);
+
+  // =========================================================================
+  // PHASE 4: UI Startup (blocking - no tasks running yet)
+  // =========================================================================
+  USBSerial.println("Starting UI...");
+
+  // Haptic feedback that boot is progressing
+  pulseVibeMotor();
+
+  // Check for performance mode activation (button held during boot)
+  if (digitalRead(board_config.button_top) == LOW) {
+    perfModeSwitch();
+  }
+
+  setLEDColor(LED_GREEN);
+
+  // Show splash screen (blocking)
+  if (xSemaphoreTake(lvglMutex, portMAX_DELAY) == pdTRUE) {
+    displayLvglSplash(deviceData, 2000);
+    // Keep mutex held through main screen setup
+  } else {
+    USBSerial.println("Failed to acquire LVGL mutex for splash");
+  }
+
+  // Setup main screen after splash
+  USBSerial.println("Setting up main screen...");
+  if (main_screen == NULL) {
+    setupMainScreen(deviceData.theme == 1);
+  }
+
+  // Load main screen
+  if (main_screen != NULL) {
+    lv_scr_load(main_screen);
+    USBSerial.println("Main screen loaded");
+  } else {
+    USBSerial.println("Error: Main screen object is NULL after setup attempt");
+  }
+
+  // Release LVGL mutex
+  if (lvglMutex != NULL && xSemaphoreGetMutexHolder(lvglMutex) == xTaskGetCurrentTaskHandle()) {
+    xSemaphoreGive(lvglMutex);
+  }
+
+  // =========================================================================
+  // PHASE 5: Services Initialization
+  // =========================================================================
+  USBSerial.println("Initializing services...");
+
+  // BLE stack (services created, advertising NOT started yet)
+  setupBLE();
+
+  // Monitoring system (disabled initially)
+  initSimpleMonitor();
+
+  // Send initial device data
+  send_device_data();
+
+  // =========================================================================
+  // PHASE 6: Create ALL Tasks
+  // Tasks can start immediately - all dependencies exist
+  // =========================================================================
+  setupTasks();
+
+  // =========================================================================
+  // PHASE 7: Start External Interfaces
+  // =========================================================================
+  USBSerial.println("Starting external interfaces...");
+
+  // Start BLE advertising (now safe - UI is ready, tasks are running)
+  restartBLEAdvertising();
+  USBSerial.println("BLE advertising started");
+
+  // Enable sensor monitoring
+  enableMonitoring();
+
+  // Confirm successful boot to prevent OTA rollback
+  if (esp_ota_mark_app_valid_cancel_rollback() == ESP_OK) {
+    USBSerial.println("OTA: Firmware marked valid - Rollback cancelled");
+  }
+
+  USBSerial.println("=== Boot complete ===");
 }
 
-// main loop all work is done in tasks
+// main loop - all work is done in tasks
 void loop() {
   vTaskDelay(pdMS_TO_TICKS(25));
-}
-
-void initButtons() {
-  pinMode(board_config.button_top, INPUT_PULLUP);
-
-  // Create button handling task
-  xTaskCreatePinnedToCore(buttonHandlerTask, "ButtonHandler", 4096, NULL, 2, &buttonTaskHandle, 0);
 }
 
 // Add new button handler task
@@ -882,9 +979,7 @@ void buttonHandlerTask(void* parameter) {
             buttonPressStartTime = currentTime;  // Reset to prevent immediate cruise activation
           }
         }
-      }
-      // Only handle other button actions if we're not in an arm sequence
-      else if (buttonPressed) {
+      } else if (buttonPressed) {  // Only handle other button actions if we're not in an arm sequence
         uint32_t currentHoldTime = currentTime - buttonPressStartTime;
 
         // Handle performance mode (only when disarmed and held long enough)
@@ -893,9 +988,8 @@ void buttonHandlerTask(void* parameter) {
           perfModeSwitch();
           buttonPressed = false;
           buttonPressStartTime = currentTime;
-        }
-        // Handle cruise control (when armed or cruising and held long enough)
-        else if ((currentState == ARMED || currentState == ARMED_CRUISING) && currentHoldTime >= CRUISE_HOLD_TIME_MS) {
+        } else if ((currentState == ARMED || currentState == ARMED_CRUISING) && currentHoldTime >= CRUISE_HOLD_TIME_MS) {
+          // Handle cruise control (when armed or cruising and held long enough)
           USBSerial.println("Cruise control button activated");
           toggleCruise();
           buttonPressed = false;
@@ -1087,7 +1181,7 @@ void handleThrottle() {
     }
   }
 
-  int finalPwm;
+  int finalPwm = ESC_DISARMED_PWM;
 
   // Handle throttle based on current device state
   switch (currentState) {
@@ -1118,7 +1212,6 @@ void handleThrottle() {
 // extern unsigned long lastEscTimeUpdateMillis;  // REMOVED - Using struct member now
 
 void syncESCTelemetry() {
-  unsigned long currentTime = millis();
   // Update ESC state based first on TWAI init, then on time since last update received
   if (!escTwaiInitialized) {
     escTelemetryData.escState = TelemetryState::NOT_CONNECTED;
@@ -1171,7 +1264,7 @@ void afterCruiseStart() {
     USBSerial.println("Failed to queue initial cruise throttle PWM");
   }
 
-  //pulseVibeMotor();
+  // pulseVibeMotor();
 }
 
 void afterCruiseEnd() {
@@ -1184,7 +1277,7 @@ void afterCruiseEnd() {
   throttleFilterReset(currentPwmVal);
 
   cruisedPotVal = 0;
-  //pulseVibeMotor();
+  // pulseVibeMotor();
 }
 
 void playCruiseSound() {
@@ -1205,7 +1298,9 @@ void audioTask(void* parameter) {
       for (int i = 0; i < request.size; i++) {
         startTone(request.notes[i]);
         TickType_t delayTicks = pdMS_TO_TICKS(request.duration);
-        if (delayTicks == 0) { delayTicks = 1; }  // Ensure non-zero delay
+        if (delayTicks == 0) {
+          delayTicks = 1;
+        }  // Ensure non-zero delay
         vTaskDelayUntil(&nextWakeTime, delayTicks);
       }
       stopTone();

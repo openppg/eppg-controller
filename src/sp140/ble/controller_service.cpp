@@ -5,6 +5,7 @@
 #include "sp140/ble.h"
 #include "sp140/ble/ble_ids.h"
 #include "sp140/throttle.h"
+#include "sp140/ble/ota_service.h"
 
 namespace {
 
@@ -62,7 +63,7 @@ void updateControllerPackedTelemetry(float altitude, float baro_temp,
       reinterpret_cast<uint8_t*>(&packet),
       sizeof(BLE_Controller_Telemetry_V1));
 
-  if (deviceConnected) {
+  if (deviceConnected && !isOtaInProgress()) {
     pControllerPackedTelemetry->notify();
   }
 }
