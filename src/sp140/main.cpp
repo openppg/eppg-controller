@@ -99,7 +99,7 @@ bool bmsCanInitialized = false;
 bool escTwaiInitialized = false;
 
 
-UnifiedBatteryData unifiedBatteryData = {0.0f, 0.0f, 0.0f};
+UnifiedBatteryData unifiedBatteryData = {0.0f, 0.0f, 0.0f, 0.0f};  // volts, amps, power, soc
 
 // Throttle PWM smoothing buffer is managed in throttle.cpp
 
@@ -159,6 +159,7 @@ extern TaskHandle_t deviceStateUpdateTaskHandle;
 extern TaskHandle_t buttonTaskHandle;
 extern TaskHandle_t vibeTaskHandle;
 
+#ifdef OPENPPG_DEBUG
 static TaskHandle_t stackLoggerTaskHandle = NULL;
 static const uint32_t STACK_LOGGER_INTERVAL_MS = 5000;  // Log every 5 seconds
 
@@ -205,6 +206,7 @@ static void stackWatermarkLoggerTask(void* parameter) {
     vTaskDelay(pdMS_TO_TICKS(STACK_LOGGER_INTERVAL_MS));
   }
 }
+#endif  // OPENPPG_DEBUG
 
 // Forward declarations for tasks defined in other compilation units
 extern void vibeTask(void* parameter);
@@ -1210,7 +1212,6 @@ void handleThrottle() {
 // extern unsigned long lastEscTimeUpdateMillis;  // REMOVED - Using struct member now
 
 void syncESCTelemetry() {
-  unsigned long currentTime = millis();
   // Update ESC state based first on TWAI init, then on time since last update received
   if (!escTwaiInitialized) {
     escTelemetryData.escState = TelemetryState::NOT_CONNECTED;
