@@ -121,6 +121,15 @@ struct BLEStateUpdate {
 QueueHandle_t bleStateQueue = NULL;
 TaskHandle_t bleStateUpdateTaskHandle = NULL;
 
+// Altimeter telemetry for queue-based sharing
+struct AltimeterData {
+  float altitude;
+  float temperature;
+  float verticalSpeed;
+};
+QueueHandle_t altimeterQueue = NULL;
+TaskHandle_t altimeterTaskHandle = NULL;
+
 // Device state broadcast
 QueueHandle_t deviceStateQueue = NULL;
 TaskHandle_t deviceStateUpdateTaskHandle = NULL;
@@ -312,7 +321,6 @@ TaskHandle_t throttleTaskHandle = NULL;
 TaskHandle_t watchdogTaskHandle = NULL;
 TaskHandle_t uiTaskHandle = NULL;
 TaskHandle_t bmsTaskHandle = NULL;
-TaskHandle_t altimeterTaskHandle = NULL;  // Altimeter sensor task
 TaskHandle_t vibeTaskHandle = NULL;  // Vibration motor task
 TaskHandle_t monitoringTaskHandle = NULL;  // Sensor monitoring task
 
@@ -418,10 +426,23 @@ void updateBLETask(void *pvParameters) {
       updateBMSTelemetry(newBmsTelemetry);
 
       // Update controller telemetry at same 10Hz rate as BMS
-      // Read from altimeter telemetry (no I2C blocking)
-      float altitude = altimeterData.altitude;
-      float baro_temp = altimeterData.temperature;
-      float vario = altimeterData.verticalSpeed;
+      // Get altimeter data - from queue if available, otherwise direct read
+      float altitude, baro_temp, vario;
+      if (altimeterQueue != NULL && uxQueueMessagesWaiting(altimeterQueue) > 0) {
+        AltimeterData altData;
+        if (xQueuePeek(altimeterQueue, &altData, 0) == pdTRUE) {
+          altitude = altData.altitude;
+          baro_temp = altData.temperature;
+          vario = altData.verticalSpeed;
+        } else {
+          altitude = baro_temp = vario = 0.0f;
+        }
+      } else {
+        // Fallback to direct read (during boot or if queue empty)
+        altitude = getAltitude(deviceData);
+        baro_temp = getBaroTemperature();
+        vario = getVerticalSpeed();
+      }
       float mcu_temp = temperatureRead();  // ESP32 internal temp sensor
       updateControllerPackedTelemetry(altitude, baro_temp, vario, mcu_temp);
     }
@@ -438,8 +459,17 @@ void refreshDisplay() {
   }
 
   if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(40)) == pdTRUE) {
-    // Read from altimeter telemetry (no I2C blocking)
-    const float currentRelativeAltitude = altimeterData.altitude;
+    // Get altitude - from queue if available, otherwise direct read
+    float currentRelativeAltitude = 0.0f;
+    if (altimeterQueue != NULL && uxQueueMessagesWaiting(altimeterQueue) > 0) {
+      AltimeterData altData;
+      if (xQueuePeek(altimeterQueue, &altData, 0) == pdTRUE) {
+        currentRelativeAltitude = altData.altitude;
+      }
+    } else {
+      // Fallback to direct read (during boot or if queue empty)
+      currentRelativeAltitude = getAltitude(deviceData);
+    }
 
     // Determine the altitude to show on the display
     float altitudeToShow = 0.0f;  // Default to 0
@@ -584,26 +614,24 @@ void bmsTask(void *pvParameters) {
   }
 }
 
-// Altimeter task: ~10 Hz polling of BMP3XX sensor via I2C
-// Single writer - prevents I2C bus contention
-void altimeterTask(void* pvParameters) {
+// Altimeter task: ~20 Hz sampling, writes to queue for thread-safe access
+void altimeterTask(void *pvParameters) {
   TickType_t lastWake = xTaskGetTickCount();
-  const TickType_t altimeterTicks = pdMS_TO_TICKS(100);  // 10 Hz
+  const TickType_t altTicks = pdMS_TO_TICKS(50);  // 20 Hz
+  AltimeterData data;
 
   for (;;) {
-    if (bmpPresent) {
-      // Single I2C read cycle - no contention with other tasks
-      altimeterData.altitude = getAltitude(deviceData);
-      altimeterData.temperature = getBaroTemperature();
-      altimeterData.pressure = getBaroPressure();
-      altimeterData.verticalSpeed = getVerticalSpeed();
-      altimeterData.lastUpdate = millis();
-      altimeterData.connected = true;
-    } else {
-      altimeterData.connected = false;
+    // Read from sensor (this populates the internal vario buffer too)
+    data.altitude = getAltitude(deviceData);
+    data.temperature = getBaroTemperature();
+    data.verticalSpeed = getVerticalSpeed();
+
+    // Publish to queue for other tasks to consume
+    if (altimeterQueue != NULL) {
+      xQueueOverwrite(altimeterQueue, &data);
     }
 
-    vTaskDelayUntil(&lastWake, altimeterTicks);
+    vTaskDelayUntil(&lastWake, altTicks);
   }
 }
 
@@ -727,6 +755,12 @@ void createAllQueues() {
   melodyQueue = xQueueCreate(5, sizeof(MelodyRequest));
   if (melodyQueue == NULL) {
     USBSerial.println("Error creating melody queue");
+  }
+
+  // Altimeter data queue for thread-safe sensor sharing
+  altimeterQueue = xQueueCreate(1, sizeof(AltimeterData));
+  if (altimeterQueue == NULL) {
+    USBSerial.println("Error creating altimeter queue");
   }
 }
 
