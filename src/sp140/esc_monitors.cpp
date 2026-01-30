@@ -51,6 +51,7 @@ void addESCMonitors() {
   monitors.push_back(escCapTemp);
 
   // Motor Temperature Monitor - with hysteresis
+  // Note: Invalid readings (>140°C = disconnected) are filtered in esc.cpp
   static HysteresisSensorMonitor* motorTemp = new HysteresisSensorMonitor(
     SensorID::Motor_Temp,
     SensorCategory::ESC,

@@ -704,7 +704,9 @@ void updateLvglMainScreen(
     lv_obj_remove_style(motor_temp_bg, &style_warning, 0);
     lv_obj_remove_style(motor_temp_bg, &style_critical, 0);
 
-    if (escTelemetry.escState == TelemetryState::CONNECTED && motorTemp > -20.0f) {
+    // Show motor temp if ESC connected and reading is valid (not disconnected)
+    // Disconnected sensor reads ~149°C, so treat > 140°C as invalid
+    if (escTelemetry.escState == TelemetryState::CONNECTED && motorTemp > -20.0f && motorTemp <= 140.0f) {
       lv_label_set_text_fmt(motor_temp_label, "%d", static_cast<int>(motorTemp));
 
       if (motorTemp >= motorTempThresholds.critHigh) {
