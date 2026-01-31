@@ -100,8 +100,10 @@ void readESCTelemetry() {
       float rawMotorTemp = res->motor_temp / 10.0f;
       if (rawMotorTemp > -20.0f && rawMotorTemp <= 140.0f) {
         escTelemetryData.motor_temp = rawMotorTemp;
+      } else {
+        // Set invalid sentinel so UI shows "-" and BLE sends MOTOR_TEMP_DISCONNECTED
+        escTelemetryData.motor_temp = MOTOR_TEMP_DISCONNECTED;
       }
-      // else: keep previous value (sensor disconnected or invalid)
       escTelemetryData.eRPM = res->speed;
       escTelemetryData.inPWM = res->recv_pwm / 10.0f;
       watts = escTelemetryData.amps * escTelemetryData.volts;

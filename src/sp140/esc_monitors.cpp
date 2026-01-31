@@ -51,12 +51,16 @@ void addESCMonitors() {
   monitors.push_back(escCapTemp);
 
   // Motor Temperature Monitor - with hysteresis
-  // Note: Invalid readings (>140°C = disconnected) are filtered in esc.cpp
+  // When sensor is disconnected esc.cpp sets motor_temp to -40; don't trigger low-temp alert
   static HysteresisSensorMonitor* motorTemp = new HysteresisSensorMonitor(
     SensorID::Motor_Temp,
     SensorCategory::ESC,
     motorTempThresholds,
-    []() { return monitoringEscData.motor_temp; },
+    []() {
+      float t = monitoringEscData.motor_temp;
+      if (t <= -20.0f || t > 140.0f) return 50.0f;  // disconnected/invalid: report nominal, no alert
+      return t;
+    },
     &multiLogger);
   monitors.push_back(motorTemp);
 

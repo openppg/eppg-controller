@@ -92,6 +92,7 @@ void updateESCPackedTelemetry(const STR_ESC_TELEMETRY_140& telemetry) {
   packet.mos_temp = telemetry.mos_temp;
   packet.cap_temp = telemetry.cap_temp;
   packet.mcu_temp = telemetry.mcu_temp;
+  // When sensor disconnected, motor_temp is MOTOR_TEMP_DISCONNECTED (-40.0); client can show "N/A"
   packet.motor_temp = telemetry.motor_temp;
   packet.eRPM = static_cast<int32_t>(telemetry.eRPM);
   packet.inPWM = static_cast<uint16_t>(telemetry.inPWM);
@@ -118,6 +119,7 @@ void updateESCTelemetryBLE(const STR_ESC_TELEMETRY_140& telemetry) {
   float voltage = telemetry.volts;
   float current = telemetry.amps;
   int32_t rpm = static_cast<int32_t>(telemetry.eRPM);
+  // motor_temp is MOTOR_TEMP_DISCONNECTED (-40.0) when sensor unplugged
   EscTempsPacket temps = {
     telemetry.mos_temp,
     telemetry.cap_temp,

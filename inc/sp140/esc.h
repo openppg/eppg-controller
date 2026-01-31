@@ -2,6 +2,9 @@
 #define INC_SP140_ESC_H_
 
 #include <Arduino.h>
+
+// Motor temp when sensor is disconnected (sent over BLE; display shows "-")
+constexpr float MOTOR_TEMP_DISCONNECTED = -40.0f;
 #include "sp140/structs.h"
 #include "../../inc/sp140/esp32s3-config.h"
 #include <SineEsc.h>
