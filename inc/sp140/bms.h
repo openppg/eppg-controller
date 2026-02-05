@@ -15,5 +15,6 @@ extern STR_BMS_TELEMETRY_140 bmsTelemetryData;
 extern BMS_CAN* bms_can;
 
 // BMS functions
+bool initBMSCAN(SPIClass* spi);
 void updateBMSData();
 void printBMSData();

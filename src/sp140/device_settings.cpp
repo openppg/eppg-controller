@@ -1,8 +1,13 @@
 // Copyright 2020 <Zach Whitehead>
 // OpenPPG
 
+#include "Arduino.h"
+#include <ArduinoJson.h>
+#include "sp140/device_settings.h"
+#include "../../inc/sp140/esp32s3-config.h"
 #include <Preferences.h>  // Add ESP32 Preferences library
 #include "../../inc/sp140/throttle.h"
+#include "../../inc/sp140/globals.h"
 
 /**
  * WebSerial Protocol Documentation
@@ -209,7 +214,7 @@ void parse_serial_commands() {
     if (!doc["command"].isNull()) {
       String command = doc["command"].as<String>();
 
-      if (command == "reboot") {
+      if (command == "reboot" || command == "rbl") {
         USBSerial.println("Rebooting");
         ESP.restart();
         return;

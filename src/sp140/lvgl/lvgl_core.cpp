@@ -77,9 +77,6 @@ void setupLvglDisplay(
 // Optimize the flush callback to minimize SPI transfers
 // CS pin management is handled here where actual SPI communication occurs
 void lvgl_flush_cb(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* color_p) {
-  // Make sure display CS is selected
-  digitalWrite(displayCS, LOW);
-
   uint32_t w = (area->x2 - area->x1 + 1);
   uint32_t h = (area->y2 - area->y1 + 1);
 
@@ -89,9 +86,14 @@ void lvgl_flush_cb(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* color
     if (xSemaphoreTake(spiBusMutex, pdMS_TO_TICKS(200)) != pdTRUE) {
       // SPI bus timeout - BMS might be doing long operation, skip display flush
       USBSerial.println("[DISPLAY] SPI bus timeout - skipping display flush");
-      return;  // Skip this display update rather than hang
+      // Must still signal LVGL that flush is done to avoid deadlock
+      lv_disp_flush_ready(disp);
+      return;
     }
   }
+
+  // Make sure display CS is selected only after SPI bus is acquired
+  digitalWrite(displayCS, LOW);
   tft_driver->startWrite();
   tft_driver->setAddrWindow(area->x1, area->y1, w, h);
 

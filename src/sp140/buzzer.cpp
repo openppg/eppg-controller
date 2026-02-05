@@ -4,8 +4,8 @@
 
 #include "sp140/shared-config.h"
 #include "sp140/esp32s3-config.h"
-#include <FreeRTOS.h>
-#include <semphr.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 
 #define DEBUG_SERIAL USBSerial
 

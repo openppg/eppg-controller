@@ -454,7 +454,7 @@ void updateLvglMainScreen(
         int ones = whole_part % 10;
 
         // Populate character positions using static buffers
-        static char power_digit_buffers[4][2];
+        static char power_digit_buffers[4][12];
 
         // Tens digit (only show if >= 10kW)
         if (tens > 0) {
@@ -533,7 +533,7 @@ void updateLvglMainScreen(
       int ones = whole_part % 10;
 
       // Populate each character position using static character buffers
-      static char digit_buffers[7][2];  // Static buffers for single digits
+      static char digit_buffers[7][12];  // Static buffers for single digits
 
       // Clear all positions first
       for (int i = 0; i < 7; i++) {
@@ -598,7 +598,7 @@ void updateLvglMainScreen(
       int tens = (feet / 10) % 10;
       int ones = feet % 10;
 
-      static char digit_buffers_ft[7][2];  // Static buffers for feet
+      static char digit_buffers_ft[7][12];  // Static buffers for feet
 
       // Adjust width of position 4 for feet (should be normal width, not narrow)
       lv_obj_set_size(altitude_char_labels[4], 17, 24);  // char_width=19, char_height=24

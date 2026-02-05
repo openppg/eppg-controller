@@ -8,6 +8,7 @@
 #include "sp140/ble/config_service.h"
 #include "sp140/ble/controller_service.h"
 #include "sp140/ble/esc_service.h"
+#include "sp140/ble/ota_service.h"
 
 namespace {
 
@@ -53,6 +54,7 @@ void setupBLE() {
   initBmsBleService(pServer);
   initEscBleService(pServer);
   initControllerBleService(pServer);
+  initOtaBleService(pServer);
 
   NimBLEAdvertising* advertising = pServer->getAdvertising();
   advertising->setName("OpenPPG Controller");
@@ -62,11 +64,11 @@ void setupBLE() {
   advertising->addServiceUUID(NimBLEUUID(BMS_TELEMETRY_SERVICE_UUID));
   advertising->addServiceUUID(NimBLEUUID(ESC_TELEMETRY_SERVICE_UUID));
   advertising->addServiceUUID(NimBLEUUID(CONTROLLER_SERVICE_UUID));
+  advertising->addServiceUUID(NimBLEUUID(OTA_SERVICE_UUID));
   advertising->enableScanResponse(true);
-  advertising->start();
+  // Note: Advertising is deferred until after splash screen
 
-  USBSerial.println("BLE device ready");
-  USBSerial.println("Waiting for a client connection...");
+  USBSerial.println("BLE device ready (advertising deferred)");
 }
 
 void restartBLEAdvertising() {
