@@ -56,10 +56,7 @@ void addESCMonitors() {
     SensorID::Motor_Temp,
     SensorCategory::ESC,
     motorTempThresholds,
-    []() {
-      float t = monitoringEscData.motor_temp;
-      return (t > -20.0f && t <= 140.0f) ? t : NAN;
-    },
+    []() { return monitoringEscData.motor_temp; },
     &multiLogger);
   monitors.push_back(motorTemp);
 

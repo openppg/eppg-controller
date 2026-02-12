@@ -3,8 +3,13 @@
 
 #include <Arduino.h>
 
-// Motor temp when sensor is disconnected (sent over BLE; display shows "-")
-constexpr float MOTOR_TEMP_DISCONNECTED = -40.0f;
+// Motor temp validity range (disconnected/invalid readings are represented as NaN)
+constexpr float MOTOR_TEMP_VALID_MIN_C = -20.0f;
+constexpr float MOTOR_TEMP_VALID_MAX_C = 140.0f;
+
+inline bool isMotorTempValidC(float tempC) {
+  return tempC > MOTOR_TEMP_VALID_MIN_C && tempC <= MOTOR_TEMP_VALID_MAX_C;
+}
 #include "sp140/structs.h"
 #include "../../inc/sp140/esp32s3-config.h"
 #include <SineEsc.h>

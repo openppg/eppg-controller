@@ -147,7 +147,7 @@ typedef struct {
   float mos_temp;               // MOSFET temperature (°C)
   float cap_temp;               // Capacitor temperature (°C)
   float mcu_temp;               // MCU temperature (°C)
-  float motor_temp;             // Motor temperature (°C)
+  float motor_temp;             // Motor temperature (°C), NaN if sensor invalid/disconnected
   int32_t eRPM;                 // Electrical RPM
   uint16_t inPWM;               // Input PWM value
   uint16_t running_error;       // Runtime error bitmask

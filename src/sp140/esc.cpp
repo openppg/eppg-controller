@@ -98,11 +98,11 @@ void readESCTelemetry() {
       // Filter motor temp - only update if sensor is connected (valid range: -20°C to 140°C)
       // Disconnected sensor reads ~149°C (thermistor pulled high)
       float rawMotorTemp = res->motor_temp / 10.0f;
-      if (rawMotorTemp > -20.0f && rawMotorTemp <= 140.0f) {
+      if (isMotorTempValidC(rawMotorTemp)) {
         escTelemetryData.motor_temp = rawMotorTemp;
       } else {
-        // Set invalid sentinel so UI shows "-" and BLE sends MOTOR_TEMP_DISCONNECTED
-        escTelemetryData.motor_temp = MOTOR_TEMP_DISCONNECTED;
+        // Store invalid motor temp as NaN. Downstream consumers can skip on isnan().
+        escTelemetryData.motor_temp = NAN;
       }
       escTelemetryData.eRPM = res->speed;
       escTelemetryData.inPWM = res->recv_pwm / 10.0f;
