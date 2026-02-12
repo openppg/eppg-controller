@@ -159,6 +159,22 @@ TEST(ThrottleTest, ApplyModeRampClamp) {
     EXPECT_EQ(result, 1867);     // Should ramp by 27, not clamp yet
 }
 
+// Test deceleration clamping at ESC minimum floor
+TEST(ThrottleTest, ApplyModeRampClampDecelToFloor) {
+    int prevPwm = 1040;
+
+    // Large decel in CHILL mode should never go below ESC_MIN_PWM
+    int result = applyModeRampClamp(500, prevPwm, 0);
+    EXPECT_EQ(result, 1035);
+    EXPECT_EQ(prevPwm, 1035);
+
+    // Large decel in SPORT mode should also clamp at ESC_MIN_PWM
+    prevPwm = 1040;
+    result = applyModeRampClamp(500, prevPwm, 1);
+    EXPECT_EQ(result, 1035);
+    EXPECT_EQ(prevPwm, 1035);
+}
+
 // Test throttle filter functions
 TEST(ThrottleTest, ThrottleFiltering) {
     // Clear buffer first
@@ -182,6 +198,29 @@ TEST(ThrottleTest, ThrottleFiltering) {
     EXPECT_EQ(throttleFilterAverage(), 1500);  // Should be filled with 1500
 }
 
+// Test throttle filter ring buffer rollover (capacity = 8)
+TEST(ThrottleTest, ThrottleFilterRollover) {
+    throttleFilterClear();
+
+    // Fill exactly to capacity
+    throttleFilterPush(1000);
+    throttleFilterPush(1100);
+    throttleFilterPush(1200);
+    throttleFilterPush(1300);
+    throttleFilterPush(1400);
+    throttleFilterPush(1500);
+    throttleFilterPush(1600);
+    throttleFilterPush(1700);
+    EXPECT_EQ(throttleFilterAverage(), 1350);  // (1000..1700)/8
+
+    // Push beyond capacity: oldest entries should roll off
+    throttleFilterPush(1800);                  // Buffer now 1100..1800
+    EXPECT_EQ(throttleFilterAverage(), 1450);
+
+    throttleFilterPush(1900);                  // Buffer now 1200..1900
+    EXPECT_EQ(throttleFilterAverage(), 1550);
+}
+
 // Test resetThrottleState function
 TEST(ThrottleTest, ResetThrottleState) {
     int prevPwm = 1500;
@@ -196,6 +235,26 @@ TEST(ThrottleTest, ResetThrottleState) {
 
     EXPECT_EQ(prevPwm, 1035);              // Should reset to ESC_MIN_PWM
     EXPECT_EQ(throttleFilterAverage(), 0); // Buffer should be empty
+}
+
+// Test getSmoothedThrottlePwm mode-aware mapping + smoothing behavior
+TEST(ThrottleTest, GetSmoothedThrottlePwmModeAwareAndSmoothing) {
+    // CHILL full-stick should map to chill max
+    throttleFilterClear();
+    setTestAnalogReadValue(4095);
+    EXPECT_EQ(getSmoothedThrottlePwm(0), 1600);
+
+    // SPORT full-stick should map to full ESC max
+    throttleFilterClear();
+    setTestAnalogReadValue(4095);
+    EXPECT_EQ(getSmoothedThrottlePwm(1), 1950);
+
+    // Verify smoothing in SPORT mode across two samples
+    throttleFilterClear();
+    setTestAnalogReadValue(0);              // 1035
+    EXPECT_EQ(getSmoothedThrottlePwm(1), 1035);
+    setTestAnalogReadValue(4095);           // 1950
+    EXPECT_EQ(getSmoothedThrottlePwm(1), 1492);  // (1035 + 1950) / 2
 }
 
 // Test potRawToModePwm - mode-aware mapping
