@@ -61,6 +61,15 @@ int potRawToPwm(uint16_t raw) {
   return map(raw, POT_MIN_VALUE, POT_MAX_VALUE, ESC_MIN_PWM, ESC_MAX_PWM);
 }
 
+/** Map raw ADC (0..4095) to mode-specific PWM range.
+ *  Chill mode: full physical range -> ESC_MIN_PWM..CHILL_MODE_MAX_PWM
+ *  Sport mode: full physical range -> ESC_MIN_PWM..ESC_MAX_PWM
+ */
+int potRawToModePwm(uint16_t raw, uint8_t performance_mode) {
+  int maxPwm = (performance_mode == 0) ? CHILL_MODE_MAX_PWM : ESC_MAX_PWM;
+  return map(raw, POT_MIN_VALUE, POT_MAX_VALUE, ESC_MIN_PWM, maxPwm);
+}
+
 /**
  * Apply mode-specific ramp limiting (in microseconds per tick) and clamp
  * the result to the current mode's max PWM. Updates prevPwm to the final value.
@@ -110,13 +119,16 @@ int throttleFilterAverage() {
 /**
  * Read throttle input and return smoothed PWM value.
  * This is the core throttle processing pipeline without any state logic.
+ * Uses mode-aware mapping so the full physical range covers the mode's
+ * PWM output range (chill: 1035-1600, sport: 1035-1950).
  *
+ * @param performance_mode 0 = CHILL, 1 = SPORT
  * @return Smoothed PWM value from throttle input
  */
-int getSmoothedThrottlePwm() {
-  // Read and convert raw pot to PWM
+int getSmoothedThrottlePwm(uint8_t performance_mode) {
+  // Read and convert raw pot to mode-specific PWM range
   int potValRaw = readThrottleRaw();
-  int targetPwm = potRawToPwm(potValRaw);
+  int targetPwm = potRawToModePwm(potValRaw, performance_mode);
 
   // Smooth in PWM domain using ring buffer
   throttleFilterPush(targetPwm);
@@ -134,21 +146,15 @@ void resetThrottleState(int& prevPwm) {
 
 /**
  * Calculate the cruise control PWM value from a raw pot reading.
- * Uses the same mapping as normal throttle: map to full range first,
- * then clamp to the mode maximum and cruise maximum.
- *
- * This ensures cruise maintains the actual throttle output level,
- * not a re-mapped value that would cause throttle drop in chill mode.
+ * Uses the same mode-aware mapping as normal throttle so the full
+ * physical range maps to the mode's output range, then applies the
+ * absolute cruise max cap.
  */
 uint16_t calculateCruisePwm(uint16_t potVal, uint8_t performance_mode, float cruiseMaxPct) {
-  // Step 1: Map to full PWM range (same as normal throttle)
-  uint16_t pwm = potRawToPwm(potVal);
+  // Step 1: Map to mode-specific PWM range (same mapping as normal throttle)
+  uint16_t pwm = potRawToModePwm(potVal, performance_mode);
 
-  // Step 2: Clamp to mode maximum (chill mode caps at lower PWM)
-  int maxPwmForMode = (performance_mode == 0) ? CHILL_MODE_MAX_PWM : ESC_MAX_PWM;
-  pwm = min(pwm, (uint16_t)maxPwmForMode);
-
-  // Step 3: Apply absolute cruise max cap
+  // Step 2: Apply absolute cruise max cap
   uint16_t absoluteMaxCruisePwm = ESC_MIN_PWM + (uint16_t)((ESC_MAX_PWM - ESC_MIN_PWM) * cruiseMaxPct);
   pwm = min(pwm, absoluteMaxCruisePwm);
 
