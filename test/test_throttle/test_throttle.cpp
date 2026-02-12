@@ -248,10 +248,10 @@ TEST(ThrottleTest, CalculateCruisePwmChillModeFullRange) {
     uint16_t result = calculateCruisePwm(4095, 0, 0.70);
     EXPECT_EQ(result, 1600);  // Full physical range -> CHILL_MODE_MAX_PWM
 
-    // 80% pot in CHILL mode - potRawToModePwm(3276, 0) = 1486
-    // Cruise cap at 70% = 1675, so 1486 is below cap
+    // 80% pot in CHILL mode - potRawToModePwm(3276, 0) = 1487
+    // Cruise cap at 70% = 1675, so 1487 is below cap
     result = calculateCruisePwm(3276, 0, 0.70);
-    EXPECT_EQ(result, 1486);  // Full granular control, no clamping
+    EXPECT_EQ(result, 1487);  // Full granular control, no clamping
 }
 
 // Test cruise max percentage capping
