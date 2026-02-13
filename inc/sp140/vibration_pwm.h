@@ -74,35 +74,4 @@ void pulseVibration(uint16_t duration_ms, uint8_t intensity);
  */
 void stopVibration();
 
-/**
- * @brief Initializes the critical alert service.
- *
- * This function sets up the necessary resources for handling synchronized critical alerts.
- * It should be called once during system initialization.
- */
-void initCriticalAlertService();
-
-/**
- * @brief Starts the critical alert notifications.
- *
- * Activates the synchronized vibration and border flashing. If alerts are
- * already running, this function has no effect.
- */
-void startCriticalAlerts();
-
-/**
- * @brief Stops the critical alert notifications.
- *
- * Deactivates the vibration and border flashing. If alerts are not currently
- * running, this function has no effect.
- */
-void stopCriticalAlerts();
-
-/**
- * @brief Checks if the critical alert system is currently active.
- *
- * @return true if critical alerts are active, false otherwise.
- */
-bool isCriticalAlertActive();
-
 #endif  // INC_SP140_VIBRATION_PWM_H_

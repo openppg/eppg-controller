@@ -98,10 +98,12 @@ void readESCTelemetry() {
       // Filter motor temp - only update if sensor is connected (valid range: -20°C to 140°C)
       // Disconnected sensor reads ~149°C (thermistor pulled high)
       float rawMotorTemp = res->motor_temp / 10.0f;
-      if (rawMotorTemp > -20.0f && rawMotorTemp <= 140.0f) {
+      if (isMotorTempValidC(rawMotorTemp)) {
         escTelemetryData.motor_temp = rawMotorTemp;
+      } else {
+        // Store invalid motor temp as NaN. Downstream consumers can skip on isnan().
+        escTelemetryData.motor_temp = NAN;
       }
-      // else: keep previous value (sensor disconnected or invalid)
       escTelemetryData.eRPM = res->speed;
       escTelemetryData.inPWM = res->recv_pwm / 10.0f;
       watts = escTelemetryData.amps * escTelemetryData.volts;
@@ -297,15 +299,6 @@ void dumpESCMessages(void) {
  */
 double mapDouble(double x, double in_min, double in_max, double out_min, double out_max) {
   return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
-}
-
-/**
- * Get the highest temperature reading from all ESC sensors
- * @param telemetry ESC telemetry data structure
- * @return The highest temperature value among motor, MOSFET, and capacitor temps
- */
-float getHighestTemp(const STR_ESC_TELEMETRY_140& telemetry) {
-  return max(telemetry.motor_temp, max(telemetry.mos_temp, telemetry.cap_temp));
 }
 
 /**

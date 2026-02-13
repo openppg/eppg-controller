@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <functional>
+#include <math.h>
 #include <Arduino.h>
 #include "sp140/structs.h"
 
@@ -148,6 +149,14 @@ struct SensorMonitor : public IMonitor {
 
   void check() override {
     float v = read();
+    if (isnan(v)) {
+      if (last != AlertLevel::OK) {
+        logger->log(id, AlertLevel::OK, v);
+        last = AlertLevel::OK;
+      }
+      return;
+    }
+
     AlertLevel now = AlertLevel::OK;
 
     if      (v <= thr.critLow)  now = AlertLevel::CRIT_LOW;
@@ -182,6 +191,14 @@ struct HysteresisSensorMonitor : public SensorMonitor {
 
   void check() override {
     float v = read();
+    if (isnan(v)) {
+      if (last != AlertLevel::OK) {
+        logger->log(id, AlertLevel::OK, v);
+        last = AlertLevel::OK;
+      }
+      return;
+    }
+
     AlertLevel now = last;  // Start with current state
 
     // Hysteresis logic to prevent bouncing

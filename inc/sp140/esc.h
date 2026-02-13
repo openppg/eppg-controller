@@ -2,6 +2,14 @@
 #define INC_SP140_ESC_H_
 
 #include <Arduino.h>
+
+// Motor temp validity range (disconnected/invalid readings are represented as NaN)
+constexpr float MOTOR_TEMP_VALID_MIN_C = -20.0f;
+constexpr float MOTOR_TEMP_VALID_MAX_C = 140.0f;
+
+inline bool isMotorTempValidC(float tempC) {
+  return tempC > MOTOR_TEMP_VALID_MIN_C && tempC <= MOTOR_TEMP_VALID_MAX_C;
+}
 #include "sp140/structs.h"
 #include "../../inc/sp140/esp32s3-config.h"
 #include <SineEsc.h>
@@ -11,9 +19,6 @@ void initESC();
 void setESCThrottle(int throttlePWM);
 void readESCTelemetry();
 bool setupTWAI();
-
-// Get the highest temperature from all ESC sensors
-float getHighestTemp(const STR_ESC_TELEMETRY_140& telemetry);
 
 // ESC Error Decoding Functions
 String decodeRunningError(uint16_t errorCode);
