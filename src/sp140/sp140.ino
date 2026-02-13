@@ -799,7 +799,7 @@ void setup140() {
   const int SDA_PIN = 44;
   const int SCL_PIN = 41;
   Wire.setPins(SDA_PIN, SCL_PIN);
-  if (!setupAltimeter(board_config.alt_wire)) {
+  if (!setupAltimeter()) {
     USBSerial.println("Error initializing BMP3xx barometer");
   }
   if (ENABLE_VIBE) {
