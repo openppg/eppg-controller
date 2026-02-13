@@ -20,9 +20,6 @@ void setESCThrottle(int throttlePWM);
 void readESCTelemetry();
 bool setupTWAI();
 
-// Get the highest temperature from all ESC sensors
-float getHighestTemp(const STR_ESC_TELEMETRY_140& telemetry);
-
 // ESC Error Decoding Functions
 String decodeRunningError(uint16_t errorCode);
 String decodeSelfCheckError(uint16_t errorCode);

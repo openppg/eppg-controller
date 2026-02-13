@@ -302,15 +302,6 @@ double mapDouble(double x, double in_min, double in_max, double out_min, double 
 }
 
 /**
- * Get the highest temperature reading from all ESC sensors
- * @param telemetry ESC telemetry data structure
- * @return The highest temperature value among motor, MOSFET, and capacitor temps
- */
-float getHighestTemp(const STR_ESC_TELEMETRY_140& telemetry) {
-  return max(telemetry.motor_temp, max(telemetry.mos_temp, telemetry.cap_temp));
-}
-
-/**
  * Decode running error bitmask into human-readable string
  * @param errorCode 16-bit running error code from ESC
  * @return String containing decoded error messages
