@@ -76,9 +76,7 @@ float getBaroPressure() {
 }
 
 // Start the bmp3XX sensor
-bool setupAltimeter(bool altWire) {
-  TwoWire* wire = &Wire;
-
+bool setupAltimeter() {
   // pull down pin 40 to high to set the address
   pinMode(40, OUTPUT);
   digitalWrite(40, HIGH);

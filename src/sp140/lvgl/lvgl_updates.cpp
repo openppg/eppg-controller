@@ -4,6 +4,7 @@
 #include "../../../inc/sp140/globals.h"
 #include "../../../inc/sp140/vibration_pwm.h"
 #include "../../../inc/sp140/shared-config.h"
+#include <math.h>
 
 // Flash timer globals - definitions
 lv_timer_t* cruise_flash_timer = NULL;
@@ -704,7 +705,8 @@ void updateLvglMainScreen(
     lv_obj_remove_style(motor_temp_bg, &style_warning, 0);
     lv_obj_remove_style(motor_temp_bg, &style_critical, 0);
 
-    if (escTelemetry.escState == TelemetryState::CONNECTED && motorTemp > -20.0f) {
+    // Show motor temp only for a valid numeric reading while ESC is connected.
+    if (escTelemetry.escState == TelemetryState::CONNECTED && !isnan(motorTemp)) {
       lv_label_set_text_fmt(motor_temp_label, "%d", static_cast<int>(motorTemp));
 
       if (motorTemp >= motorTempThresholds.critHigh) {

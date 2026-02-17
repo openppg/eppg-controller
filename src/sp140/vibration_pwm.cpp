@@ -1,6 +1,5 @@
 #include "sp140/vibration_pwm.h"
 #include "sp140/esp32s3-config.h"
-#include "sp140/lvgl/lvgl_updates.h"
 
 extern HardwareConfig board_config;
 
@@ -13,27 +12,6 @@ const int VIBE_PWM_RESOLUTION = 8;  // 8-bit resolution
 // Channel 1: Buzzer (buzzer.cpp)
 // Channels 2-7: Available for future use
 const int VIBE_PWM_CHANNEL = 0;
-
-static bool criticalVibrationActive = false;
-static TaskHandle_t criticalVibeTaskHandle = NULL;
-
-/**
- * Critical vibration task - provides continuous vibration for critical alerts
- */
-void criticalVibeTask(void* parameter) {
-  for (;;) {
-    if (criticalVibrationActive && ENABLE_VIBE) {
-      // Pulse every 1 second for critical alerts
-      ledcWrite(board_config.vibe_pwm, 200);  // Medium intensity for continuous
-      vTaskDelay(pdMS_TO_TICKS(300));    // 300ms on
-      ledcWrite(board_config.vibe_pwm, 0);
-      vTaskDelay(pdMS_TO_TICKS(700));    // 700ms off (total 1 second cycle)
-    } else {
-      // If not active, suspend task to save resources
-      vTaskSuspend(NULL);
-    }
-  }
-}
 
 /**
  * Vibration task - processes vibration requests from queue
@@ -213,47 +191,4 @@ void customVibePattern(const uint8_t intensities[], const uint16_t durations[], 
     vTaskDelay(pdMS_TO_TICKS(durations[i]));
   }
   ledcWrite(board_config.vibe_pwm, 0);
-}
-
-// Service state for critical alerts
-static bool g_critical_alert_active = false;
-
-/**
- * @brief Initializes the critical alert service.
- */
-void initCriticalAlertService() {
-  // Initialization can be expanded if needed in the future.
-}
-
-/**
- * @brief Starts the critical alert notifications.
- */
-void startCriticalAlerts() {
-  if (g_critical_alert_active) {
-    return;
-  }
-  g_critical_alert_active = true;
-
-  // Start the single master LVGL timer, which will handle both border and vibration
-  startCriticalBorderFlash();
-}
-
-/**
- * @brief Stops the critical alert notifications.
- */
-void stopCriticalAlerts() {
-  if (!g_critical_alert_active) {
-    return;
-  }
-  g_critical_alert_active = false;
-
-  // Stop the master LVGL timer
-  stopCriticalBorderFlash();
-}
-
-/**
- * @brief Checks if the critical alert system is currently active.
- */
-bool isCriticalAlertActive() {
-  return g_critical_alert_active;
 }

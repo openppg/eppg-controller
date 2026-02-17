@@ -6,21 +6,6 @@
 
 #pragma pack(push, 1)
 
-// Temperature component enum
-enum TempComponent {
-  COMP_ESC_MOS = 0,
-  COMP_ESC_MCU = 1,
-  COMP_ESC_CAP = 2,
-  COMP_MOTOR = 3
-};
-
-enum TempState {
-  TEMP_INVALID = -1,  // Sensor reading is invalid
-  TEMP_NORMAL = 0,
-  TEMP_WARNING = 1,
-  TEMP_CRITICAL = 2
-};
-
 // Telemetry connection state
 enum class TelemetryState : uint8_t {
   NOT_CONNECTED,  // Never received data since boot
@@ -42,11 +27,6 @@ typedef struct {
   uint8_t statusFlag;
   word checksum;
   unsigned long lastUpdateMs;  // Timestamp of last telemetry update
-  TempState mos_state;         // MOS temperature state
-  TempState mcu_state;        // MCU temperature state
-  TempState cap_state;        // CAP temperature state
-  TempState motor_state;      // Motor temperature state
-  bool temp_sensor_error;     // True if any sensor is invalid
   TelemetryState escState;       // Current connection state
   uint16_t running_error;      // Runtime error bitmask
   uint16_t selfcheck_error;    // Self-check error bitmask
@@ -167,7 +147,7 @@ typedef struct {
   float mos_temp;               // MOSFET temperature (°C)
   float cap_temp;               // Capacitor temperature (°C)
   float mcu_temp;               // MCU temperature (°C)
-  float motor_temp;             // Motor temperature (°C)
+  float motor_temp;             // Motor temperature (°C), NaN if sensor invalid/disconnected
   int32_t eRPM;                 // Electrical RPM
   uint16_t inPWM;               // Input PWM value
   uint16_t running_error;       // Runtime error bitmask

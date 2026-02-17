@@ -3,11 +3,6 @@
 
 #include <Arduino.h>
 
-double mapd(double x, double in_min, double in_max, double out_min, double out_max);
-
-// Function for digital time display - adds leading zeros
-String convertToDigits(byte digits);
-
 // Function to get unique chip ID
 String chipId();
 

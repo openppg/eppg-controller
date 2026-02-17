@@ -43,9 +43,6 @@ void initAlertDisplay() {
     return;
   }
 
-  // Init the new alert service
-  initCriticalAlertService();
-
   // Create aggregation task (low priority)
   xTaskCreate(alertAggregationTask, "AlertAgg", 4096, NULL, 1, &alertAggregationTaskHandle);
   USBSerial.println("[AlertDisplay] Init complete");

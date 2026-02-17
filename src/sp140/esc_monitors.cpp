@@ -51,6 +51,7 @@ void addESCMonitors() {
   monitors.push_back(escCapTemp);
 
   // Motor Temperature Monitor - with hysteresis
+  // Return NaN for disconnected/invalid sensor so monitor logic skips it.
   static HysteresisSensorMonitor* motorTemp = new HysteresisSensorMonitor(
     SensorID::Motor_Temp,
     SensorCategory::ESC,

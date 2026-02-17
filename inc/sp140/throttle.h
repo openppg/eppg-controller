@@ -44,8 +44,21 @@ uint16_t readThrottleRaw();
 /** Get the most recently sampled raw throttle value (0..4095). */
 uint16_t getLastThrottleRaw();
 
-/** Convert raw pot reading (0..4095) to PWM microseconds. */
+/** Convert raw pot reading (0..4095) to PWM microseconds (full range). */
 int potRawToPwm(uint16_t raw);
+
+/**
+ * Convert raw pot reading (0..4095) to PWM microseconds using the
+ * mode-specific maximum.  In chill mode the full physical range maps to
+ * ESC_MIN_PWM..CHILL_MODE_MAX_PWM; in sport mode it maps to the full
+ * ESC_MIN_PWM..ESC_MAX_PWM range.  This gives chill mode full granular
+ * control over its limited output range instead of a hard clamp.
+ *
+ * @param raw              Raw ADC value (0..4095)
+ * @param performance_mode 0 = CHILL, 1 = SPORT
+ * @return PWM microseconds in the mode's range
+ */
+int potRawToModePwm(uint16_t raw, uint8_t performance_mode);
 
 /**
  * Apply mode-based ramp (us/tick) and clamp to the mode's max PWM.
@@ -86,10 +99,13 @@ bool throttleEngaged();
 /**
  * Read throttle input and return smoothed PWM value.
  * This is the core throttle processing pipeline without any state logic.
+ * Uses mode-aware mapping so the full physical range covers the mode's
+ * PWM output range.
  *
+ * @param performance_mode 0 = CHILL, 1 = SPORT
  * @return Smoothed PWM value from throttle input
  */
-int getSmoothedThrottlePwm();
+int getSmoothedThrottlePwm(uint8_t performance_mode);
 
 /**
  * Reset throttle state for clean startup/disarm.
@@ -107,8 +123,8 @@ void handleThrottle();
 
 /**
  * Calculate the cruise control PWM value from a raw pot reading.
- * Uses the same mapping as normal throttle (full range then clamp to mode max).
- * Also applies the absolute cruise max cap.
+ * Uses the same mode-aware mapping as normal throttle, then applies
+ * the absolute cruise max cap.
  *
  * @param potVal           Raw potentiometer value (0..4095)
  * @param performance_mode 0 = CHILL, 1 = SPORT
