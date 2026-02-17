@@ -15,4 +15,16 @@ void initOtaBleService(NimBLEServer* pServer);
  */
 bool isOtaInProgress();
 
+/**
+ * Abort any in-progress OTA update and reset state.
+ * Safe to call even if no OTA is in progress.
+ */
+void abortOta();
+
+/**
+ * Check if OTA has been idle too long and abort if so.
+ * Call periodically (e.g. from a monitoring task).
+ */
+void checkOtaTimeout();
+
 #endif  // INC_SP140_BLE_OTA_SERVICE_H_

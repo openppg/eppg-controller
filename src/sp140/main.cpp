@@ -447,6 +447,9 @@ void updateBLETask(void *pvParameters) {
       updateControllerPackedTelemetry(altitude, baro_temp, vario, mcu_temp);
     }
 
+    // Check for stalled OTA updates
+    checkOtaTimeout();
+
     // Add a small delay to prevent task starvation
     vTaskDelay(pdMS_TO_TICKS(20));
   }

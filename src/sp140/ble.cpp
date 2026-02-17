@@ -5,4 +5,3 @@ NimBLECharacteristic* pThrottleCharacteristic = nullptr;
 NimBLECharacteristic* pDeviceStateCharacteristic = nullptr;
 NimBLEServer* pServer = nullptr;
 volatile bool deviceConnected = false;
-volatile bool oldDeviceConnected = false;

@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
+#include "sp140/ble/ble_core.h"
 #include "sp140/ble/ble_ids.h"
 #include "sp140/device_state.h"
 #include <cstring>
@@ -34,6 +35,10 @@ uint16_t sectorBufferLen = 0;
 uint16_t currentSectorIndex = 0;
 size_t receivedBytes = 0;
 uint32_t packetCount = 0;
+
+// Idle timeout: abort OTA if no data received within this period
+const unsigned long OTA_TIMEOUT_MS = 30000;
+volatile unsigned long lastOtaActivityMs = 0;
 
 // OTA characteristics
 NimBLECharacteristic* pRecvFwChar = nullptr;
@@ -101,16 +106,28 @@ void sendCommandResponse(uint16_t ackId, uint16_t status) {
     }
 }
 
+}  // namespace
+
 void abortOta() {
     if (otaInProgress) {
         if (updateHandle) esp_ota_abort(updateHandle);
         otaInProgress = false;
+        requestNormalConnParams();
         USBSerial.println("OTA: Aborted.");
     }
     sectorBufferLen = 0;
     currentSectorIndex = 0;
     receivedBytes = 0;
 }
+
+void checkOtaTimeout() {
+    if (otaInProgress && (millis() - lastOtaActivityMs > OTA_TIMEOUT_MS)) {
+        USBSerial.println("OTA: Idle timeout, aborting.");
+        abortOta();
+    }
+}
+
+namespace {
 
 class OtaCommandCallback : public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic* pChar, NimBLEConnInfo& connInfo) override {
@@ -171,6 +188,8 @@ class OtaCommandCallback : public NimBLECharacteristicCallbacks {
             receivedBytes = 0;
             sectorBufferLen = 0;
             currentSectorIndex = 0;
+            lastOtaActivityMs = millis();
+            requestFastConnParams();
 
             sendCommandResponse(CMD_START, 0x0000);  // Accept
 
@@ -217,6 +236,7 @@ class OtaDataCallback : public NimBLECharacteristicCallbacks {
 
         if (len < 3) return;  // Header: Sector(2) + Seq(1)
 
+        lastOtaActivityMs = millis();
         packetCount++;
         if (packetCount % 100 == 0) {
             USBSerial.printf("OTA: Received %lu packets (sector %u)\n",

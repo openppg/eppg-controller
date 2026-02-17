@@ -10,6 +10,5 @@ extern NimBLECharacteristic* pThrottleCharacteristic;
 extern NimBLECharacteristic* pDeviceStateCharacteristic;
 extern NimBLEServer* pServer;
 extern volatile bool deviceConnected;
-extern volatile bool oldDeviceConnected;
 
 #endif  // INC_SP140_BLE_H_
