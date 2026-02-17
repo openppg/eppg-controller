@@ -43,7 +43,9 @@ inline void delay(unsigned long ms) {
 #endif
 
 inline void pinMode(int, int) {}
-inline int analogRead(int) { return 0; }
+inline int g_testAnalogReadValue = 0;
+inline void setTestAnalogReadValue(int value) { g_testAnalogReadValue = value; }
+inline int analogRead(int) { return g_testAnalogReadValue; }
 inline void analogReadResolution(int) {}
 
 // Math helpers

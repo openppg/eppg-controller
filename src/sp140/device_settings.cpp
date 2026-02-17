@@ -110,7 +110,7 @@ void refreshDeviceData() {
   deviceData.performance_mode = preferences.getUChar(KEY_PERFORMANCE_MODE, DEFAULT_PERFORMANCE_MODE);
   deviceData.theme = preferences.getUChar(KEY_THEME, DEFAULT_THEME);
   deviceData.armed_time = preferences.getUShort(KEY_ARMED_TIME, 0);
-  deviceData.revision = preferences.getUChar(KEY_REVISION, 3);  // Default to ESP32-S3
+  deviceData.revision = preferences.getUChar(KEY_REVISION, 0);  // Default to ESP32-S3
   deviceData.timezone_offset = preferences.getInt(KEY_TIMEZONE_OFFSET, 0);
 
   // Validate critical display-related settings
@@ -172,7 +172,7 @@ void resetDeviceData() {
   deviceData = STR_DEVICE_DATA_140_V1();
 
   // Set the revision to ESP32-S3
-  deviceData.revision = 3;  // Set appropriate revision for ESP32-S3
+  deviceData.revision = 0;  // Set appropriate revision for ESP32-S3
 
   deviceData.version_major = VERSION_MAJOR;
   deviceData.version_minor = VERSION_MINOR;

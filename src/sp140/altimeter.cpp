@@ -77,7 +77,7 @@ float getBaroPressure() {
 
 // Start the bmp3XX sensor
 bool setupAltimeter() {
-  // pull down pin 40 to high to set the address
+  // Set I2C address pin
   pinMode(40, OUTPUT);
   digitalWrite(40, HIGH);
   if (!bmp.begin_I2C(BMP3XX_DEFAULT_ADDRESS, &Wire)) return false;

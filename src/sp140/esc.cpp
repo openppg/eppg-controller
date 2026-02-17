@@ -95,7 +95,15 @@ void readESCTelemetry() {
       escTelemetryData.mos_temp = res->mos_temp / 10.0f;
       escTelemetryData.cap_temp = res->cap_temp / 10.0f;
       escTelemetryData.mcu_temp = res->mcu_temp / 10.0f;
-      escTelemetryData.motor_temp = res->motor_temp / 10.0f;
+      // Filter motor temp - only update if sensor is connected (valid range: -20°C to 140°C)
+      // Disconnected sensor reads ~149°C (thermistor pulled high)
+      float rawMotorTemp = res->motor_temp / 10.0f;
+      if (isMotorTempValidC(rawMotorTemp)) {
+        escTelemetryData.motor_temp = rawMotorTemp;
+      } else {
+        // Store invalid motor temp as NaN. Downstream consumers can skip on isnan().
+        escTelemetryData.motor_temp = NAN;
+      }
       escTelemetryData.eRPM = res->speed;
       escTelemetryData.inPWM = res->recv_pwm / 10.0f;
       watts = escTelemetryData.amps * escTelemetryData.volts;
@@ -103,17 +111,6 @@ void readESCTelemetry() {
       // Store error bitmasks
       escTelemetryData.running_error = res->running_error;
       escTelemetryData.selfcheck_error = res->selfcheck_error;
-
-      // Temperature states
-      escTelemetryData.mos_state = checkTempState(escTelemetryData.mos_temp, COMP_ESC_MOS);
-      escTelemetryData.mcu_state = checkTempState(escTelemetryData.mcu_temp, COMP_ESC_MCU);
-      escTelemetryData.cap_state = checkTempState(escTelemetryData.cap_temp, COMP_ESC_CAP);
-      escTelemetryData.motor_state = checkTempState(escTelemetryData.motor_temp, COMP_MOTOR);
-      escTelemetryData.temp_sensor_error =
-        (escTelemetryData.mos_state == TEMP_INVALID) ||
-        (escTelemetryData.mcu_state == TEMP_INVALID) ||
-        (escTelemetryData.cap_state == TEMP_INVALID) ||
-        (escTelemetryData.motor_state == TEMP_INVALID);
 
       // Record the time of this successful communication using the local clock
       lastSuccessfulCommTimeMs = millis();
@@ -302,49 +299,6 @@ void dumpESCMessages(void) {
  */
 double mapDouble(double x, double in_min, double in_max, double out_min, double out_max) {
   return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
-}
-
-/**
- * Get the highest temperature reading from all ESC sensors
- * @param telemetry ESC telemetry data structure
- * @return The highest temperature value among motor, MOSFET, and capacitor temps
- */
-float getHighestTemp(const STR_ESC_TELEMETRY_140& telemetry) {
-  return max(telemetry.motor_temp, max(telemetry.mos_temp, telemetry.cap_temp));
-}
-
-/**
- * Check temperature state for a specific component
- * @param temp Temperature value to check
- * @param component Component type (ESC_MOS, ESC_MCU, ESC_CAP, or MOTOR)
- * @return Temperature state (NORMAL, WARNING, CRITICAL, or INVALID)
- */
-TempState checkTempState(float temp, TempComponent component) {
-  // Check for invalid temperature readings
-  if (temp < -50 || temp > 200) {
-      return TEMP_INVALID;
-  }
-
-  switch (component) {
-    case COMP_ESC_MOS:
-      return temp >= ESC_MOS_CRIT ? TEMP_CRITICAL :
-              temp >= ESC_MOS_WARN ? TEMP_WARNING : TEMP_NORMAL;
-
-    case COMP_ESC_MCU:
-      return temp >= ESC_MCU_CRIT ? TEMP_CRITICAL :
-              temp >= ESC_MCU_WARN ? TEMP_WARNING : TEMP_NORMAL;
-
-    case COMP_ESC_CAP:
-      return temp >= ESC_CAP_CRIT ? TEMP_CRITICAL :
-              temp >= ESC_CAP_WARN ? TEMP_WARNING : TEMP_NORMAL;
-
-    case COMP_MOTOR:
-      return temp >= MOTOR_CRIT ? TEMP_CRITICAL :
-              temp >= MOTOR_WARN ? TEMP_WARNING : TEMP_NORMAL;
-
-    default:
-      return TEMP_INVALID;
-  }
 }
 
 /**

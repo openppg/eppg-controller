@@ -651,12 +651,6 @@ void printBootMessage() {
   USBSerial.println(GIT_REV);
 }
 
-void setupBarometer() {
-  const int bmp_enabler = 9;
-  pinMode(bmp_enabler, OUTPUT);
-  digitalWrite(bmp_enabler, HIGH);  // barometer fix for V2 board
-}
-
 void setupLED() {
   pinMode(board_config.led_sw, OUTPUT);   // set up the internal LED2 pin
   if (board_config.enable_neopixel) {
@@ -856,8 +850,6 @@ void setup() {
   const int SCL_PIN = 41;
   Wire.setPins(SDA_PIN, SCL_PIN);
 
-  // Initialize peripherals
-  setupBarometer();
   if (!setupAltimeter()) {
     USBSerial.println("Error initializing BMP3xx barometer");
   }
@@ -1266,7 +1258,7 @@ void handleThrottle() {
       break;
 
     case ARMED:
-      int smoothedPwm = getSmoothedThrottlePwm();
+      int smoothedPwm = getSmoothedThrottlePwm(deviceData.performance_mode);
       finalPwm = applyModeRampClamp(smoothedPwm, prevPwm, deviceData.performance_mode);
       break;
   }
@@ -1341,7 +1333,7 @@ void afterCruiseEnd() {
   // Instead of clearing the buffer which causes throttle to drop to 0,
   // pre-populate it with the current throttle position to ensure smooth transition
   int currentPotVal = readThrottleRaw();
-  int currentPwmVal = potRawToPwm(currentPotVal);
+  int currentPwmVal = potRawToModePwm(currentPotVal, deviceData.performance_mode);
 
   // Pre-fill the buffer with current pot value for smooth transition
   throttleFilterReset(currentPwmVal);
