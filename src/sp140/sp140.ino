@@ -598,7 +598,15 @@ void setupAnalogRead() {
 void setupWatchdog() {
 #ifndef OPENPPG_DEBUG
   // Initialize Task Watchdog
-  ESP_ERROR_CHECK(esp_task_wdt_init(3000, true));  // 3 second timeout, panic on timeout
+  esp_task_wdt_config_t twdt_config = {
+    .timeout_ms = 3000,
+    .idle_core_mask = 0,   // do not subscribe idle tasks
+    .trigger_panic = true,
+  };
+  esp_err_t wdt_init_result = esp_task_wdt_init(&twdt_config);
+  if (wdt_init_result != ESP_OK && wdt_init_result != ESP_ERR_INVALID_STATE) {
+    ESP_ERROR_CHECK(wdt_init_result);
+  }
 #endif // OPENPPG_DEBUG
 }
 
@@ -617,8 +625,8 @@ void setup() {
 
   // Pull CSB (pin 42) high to activate I2C mode
   // temporary fix TODO remove
-  digitalWrite(42, HIGH);
   pinMode(42, OUTPUT);
+  digitalWrite(42, HIGH);
 
   // Initialize LVGL mutex before anything else
   lvglMutex = xSemaphoreCreateMutex();

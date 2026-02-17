@@ -1,6 +1,8 @@
 #include "sp140/vibration_pwm.h"
 #include "sp140/esp32s3-config.h"
 
+extern HardwareConfig board_config;
+
 // Pin is configured via s3_config.vibe_pwm
 const int VIBE_PWM_FREQ = 1000;  // Adjust as needed
 const int VIBE_PWM_RESOLUTION = 8;  // 8-bit resolution
@@ -21,13 +23,13 @@ void vibeTask(void* parameter) {
     if (xQueueReceive(vibeQueue, &request, portMAX_DELAY) == pdTRUE) {
       if (ENABLE_VIBE) {
         // Turn on vibration with specified intensity
-        ledcWrite(VIBE_PWM_CHANNEL, request.intensity);
+        ledcWrite(board_config.vibe_pwm, request.intensity);
 
         // Wait for specified duration
         vTaskDelay(pdMS_TO_TICKS(request.duration_ms));
 
         // Turn off vibration
-        ledcWrite(VIBE_PWM_CHANNEL, 0);
+        ledcWrite(board_config.vibe_pwm, 0);
       }
     }
   }
@@ -38,9 +40,10 @@ void vibeTask(void* parameter) {
  * @return Returns true if initialization was successful, false otherwise
  */
 bool initVibeMotor() {
-  extern HardwareConfig board_config;
-  ledcSetup(VIBE_PWM_CHANNEL, VIBE_PWM_FREQ, VIBE_PWM_RESOLUTION);
-  ledcAttachPin(board_config.vibe_pwm, VIBE_PWM_CHANNEL);
+  // Arduino-ESP32 3.x LEDC API: use ledcAttach(pin, freq, resolution)
+  pinMode(board_config.vibe_pwm, OUTPUT);
+  ledcAttach(board_config.vibe_pwm, VIBE_PWM_FREQ, VIBE_PWM_RESOLUTION);
+  ledcWrite(board_config.vibe_pwm, 0);
 
   // Create vibration queue
   vibeQueue = xQueueCreate(5, sizeof(VibeRequest));
@@ -90,7 +93,7 @@ void stopVibration() {
   if (vibeQueue != NULL) {
     xQueueReset(vibeQueue);
   }
-  ledcWrite(VIBE_PWM_CHANNEL, 0);
+  ledcWrite(board_config.vibe_pwm, 0);
 }
 
 /**
@@ -103,10 +106,10 @@ bool runVibePattern(const unsigned int pattern[], int patternSize) {
   if (!ENABLE_VIBE) return false;
 
   for (int i = 0; i < patternSize; i++) {
-    ledcWrite(VIBE_PWM_CHANNEL, pattern[i]);
+    ledcWrite(board_config.vibe_pwm, pattern[i]);
     vTaskDelay(pdMS_TO_TICKS(200));
   }
-  ledcWrite(VIBE_PWM_CHANNEL, 0);  // Turn off vibration
+  ledcWrite(board_config.vibe_pwm, 0);  // Turn off vibration
   return true;
 }
 
@@ -119,46 +122,46 @@ void executeVibePattern(VibePattern pattern) {
 
   switch (pattern) {
     case VIBE_SHORT_PULSE:
-      ledcWrite(VIBE_PWM_CHANNEL, 255);
+      ledcWrite(board_config.vibe_pwm, 255);
       vTaskDelay(pdMS_TO_TICKS(100));
-      ledcWrite(VIBE_PWM_CHANNEL, 0);
+      ledcWrite(board_config.vibe_pwm, 0);
       break;
 
     case VIBE_LONG_PULSE:
-      ledcWrite(VIBE_PWM_CHANNEL, 255);
+      ledcWrite(board_config.vibe_pwm, 255);
       vTaskDelay(pdMS_TO_TICKS(500));
-      ledcWrite(VIBE_PWM_CHANNEL, 0);
+      ledcWrite(board_config.vibe_pwm, 0);
       break;
 
     case VIBE_DOUBLE_PULSE:
       for (int i = 0; i < 2; i++) {
-        ledcWrite(VIBE_PWM_CHANNEL, 255);
+        ledcWrite(board_config.vibe_pwm, 255);
         vTaskDelay(pdMS_TO_TICKS(150));
-        ledcWrite(VIBE_PWM_CHANNEL, 0);
+        ledcWrite(board_config.vibe_pwm, 0);
         vTaskDelay(pdMS_TO_TICKS(150));
       }
       break;
 
     case VIBE_TRIPLE_PULSE:
       for (int i = 0; i < 3; i++) {
-        ledcWrite(VIBE_PWM_CHANNEL, 255);
+        ledcWrite(board_config.vibe_pwm, 255);
         vTaskDelay(pdMS_TO_TICKS(100));
-        ledcWrite(VIBE_PWM_CHANNEL, 0);
+        ledcWrite(board_config.vibe_pwm, 0);
         vTaskDelay(pdMS_TO_TICKS(100));
       }
       break;
 
     case VIBE_RAMP_UP:
       for (int i = 0; i <= 255; i += 5) {
-        ledcWrite(VIBE_PWM_CHANNEL, i);
+        ledcWrite(board_config.vibe_pwm, i);
         vTaskDelay(pdMS_TO_TICKS(25));
       }
-      ledcWrite(VIBE_PWM_CHANNEL, 0);
+      ledcWrite(board_config.vibe_pwm, 0);
       break;
 
     case VIBE_RAMP_DOWN:
       for (int i = 255; i >= 0; i -= 5) {
-        ledcWrite(VIBE_PWM_CHANNEL, i);
+        ledcWrite(board_config.vibe_pwm, i);
         vTaskDelay(pdMS_TO_TICKS(25));
       }
       break;
@@ -166,10 +169,10 @@ void executeVibePattern(VibePattern pattern) {
     case VIBE_WAVE:
       for (int i = 0; i <= 180; i += 5) {
         int intensity = (sin(i * PI / 180.0) + 1) * 127.5;
-        ledcWrite(VIBE_PWM_CHANNEL, intensity);
+        ledcWrite(board_config.vibe_pwm, intensity);
         vTaskDelay(pdMS_TO_TICKS(20));
       }
-      ledcWrite(VIBE_PWM_CHANNEL, 0);
+      ledcWrite(board_config.vibe_pwm, 0);
       break;
   }
 }
@@ -184,8 +187,8 @@ void customVibePattern(const uint8_t intensities[], const uint16_t durations[], 
   if (!ENABLE_VIBE) return;
 
   for (int i = 0; i < steps; i++) {
-    ledcWrite(VIBE_PWM_CHANNEL, intensities[i]);
+    ledcWrite(board_config.vibe_pwm, intensities[i]);
     vTaskDelay(pdMS_TO_TICKS(durations[i]));
   }
-  ledcWrite(VIBE_PWM_CHANNEL, 0);
+  ledcWrite(board_config.vibe_pwm, 0);
 }
