@@ -3,6 +3,70 @@
 #include "sp140/globals.h"
 #include "sp140/lvgl/lvgl_core.h"  // for spiBusMutex
 
+namespace {
+
+constexpr uint8_t kBmsCellProbeCount = 4;
+
+void logBmsCellProbeConnectionTransitions(const float rawCellTemps[kBmsCellProbeCount]) {
+  static bool hasPreviousState = false;
+  static bool wasConnected[kBmsCellProbeCount] = {false, false, false, false};
+
+  for (uint8_t i = 0; i < kBmsCellProbeCount; i++) {
+    const bool connected = isBmsCellTempValidC(rawCellTemps[i]);
+
+    if (!hasPreviousState) {
+      wasConnected[i] = connected;
+      continue;
+    }
+
+    if (connected != wasConnected[i]) {
+      USBSerial.printf("[BMS] T%u sensor %s (raw=%.1fC)\n",
+                       i + 1,
+                       connected ? "reconnected" : "disconnected",
+                       rawCellTemps[i]);
+      wasConnected[i] = connected;
+    }
+  }
+
+  hasPreviousState = true;
+}
+
+void recomputeBmsTemperatureExtrema(STR_BMS_TELEMETRY_140& telemetry) {  // NOLINT(runtime/references)
+  const float allTemps[] = {
+    telemetry.mos_temperature,
+    telemetry.balance_temperature,
+    telemetry.t1_temperature,
+    telemetry.t2_temperature,
+    telemetry.t3_temperature,
+    telemetry.t4_temperature
+  };
+
+  bool hasValidReading = false;
+  float highest = NAN;
+  float lowest = NAN;
+
+  for (float temp : allTemps) {
+    if (isnan(temp)) {
+      continue;
+    }
+
+    if (!hasValidReading) {
+      highest = temp;
+      lowest = temp;
+      hasValidReading = true;
+      continue;
+    }
+
+    if (temp > highest) highest = temp;
+    if (temp < lowest) lowest = temp;
+  }
+
+  telemetry.highest_temperature = highest;
+  telemetry.lowest_temperature = lowest;
+}
+
+}  // namespace
+
 STR_BMS_TELEMETRY_140 bmsTelemetryData = {
   .bmsState = TelemetryState::NOT_CONNECTED
 };
@@ -51,10 +115,6 @@ void updateBMSData() {
   // Calculated highest cell minus lowest cell voltage
   bmsTelemetryData.voltage_differential = bms_can->getHighestCellVoltage() - bms_can->getLowestCellVoltage();
 
-  // Temperature readings
-  bmsTelemetryData.highest_temperature = bms_can->getHighestTemperature();
-  bmsTelemetryData.lowest_temperature = bms_can->getLowestTemperature();
-
   // Battery statistics
   bmsTelemetryData.battery_cycle = bms_can->getBatteryCycle();
   bmsTelemetryData.energy_cycle = bms_can->getEnergyCycle();
@@ -73,10 +133,21 @@ void updateBMSData() {
   // Populate individual temperature sensors
   bmsTelemetryData.mos_temperature = bms_can->getTemperature(0);      // BMS MOSFET
   bmsTelemetryData.balance_temperature = bms_can->getTemperature(1);  // BMS Balance resistors
-  bmsTelemetryData.t1_temperature = bms_can->getTemperature(2);       // Cell probe 1
-  bmsTelemetryData.t2_temperature = bms_can->getTemperature(3);       // Cell probe 2
-  bmsTelemetryData.t3_temperature = bms_can->getTemperature(4);       // Cell probe 3
-  bmsTelemetryData.t4_temperature = bms_can->getTemperature(5);       // Cell probe 4
+
+  const float rawCellTemps[kBmsCellProbeCount] = {
+    bms_can->getTemperature(2),
+    bms_can->getTemperature(3),
+    bms_can->getTemperature(4),
+    bms_can->getTemperature(5)
+  };
+
+  bmsTelemetryData.t1_temperature = sanitizeBmsCellTempC(rawCellTemps[0]);  // Cell probe 1
+  bmsTelemetryData.t2_temperature = sanitizeBmsCellTempC(rawCellTemps[1]);  // Cell probe 2
+  bmsTelemetryData.t3_temperature = sanitizeBmsCellTempC(rawCellTemps[2]);  // Cell probe 3
+  bmsTelemetryData.t4_temperature = sanitizeBmsCellTempC(rawCellTemps[3]);  // Cell probe 4
+
+  logBmsCellProbeConnectionTransitions(rawCellTemps);
+  recomputeBmsTemperatureExtrema(bmsTelemetryData);
 
   bmsTelemetryData.lastUpdateMs = millis();
   unsigned long dur = bmsTelemetryData.lastUpdateMs - tStart;

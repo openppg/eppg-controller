@@ -334,11 +334,25 @@ void updateLvglMainScreen(
   float batteryPercent = unifiedBatteryData.soc;
   float totalVolts = unifiedBatteryData.volts;
   float lowestCellV = bmsTelemetry.lowest_cell_voltage;
-  // Calculate highest cell temperature from T1-T4 only (excluding MOSFET and balance temps)
-  float batteryTemp = bmsTelemetry.t1_temperature;
-  if (bmsTelemetry.t2_temperature > batteryTemp) batteryTemp = bmsTelemetry.t2_temperature;
-  if (bmsTelemetry.t3_temperature > batteryTemp) batteryTemp = bmsTelemetry.t3_temperature;
-  if (bmsTelemetry.t4_temperature > batteryTemp) batteryTemp = bmsTelemetry.t4_temperature;
+  // Calculate battery temp from connected T1-T4 cell probes only.
+  const float cellTemps[] = {
+    bmsTelemetry.t1_temperature,
+    bmsTelemetry.t2_temperature,
+    bmsTelemetry.t3_temperature,
+    bmsTelemetry.t4_temperature
+  };
+  float batteryTemp = NAN;
+  bool hasValidBatteryTemp = false;
+  for (float cellTemp : cellTemps) {
+    if (!isBmsCellTempValidC(cellTemp)) {
+      continue;
+    }
+
+    if (!hasValidBatteryTemp || cellTemp > batteryTemp) {
+      batteryTemp = cellTemp;
+      hasValidBatteryTemp = true;
+    }
+  }
   float escTemp = escTelemetry.cap_temp;
   float motorTemp = escTelemetry.motor_temp;
   // Check if BMS or ESC is connected
@@ -660,7 +674,7 @@ void updateLvglMainScreen(
     lv_obj_remove_style(batt_temp_bg, &style_warning, 0);
     lv_obj_remove_style(batt_temp_bg, &style_critical, 0);
 
-    if (bmsTelemetry.bmsState == TelemetryState::CONNECTED) {
+    if (bmsTelemetry.bmsState == TelemetryState::CONNECTED && hasValidBatteryTemp) {
       lv_label_set_text_fmt(batt_temp_label, "%d", static_cast<int>(batteryTemp));
       if (batteryTemp >= bmsCellTempThresholds.critHigh) {
         lv_obj_add_style(batt_temp_bg, &style_critical, 0);

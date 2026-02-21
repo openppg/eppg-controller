@@ -199,19 +199,29 @@ void updateBMSTelemetry(const STR_BMS_TELEMETRY_140& telemetry) {
   // Sensor mapping: [0]=MOS, [1]=Balance, [2]=T1, [3]=T2, [4]=T3, [5]=T4, [6-7]=Reserved
   if (pBMSTemperatures) {
     uint8_t temp_buffer[17];
-
-    // Byte 0: Valid sensor bitmap (bit N = sensor N is valid)
-    // 0b00111111 = sensors 0-5 valid (6 temperature sensors)
-    temp_buffer[0] = 0b00111111;
+    uint8_t validBitmap = 0;
 
     // Bytes 1-16: 8×int16_t temperatures in deci-degrees C (0.1°C resolution)
     int16_t* temps = reinterpret_cast<int16_t*>(&temp_buffer[1]);
-    temps[0] = static_cast<int16_t>(telemetry.mos_temperature * 10.0f);      // [0] MOS
-    temps[1] = static_cast<int16_t>(telemetry.balance_temperature * 10.0f);  // [1] Balance
-    temps[2] = static_cast<int16_t>(telemetry.t1_temperature * 10.0f);       // [2] T1
-    temps[3] = static_cast<int16_t>(telemetry.t2_temperature * 10.0f);       // [3] T2
-    temps[4] = static_cast<int16_t>(telemetry.t3_temperature * 10.0f);       // [4] T3
-    temps[5] = static_cast<int16_t>(telemetry.t4_temperature * 10.0f);       // [5] T4
+    const float sensorTemps[6] = {
+      telemetry.mos_temperature,
+      telemetry.balance_temperature,
+      telemetry.t1_temperature,
+      telemetry.t2_temperature,
+      telemetry.t3_temperature,
+      telemetry.t4_temperature
+    };
+
+    for (uint8_t i = 0; i < 6; i++) {
+      bool isValid = !isnan(sensorTemps[i]);
+
+      if (isValid) {
+        validBitmap |= static_cast<uint8_t>(1U << i);
+      }
+      temps[i] = isValid ? static_cast<int16_t>(sensorTemps[i] * 10.0f) : 0;
+    }
+
+    temp_buffer[0] = validBitmap;
     temps[6] = 0;  // [6] Reserved
     temps[7] = 0;  // [7] Reserved
 
