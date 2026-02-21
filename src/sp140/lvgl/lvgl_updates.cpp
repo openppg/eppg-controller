@@ -263,10 +263,6 @@ void stopCriticalBorderFlashDirect() {
 
 // Update the climb rate indicator
 void updateClimbRateIndicator(float climbRate) {
-  // Clamp climb rate to displayable range (-0.6 to +0.6 m/s)
-  if (climbRate > 0.6f) climbRate = 0.6f;
-  if (climbRate < -0.6f) climbRate = -0.6f;
-
   // Reset all sections to transparent
   for (int i = 0; i < 12; i++) {
     if (climb_rate_fill_sections[i] != NULL) {
