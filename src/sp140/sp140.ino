@@ -393,9 +393,6 @@ void updateBLETask(void *pvParameters) {
       // Update packed binary telemetry (always enabled)
       updateBMSPackedTelemetry(newBmsTelemetry, 0);  // bms_id=0 for primary BMS
 
-      // Update legacy BLE characteristics (can be disabled with DISABLE_LEGACY_BLE_TELEMETRY)
-      updateBMSTelemetry(newBmsTelemetry);
-
       // Update controller telemetry at same 10Hz rate as BMS
       // Gather sensor data from barometer and ESP32
       float altitude = getAltitude(deviceData);
@@ -1234,9 +1231,6 @@ void updateESCBLETask(void *pvParameters) {
         updateESCPackedTelemetry(newEscTelemetry);
         lastPackedUpdateMs = now;
       }
-
-      // Update legacy BLE characteristics (can be disabled with DISABLE_LEGACY_BLE_TELEMETRY)
-      updateESCTelemetryBLE(newEscTelemetry);
     }
 
     // Add a small delay to prevent task starvation
