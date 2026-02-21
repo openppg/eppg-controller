@@ -12,7 +12,7 @@ void logBmsCellProbeConnectionTransitions(const float rawCellTemps[kBmsCellProbe
   static bool wasConnected[kBmsCellProbeCount] = {false, false, false, false};
 
   for (uint8_t i = 0; i < kBmsCellProbeCount; i++) {
-    const bool connected = isBmsCellTempValidC(rawCellTemps[i]);
+    const bool connected = !isnan(sanitizeBmsCellTempC(rawCellTemps[i]));
 
     if (!hasPreviousState) {
       wasConnected[i] = connected;

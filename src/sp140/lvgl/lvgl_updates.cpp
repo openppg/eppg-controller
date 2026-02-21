@@ -344,12 +344,13 @@ void updateLvglMainScreen(
   float batteryTemp = NAN;
   bool hasValidBatteryTemp = false;
   for (float cellTemp : cellTemps) {
-    if (!isBmsCellTempValidC(cellTemp)) {
+    const float sanitizedCellTemp = sanitizeBmsCellTempC(cellTemp);
+    if (isnan(sanitizedCellTemp)) {
       continue;
     }
 
-    if (!hasValidBatteryTemp || cellTemp > batteryTemp) {
-      batteryTemp = cellTemp;
+    if (!hasValidBatteryTemp || sanitizedCellTemp > batteryTemp) {
+      batteryTemp = sanitizedCellTemp;
       hasValidBatteryTemp = true;
     }
   }
