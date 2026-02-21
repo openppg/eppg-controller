@@ -12,6 +12,8 @@ void logBmsCellProbeConnectionTransitions(const float rawCellTemps[kBmsCellProbe
   static bool wasConnected[kBmsCellProbeCount] = {false, false, false, false};
 
   for (uint8_t i = 0; i < kBmsCellProbeCount; i++) {
+    // Reuse the same sanitizer used for telemetry storage so detection and
+    // downstream behavior stay consistent.
     const bool connected = !isnan(sanitizeBmsCellTempC(rawCellTemps[i]));
 
     if (!hasPreviousState) {
@@ -46,6 +48,7 @@ void recomputeBmsTemperatureExtrema(STR_BMS_TELEMETRY_140& telemetry) {  // NOLI
   float lowest = NAN;
 
   for (float temp : allTemps) {
+    // Disconnected probes are stored as NaN; exclude them from extrema.
     if (isnan(temp)) {
       continue;
     }
@@ -146,7 +149,9 @@ void updateBMSData() {
   bmsTelemetryData.t3_temperature = sanitizeBmsCellTempC(rawCellTemps[2]);  // Cell probe 3
   bmsTelemetryData.t4_temperature = sanitizeBmsCellTempC(rawCellTemps[3]);  // Cell probe 4
 
+  // Emit transition logs to help field-debug intermittent probe wiring issues.
   logBmsCellProbeConnectionTransitions(rawCellTemps);
+  // Keep published high/low temperatures aligned with sanitized probe values.
   recomputeBmsTemperatureExtrema(bmsTelemetryData);
 
   bmsTelemetryData.lastUpdateMs = millis();

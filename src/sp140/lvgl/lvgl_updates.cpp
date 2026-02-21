@@ -344,6 +344,7 @@ void updateLvglMainScreen(
   float batteryTemp = NAN;
   bool hasValidBatteryTemp = false;
   for (float cellTemp : cellTemps) {
+    // sanitizeBmsCellTempC() converts disconnected probes (-40C) to NaN.
     const float sanitizedCellTemp = sanitizeBmsCellTempC(cellTemp);
     if (isnan(sanitizedCellTemp)) {
       continue;
@@ -687,6 +688,7 @@ void updateLvglMainScreen(
         lv_obj_add_flag(batt_temp_bg, LV_OBJ_FLAG_HIDDEN);
       }
     } else {
+      // No valid cell probe connected: show "-" instead of a fake low reading.
       lv_label_set_text(batt_temp_label, "-");
       lv_obj_add_flag(batt_temp_bg, LV_OBJ_FLAG_HIDDEN);
     }
