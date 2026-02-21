@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <BMS_CAN.h>
+#include <math.h>
 
 #include "sp140/structs.h"
 
