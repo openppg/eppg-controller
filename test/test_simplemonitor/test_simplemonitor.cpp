@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include "sp140/bms.h"
 #include "sp140/simple_monitor.h"
 #include "sp140/monitor_config.h"
 
@@ -235,6 +236,67 @@ TEST(SimpleMonitor, BMSTemperatureAlerts) {
     tempMon.check();
     ASSERT_EQ(logger.entries.size(), 2u);
     EXPECT_EQ(logger.entries.back().lvl, AlertLevel::CRIT_HIGH);
+}
+
+TEST(SimpleMonitor, BMSCellTemperatureDisconnectedIsIgnored) {
+  FakeLogger logger;
+  float fakeTemp = 30.0f;
+
+  SensorMonitor cellTempMon(
+    SensorID::BMS_T1_Temp,
+    SensorCategory::BMS,
+    bmsCellTempThresholds,
+    [&]() { return fakeTemp; },
+    &logger);
+
+  cellTempMon.check();  // Baseline OK
+  EXPECT_TRUE(logger.entries.empty());
+
+  // Disconnected probe reading should be treated as invalid (sanitized to NaN upstream).
+  fakeTemp = NAN;
+  cellTempMon.check();
+  EXPECT_TRUE(logger.entries.empty());
+
+  // Remaining connected probes still report alerts normally.
+  fakeTemp = 54.0f;
+  cellTempMon.check();
+  ASSERT_EQ(logger.entries.size(), 1u);
+  EXPECT_EQ(logger.entries.back().lvl, AlertLevel::WARN_HIGH);
+}
+
+TEST(SimpleMonitor, BMSCellTemperatureDisconnectClearsActiveAlert) {
+  FakeLogger logger;
+  float fakeTemp = 55.0f;
+
+  SensorMonitor cellTempMon(
+    SensorID::BMS_T2_Temp,
+    SensorCategory::BMS,
+    bmsCellTempThresholds,
+    [&]() { return fakeTemp; },
+    &logger);
+
+  // Enter warning state first.
+  cellTempMon.check();
+  ASSERT_EQ(logger.entries.size(), 1u);
+  EXPECT_EQ(logger.entries.back().lvl, AlertLevel::WARN_HIGH);
+
+  // Disconnect should clear the active alert.
+  fakeTemp = NAN;
+  cellTempMon.check();
+  ASSERT_EQ(logger.entries.size(), 2u);
+  EXPECT_EQ(logger.entries.back().lvl, AlertLevel::OK);
+}
+
+TEST(SimpleMonitor, BMSCellTempSanitizerDisconnectThreshold) {
+  EXPECT_TRUE(isnan(sanitizeBmsCellTempC(-40.0f)));
+  EXPECT_TRUE(isnan(sanitizeBmsCellTempC(-41.0f)));
+  EXPECT_FLOAT_EQ(sanitizeBmsCellTempC(-39.5f), -39.5f);
+}
+
+TEST(SimpleMonitor, BMSCellTempSanitizerPreservesValidValues) {
+  EXPECT_FLOAT_EQ(sanitizeBmsCellTempC(0.0f), 0.0f);
+  EXPECT_FLOAT_EQ(sanitizeBmsCellTempC(25.0f), 25.0f);
+  EXPECT_TRUE(isnan(sanitizeBmsCellTempC(NAN)));
 }
 
 TEST(SimpleMonitor, MonitorIDAccess) {
