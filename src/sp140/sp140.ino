@@ -27,6 +27,7 @@
 #include "../../inc/sp140/debug.h"
 #include "../../inc/sp140/simple_monitor.h"
 #include "../../inc/sp140/alert_display.h"
+#include "../../inc/sp140/notification.h"
 #include "../../inc/sp140/ble.h"
 #include "../../inc/sp140/ble/ble_core.h"
 #include "../../inc/sp140/ble/bms_service.h"
@@ -484,6 +485,9 @@ void refreshDisplay() {
       }
     }
 
+    // Handle one-time notifications (top overlay)
+    processNotificationQueue();
+
     // General LVGL update handler
     updateLvgl();
 
@@ -557,6 +561,8 @@ void bmsTask(void *pvParameters) {
         unifiedBatteryData.power = 0.0;
       }
     #endif
+
+    checkFlightNotifications();
 
     lastBmsRunMs = millis();
     vTaskDelayUntil(&lastWake, bmsTicks);
@@ -648,6 +654,7 @@ void setup() {
 
   // Initialise alert display aggregation & UI
   initAlertDisplay();
+  initNotifications();
 
   #ifndef SCREEN_DEBUG
     // Pass the hardware SPI instance to the BMS_CAN initialization
@@ -1154,6 +1161,8 @@ bool armSystem() {
   playMelody(arm_melody, 2);
   // runVibePattern(arm_vibes, 7);
   pulseVibeMotor();  // Ensure this is the active call
+  resetFlightNotifications();
+  checkArmNotifications();
   return true;
 }
 
