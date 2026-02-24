@@ -19,9 +19,8 @@ struct Notification {
 bool shouldNotifyLowBattery(float soc);
 bool shouldNotifyBingo(float soc, bool alreadyFired, bool seenAboveThreshold);
 
-// Runtime API
+// Runtime API (platform-only, not compiled in tests)
 void initNotifications();
-void setupNotificationOverlay(bool darkMode);
 void processNotificationQueue();
 void queueNotification(const char* msg, NotifySeverity sev, uint16_t durationMs, bool vibrate);
 
