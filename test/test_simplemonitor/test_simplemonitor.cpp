@@ -293,6 +293,11 @@ TEST(SimpleMonitor, BMSCellTempSanitizerDisconnectThreshold) {
   EXPECT_FLOAT_EQ(sanitizeBmsCellTempC(-39.5f), -39.5f);
 }
 
+TEST(SimpleMonitor, BMSCellTempSanitizerCanKeepDisconnectedValueWhenRequired) {
+  EXPECT_FLOAT_EQ(sanitizeBmsCellTempC(-40.0f, false), -40.0f);
+  EXPECT_TRUE(isnan(sanitizeBmsCellTempC(-41.0f, false)));
+}
+
 TEST(SimpleMonitor, BMSCellTempSanitizerPreservesValidValues) {
   EXPECT_FLOAT_EQ(sanitizeBmsCellTempC(0.0f), 0.0f);
   EXPECT_FLOAT_EQ(sanitizeBmsCellTempC(25.0f), 25.0f);

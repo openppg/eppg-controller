@@ -6,6 +6,11 @@
 namespace {
 
 constexpr uint8_t kBmsCellProbeCount = 4;
+constexpr uint8_t kBmsMinRequiredProbeCount = 2;
+
+float sanitizeBmsCellProbeTempC(float tempC, uint8_t probeIndex) {
+  return sanitizeBmsCellTempC(tempC, probeIndex < kBmsMinRequiredProbeCount);
+}
 
 void logBmsCellProbeConnectionTransitions(const float rawCellTemps[kBmsCellProbeCount]) {
   static bool hasPreviousState = false;
@@ -14,7 +19,7 @@ void logBmsCellProbeConnectionTransitions(const float rawCellTemps[kBmsCellProbe
   for (uint8_t i = 0; i < kBmsCellProbeCount; i++) {
     // Reuse the same sanitizer used for telemetry storage so detection and
     // downstream behavior stay consistent.
-    const bool connected = !isnan(sanitizeBmsCellTempC(rawCellTemps[i]));
+    const bool connected = !isnan(sanitizeBmsCellProbeTempC(rawCellTemps[i], i));
 
     if (!hasPreviousState) {
       wasConnected[i] = connected;
@@ -144,10 +149,10 @@ void updateBMSData() {
     bms_can->getTemperature(5)
   };
 
-  bmsTelemetryData.t1_temperature = sanitizeBmsCellTempC(rawCellTemps[0]);  // Cell probe 1
-  bmsTelemetryData.t2_temperature = sanitizeBmsCellTempC(rawCellTemps[1]);  // Cell probe 2
-  bmsTelemetryData.t3_temperature = sanitizeBmsCellTempC(rawCellTemps[2]);  // Cell probe 3
-  bmsTelemetryData.t4_temperature = sanitizeBmsCellTempC(rawCellTemps[3]);  // Cell probe 4
+  bmsTelemetryData.t1_temperature = sanitizeBmsCellProbeTempC(rawCellTemps[0], 0);  // Cell probe 1
+  bmsTelemetryData.t2_temperature = sanitizeBmsCellProbeTempC(rawCellTemps[1], 1);  // Cell probe 2
+  bmsTelemetryData.t3_temperature = sanitizeBmsCellProbeTempC(rawCellTemps[2], 2);  // Cell probe 3
+  bmsTelemetryData.t4_temperature = sanitizeBmsCellProbeTempC(rawCellTemps[3], 3);  // Cell probe 4
 
   // Emit transition logs to help field-debug intermittent probe wiring issues.
   logBmsCellProbeConnectionTransitions(rawCellTemps);
