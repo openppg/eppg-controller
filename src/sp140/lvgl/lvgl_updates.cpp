@@ -344,14 +344,12 @@ void updateLvglMainScreen(
   float batteryTemp = NAN;
   bool hasValidBatteryTemp = false;
   for (float cellTemp : cellTemps) {
-    // sanitizeBmsCellTempC() converts disconnected probes (-40C) to NaN.
-    const float sanitizedCellTemp = sanitizeBmsCellTempC(cellTemp);
-    if (isnan(sanitizedCellTemp)) {
+    if (isnan(cellTemp)) {
       continue;
     }
 
-    if (!hasValidBatteryTemp || sanitizedCellTemp > batteryTemp) {
-      batteryTemp = sanitizedCellTemp;
+    if (!hasValidBatteryTemp || cellTemp > batteryTemp) {
+      batteryTemp = cellTemp;
       hasValidBatteryTemp = true;
     }
   }

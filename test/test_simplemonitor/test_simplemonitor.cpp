@@ -299,6 +299,110 @@ TEST(SimpleMonitor, BMSCellTempSanitizerPreservesValidValues) {
   EXPECT_TRUE(isnan(sanitizeBmsCellTempC(NAN)));
 }
 
+TEST(SimpleMonitor, BMSCellProbeSanitizerIgnoresUpToTwoDisconnectedSentinels) {
+  const float rawTemps[BMS_CELL_PROBE_COUNT] = {-40.0f, -39.0f, -40.0f, 12.0f};
+  float sanitizedTemps[BMS_CELL_PROBE_COUNT] = {};
+
+  sanitizeCellProbeTemps(rawTemps, sanitizedTemps);
+
+  EXPECT_TRUE(isnan(sanitizedTemps[0]));
+  EXPECT_FLOAT_EQ(sanitizedTemps[1], -39.0f);
+  EXPECT_TRUE(isnan(sanitizedTemps[2]));
+  EXPECT_FLOAT_EQ(sanitizedTemps[3], 12.0f);
+}
+
+TEST(SimpleMonitor, BMSCellProbeSanitizerKeepsThirdDisconnectedSentinelAsValidTemp) {
+  const float rawTemps[BMS_CELL_PROBE_COUNT] = {-40.0f, -40.0f, -40.0f, 25.0f};
+  float sanitizedTemps[BMS_CELL_PROBE_COUNT] = {};
+
+  sanitizeCellProbeTemps(rawTemps, sanitizedTemps);
+
+  EXPECT_TRUE(isnan(sanitizedTemps[0]));
+  EXPECT_TRUE(isnan(sanitizedTemps[1]));
+  EXPECT_FLOAT_EQ(sanitizedTemps[2], -40.0f);
+  EXPECT_FLOAT_EQ(sanitizedTemps[3], 25.0f);
+}
+
+TEST(SimpleMonitor, BMSCellProbeSanitizerKeepsThirdAndFourthDisconnectedSentinelsAsValidTemps) {
+  const float rawTemps[BMS_CELL_PROBE_COUNT] = {-40.0f, -40.0f, -40.0f, -40.0f};
+  float sanitizedTemps[BMS_CELL_PROBE_COUNT] = {};
+
+  sanitizeCellProbeTemps(rawTemps, sanitizedTemps);
+
+  EXPECT_TRUE(isnan(sanitizedTemps[0]));
+  EXPECT_TRUE(isnan(sanitizedTemps[1]));
+  EXPECT_FLOAT_EQ(sanitizedTemps[2], -40.0f);
+  EXPECT_FLOAT_EQ(sanitizedTemps[3], -40.0f);
+}
+
+TEST(SimpleMonitor, BMSCellProbeSanitizerTreatsBelowDisconnectedAndNaNAsInvalid) {
+  const float rawTemps[BMS_CELL_PROBE_COUNT] = {-41.0f, -39.0f, -40.0f, NAN};
+  float sanitizedTemps[BMS_CELL_PROBE_COUNT] = {};
+
+  sanitizeCellProbeTemps(rawTemps, sanitizedTemps);
+
+  EXPECT_TRUE(isnan(sanitizedTemps[0]));
+  EXPECT_FLOAT_EQ(sanitizedTemps[1], -39.0f);
+  EXPECT_TRUE(isnan(sanitizedTemps[2]));
+  EXPECT_TRUE(isnan(sanitizedTemps[3]));
+}
+
+TEST(SimpleMonitor, BMSCellProbeSentinelTransitionFromTwoToThreeToTwoTriggersAndClearsAlert) {
+  FakeLogger logger;
+  float sanitizedTemps[BMS_CELL_PROBE_COUNT] = {NAN, NAN, NAN, NAN};
+
+  SensorMonitor t1Mon(
+    SensorID::BMS_T1_Temp,
+    SensorCategory::BMS,
+    bmsCellTempThresholds,
+    [&]() { return sanitizedTemps[0]; },
+    &logger);
+  SensorMonitor t2Mon(
+    SensorID::BMS_T2_Temp,
+    SensorCategory::BMS,
+    bmsCellTempThresholds,
+    [&]() { return sanitizedTemps[1]; },
+    &logger);
+  SensorMonitor t3Mon(
+    SensorID::BMS_T3_Temp,
+    SensorCategory::BMS,
+    bmsCellTempThresholds,
+    [&]() { return sanitizedTemps[2]; },
+    &logger);
+  SensorMonitor t4Mon(
+    SensorID::BMS_T4_Temp,
+    SensorCategory::BMS,
+    bmsCellTempThresholds,
+    [&]() { return sanitizedTemps[3]; },
+    &logger);
+
+  const auto evaluateCycle = [&](const float rawTemps[BMS_CELL_PROBE_COUNT]) {
+    sanitizeCellProbeTemps(rawTemps, sanitizedTemps);
+    t1Mon.check();
+    t2Mon.check();
+    t3Mon.check();
+    t4Mon.check();
+  };
+
+  // Two disconnected sentinels are ignored - no low-temp alert.
+  const float twoSentinels[BMS_CELL_PROBE_COUNT] = {-40.0f, -40.0f, 5.0f, 6.0f};
+  evaluateCycle(twoSentinels);
+  EXPECT_TRUE(logger.entries.empty());
+
+  // Third sentinel becomes a real temperature and must trigger a low-temp alert.
+  const float threeSentinels[BMS_CELL_PROBE_COUNT] = {-40.0f, -40.0f, -40.0f, 6.0f};
+  evaluateCycle(threeSentinels);
+  ASSERT_EQ(logger.entries.size(), 1u);
+  EXPECT_EQ(logger.entries[0].id, SensorID::BMS_T3_Temp);
+  EXPECT_EQ(logger.entries[0].lvl, AlertLevel::CRIT_LOW);
+
+  // Returning to only two sentinels clears that low-temp alert cleanly.
+  evaluateCycle(twoSentinels);
+  ASSERT_EQ(logger.entries.size(), 2u);
+  EXPECT_EQ(logger.entries[1].id, SensorID::BMS_T3_Temp);
+  EXPECT_EQ(logger.entries[1].lvl, AlertLevel::OK);
+}
+
 TEST(SimpleMonitor, MonitorIDAccess) {
     FakeLogger logger;
 

@@ -5,16 +5,14 @@
 
 namespace {
 
-constexpr uint8_t kBmsCellProbeCount = 4;
-
-void logBmsCellProbeConnectionTransitions(const float rawCellTemps[kBmsCellProbeCount]) {
+void logBmsCellProbeConnectionTransitions(const float sanitizedCellTemps[BMS_CELL_PROBE_COUNT]) {
   static bool hasPreviousState = false;
-  static bool wasConnected[kBmsCellProbeCount] = {false, false, false, false};
+  static bool wasConnected[BMS_CELL_PROBE_COUNT] = {false, false, false, false};
 
-  for (uint8_t i = 0; i < kBmsCellProbeCount; i++) {
-    // Reuse the same sanitizer used for telemetry storage so detection and
+  for (uint8_t i = 0; i < BMS_CELL_PROBE_COUNT; i++) {
+    // Use already-sanitized telemetry values so connection detection and
     // downstream behavior stay consistent.
-    const bool connected = !isnan(sanitizeBmsCellTempC(rawCellTemps[i]));
+    const bool connected = !isnan(sanitizedCellTemps[i]);
 
     if (!hasPreviousState) {
       wasConnected[i] = connected;
@@ -22,10 +20,10 @@ void logBmsCellProbeConnectionTransitions(const float rawCellTemps[kBmsCellProbe
     }
 
     if (connected != wasConnected[i]) {
-      USBSerial.printf("[BMS] T%u sensor %s (raw=%.1fC)\n",
+      USBSerial.printf("[BMS] T%u sensor %s (sanitized=%.1fC)\n",
                        i + 1,
                        connected ? "reconnected" : "disconnected",
-                       rawCellTemps[i]);
+                       sanitizedCellTemps[i]);
       wasConnected[i] = connected;
     }
   }
@@ -137,20 +135,22 @@ void updateBMSData() {
   bmsTelemetryData.mos_temperature = bms_can->getTemperature(0);      // BMS MOSFET
   bmsTelemetryData.balance_temperature = bms_can->getTemperature(1);  // BMS Balance resistors
 
-  const float rawCellTemps[kBmsCellProbeCount] = {
+  const float rawCellTemps[BMS_CELL_PROBE_COUNT] = {
     bms_can->getTemperature(2),
     bms_can->getTemperature(3),
     bms_can->getTemperature(4),
     bms_can->getTemperature(5)
   };
+  float sanitizedCellTemps[BMS_CELL_PROBE_COUNT];
 
-  bmsTelemetryData.t1_temperature = sanitizeBmsCellTempC(rawCellTemps[0]);  // Cell probe 1
-  bmsTelemetryData.t2_temperature = sanitizeBmsCellTempC(rawCellTemps[1]);  // Cell probe 2
-  bmsTelemetryData.t3_temperature = sanitizeBmsCellTempC(rawCellTemps[2]);  // Cell probe 3
-  bmsTelemetryData.t4_temperature = sanitizeBmsCellTempC(rawCellTemps[3]);  // Cell probe 4
+  sanitizeCellProbeTemps(rawCellTemps, sanitizedCellTemps);
+  bmsTelemetryData.t1_temperature = sanitizedCellTemps[0];  // Cell probe 1
+  bmsTelemetryData.t2_temperature = sanitizedCellTemps[1];  // Cell probe 2
+  bmsTelemetryData.t3_temperature = sanitizedCellTemps[2];  // Cell probe 3
+  bmsTelemetryData.t4_temperature = sanitizedCellTemps[3];  // Cell probe 4
 
   // Emit transition logs to help field-debug intermittent probe wiring issues.
-  logBmsCellProbeConnectionTransitions(rawCellTemps);
+  logBmsCellProbeConnectionTransitions(sanitizedCellTemps);
   // Keep published high/low temperatures aligned with sanitized probe values.
   recomputeBmsTemperatureExtrema(bmsTelemetryData);
 
