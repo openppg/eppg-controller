@@ -25,7 +25,7 @@ typedef struct {
   float inPWM;
   float outPWM;
   uint8_t statusFlag;
-  word checksum;
+  uint16_t checksum;
   unsigned long lastUpdateMs;  // Timestamp of last telemetry update
   TelemetryState escState;       // Current connection state
   uint16_t running_error;      // Runtime error bitmask
