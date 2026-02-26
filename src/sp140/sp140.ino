@@ -33,6 +33,7 @@
 #include "../../inc/sp140/ble/config_service.h"
 #include "../../inc/sp140/ble/controller_service.h"
 #include "../../inc/sp140/ble/esc_service.h"
+#include "../../inc/sp140/logging/telemetry_logger.h"
 
 #include "../../inc/sp140/buzzer.h"
 #include "../../inc/sp140/device_state.h"
@@ -241,6 +242,7 @@ void changeDeviceState(DeviceState newState) {
   if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
     DeviceState oldState = currentState;
     currentState = newState;
+    telemetry_log::onDeviceStateChange(oldState, newState);
 
     // Send state update to queue
     uint8_t state = (uint8_t)newState;
@@ -370,6 +372,7 @@ void throttleTask(void *pvParameters) {
   const TickType_t throttleTicks = pdMS_TO_TICKS(20);  // 50 Hz
   for (;;) {
     handleThrottle();
+    telemetry_log::tick();
     pushTelemetrySnapshot();
     lastThrottleRunMs = millis();
     vTaskDelayUntil(&lastWake, throttleTicks);
@@ -392,15 +395,15 @@ void updateBLETask(void *pvParameters) {
     if (xQueueReceive(bmsTelemetryQueue, &newBmsTelemetry, pdMS_TO_TICKS(100)) == pdTRUE) {
       // Update packed binary telemetry (always enabled)
       updateBMSPackedTelemetry(newBmsTelemetry, 0);  // bms_id=0 for primary BMS
-
-      // Update controller telemetry at same 10Hz rate as BMS
-      // Gather sensor data from barometer and ESP32
-      float altitude = getAltitude(deviceData);
-      float baro_temp = getBaroTemperature();
-      float vario = getVerticalSpeed();
-      float mcu_temp = temperatureRead();  // ESP32 internal temp sensor
-      updateControllerPackedTelemetry(altitude, baro_temp, vario, mcu_temp);
+      updateBMSExtendedTelemetry(newBmsTelemetry, 0);
     }
+
+    // Controller telemetry should not depend on BMS connectivity.
+    float altitude = getAltitude(deviceData);
+    float baro_temp = getBaroTemperature();
+    float vario = getVerticalSpeed();
+    float mcu_temp = temperatureRead();  // ESP32 internal temp sensor
+    updateControllerPackedTelemetry(altitude, baro_temp, vario, mcu_temp);
 
     // Add a small delay to prevent task starvation
     vTaskDelay(pdMS_TO_TICKS(20));
@@ -527,11 +530,19 @@ void bmsTask(void *pvParameters) {
     #else
       if (bmsCanInitialized) {
         updateBMSData();
+        telemetry_log::logBmsMain(bmsTelemetryData);
+        telemetry_log::logBmsCells(bmsTelemetryData);
         if (bms_can->isConnected()) {
           bmsTelemetryData.bmsState = TelemetryState::CONNECTED;
         } else {
           bmsTelemetryData.bmsState = TelemetryState::NOT_CONNECTED;
         }
+      } else {
+        bmsTelemetryData.bmsState = TelemetryState::NOT_CONNECTED;
+      }
+
+      if (bmsTelemetryQueue != NULL) {
+        xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);
       }
 
       if (bmsTelemetryData.bmsState == TelemetryState::CONNECTED) {
@@ -539,9 +550,6 @@ void bmsTask(void *pvParameters) {
         unifiedBatteryData.amps = bmsTelemetryData.battery_current;
         unifiedBatteryData.soc = bmsTelemetryData.soc;
         unifiedBatteryData.power = bmsTelemetryData.power;
-        if (bmsTelemetryQueue != NULL) {
-          xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);
-        }
       } else if (escTelemetryData.escState == TelemetryState::CONNECTED) {
         unifiedBatteryData.volts = escTelemetryData.volts;
         unifiedBatteryData.amps = escTelemetryData.amps;
@@ -691,6 +699,7 @@ void setup() {
   }
 
     setupBLE();
+    telemetry_log::init();
 
   // Initialize the simple monitoring system (but keep it disabled initially)
   initSimpleMonitor();
@@ -1109,6 +1118,7 @@ void handleThrottle() {
     // Read/Sync ESC Telemetry (runs in all armed states)
   readESCTelemetry();
   syncESCTelemetry();
+  telemetry_log::logEscFast(escTelemetryData);
 }
 
 // Declare the static variable from esc.cpp as extern here so sync can access it

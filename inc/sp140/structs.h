@@ -155,6 +155,22 @@ typedef struct {
   uint32_t lastUpdateMs;        // Timestamp of last update
 } BLE_ESC_Telemetry_V1;
 
+// Binary packed BMS extended telemetry (V2 compact format).
+// Cell voltages are milli-volts. Temperatures are deci-Celsius.
+enum {
+  BLE_BMS_EXTENDED_CELL_COUNT = 24,
+  BLE_BMS_EXTENDED_TEMP_COUNT = 8,
+  BLE_BMS_EXTENDED_INVALID_TEMP = -32768
+};
+
+typedef struct {
+  uint8_t version;              // Protocol version (2)
+  uint8_t bms_id;               // BMS identifier
+  uint32_t lastUpdateMs;        // Source timestamp
+  uint16_t cell_mV[BLE_BMS_EXTENDED_CELL_COUNT];
+  int16_t temp_dC[BLE_BMS_EXTENDED_TEMP_COUNT];
+} BLE_BMS_Extended_V2;
+
 // Binary packed Controller telemetry for BLE transmission (~23 bytes)
 // Contains ESP32 sensor data and system status
 typedef struct {
