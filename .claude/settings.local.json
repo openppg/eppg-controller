@@ -3,7 +3,8 @@
     "allow": [
       "Bash(pio)",
       "Bash(pio run)",
-      "Bash(cpplint:*)"
+      "Bash(cpplint:*)",
+      "Bash(pio test:*)"
     ],
     "deny": []
   }

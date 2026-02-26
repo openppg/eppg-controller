@@ -120,3 +120,9 @@ TEST(BMSPacketCodec, StructSizeExpectations) {
   EXPECT_EQ(sizeof(BLE_BMS_Extended_Telemetry_V1), static_cast<std::size_t>(155));
   EXPECT_LE(sizeof(BLE_BMS_Extended_Telemetry_V1), static_cast<std::size_t>(182));
 }
+
+int main(int argc, char **argv) {
+    ::testing::InitGoogleTest(&argc, argv);
+    RUN_ALL_TESTS();
+    return 0;
+}
