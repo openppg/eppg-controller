@@ -139,8 +139,9 @@ typedef struct {
   uint32_t lastUpdateMs;        // Timestamp of last update
 } BLE_BMS_Telemetry_V1;
 
-// Binary packed Extended BMS telemetry for BLE transmission (~175 bytes)
-// Fixed-size payload with all summary fields + per-cell/per-probe values.
+// Binary packed Extended BMS telemetry for BLE transmission
+// Contains summary fields + per-cell voltages + per-probe temperatures.
+// Min/max/differential are omitted — clients compute from the arrays.
 typedef struct {
   uint8_t version;              // Protocol version (1)
   uint8_t bms_id;               // BMS identifier (0-3 for multi-BMS)
@@ -149,11 +150,6 @@ typedef struct {
   float battery_voltage;        // Total battery voltage (V)
   float battery_current;        // Battery current (A)
   float power;                  // Power (kW)
-  float highest_cell_voltage;   // Highest cell voltage (V)
-  float lowest_cell_voltage;    // Lowest cell voltage (V)
-  float highest_temperature;    // Highest temperature (deg C)
-  float lowest_temperature;     // Lowest temperature (deg C)
-  float voltage_differential;   // Cell voltage differential (V)
   uint8_t battery_fail_level;   // Battery failure status
   uint8_t is_charge_mos;        // Charge MOSFET state (0/1)
   uint8_t is_discharge_mos;     // Discharge MOSFET state (0/1)

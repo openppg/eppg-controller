@@ -59,8 +59,10 @@ TEST(BMSPacketCodec, ConnectedTelemetryMapsToPackedAndExtended) {
   EXPECT_EQ(extended.version, 1);
   EXPECT_EQ(extended.bms_id, 3);
   EXPECT_EQ(extended.connection_state, static_cast<uint8_t>(TelemetryState::CONNECTED));
-  EXPECT_FLOAT_EQ(extended.highest_cell_voltage, telemetry.highest_cell_voltage);
-  EXPECT_FLOAT_EQ(extended.lowest_cell_voltage, telemetry.lowest_cell_voltage);
+  EXPECT_FLOAT_EQ(extended.soc, telemetry.soc);
+  EXPECT_FLOAT_EQ(extended.battery_voltage, telemetry.battery_voltage);
+  EXPECT_FLOAT_EQ(extended.battery_current, telemetry.battery_current);
+  EXPECT_FLOAT_EQ(extended.power, telemetry.power);
   EXPECT_FLOAT_EQ(extended.cell_voltages[0], telemetry.cell_voltages[0]);
   EXPECT_FLOAT_EQ(extended.cell_voltages[BMS_CELLS_NUM - 1],
                   telemetry.cell_voltages[BMS_CELLS_NUM - 1]);
@@ -96,11 +98,6 @@ TEST(BMSPacketCodec, DisconnectedTelemetryKeepsLastKnownValues) {
   EXPECT_FLOAT_EQ(extended.battery_voltage, telemetry.battery_voltage);
   EXPECT_FLOAT_EQ(extended.battery_current, telemetry.battery_current);
   EXPECT_FLOAT_EQ(extended.power, telemetry.power);
-  EXPECT_FLOAT_EQ(extended.highest_cell_voltage, telemetry.highest_cell_voltage);
-  EXPECT_FLOAT_EQ(extended.lowest_cell_voltage, telemetry.lowest_cell_voltage);
-  EXPECT_FLOAT_EQ(extended.highest_temperature, telemetry.highest_temperature);
-  EXPECT_FLOAT_EQ(extended.lowest_temperature, telemetry.lowest_temperature);
-  EXPECT_FLOAT_EQ(extended.voltage_differential, telemetry.voltage_differential);
   EXPECT_FLOAT_EQ(extended.energy_cycle, telemetry.energy_cycle);
   for (uint8_t i = 0; i < BMS_CELLS_NUM; ++i) {
     EXPECT_FLOAT_EQ(extended.cell_voltages[i], telemetry.cell_voltages[i]);
@@ -120,5 +117,6 @@ TEST(BMSPacketCodec, DisconnectedTelemetryKeepsLastKnownValues) {
 
 TEST(BMSPacketCodec, StructSizeExpectations) {
   EXPECT_EQ(sizeof(BLE_BMS_Telemetry_V1), static_cast<std::size_t>(55));
+  EXPECT_EQ(sizeof(BLE_BMS_Extended_Telemetry_V1), static_cast<std::size_t>(155));
   EXPECT_LE(sizeof(BLE_BMS_Extended_Telemetry_V1), static_cast<std::size_t>(182));
 }

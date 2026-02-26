@@ -59,11 +59,6 @@ BLE_BMS_Extended_Telemetry_V1 buildBMSExtendedTelemetryV1(
   packet.battery_voltage = telemetry.battery_voltage;
   packet.battery_current = telemetry.battery_current;
   packet.power = telemetry.power;
-  packet.highest_cell_voltage = telemetry.highest_cell_voltage;
-  packet.lowest_cell_voltage = telemetry.lowest_cell_voltage;
-  packet.highest_temperature = telemetry.highest_temperature;
-  packet.lowest_temperature = telemetry.lowest_temperature;
-  packet.voltage_differential = telemetry.voltage_differential;
   packet.battery_fail_level = telemetry.battery_fail_level;
   packet.is_charge_mos = telemetry.is_charge_mos ? 1 : 0;
   packet.is_discharge_mos = telemetry.is_discharge_mos ? 1 : 0;
