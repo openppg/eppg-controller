@@ -379,6 +379,8 @@ void throttleTask(void *pvParameters) {
 
 void updateBLETask(void *pvParameters) {
   STR_BMS_TELEMETRY_140 newBmsTelemetry;
+  static unsigned long lastExtendedUpdateMs = 0;
+  const unsigned long EXTENDED_UPDATE_INTERVAL_MS = 500;  // 2Hz
 
   while (true) {
     // Add error checking for queue
@@ -392,6 +394,12 @@ void updateBLETask(void *pvParameters) {
     if (xQueueReceive(bmsTelemetryQueue, &newBmsTelemetry, pdMS_TO_TICKS(100)) == pdTRUE) {
       // Update packed binary telemetry (always enabled)
       updateBMSPackedTelemetry(newBmsTelemetry, 0);  // bms_id=0 for primary BMS
+
+      const unsigned long now = millis();
+      if (now - lastExtendedUpdateMs >= EXTENDED_UPDATE_INTERVAL_MS) {
+        updateBMSExtendedTelemetry(newBmsTelemetry, 0);  // bms_id=0 for primary BMS
+        lastExtendedUpdateMs = now;
+      }
 
       // Update controller telemetry at same 10Hz rate as BMS
       // Gather sensor data from barometer and ESP32
@@ -534,14 +542,15 @@ void bmsTask(void *pvParameters) {
         }
       }
 
+      if (bmsTelemetryQueue != NULL) {
+        xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);
+      }
+
       if (bmsTelemetryData.bmsState == TelemetryState::CONNECTED) {
         unifiedBatteryData.volts = bmsTelemetryData.battery_voltage;
         unifiedBatteryData.amps = bmsTelemetryData.battery_current;
         unifiedBatteryData.soc = bmsTelemetryData.soc;
         unifiedBatteryData.power = bmsTelemetryData.power;
-        if (bmsTelemetryQueue != NULL) {
-          xQueueOverwrite(bmsTelemetryQueue, &bmsTelemetryData);
-        }
       } else if (escTelemetryData.escState == TelemetryState::CONNECTED) {
         unifiedBatteryData.volts = escTelemetryData.volts;
         unifiedBatteryData.amps = escTelemetryData.amps;
