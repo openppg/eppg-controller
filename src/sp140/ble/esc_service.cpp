@@ -7,14 +7,14 @@
 
 namespace {
 
-NimBLEService* pEscService = nullptr;
+NimBLEService *pEscService = nullptr;
 
 // Binary packed telemetry characteristic (V1)
-NimBLECharacteristic* pESCPackedTelemetry = nullptr;
+NimBLECharacteristic *pESCPackedTelemetry = nullptr;
 
-}  // namespace
+} // namespace
 
-void initEscBleService(NimBLEServer* server) {
+void initEscBleService(NimBLEServer *server) {
   if (pEscService != nullptr) {
     return;
   }
@@ -27,42 +27,57 @@ void initEscBleService(NimBLEServer* server) {
       NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
 
   // Initialize packed telemetry with zeros
-  BLE_ESC_Telemetry_V1 initialPacket = {};
-  initialPacket.version = 1;
-  pESCPackedTelemetry->setValue(
-      reinterpret_cast<uint8_t*>(&initialPacket),
-      sizeof(BLE_ESC_Telemetry_V1));
+  BLE_ESC_Batched_Telemetry_V2 initialPacket = {};
+  initialPacket.version = 2;
+  initialPacket.count = 0;
+  pESCPackedTelemetry->setValue(reinterpret_cast<uint8_t *>(&initialPacket),
+                                sizeof(BLE_ESC_Batched_Telemetry_V2));
 
   pEscService->start();
 }
 
-// Binary packed telemetry update (V1 protocol)
-void updateESCPackedTelemetry(const STR_ESC_TELEMETRY_140& telemetry) {
+// Static batching buffer
+static BLE_ESC_Batched_Telemetry_V2 batchedPacket = {.version = 2, .count = 0};
+
+// Binary batched telemetry update (V2 protocol)
+void updateESCPackedTelemetry(const STR_ESC_TELEMETRY_140 &telemetry) {
   if (pEscService == nullptr || pESCPackedTelemetry == nullptr) {
     return;
   }
 
-  BLE_ESC_Telemetry_V1 packet;
-  packet.version = 1;
-  packet.connection_state = static_cast<uint8_t>(telemetry.escState);
-  packet.volts = telemetry.volts;
-  packet.amps = telemetry.amps;
-  packet.mos_temp = telemetry.mos_temp;
-  packet.cap_temp = telemetry.cap_temp;
-  packet.mcu_temp = telemetry.mcu_temp;
+  // Sanity check just in case
+  if (batchedPacket.count >= 5) {
+    batchedPacket.count = 0;
+  }
+
+  BLE_ESC_Telemetry_V1 *packet = &batchedPacket.frames[batchedPacket.count];
+  packet->version = 1;
+  packet->connection_state = static_cast<uint8_t>(telemetry.escState);
+  packet->volts = telemetry.volts;
+  packet->amps = telemetry.amps;
+  packet->mos_temp = telemetry.mos_temp;
+  packet->cap_temp = telemetry.cap_temp;
+  packet->mcu_temp = telemetry.mcu_temp;
   // motor_temp is NaN when sensor is disconnected/invalid.
-  packet.motor_temp = telemetry.motor_temp;
-  packet.eRPM = static_cast<int32_t>(telemetry.eRPM);
-  packet.inPWM = static_cast<uint16_t>(telemetry.inPWM);
-  packet.running_error = telemetry.running_error;
-  packet.selfcheck_error = telemetry.selfcheck_error;
-  packet.lastUpdateMs = static_cast<uint32_t>(telemetry.lastUpdateMs);
+  packet->motor_temp = telemetry.motor_temp;
+  packet->eRPM = static_cast<int32_t>(telemetry.eRPM);
+  packet->inPWM = static_cast<uint16_t>(telemetry.inPWM);
+  packet->running_error = telemetry.running_error;
+  packet->selfcheck_error = telemetry.selfcheck_error;
+  packet->lastUpdateMs = static_cast<uint32_t>(telemetry.lastUpdateMs);
 
-  pESCPackedTelemetry->setValue(
-      reinterpret_cast<uint8_t*>(&packet),
-      sizeof(BLE_ESC_Telemetry_V1));
+  batchedPacket.count++;
 
-  if (deviceConnected) {
-    pESCPackedTelemetry->notify();
+  // Once we reach 5 frames (50Hz -> 10Hz), send the notification
+  if (batchedPacket.count >= 5) {
+    pESCPackedTelemetry->setValue(reinterpret_cast<uint8_t *>(&batchedPacket),
+                                  sizeof(BLE_ESC_Batched_Telemetry_V2));
+
+    if (deviceConnected) {
+      pESCPackedTelemetry->notify();
+    }
+
+    // Reset for next batch
+    batchedPacket.count = 0;
   }
 }

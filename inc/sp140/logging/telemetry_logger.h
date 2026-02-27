@@ -40,31 +40,52 @@ struct Manifest {
   uint32_t latest_seq;
   uint32_t record_count;
   uint32_t used_bytes;
+  uint32_t blackbox_earliest_seq;
   uint32_t blackbox_latest_seq;
   uint32_t blackbox_record_count;
+  uint32_t gap_file_count;
+  uint32_t gap_file_bytes;
 };
 
 struct StreamCursor {
   bool valid;
   uint32_t next_offset;
   uint32_t end_seq;
+  uint8_t source;  // 0 = gap files, 1 = blackbox partition
 };
 
+// Initialize logger (blackbox partition, RAM buffer, LittleFS)
 void init();
+
+// Called periodically from Data Logger task (~20ms)
 void tick();
+
+// Notify logger of device state changes (arm/disarm)
 void onDeviceStateChange(DeviceState oldState, DeviceState newState);
 
+// --- Data ingestion (called from Data Logger task) ---
 void logEscFast(const STR_ESC_TELEMETRY_140& telemetry);
 void logBmsMain(const STR_BMS_TELEMETRY_140& telemetry);
 void logBmsCells(const STR_BMS_TELEMETRY_140& telemetry);
 void logController(float altitude, float baro_temp, float vario, float mcu_temp,
                    uint16_t pot_raw, uint32_t uptime_ms);
 
+// --- BLE disconnect/reconnect gap management ---
+void onBleDisconnect();
+void onBleReconnect();
+
+// --- Manifest and streaming (used by log_sync_service) ---
 uint32_t currentSessionId();
 bool getManifest(Manifest* out_manifest);
 
-bool openCursor(uint32_t start_seq, uint32_t end_seq, StreamCursor* out_cursor);
+// Open cursor for streaming. source: 0 = gap files, 1 = blackbox
+bool openCursor(uint32_t start_seq, uint32_t end_seq, StreamCursor* out_cursor,
+                uint8_t source = 1);
 bool readCursorNext(StreamCursor* cursor, ReplayFrameV1* out_frame);
+
+// Gap file management
+uint32_t getGapFileCount();
+bool deleteOldestGapFile();
 
 }  // namespace telemetry_log
 

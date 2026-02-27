@@ -35,6 +35,7 @@
 #define LOG_SYNC_CONTROL_UUID      "F21F9A41-7A3D-4E08-9A8E-2014C5207A10"
 #define LOG_SYNC_DATA_UUID         "F21F9A42-7A3D-4E08-9A8E-2014C5207A10"
 #define LOG_SYNC_META_UUID         "F21F9A43-7A3D-4E08-9A8E-2014C5207A10"
+#define LOG_SYNC_STATUS_UUID       "F21F9A44-7A3D-4E08-9A8E-2014C5207A10"
 
 // ============================================================================
 // Binary Packed Telemetry Characteristics (V1)

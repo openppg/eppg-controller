@@ -11,6 +11,7 @@
 #include "sp140/ble.h"
 #include "sp140/ble/ble_ids.h"
 #include "sp140/logging/telemetry_logger.h"
+#include "sp140/telemetry_hub.h"
 
 namespace {
 
@@ -40,6 +41,7 @@ NimBLEService* pLogSyncService = nullptr;
 NimBLECharacteristic* pLogSyncControl = nullptr;
 NimBLECharacteristic* pLogSyncData = nullptr;
 NimBLECharacteristic* pLogSyncMeta = nullptr;
+NimBLECharacteristic* pLogSyncStatus = nullptr;
 TaskHandle_t logSyncTaskHandle = nullptr;
 SemaphoreHandle_t streamMutex = nullptr;
 
@@ -47,6 +49,7 @@ struct StreamState {
   bool active;
   bool paused;
   bool cursor_open;
+  uint8_t source;
   uint32_t start_seq;
   uint32_t end_seq;
   uint32_t ack_seq;
@@ -62,6 +65,7 @@ StreamState gStream = {};
 constexpr size_t kMaxFrameBytes = 220;
 constexpr uint32_t kWindowSize = 12u;
 constexpr uint32_t kAckTimeoutMs = 3000u;
+constexpr uint32_t kStatusPublishIntervalMs = 250u;
 
 void writeU32LE(uint8_t* dst, uint32_t value) {
   dst[0] = static_cast<uint8_t>(value & 0xFFu);
@@ -85,6 +89,60 @@ void sendControlResponse(const uint8_t* data, size_t len) {
   }
 }
 
+uint8_t buildStatusFlags(const telemetry_log::Manifest& manifest) {
+  uint8_t flags = 0u;
+  const LoggingMode mode = telemetryHubGetLoggingMode();
+  const bool backfill_pending = manifest.gap_file_count > 0u;
+  const bool backfill_in_progress = gStream.active && (gStream.source == 0u);
+  const bool live_connected = deviceConnected;
+
+  if (live_connected) flags |= (1u << 0);            // BLE connected
+  if (backfill_pending) flags |= (1u << 1);          // gap backlog pending
+  if (backfill_in_progress) flags |= (1u << 2);      // gap stream in progress
+  if (mode == LoggingMode::GAP_RECORDING) flags |= (1u << 3);
+  if (mode == LoggingMode::GAP_SYNCING) flags |= (1u << 4);
+  // Live telemetry means connected and not in disconnect-recording mode.
+  if (live_connected && mode != LoggingMode::GAP_RECORDING) flags |= (1u << 5);
+  // Backfill complete means no pending backlog and no active gap stream.
+  if (!backfill_pending && !backfill_in_progress) flags |= (1u << 6);
+  return flags;
+}
+
+void publishStatus() {
+  if (pLogSyncStatus == nullptr) return;
+
+  telemetry_log::Manifest manifest = {};
+  if (!telemetry_log::getManifest(&manifest)) return;
+
+  // LOG_SYNC_STATUS_UUID payload (36 bytes):
+  // [0]=version, [1]=logging_mode, [2]=stream_active, [3]=stream_source,
+  // [4]=flags, [8..11]=session_id, [12..15]=gap_file_count,
+  // [16..19]=gap_file_bytes, [20..23]=gap_earliest_seq,
+  // [24..27]=gap_latest_seq, [28..31]=backfill_ack_seq,
+  // [32..35]=backfill_end_seq.
+  uint8_t payload[36] = {};
+  payload[0] = telemetry_log::kProtocolVersion;
+  payload[1] = static_cast<uint8_t>(telemetryHubGetLoggingMode());
+  payload[2] = gStream.active ? 1u : 0u;
+  payload[3] = gStream.active ? gStream.source : 0xFFu;
+  payload[4] = buildStatusFlags(manifest);
+  payload[5] = 0u;
+  payload[6] = 0u;
+  payload[7] = 0u;
+  writeU32LE(&payload[8], manifest.current_session_id);
+  writeU32LE(&payload[12], manifest.gap_file_count);
+  writeU32LE(&payload[16], manifest.gap_file_bytes);
+  writeU32LE(&payload[20], manifest.earliest_seq);
+  writeU32LE(&payload[24], manifest.latest_seq);
+  writeU32LE(&payload[28], gStream.ack_seq);
+  writeU32LE(&payload[32], gStream.end_seq);
+
+  pLogSyncStatus->setValue(payload, sizeof(payload));
+  if (deviceConnected) {
+    pLogSyncStatus->notify();
+  }
+}
+
 void publishMeta() {
   if (pLogSyncMeta == nullptr) return;
 
@@ -92,7 +150,7 @@ void publishMeta() {
   payload[0] = telemetry_log::kProtocolVersion;
   payload[1] = gStream.active ? 1u : 0u;
   payload[2] = gStream.paused ? 1u : 0u;
-  payload[3] = 0u;
+  payload[3] = gStream.source;
   writeU32LE(&payload[4], telemetry_log::currentSessionId());
   writeU32LE(&payload[8], gStream.start_seq);
   writeU32LE(&payload[12], gStream.end_seq);
@@ -115,7 +173,7 @@ void sendManifest() {
     return;
   }
 
-  uint8_t payload[34] = {};
+  uint8_t payload[46] = {};
   payload[0] = static_cast<uint8_t>(Response::MANIFEST);
   payload[1] = telemetry_log::kProtocolVersion;
   writeU32LE(&payload[2], manifest.current_session_id);
@@ -123,34 +181,68 @@ void sendManifest() {
   writeU32LE(&payload[10], manifest.latest_seq);
   writeU32LE(&payload[14], manifest.record_count);
   writeU32LE(&payload[18], manifest.used_bytes);
-  writeU32LE(&payload[22], manifest.blackbox_latest_seq);
-  writeU32LE(&payload[26], manifest.blackbox_record_count);
-  writeU32LE(&payload[30], gStream.active ? 1u : 0u);
+  writeU32LE(&payload[22], manifest.blackbox_earliest_seq);
+  writeU32LE(&payload[26], manifest.blackbox_latest_seq);
+  writeU32LE(&payload[30], manifest.blackbox_record_count);
+  writeU32LE(&payload[34], manifest.gap_file_count);
+  writeU32LE(&payload[38], manifest.gap_file_bytes);
+  writeU32LE(&payload[42], gStream.active ? 1u : 0u);
   sendControlResponse(payload, sizeof(payload));
   publishMeta();
+  publishStatus();
 }
 
 void stopStream(bool send_complete) {
+  const uint8_t source = gStream.source;
   uint32_t final_seq = gStream.ack_seq;
   gStream = {};
+  if (send_complete && source == 0u) {
+    telemetry_log::deleteOldestGapFile();
+  }
   if (send_complete) {
     uint8_t payload[5] = {static_cast<uint8_t>(Response::STREAM_COMPLETE), 0, 0, 0, 0};
     writeU32LE(&payload[1], final_seq);
     sendControlResponse(payload, sizeof(payload));
   }
   publishMeta();
+  publishStatus();
 }
 
-void startStream(uint32_t start_seq, uint32_t end_seq) {
+void startStream(uint32_t start_seq, uint32_t end_seq, uint8_t source) {
   telemetry_log::Manifest manifest = {};
-  if (!telemetry_log::getManifest(&manifest) || manifest.record_count == 0u || manifest.latest_seq == 0u) {
+  if (!telemetry_log::getManifest(&manifest)) {
     uint8_t err[6] = {static_cast<uint8_t>(Response::ERROR), static_cast<uint8_t>(ErrorCode::NO_DATA), 0, 0, 0, 0};
     sendControlResponse(err, sizeof(err));
     return;
   }
 
-  if (start_seq == 0u || start_seq < manifest.earliest_seq) start_seq = manifest.earliest_seq;
-  if (end_seq == 0u || end_seq > manifest.latest_seq) end_seq = manifest.latest_seq;
+  const bool stream_blackbox = (source == 1u);
+  if (!stream_blackbox &&
+      (manifest.record_count == 0u || manifest.latest_seq == 0u)) {
+    uint8_t err[6] = {static_cast<uint8_t>(Response::ERROR), static_cast<uint8_t>(ErrorCode::NO_DATA), 0, 0, 0, 0};
+    sendControlResponse(err, sizeof(err));
+    return;
+  }
+  if (stream_blackbox && manifest.blackbox_latest_seq == 0u) {
+    uint8_t err[6] = {static_cast<uint8_t>(Response::ERROR), static_cast<uint8_t>(ErrorCode::NO_DATA), 0, 0, 0, 0};
+    sendControlResponse(err, sizeof(err));
+    return;
+  }
+
+  if (stream_blackbox) {
+    if (start_seq == 0u) start_seq = 1u;
+    if (end_seq == 0u || end_seq > manifest.blackbox_latest_seq) {
+      end_seq = manifest.blackbox_latest_seq;
+    }
+  } else {
+    if (start_seq == 0u || start_seq < manifest.earliest_seq) {
+      start_seq = manifest.earliest_seq;
+    }
+    if (end_seq == 0u || end_seq > manifest.latest_seq) {
+      end_seq = manifest.latest_seq;
+    }
+  }
+
   if (start_seq > end_seq) {
     uint8_t err[6] = {static_cast<uint8_t>(Response::ERROR), static_cast<uint8_t>(ErrorCode::BAD_REQUEST), 0, 0, 0, 0};
     sendControlResponse(err, sizeof(err));
@@ -158,16 +250,18 @@ void startStream(uint32_t start_seq, uint32_t end_seq) {
   }
 
   telemetry_log::StreamCursor cursor = {};
-  if (!telemetry_log::openCursor(start_seq, end_seq, &cursor)) {
+  if (!telemetry_log::openCursor(start_seq, end_seq, &cursor, source)) {
     uint8_t err[6] = {static_cast<uint8_t>(Response::ERROR), static_cast<uint8_t>(ErrorCode::NO_DATA), 0, 0, 0, 0};
     sendControlResponse(err, sizeof(err));
     return;
   }
+  end_seq = cursor.end_seq;
 
   gStream = {};
   gStream.active = true;
   gStream.paused = false;
   gStream.cursor_open = true;
+  gStream.source = source;
   gStream.start_seq = start_seq;
   gStream.end_seq = end_seq;
   gStream.ack_seq = (start_seq > 0u) ? (start_seq - 1u) : 0u;
@@ -177,11 +271,14 @@ void startStream(uint32_t start_seq, uint32_t end_seq) {
   gStream.last_meta_ms = millis();
   gStream.cursor = cursor;
 
-  uint8_t payload[9] = {static_cast<uint8_t>(Response::STREAM_STARTED), 0, 0, 0, 0, 0, 0, 0, 0};
+  uint8_t payload[10] = {
+      static_cast<uint8_t>(Response::STREAM_STARTED), 0, 0, 0, 0,
+      0,                                           0, 0, 0, source};
   writeU32LE(&payload[1], start_seq);
   writeU32LE(&payload[5], end_seq);
   sendControlResponse(payload, sizeof(payload));
   publishMeta();
+  publishStatus();
 }
 
 bool sendOneFrame() {
@@ -221,7 +318,8 @@ void ensureCursorOpenFromNextSeq() {
   if (!gStream.active) return;
   if (gStream.cursor_open) return;
   telemetry_log::StreamCursor cursor = {};
-  if (telemetry_log::openCursor(gStream.next_seq, gStream.end_seq, &cursor)) {
+  if (telemetry_log::openCursor(gStream.next_seq, gStream.end_seq, &cursor,
+                                gStream.source)) {
     gStream.cursor = cursor;
     gStream.cursor_open = true;
   }
@@ -229,6 +327,7 @@ void ensureCursorOpenFromNextSeq() {
 
 void logSyncTask(void* pv) {
   (void)pv;
+  unsigned long last_status_ms = 0u;
   for (;;) {
     if (streamMutex != nullptr && xSemaphoreTake(streamMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
       if (gStream.active && !gStream.paused) {
@@ -259,6 +358,10 @@ void logSyncTask(void* pv) {
       if (now - gStream.last_meta_ms > 500u) {
         publishMeta();
         gStream.last_meta_ms = now;
+      }
+      if (now - last_status_ms > kStatusPublishIntervalMs) {
+        publishStatus();
+        last_status_ms = now;
       }
 
       xSemaphoreGive(streamMutex);
@@ -293,7 +396,8 @@ class LogSyncControlCallbacks : public NimBLECharacteristicCallbacks {
         }
         const uint32_t start_seq = readU32LE(&bytes[1]);
         const uint32_t end_seq = readU32LE(&bytes[5]);
-        startStream(start_seq, end_seq);
+        const uint8_t source = (len >= 10u) ? bytes[9] : 1u;
+        startStream(start_seq, end_seq, source);
       } break;
       case Command::ACK:
         if (len >= 5u && gStream.active) {
@@ -307,11 +411,13 @@ class LogSyncControlCallbacks : public NimBLECharacteristicCallbacks {
       case Command::PAUSE:
         gStream.paused = true;
         publishMeta();
+        publishStatus();
         break;
       case Command::RESUME:
         gStream.paused = false;
         gStream.last_ack_ms = millis();
         publishMeta();
+        publishStatus();
         break;
       case Command::ABORT:
         stopStream(false);
@@ -344,14 +450,19 @@ void initLogSyncBleService(NimBLEServer* server) {
   pLogSyncMeta = pLogSyncService->createCharacteristic(
       NimBLEUUID(LOG_SYNC_META_UUID),
       NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
+  pLogSyncStatus = pLogSyncService->createCharacteristic(
+      NimBLEUUID(LOG_SYNC_STATUS_UUID),
+      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
 
   static LogSyncControlCallbacks callbacks;
   pLogSyncControl->setCallbacks(&callbacks);
 
   uint8_t initial[2] = {telemetry_log::kProtocolVersion, 0u};
-  pLogSyncControl->setValue(initial, sizeof(initial));
-  pLogSyncMeta->setValue(initial, sizeof(initial));
+  if (pLogSyncControl != nullptr) pLogSyncControl->setValue(initial, sizeof(initial));
+  if (pLogSyncMeta != nullptr) pLogSyncMeta->setValue(initial, sizeof(initial));
+  if (pLogSyncStatus != nullptr) pLogSyncStatus->setValue(initial, sizeof(initial));
   pLogSyncService->start();
 
   xTaskCreate(logSyncTask, "LogSyncTask", 6144, nullptr, 1, &logSyncTaskHandle);
+  publishStatus();
 }

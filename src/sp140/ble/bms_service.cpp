@@ -89,14 +89,6 @@ void updateBMSExtendedTelemetry(const STR_BMS_TELEMETRY_140& telemetry, uint8_t 
     return;
   }
 
-  // Keep BLE bandwidth predictable: extended packet at 1Hz.
-  static unsigned long lastUpdateMs = 0;
-  const unsigned long now = millis();
-  if ((now - lastUpdateMs) < 1000ul) {
-    return;
-  }
-  lastUpdateMs = now;
-
   BLE_BMS_Extended_V2 packet = {};
   packet.version = 2;
   packet.bms_id = bms_id;
