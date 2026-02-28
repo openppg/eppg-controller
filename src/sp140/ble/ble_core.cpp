@@ -5,6 +5,7 @@
 #include <cctype>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <freertos/timers.h>
 
 #include "sp140/ble.h"
 #include "sp140/ble/ble_ids.h"
@@ -21,6 +22,28 @@
 namespace {
 
 constexpr uint8_t kExtAdvInstance = 0;
+constexpr const char* kAdvertisingName = "OpenPPG";
+constexpr TickType_t kConnTuneDelayTicks = pdMS_TO_TICKS(180);
+TimerHandle_t gConnTuneTimer = nullptr;
+
+void applyPreferredLinkParams(TimerHandle_t timer) {
+  (void)timer;
+
+  auto* server = pServer;
+  const uint16_t handle = connectedHandle;
+  if (server == nullptr || !deviceConnected ||
+      handle == BLE_HS_CONN_HANDLE_NONE) {
+    return;
+  }
+
+  server->updateConnParams(handle, 12, 24, 0, 200);
+  server->setDataLen(handle, 251);
+  const bool phyOk =
+      server->updatePhy(handle, BLE_GAP_LE_PHY_2M_MASK,
+                        BLE_GAP_LE_PHY_2M_MASK, 0);
+  USBSerial.printf("[BLE] Link tune handle=%u phy2m=%s\n", handle,
+                   phyOk ? "OK" : "FAIL");
+}
 
 void startAdvertising(NimBLEServer* server) {
   if (server == nullptr) {
@@ -28,33 +51,35 @@ void startAdvertising(NimBLEServer* server) {
   }
 
 #if CONFIG_BT_NIMBLE_EXT_ADV
-  NimBLEExtAdvertisement adv(BLE_HCI_LE_PHY_1M, BLE_HCI_LE_PHY_2M);
-  adv.setLegacyAdvertising(false);
+  // Use legacy-connectable advertising for maximum phone discoverability.
+  // Extended connectable+scannable combinations are less interoperable.
+  NimBLEExtAdvertisement adv(BLE_HCI_LE_PHY_1M, BLE_HCI_LE_PHY_1M);
+  adv.setLegacyAdvertising(true);
   adv.setConnectable(true);
   adv.setScannable(true);
-  adv.setName("OpenPPG Controller");
+  adv.setName(kAdvertisingName);
   adv.setFlags(BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP);
+
+  // Keep payload within 31-byte legacy limit so name + UUID reliably fit.
   adv.addServiceUUID(NimBLEUUID(CONFIG_SERVICE_UUID));
-  adv.addServiceUUID(NimBLEUUID(BMS_TELEMETRY_SERVICE_UUID));
-  adv.addServiceUUID(NimBLEUUID(ESC_TELEMETRY_SERVICE_UUID));
-  adv.addServiceUUID(NimBLEUUID(CONTROLLER_SERVICE_UUID));
-  adv.addServiceUUID(NimBLEUUID(LOG_SYNC_SERVICE_UUID));
 
   auto* advertising = server->getAdvertising();
-  advertising->setInstanceData(kExtAdvInstance, adv);
-  advertising->start(kExtAdvInstance);
+  advertising->removeAll();
+  const bool configured = advertising->setInstanceData(kExtAdvInstance, adv);
+  const bool started = configured && advertising->start(kExtAdvInstance);
+  USBSerial.printf("[BLE] Adv configure=%s start=%s\n",
+                   configured ? "OK" : "FAIL",
+                   started ? "OK" : "FAIL");
 #else
   auto* advertising = server->getAdvertising();
-  advertising->setName("OpenPPG Controller");
+  advertising->setName(kAdvertisingName);
   advertising->setDiscoverableMode(BLE_GAP_DISC_MODE_GEN);
   advertising->setConnectableMode(BLE_GAP_CONN_MODE_UND);
   advertising->addServiceUUID(NimBLEUUID(CONFIG_SERVICE_UUID));
-  advertising->addServiceUUID(NimBLEUUID(BMS_TELEMETRY_SERVICE_UUID));
-  advertising->addServiceUUID(NimBLEUUID(ESC_TELEMETRY_SERVICE_UUID));
-  advertising->addServiceUUID(NimBLEUUID(CONTROLLER_SERVICE_UUID));
-  advertising->addServiceUUID(NimBLEUUID(LOG_SYNC_SERVICE_UUID));
   advertising->enableScanResponse(true);
-  advertising->start();
+  const bool started = advertising->start();
+  USBSerial.printf("[BLE] Legacy advertising start=%s\n",
+                   started ? "OK" : "FAIL");
 #endif
 }
 
@@ -64,23 +89,23 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
     connectedHandle = connInfo.getConnHandle();
     telemetry_log::onBleReconnect();
 
-    // iOS is more likely to accept params after the initial connection settles.
-    vTaskDelay(pdMS_TO_TICKS(150));
-    server->updateConnParams(connectedHandle, 12, 24, 0, 200);
-    server->setDataLen(connectedHandle, 251);
-    server->updatePhy(connectedHandle, BLE_GAP_LE_PHY_2M_MASK,
-                      BLE_GAP_LE_PHY_2M_MASK, 0);
-    USBSerial.println("Device connected");
+    if (gConnTuneTimer != nullptr) {
+      xTimerStop(gConnTuneTimer, 0);
+      xTimerStart(gConnTuneTimer, 0);
+    }
+    USBSerial.printf("Device connected handle=%u\n", connectedHandle);
   }
 
   void onDisconnect(NimBLEServer* server, NimBLEConnInfo& connInfo,
                     int reason) override {
     (void)connInfo;
-    (void)reason;
+    if (gConnTuneTimer != nullptr) {
+      xTimerStop(gConnTuneTimer, 0);
+    }
     deviceConnected = false;
     connectedHandle = BLE_HS_CONN_HANDLE_NONE;
     telemetry_log::onBleDisconnect();
-    USBSerial.println("Device disconnected");
+    USBSerial.printf("Device disconnected reason=%d\n", reason);
     startAdvertising(server);
     USBSerial.println("Started advertising");
   }
@@ -90,7 +115,7 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
 
 void setupBLE() {
   // Initialize NimBLE with device name
-  NimBLEDevice::init("OpenPPG Controller");
+  NimBLEDevice::init(kAdvertisingName);
 
   // Bonding and LE secure connections ("Just Works").
   NimBLEDevice::setSecurityAuth(true, false, true);
@@ -107,6 +132,10 @@ void setupBLE() {
   pServer = NimBLEDevice::createServer();
   static BleServerConnectionCallbacks serverCallbacks;
   pServer->setCallbacks(&serverCallbacks);
+  if (gConnTuneTimer == nullptr) {
+    gConnTuneTimer = xTimerCreate("bleConnTune", kConnTuneDelayTicks, pdFALSE,
+                                  nullptr, applyPreferredLinkParams);
+  }
 
   NimBLEAddress bleAddress = NimBLEDevice::getAddress();
   std::string uniqueId = bleAddress.toString();

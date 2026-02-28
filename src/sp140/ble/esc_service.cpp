@@ -38,6 +38,7 @@ void initEscBleService(NimBLEServer *server) {
 
 // Static batching buffer
 static BLE_ESC_Batched_Telemetry_V2 batchedPacket = {.version = 2, .count = 0};
+static unsigned long batchStartMs = 0;
 
 // Binary batched telemetry update (V2 protocol)
 void updateESCPackedTelemetry(const STR_ESC_TELEMETRY_140 &telemetry) {
@@ -48,6 +49,10 @@ void updateESCPackedTelemetry(const STR_ESC_TELEMETRY_140 &telemetry) {
   // Sanity check just in case
   if (batchedPacket.count >= 5) {
     batchedPacket.count = 0;
+  }
+
+  if (batchedPacket.count == 0) {
+    batchStartMs = millis();
   }
 
   BLE_ESC_Telemetry_V1 *packet = &batchedPacket.frames[batchedPacket.count];
@@ -68,8 +73,9 @@ void updateESCPackedTelemetry(const STR_ESC_TELEMETRY_140 &telemetry) {
 
   batchedPacket.count++;
 
-  // Once we reach 5 frames (50Hz -> 10Hz), send the notification
-  if (batchedPacket.count >= 5) {
+  // Once we reach 5 frames (50Hz), or if ~100ms has elapsed on a degraded link,
+  // send the notification
+  if (batchedPacket.count >= 5 || (millis() - batchStartMs) >= 80) {
     pESCPackedTelemetry->setValue(reinterpret_cast<uint8_t *>(&batchedPacket),
                                   sizeof(BLE_ESC_Batched_Telemetry_V2));
 

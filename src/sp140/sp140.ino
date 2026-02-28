@@ -988,6 +988,13 @@ void buttonHandlerTask(void *parameter) {
           const bool deleted = NimBLEDevice::deleteAllBonds();
           USBSerial.printf("[BLE] Delete all bonds: %s\n",
                            deleted ? "OK" : "FAILED");
+          if (deviceConnected && pServer != nullptr &&
+              connectedHandle != BLE_HS_CONN_HANDLE_NONE) {
+            pServer->disconnect(connectedHandle);
+            vTaskDelay(pdMS_TO_TICKS(40));
+          }
+          restartBLEAdvertising();
+          USBSerial.println("[BLE] Advertising restarted after bond reset");
           pulseVibeMotor();
           unbondHoldHandled = true;
           buttonPressed = false;

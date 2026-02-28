@@ -27,6 +27,8 @@ constexpr uint32_t kMetaSlotCount = kMetaSlotsPerPage * 2u;
 constexpr size_t kRamBufferBytes = 72u * 1024u;
 constexpr const char *kGapFilePrefix = "/gap_";
 constexpr const char *kGapFileSuffix = ".bin";
+constexpr uint32_t kMaxGapFileSize = 256u * 1024u;
+constexpr uint32_t kMaxGapStorageBytes = 2u * 1024u * 1024u;
 
 constexpr uint32_t kEscFastBaseIntervalMs = 20u;  // 50Hz steady state
 constexpr uint32_t kEscFastBurstIntervalMs = 20u; // 50Hz transient bursts
@@ -463,10 +465,40 @@ bool readOneGapRecord(File &file, TelemetryRecordHeader *header,
   return true;
 }
 
+void enforceGapStorageLimits() {
+  while (true) {
+    const auto files = listGapFilesSorted();
+    if (files.size() <= 1u)
+      break;
+    uint32_t total_bytes = 0;
+    for (const auto &path : files) {
+      File f = LittleFS.open(path, "r");
+      if (f)
+        total_bytes += f.size();
+    }
+    if (total_bytes > kMaxGapStorageBytes) {
+      LittleFS.remove(files.front());
+    } else {
+      break;
+    }
+  }
+}
+
 bool writeRecordToActiveGapFile(const TelemetryRecordHeader &header,
                                 const void *payload) {
   if (!gGapFsReady || !gActiveGapFile)
     return false;
+
+  if (gActiveGapFile.size() >= kMaxGapFileSize) {
+    gActiveGapFile.close();
+    enforceGapStorageLimits();
+    gActiveGapPath = makeGapFilePath(gCurrentSessionId, header.seq);
+    gActiveGapFile = LittleFS.open(gActiveGapPath, "w");
+    if (!gActiveGapFile) {
+      return false;
+    }
+  }
+
   const size_t wrote_header = gActiveGapFile.write(
       reinterpret_cast<const uint8_t *>(&header), sizeof(header));
   if (wrote_header != sizeof(header))
@@ -482,7 +514,8 @@ bool writeRecordToActiveGapFile(const TelemetryRecordHeader &header,
 }
 
 void snapshotRamToActiveGapFile() {
-  if (!gGapFsReady || !gActiveGapFile || gRamBuffer == nullptr || gRamUsed == 0u)
+  if (!gGapFsReady || !gActiveGapFile || gRamBuffer == nullptr ||
+      gRamUsed == 0u)
     return;
   size_t offset = ramTail();
   size_t consumed = 0u;
@@ -491,10 +524,12 @@ void snapshotRamToActiveGapFile() {
     offset = (offset + sizeof(uint16_t)) % kRamBufferBytes;
     consumed += sizeof(uint16_t);
     if (record_len < sizeof(TelemetryRecordHeader) ||
-        record_len > (sizeof(TelemetryRecordHeader) + sizeof(ReplayFrameV1::payload))) {
+        record_len >
+            (sizeof(TelemetryRecordHeader) + sizeof(ReplayFrameV1::payload))) {
       break;
     }
-    uint8_t record_buf[sizeof(TelemetryRecordHeader) + sizeof(ReplayFrameV1::payload)] = {};
+    uint8_t record_buf[sizeof(TelemetryRecordHeader) +
+                       sizeof(ReplayFrameV1::payload)] = {};
     ramReadBytes(offset, record_buf, record_len);
     offset = (offset + record_len) % kRamBufferBytes;
     consumed += record_len;
@@ -516,6 +551,7 @@ void beginGapRecording() {
   if (gActiveGapFile) {
     gActiveGapFile.close();
   }
+  enforceGapStorageLimits();
   const uint32_t start_seq = gGapSeqCounter + 1u;
   gActiveGapPath = makeGapFilePath(gCurrentSessionId, start_seq);
   gActiveGapFile = LittleFS.open(gActiveGapPath, "w");
@@ -546,8 +582,8 @@ void endGapRecording() {
 void updateGapModeAfterDelete() {
   const auto files = listGapFilesSorted();
   if (files.empty()) {
-    gLoggingMode = gBleConnected ? LoggingMode::STREAMING
-                                 : LoggingMode::GAP_RECORDING;
+    gLoggingMode =
+        gBleConnected ? LoggingMode::STREAMING : LoggingMode::GAP_RECORDING;
   } else if (gBleConnected) {
     gLoggingMode = LoggingMode::GAP_SYNCING;
   } else {
@@ -556,8 +592,9 @@ void updateGapModeAfterDelete() {
   telemetryHubSetLoggingMode(gLoggingMode);
 }
 
-bool appendGapRecord(uint8_t source_type, uint32_t session_id, uint32_t source_ms,
-                     const void *payload, uint16_t payload_len) {
+bool appendGapRecord(uint8_t source_type, uint32_t session_id,
+                     uint32_t source_ms, const void *payload,
+                     uint16_t payload_len) {
   ++gGapSeqCounter;
 
   TelemetryRecordHeader header = {};
@@ -940,16 +977,16 @@ void emitBlackboxSnapshot() {
   payload.version = 2u;
   payload.device_state = gCurrentDeviceState;
   payload.ble_connected = gBleConnected ? 1u : 0u;
-  payload.bms_connection_state =
-      static_cast<uint8_t>(gHaveBms ? gLastBms.bmsState : TelemetryState::NOT_CONNECTED);
-  payload.esc_connection_state =
-      static_cast<uint8_t>(gHaveEsc ? gLastEsc.escState : TelemetryState::NOT_CONNECTED);
+  payload.bms_connection_state = static_cast<uint8_t>(
+      gHaveBms ? gLastBms.bmsState : TelemetryState::NOT_CONNECTED);
+  payload.esc_connection_state = static_cast<uint8_t>(
+      gHaveEsc ? gLastEsc.escState : TelemetryState::NOT_CONNECTED);
   if (gHaveBms) {
     payload.bms_voltage_dV =
         static_cast<uint16_t>(gLastBms.battery_voltage * 10.0f);
     payload.bms_current_dA = clampI16(
-        static_cast<int32_t>(lroundf(gLastBms.battery_current * 10.0f)),
-        -32768, 32767);
+        static_cast<int32_t>(lroundf(gLastBms.battery_current * 10.0f)), -32768,
+        32767);
     payload.bms_soc = static_cast<uint8_t>(
         clampU32(static_cast<int64_t>(lroundf(gLastBms.soc)), 0u, 100u));
     payload.bms_failure_level = gLastBms.battery_fail_level;
@@ -1003,23 +1040,23 @@ void emitBlackboxSnapshot() {
     payload.temp_dC[i] = BLE_BMS_EXTENDED_INVALID_TEMP;
   if (gHaveBms) {
     payload.temp_dC[0] = clampI16(
-        static_cast<int32_t>(lroundf(gLastBms.mos_temperature * 10.0f)),
-        -32768, 32767);
+        static_cast<int32_t>(lroundf(gLastBms.mos_temperature * 10.0f)), -32768,
+        32767);
     payload.temp_dC[1] = clampI16(
         static_cast<int32_t>(lroundf(gLastBms.balance_temperature * 10.0f)),
         -32768, 32767);
-    payload.temp_dC[2] = clampI16(
-        static_cast<int32_t>(lroundf(gLastBms.t1_temperature * 10.0f)), -32768,
-        32767);
-    payload.temp_dC[3] = clampI16(
-        static_cast<int32_t>(lroundf(gLastBms.t2_temperature * 10.0f)), -32768,
-        32767);
-    payload.temp_dC[4] = clampI16(
-        static_cast<int32_t>(lroundf(gLastBms.t3_temperature * 10.0f)), -32768,
-        32767);
-    payload.temp_dC[5] = clampI16(
-        static_cast<int32_t>(lroundf(gLastBms.t4_temperature * 10.0f)), -32768,
-        32767);
+    payload.temp_dC[2] =
+        clampI16(static_cast<int32_t>(lroundf(gLastBms.t1_temperature * 10.0f)),
+                 -32768, 32767);
+    payload.temp_dC[3] =
+        clampI16(static_cast<int32_t>(lroundf(gLastBms.t2_temperature * 10.0f)),
+                 -32768, 32767);
+    payload.temp_dC[4] =
+        clampI16(static_cast<int32_t>(lroundf(gLastBms.t3_temperature * 10.0f)),
+                 -32768, 32767);
+    payload.temp_dC[5] =
+        clampI16(static_cast<int32_t>(lroundf(gLastBms.t4_temperature * 10.0f)),
+                 -32768, 32767);
   }
 
   if (gHaveCtrl) {
@@ -1028,8 +1065,8 @@ void emitBlackboxSnapshot() {
     payload.baro_temp_dC = gLastCtrl.baro_temp_dC;
     payload.mcu_temp_dC = gLastCtrl.mcu_temp_dC;
     payload.throttle_raw = gLastCtrl.pot_raw;
-    payload.uptime_min = static_cast<uint16_t>(
-        clampU32(static_cast<int64_t>(gLastCtrl.uptime_ms / 60000u), 0u, 65535u));
+    payload.uptime_min = static_cast<uint16_t>(clampU32(
+        static_cast<int64_t>(gLastCtrl.uptime_ms / 60000u), 0u, 65535u));
   }
 
   if (appendRecord(&gBlackbox,
@@ -1372,8 +1409,8 @@ bool getManifest(Manifest *out_manifest) {
   return true;
 }
 
-bool openCursor(uint32_t start_seq, uint32_t end_seq,
-                StreamCursor *out_cursor, uint8_t source) {
+bool openCursor(uint32_t start_seq, uint32_t end_seq, StreamCursor *out_cursor,
+                uint8_t source) {
   if (!gInitialized || out_cursor == nullptr)
     return false;
   if (xSemaphoreTake(gMutex, pdMS_TO_TICKS(20)) != pdTRUE)
@@ -1395,8 +1432,7 @@ bool openCursor(uint32_t start_seq, uint32_t end_seq,
     String selected_file;
     uint32_t selected_first = 0u;
     uint32_t selected_last = 0u;
-    const uint32_t requested_end =
-        (end_seq == 0u) ? 0xFFFFFFFFu : end_seq;
+    const uint32_t requested_end = (end_seq == 0u) ? 0xFFFFFFFFu : end_seq;
 
     for (const auto &path : files) {
       uint32_t file_first = 0u;
