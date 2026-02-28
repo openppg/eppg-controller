@@ -89,6 +89,12 @@ void sendControlResponse(const uint8_t* data, size_t len) {
   }
 }
 
+void sendError(ErrorCode code) {
+  uint8_t err[6] = {static_cast<uint8_t>(Response::ERROR),
+                    static_cast<uint8_t>(code), 0, 0, 0, 0};
+  sendControlResponse(err, sizeof(err));
+}
+
 uint8_t buildStatusFlags(const telemetry_log::Manifest& manifest) {
   uint8_t flags = 0u;
   const LoggingMode mode = telemetryHubGetLoggingMode();
@@ -168,8 +174,7 @@ void publishMeta() {
 void sendManifest() {
   telemetry_log::Manifest manifest = {};
   if (!telemetry_log::getManifest(&manifest)) {
-    uint8_t err[6] = {static_cast<uint8_t>(Response::ERROR), static_cast<uint8_t>(ErrorCode::INTERNAL), 0, 0, 0, 0};
-    sendControlResponse(err, sizeof(err));
+    sendError(ErrorCode::INTERNAL);
     return;
   }
 
@@ -211,21 +216,18 @@ void stopStream(bool send_complete) {
 void startStream(uint32_t start_seq, uint32_t end_seq, uint8_t source) {
   telemetry_log::Manifest manifest = {};
   if (!telemetry_log::getManifest(&manifest)) {
-    uint8_t err[6] = {static_cast<uint8_t>(Response::ERROR), static_cast<uint8_t>(ErrorCode::NO_DATA), 0, 0, 0, 0};
-    sendControlResponse(err, sizeof(err));
+    sendError(ErrorCode::NO_DATA);
     return;
   }
 
   const bool stream_blackbox = (source == 1u);
   if (!stream_blackbox &&
       (manifest.record_count == 0u || manifest.latest_seq == 0u)) {
-    uint8_t err[6] = {static_cast<uint8_t>(Response::ERROR), static_cast<uint8_t>(ErrorCode::NO_DATA), 0, 0, 0, 0};
-    sendControlResponse(err, sizeof(err));
+    sendError(ErrorCode::NO_DATA);
     return;
   }
   if (stream_blackbox && manifest.blackbox_latest_seq == 0u) {
-    uint8_t err[6] = {static_cast<uint8_t>(Response::ERROR), static_cast<uint8_t>(ErrorCode::NO_DATA), 0, 0, 0, 0};
-    sendControlResponse(err, sizeof(err));
+    sendError(ErrorCode::NO_DATA);
     return;
   }
 
@@ -244,15 +246,13 @@ void startStream(uint32_t start_seq, uint32_t end_seq, uint8_t source) {
   }
 
   if (start_seq > end_seq) {
-    uint8_t err[6] = {static_cast<uint8_t>(Response::ERROR), static_cast<uint8_t>(ErrorCode::BAD_REQUEST), 0, 0, 0, 0};
-    sendControlResponse(err, sizeof(err));
+    sendError(ErrorCode::BAD_REQUEST);
     return;
   }
 
   telemetry_log::StreamCursor cursor = {};
   if (!telemetry_log::openCursor(start_seq, end_seq, &cursor, source)) {
-    uint8_t err[6] = {static_cast<uint8_t>(Response::ERROR), static_cast<uint8_t>(ErrorCode::NO_DATA), 0, 0, 0, 0};
-    sendControlResponse(err, sizeof(err));
+    sendError(ErrorCode::NO_DATA);
     return;
   }
   end_seq = cursor.end_seq;
@@ -390,8 +390,7 @@ class LogSyncControlCallbacks : public NimBLECharacteristicCallbacks {
         break;
       case Command::START_STREAM: {
         if (len < 9u) {
-          uint8_t err[6] = {static_cast<uint8_t>(Response::ERROR), static_cast<uint8_t>(ErrorCode::BAD_REQUEST), 0, 0, 0, 0};
-          sendControlResponse(err, sizeof(err));
+          sendError(ErrorCode::BAD_REQUEST);
           break;
         }
         const uint32_t start_seq = readU32LE(&bytes[1]);
@@ -422,10 +421,9 @@ class LogSyncControlCallbacks : public NimBLECharacteristicCallbacks {
       case Command::ABORT:
         stopStream(false);
         break;
-      default: {
-        uint8_t err[6] = {static_cast<uint8_t>(Response::ERROR), static_cast<uint8_t>(ErrorCode::BAD_REQUEST), 0, 0, 0, 0};
-        sendControlResponse(err, sizeof(err));
-      } break;
+      default:
+        sendError(ErrorCode::BAD_REQUEST);
+        break;
     }
 
     xSemaphoreGive(streamMutex);
@@ -458,9 +456,9 @@ void initLogSyncBleService(NimBLEServer* server) {
   pLogSyncControl->setCallbacks(&callbacks);
 
   uint8_t initial[2] = {telemetry_log::kProtocolVersion, 0u};
-  if (pLogSyncControl != nullptr) pLogSyncControl->setValue(initial, sizeof(initial));
-  if (pLogSyncMeta != nullptr) pLogSyncMeta->setValue(initial, sizeof(initial));
-  if (pLogSyncStatus != nullptr) pLogSyncStatus->setValue(initial, sizeof(initial));
+  pLogSyncControl->setValue(initial, sizeof(initial));
+  pLogSyncMeta->setValue(initial, sizeof(initial));
+  pLogSyncStatus->setValue(initial, sizeof(initial));
   pLogSyncService->start();
 
   xTaskCreate(logSyncTask, "LogSyncTask", 6144, nullptr, 1, &logSyncTaskHandle);

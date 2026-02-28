@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <LittleFS.h>
 #include <Preferences.h>
+#include <esp_crc.h>
 #include <esp_partition.h>
 
 #include <algorithm>
@@ -247,20 +248,8 @@ int16_t clampI16(int32_t value, int16_t min_v, int16_t max_v) {
   return static_cast<int16_t>(value);
 }
 
-uint32_t crc32Update(uint32_t crc, const uint8_t *data, size_t len) {
-  crc = ~crc;
-  for (size_t i = 0; i < len; ++i) {
-    crc ^= data[i];
-    for (int bit = 0; bit < 8; ++bit) {
-      crc = (crc >> 1) ^ (0xEDB88320u & static_cast<uint32_t>(
-                                            -(static_cast<int32_t>(crc & 1u))));
-    }
-  }
-  return ~crc;
-}
-
 uint32_t crc32Buffer(const void *data, size_t len) {
-  return crc32Update(0u, reinterpret_cast<const uint8_t *>(data), len);
+  return esp_crc32_le(0u, reinterpret_cast<const uint8_t *>(data), len);
 }
 
 size_t ramTail() {

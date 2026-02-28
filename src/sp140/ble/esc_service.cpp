@@ -46,11 +46,6 @@ void updateESCPackedTelemetry(const STR_ESC_TELEMETRY_140 &telemetry) {
     return;
   }
 
-  // Sanity check just in case
-  if (batchedPacket.count >= 5) {
-    batchedPacket.count = 0;
-  }
-
   if (batchedPacket.count == 0) {
     batchStartMs = millis();
   }
