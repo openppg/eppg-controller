@@ -3,7 +3,12 @@
     "allow": [
       "Bash(pio)",
       "Bash(pio run)",
-      "Bash(cpplint:*)"
+      "Bash(cpplint:*)",
+      "Bash(python3 -m platformio run)",
+      "Bash(python3 -m platformio device list)",
+      "Bash(python3 -m platformio run --target upload)",
+      "Bash(lsof /dev/cu.usbmodem1101)",
+      "Bash(kill 25395)"
     ],
     "deny": []
   }
