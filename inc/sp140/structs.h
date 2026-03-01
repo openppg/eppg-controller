@@ -18,9 +18,9 @@ typedef struct {
   float mos_temp;
   float cap_temp;
   float mcu_temp;
-  float motor_temp;      // Motor temperature in °C
-  float amps;            // DC bus current (A)
-  float phase_current;   // AC phase current into motor windings (A)
+  float motor_temp;    // Motor temperature in °C
+  float amps;          // DC bus current (A)
+  float phase_current; // AC phase current into motor windings (A)
   float eRPM;
   float inPWM;
   float outPWM;
@@ -110,9 +110,11 @@ typedef struct {
   bool battery_ready;         // BMS reports battery ready for use
 
   // Static battery identity (populated when available)
-  char battery_id[33];        // Null-terminated battery serial/ID string (up to 32 chars)
+  char battery_id[33]; // Null-terminated battery serial/ID string (up to 32
+                       // chars)
 
-  // BMS type detected by firmware (0=unknown, 1=Type A LE cells, 2=Type B BE cells)
+  // BMS type detected by firmware (0=unknown, 1=Type A LE cells, 2=Type B BE
+  // cells)
   uint8_t bms_type;
 } STR_BMS_TELEMETRY_140;
 #pragma pack(pop)
@@ -134,57 +136,58 @@ typedef struct {
   uint32_t uptime_ms; // Time since boot (ms)
 
   // Controller Data
-  float altitude;        // Barometric altitude (m)
-  float baro_temp;       // Barometric sensor temperature (°C)
-  float baro_pressure;   // Barometric pressure (hPa)
-  float vario;           // Vertical speed (m/s)
-  float mcu_temp;        // ESP32 internal temperature (°C)
-  uint16_t pot_raw;      // Raw throttle potentiometer (0..4095)
-  uint8_t device_state;  // 0=DISARMED, 1=ARMED, 2=ARMED_CRUISING
+  float altitude;       // Barometric altitude (m)
+  float baro_temp;      // Barometric sensor temperature (°C)
+  float baro_pressure;  // Barometric pressure (hPa)
+  float vario;          // Vertical speed (m/s)
+  float mcu_temp;       // ESP32 internal temperature (°C)
+  uint16_t pot_raw;     // Raw throttle potentiometer (0..4095)
+  uint8_t device_state; // 0=DISARMED, 1=ARMED, 2=ARMED_CRUISING
 
   // ESC Data
-  uint8_t esc_status;         // TelemetryState enum
-  float esc_volts;            // ESC Voltage (V)
-  float esc_amps;             // DC bus current (A)
-  float esc_phase_current;    // AC phase current into motor windings (A)
-  int32_t esc_rpm;            // Electrical RPM
-  float esc_temp_mos;         // MOSFET Temp (°C)
-  float esc_temp_cap;         // Capacitor Temp (°C)
-  float esc_temp_mcu;         // MCU Temp (°C)
-  float esc_temp_motor;       // Motor Temp (°C)
-  uint16_t esc_inPWM;         // Input PWM command (recv_pwm, raw)
-  uint16_t esc_outPWM;        // Commutation PWM output (comm_pwm, raw)
-  uint16_t esc_v_modulation;  // Voltage modulation index (raw)
-  uint16_t esc_error;         // Runtime error bitmask
-  uint16_t esc_selfcheck;     // Self-check error bitmask
+  uint8_t esc_status;        // TelemetryState enum
+  float esc_volts;           // ESC Voltage (V)
+  float esc_amps;            // DC bus current (A)
+  float esc_phase_current;   // AC phase current into motor windings (A)
+  int32_t esc_rpm;           // Electrical RPM
+  float esc_temp_mos;        // MOSFET Temp (°C)
+  float esc_temp_cap;        // Capacitor Temp (°C)
+  float esc_temp_mcu;        // MCU Temp (°C)
+  float esc_temp_motor;      // Motor Temp (°C)
+  uint16_t esc_inPWM;        // Input PWM command (recv_pwm, raw)
+  uint16_t esc_outPWM;       // Commutation PWM output (comm_pwm, raw)
+  uint16_t esc_v_modulation; // Voltage modulation index (raw)
+  uint16_t esc_error;        // Runtime error bitmask
+  uint16_t esc_selfcheck;    // Self-check error bitmask
   // ESC static hardware info
   uint16_t esc_hardware_id;
   uint16_t esc_fw_version;
   uint16_t esc_bootloader_version;
-  uint8_t esc_sn_code[16];    // ESC serial number (16 bytes)
+  uint32_t esc_runtime_ms; // ESC internal runtime (ms) from time_10ms × 10
+  uint8_t esc_sn_code[16]; // ESC serial number (16 bytes)
 
   // BMS Data
-  uint8_t bms_status;              // TelemetryState enum
-  float bms_soc;                   // State of Charge (%)
-  float bms_volts;                 // Total Battery Voltage (V)
-  float bms_amps;                  // Battery Current (A)
-  float bms_power;                 // Power (kW)
-  float bms_energy_cycle_ah;       // Energy per cycle (Ah)
-  uint32_t bms_battery_cycle;      // Battery cycle count
-  uint8_t bms_fail_level;          // Battery failure status
-  uint8_t bms_is_charging;         // Charging state (0/1)
-  uint8_t bms_is_charge_mos;       // Charge MOSFET state (0/1)
-  uint8_t bms_is_discharge_mos;    // Discharge MOSFET state (0/1)
-  uint8_t bms_charge_wire;         // Charge wire physically connected (0/1)
-  uint8_t bms_low_soc_warning;     // Low SOC warning active (0/1)
-  uint8_t bms_battery_ready;       // Battery ready for use (0/1)
-  float bms_highest_temp;          // Highest temperature (°C)
-  float bms_lowest_temp;           // Lowest temperature (°C)
-  float bms_cell_max;              // Highest cell voltage (V)
-  float bms_cell_min;              // Lowest cell voltage (V)
-  float bms_voltage_diff;          // Cell voltage differential (V)
-  char bms_battery_id[33];         // Battery serial/ID string (null-terminated)
-  uint8_t bms_type;                // BMS type (0=unknown, 1=Type A LE, 2=Type B BE)
+  uint8_t bms_status;           // TelemetryState enum
+  float bms_soc;                // State of Charge (%)
+  float bms_volts;              // Total Battery Voltage (V)
+  float bms_amps;               // Battery Current (A)
+  float bms_power;              // Power (kW)
+  float bms_energy_cycle_ah;    // Energy per cycle (Ah)
+  uint32_t bms_battery_cycle;   // Battery cycle count
+  uint8_t bms_fail_level;       // Battery failure status
+  uint8_t bms_is_charging;      // Charging state (0/1)
+  uint8_t bms_is_charge_mos;    // Charge MOSFET state (0/1)
+  uint8_t bms_is_discharge_mos; // Discharge MOSFET state (0/1)
+  uint8_t bms_charge_wire;      // Charge wire physically connected (0/1)
+  uint8_t bms_low_soc_warning;  // Low SOC warning active (0/1)
+  uint8_t bms_battery_ready;    // Battery ready for use (0/1)
+  float bms_highest_temp;       // Highest temperature (°C)
+  float bms_lowest_temp;        // Lowest temperature (°C)
+  float bms_cell_max;           // Highest cell voltage (V)
+  float bms_cell_min;           // Lowest cell voltage (V)
+  float bms_voltage_diff;       // Cell voltage differential (V)
+  char bms_battery_id[33];      // Battery serial/ID string (null-terminated)
+  uint8_t bms_type; // BMS type (0=unknown, 1=Type A LE, 2=Type B BE)
 
   // Extended BMS arrays
   float bms_cell_voltages[BMS_CELLS_NUM]; // Array of 24 cell voltages (V)
