@@ -57,13 +57,24 @@ void updateBMSData() {
 
   // Battery statistics
   bmsTelemetryData.battery_cycle = bms_can->getBatteryCycle();
-  bmsTelemetryData.energy_cycle = bms_can->getEnergyCycle();
+  bmsTelemetryData.energy_cycle_ah = bms_can->getEnergyCycle();
   bmsTelemetryData.battery_fail_level = bms_can->getBatteryFailureLevel();
 
   // Battery status
   bmsTelemetryData.is_charging = bms_can->isBatteryCharging();
   bmsTelemetryData.is_charge_mos = bms_can->isChargeMOSStatus();
   bmsTelemetryData.is_discharge_mos = bms_can->isDischargeMOSStatus();
+  bmsTelemetryData.charge_wire_connected = bms_can->isChargeWireConnected();
+  bmsTelemetryData.low_soc_warning = bms_can->isBatteryLowSOC();
+  bmsTelemetryData.battery_ready = bms_can->isBatteryReady();
+
+  // BMS type (auto-detected from cell voltage endianness)
+  bmsTelemetryData.bms_type = (uint8_t)bms_can->getBmsType();
+
+  // Battery identity string
+  String bid = bms_can->getBatteryID();
+  strncpy(bmsTelemetryData.battery_id, bid.c_str(), sizeof(bmsTelemetryData.battery_id) - 1);
+  bmsTelemetryData.battery_id[sizeof(bmsTelemetryData.battery_id) - 1] = '\0';
 
   // Populate individual cell voltages
   for (uint8_t i = 0; i < BMS_CELLS_NUM; i++) {

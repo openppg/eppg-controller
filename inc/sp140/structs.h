@@ -8,9 +8,8 @@
 
 // Telemetry connection state
 enum class TelemetryState : uint8_t {
-  NOT_CONNECTED, // Never received data since boot
+  NOT_CONNECTED, // Not receiving data
   CONNECTED,     // Receiving data normally
-  STALE          // Was connected but hasn't received data recently
 };
 
 // v1 ESC telemetry
@@ -19,17 +18,25 @@ typedef struct {
   float mos_temp;
   float cap_temp;
   float mcu_temp;
-  float motor_temp; // Motor temperature in °C
-  float amps;
+  float motor_temp;      // Motor temperature in °C
+  float amps;            // DC bus current (A)
+  float phase_current;   // AC phase current into motor windings (A)
   float eRPM;
   float inPWM;
   float outPWM;
+  uint16_t comm_pwm;     // Commutation PWM output to motor (raw ESC units)
+  uint16_t v_modulation; // Voltage modulation index (raw ESC units)
   uint8_t statusFlag;
   uint16_t checksum;
   unsigned long lastUpdateMs; // Timestamp of last telemetry update
   TelemetryState escState;    // Current connection state
   uint16_t running_error;     // Runtime error bitmask
   uint16_t selfcheck_error;   // Self-check error bitmask
+  // Static hardware info (populated from GetHwInfo response)
+  uint16_t hardware_id;
+  uint16_t fw_version;
+  uint16_t bootloader_version;
+  uint8_t sn_code[16];
 } STR_ESC_TELEMETRY_140;
 
 // Internal device data
@@ -78,7 +85,7 @@ typedef struct {
   float lowest_cell_voltage;  // Lowest individual cell voltage (V)
   float highest_temperature;  // Highest temperature reading (°C)
   float lowest_temperature;   // Lowest temperature reading (°C)
-  float energy_cycle;         // Energy per cycle (kWh)
+  float energy_cycle_ah;      // Energy per cycle (Ah)
   uint32_t battery_cycle;     // Battery cycle count
   uint8_t battery_fail_level; // Battery failure status
   float voltage_differential; // Highest cell minus lowest cell voltage (V)
@@ -96,6 +103,17 @@ typedef struct {
   float t2_temperature;      // T2 cell temperature sensor (°C) - index 3
   float t3_temperature;      // T3 cell temperature sensor (°C) - index 4
   float t4_temperature;      // T4 cell temperature sensor (°C) - index 5
+
+  // Additional status flags
+  bool charge_wire_connected; // Charge wire physically connected
+  bool low_soc_warning;       // BMS low SOC warning active
+  bool battery_ready;         // BMS reports battery ready for use
+
+  // Static battery identity (populated when available)
+  char battery_id[33];        // Null-terminated battery serial/ID string (up to 32 chars)
+
+  // BMS type detected by firmware (0=unknown, 1=Type A LE cells, 2=Type B BE cells)
+  uint8_t bms_type;
 } STR_BMS_TELEMETRY_140;
 #pragma pack(pop)
 
@@ -106,141 +124,70 @@ struct MelodyRequest {
   uint16_t duration;
 };
 
-// ============================================================================
-// BLE Binary Packed Telemetry Structures (V1)
-// These structures are designed for efficient BLE transmission with minimal
-// overhead. All multi-byte values are little-endian (ESP32/ARM native).
-// ============================================================================
-
 #pragma pack(push, 1)
-
-// Binary packed BMS telemetry for BLE transmission (~65 bytes)
-// For multi-BMS systems, send separate notifications with different bms_id
-// values
-typedef struct {
-  uint8_t version;            // Protocol version (1)
-  uint8_t bms_id;             // BMS identifier (0-3 for multi-BMS)
-  uint8_t connection_state;   // TelemetryState enum value
-  float soc;                  // State of charge (%)
-  float battery_voltage;      // Total battery voltage (V)
-  float battery_current;      // Battery current (A)
-  float power;                // Power (kW)
-  float highest_cell_voltage; // Highest cell voltage (V)
-  float lowest_cell_voltage;  // Lowest cell voltage (V)
-  float highest_temperature;  // Highest temperature (°C)
-  float lowest_temperature;   // Lowest temperature (°C)
-  float voltage_differential; // Cell voltage differential (V)
-  uint8_t battery_fail_level; // Battery failure status
-  uint8_t is_charge_mos;      // Charge MOSFET state (0/1)
-  uint8_t is_discharge_mos;   // Discharge MOSFET state (0/1)
-  uint8_t is_charging;        // Charging state (0/1)
-  uint32_t battery_cycle;     // Battery cycle count
-  float energy_cycle;         // Energy per cycle (kWh)
-  uint32_t lastUpdateMs;      // Timestamp of last update
-} BLE_BMS_Telemetry_V1;
-
-// Binary packed ESC telemetry for BLE transmission (~46 bytes)
-typedef struct {
-  uint8_t version;          // Protocol version (1)
-  uint8_t connection_state; // TelemetryState enum value
-  float volts;              // ESC voltage (V)
-  float amps;               // ESC current (A)
-  float mos_temp;           // MOSFET temp (°C)
-  float cap_temp;           // Capacitor temp (°C)
-  float mcu_temp;           // MCU temp (°C)
-  float motor_temp;       // Motor temp (°C), NaN if sensor invalid/disconnected
-  int32_t eRPM;           // Electrical RPM
-  uint16_t inPWM;         // Input PWM value
-  uint16_t running_error; // Runtime error bitmask
-  uint16_t selfcheck_error; // Self-check error bitmask
-  uint32_t lastUpdateMs;    // Timestamp of last update
-} BLE_ESC_Telemetry_V1;
-
-// Batched ESC telemetry containing 5 frames of ESC data sent at 10Hz
-// (representing 50Hz data)
-typedef struct {
-  uint8_t version;                // Protocol version (2)
-  uint8_t count;                  // How many valid frames (usually 5)
-  BLE_ESC_Telemetry_V1 frames[5]; // Array of consecutive 50Hz ESC packets
-} BLE_ESC_Batched_Telemetry_V2;
-
-// Binary packed BMS extended telemetry (V2 compact format).
-// Cell voltages are milli-volts. Temperatures are deci-Celsius.
-enum {
-  BLE_BMS_EXTENDED_CELL_COUNT = 24,
-  BLE_BMS_EXTENDED_TEMP_COUNT = 8,
-  BLE_BMS_EXTENDED_INVALID_TEMP = -32768
-};
-
-typedef struct {
-  uint8_t version;       // Protocol version (2)
-  uint8_t bms_id;        // BMS identifier
-  uint32_t lastUpdateMs; // Source timestamp
-  uint16_t cell_mV[BLE_BMS_EXTENDED_CELL_COUNT];
-  int16_t temp_dC[BLE_BMS_EXTENDED_TEMP_COUNT];
-} BLE_BMS_Extended_V2;
-
-// Binary packed Controller telemetry for BLE transmission (~23 bytes)
-// Contains ESP32 sensor data and system status
-typedef struct {
-  uint8_t version;    // Protocol version (1)
-  float altitude;     // Barometric altitude (m)
-  float baro_temp;    // Barometric sensor temperature (°C)
-  float vario;        // Vertical speed (m/s)
-  float mcu_temp;     // Internal ESP32 temperature (°C)
-  uint16_t pot_raw;   // Raw potentiometer reading (0..4095)
-  uint32_t uptime_ms; // Time since boot (ms)
-} BLE_Controller_Telemetry_V1;
 
 // Fast-Link Unified Telemetry Struct (V2 - Exhaustive)
 // Designed for High-Bandwidth BLE 5.0 (2M PHY, DLE)
-// Total size: ~176 bytes (Well within 251-byte DLE and 517-byte MTU)
 typedef struct {
   uint8_t version;    // Protocol version (2)
   uint32_t packet_id; // Sequential packet ID for drop detection
   uint32_t uptime_ms; // Time since boot (ms)
 
   // Controller Data
-  float altitude;       // Barometric altitude (m)
-  float baro_temp;      // Barometric sensor temperature (°C)
-  float vario;          // Vertical speed (m/s)
-  float mcu_temp;       // ESP32 internal temperature (°C)
-  uint16_t pot_raw;     // Raw throttle potentiometer (0..4095)
-  uint8_t device_state; // 0=DISARMED, 1=ARMED, 2=ARMED_CRUISING
+  float altitude;        // Barometric altitude (m)
+  float baro_temp;       // Barometric sensor temperature (°C)
+  float baro_pressure;   // Barometric pressure (hPa)
+  float vario;           // Vertical speed (m/s)
+  float mcu_temp;        // ESP32 internal temperature (°C)
+  uint16_t pot_raw;      // Raw throttle potentiometer (0..4095)
+  uint8_t device_state;  // 0=DISARMED, 1=ARMED, 2=ARMED_CRUISING
 
   // ESC Data
-  uint8_t esc_status;     // TelemetryState enum
-  float esc_volts;        // ESC Voltage (V)
-  float esc_amps;         // ESC Current (A)
-  int32_t esc_rpm;        // Electrical RPM
-  float esc_temp_mos;     // MOSFET Temp (°C)
-  float esc_temp_cap;     // Capacitor Temp (°C)
-  float esc_temp_mcu;     // MCU Temp (°C)
-  float esc_temp_motor;   // Motor Temp (°C)
-  uint16_t esc_inPWM;     // Input PWM command
-  uint16_t esc_error;     // Runtime error bitmask
-  uint16_t esc_selfcheck; // Self-check error bitmask
+  uint8_t esc_status;         // TelemetryState enum
+  float esc_volts;            // ESC Voltage (V)
+  float esc_amps;             // DC bus current (A)
+  float esc_phase_current;    // AC phase current into motor windings (A)
+  int32_t esc_rpm;            // Electrical RPM
+  float esc_temp_mos;         // MOSFET Temp (°C)
+  float esc_temp_cap;         // Capacitor Temp (°C)
+  float esc_temp_mcu;         // MCU Temp (°C)
+  float esc_temp_motor;       // Motor Temp (°C)
+  uint16_t esc_inPWM;         // Input PWM command (recv_pwm, raw)
+  uint16_t esc_outPWM;        // Commutation PWM output (comm_pwm, raw)
+  uint16_t esc_v_modulation;  // Voltage modulation index (raw)
+  uint16_t esc_error;         // Runtime error bitmask
+  uint16_t esc_selfcheck;     // Self-check error bitmask
+  // ESC static hardware info
+  uint16_t esc_hardware_id;
+  uint16_t esc_fw_version;
+  uint16_t esc_bootloader_version;
+  uint8_t esc_sn_code[16];    // ESC serial number (16 bytes)
 
   // BMS Data
-  uint8_t bms_status;           // TelemetryState enum
-  float bms_soc;                // State of Charge (%)
-  float bms_volts;              // Total Battery Voltage (V)
-  float bms_amps;               // Battery Current (A)
-  float bms_power;              // Power (kW)
-  float bms_energy_cycle;       // Energy per cycle (kWh)
-  uint32_t bms_battery_cycle;   // Battery cycle count
-  uint8_t bms_fail_level;       // Battery failure status
-  uint8_t bms_is_charging;      // Charging state (0/1)
-  uint8_t bms_is_charge_mos;    // Charge MOSFET state (0/1)
-  uint8_t bms_is_discharge_mos; // Discharge MOSFET state (0/1)
-  float bms_highest_temp;       // Highest temperature (°C)
-  float bms_lowest_temp;        // Lowest temperature (°C)
-  float bms_cell_max;           // Highest cell voltage (V)
-  float bms_cell_min;           // Lowest cell voltage (V)
-  float bms_voltage_diff;       // Cell voltage differential (V)
+  uint8_t bms_status;              // TelemetryState enum
+  float bms_soc;                   // State of Charge (%)
+  float bms_volts;                 // Total Battery Voltage (V)
+  float bms_amps;                  // Battery Current (A)
+  float bms_power;                 // Power (kW)
+  float bms_energy_cycle_ah;       // Energy per cycle (Ah)
+  uint32_t bms_battery_cycle;      // Battery cycle count
+  uint8_t bms_fail_level;          // Battery failure status
+  uint8_t bms_is_charging;         // Charging state (0/1)
+  uint8_t bms_is_charge_mos;       // Charge MOSFET state (0/1)
+  uint8_t bms_is_discharge_mos;    // Discharge MOSFET state (0/1)
+  uint8_t bms_charge_wire;         // Charge wire physically connected (0/1)
+  uint8_t bms_low_soc_warning;     // Low SOC warning active (0/1)
+  uint8_t bms_battery_ready;       // Battery ready for use (0/1)
+  float bms_highest_temp;          // Highest temperature (°C)
+  float bms_lowest_temp;           // Lowest temperature (°C)
+  float bms_cell_max;              // Highest cell voltage (V)
+  float bms_cell_min;              // Lowest cell voltage (V)
+  float bms_voltage_diff;          // Cell voltage differential (V)
+  char bms_battery_id[33];         // Battery serial/ID string (null-terminated)
+  uint8_t bms_type;                // BMS type (0=unknown, 1=Type A LE, 2=Type B BE)
 
   // Extended BMS arrays
-  float bms_cell_voltages[BMS_CELLS_NUM]; // Array of 24 cell voltages
+  float bms_cell_voltages[BMS_CELLS_NUM]; // Array of 24 cell voltages (V)
 
   // Array of 8 temperatures (MOS, BAL, T1-T4, unused, unused)
   float bms_temp_sensors[8];

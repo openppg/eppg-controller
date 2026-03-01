@@ -32,6 +32,7 @@ struct TelemetryHub {
   // Controller sensor data (written periodically)
   float altitude;
   float baro_temp;
+  float baro_pressure;
   float vario;
   float mcu_temp;
   uint16_t pot_raw;
@@ -55,8 +56,9 @@ void telemetryHubWriteBms(const STR_BMS_TELEMETRY_140& data);
 
 // Write new controller sensor data. Increments ctrlSeq.
 void telemetryHubWriteController(float altitude, float baro_temp,
-                                  float vario, float mcu_temp,
-                                  uint16_t pot_raw, uint32_t uptime_ms);
+                                  float baro_pressure, float vario,
+                                  float mcu_temp, uint16_t pot_raw,
+                                  uint32_t uptime_ms);
 
 // --- Consumer helpers ---
 

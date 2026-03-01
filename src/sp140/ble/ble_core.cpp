@@ -9,10 +9,7 @@
 
 #include "sp140/ble.h"
 #include "sp140/ble/ble_ids.h"
-#include "sp140/ble/bms_service.h"
 #include "sp140/ble/config_service.h"
-#include "sp140/ble/controller_service.h"
-#include "sp140/ble/esc_service.h"
 #include "sp140/ble/fastlink_service.h"
 #include "sp140/ble/log_sync_service.h"
 #include "sp140/logging/telemetry_logger.h"
@@ -191,9 +188,6 @@ void setupBLE() {
       [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
 
   initConfigBleService(pServer, uniqueId);
-  initBmsBleService(pServer);
-  initEscBleService(pServer);
-  initControllerBleService(pServer);
   initFastLinkBleService(pServer);
   initLogSyncBleService(pServer);
 

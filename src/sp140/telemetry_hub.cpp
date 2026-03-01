@@ -27,12 +27,14 @@ void telemetryHubWriteBms(const STR_BMS_TELEMETRY_140& data) {
 }
 
 void telemetryHubWriteController(float altitude, float baro_temp,
-                                  float vario, float mcu_temp,
-                                  uint16_t pot_raw, uint32_t uptime_ms) {
+                                  float baro_pressure, float vario,
+                                  float mcu_temp, uint16_t pot_raw,
+                                  uint32_t uptime_ms) {
   if (gTelemetryHub.mutex == nullptr) return;
   if (xSemaphoreTake(gTelemetryHub.mutex, pdMS_TO_TICKS(2)) != pdTRUE) return;
   gTelemetryHub.altitude = altitude;
   gTelemetryHub.baro_temp = baro_temp;
+  gTelemetryHub.baro_pressure = baro_pressure;
   gTelemetryHub.vario = vario;
   gTelemetryHub.mcu_temp = mcu_temp;
   gTelemetryHub.pot_raw = pot_raw;

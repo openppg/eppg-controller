@@ -104,8 +104,11 @@ void readESCTelemetry() {
         // Store invalid motor temp as NaN. Downstream consumers can skip on isnan().
         escTelemetryData.motor_temp = NAN;
       }
+      escTelemetryData.phase_current = res->current / 10.0f;
       escTelemetryData.eRPM = res->speed;
       escTelemetryData.inPWM = res->recv_pwm / 10.0f;
+      escTelemetryData.comm_pwm = res->comm_pwm;
+      escTelemetryData.v_modulation = res->v_modulation;
       watts = escTelemetryData.amps * escTelemetryData.volts;
 
       // Store error bitmasks
@@ -136,6 +139,15 @@ void readESCTelemetry() {
       USBSerial.printf("ESC State: %d -> CONNECTED\n", escTelemetryData.escState);
       escTelemetryData.escState = TelemetryState::CONNECTED;
     }
+  }
+
+  // Populate static hardware info whenever available (comes in once after boot)
+  if (model.hasGetHardwareInfoResponse) {
+    const sine_esc_GetHwInfoResponse *hw = &model.getHardwareInfoResponse;
+    escTelemetryData.hardware_id = hw->hardware_id;
+    escTelemetryData.fw_version = hw->app_version;
+    escTelemetryData.bootloader_version = hw->bootloader_version;
+    memcpy(escTelemetryData.sn_code, hw->sn_code, sizeof(escTelemetryData.sn_code));
   }
 
   adapter.processTxRxOnce();  // Process CAN messages

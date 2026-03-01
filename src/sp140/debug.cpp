@@ -62,7 +62,7 @@ void generateFakeTelemetry(STR_ESC_TELEMETRY_140& escTelemetry,
     bmsTelemetry.lowest_cell_voltage = escTelemetry.volts / 24.0 - 0.1;
     bmsTelemetry.highest_temperature = escTelemetry.mos_temp;
     bmsTelemetry.lowest_temperature = escTelemetry.mcu_temp;
-    bmsTelemetry.energy_cycle = 3.5;
+    bmsTelemetry.energy_cycle_ah = 3.5;
     bmsTelemetry.battery_cycle = 42;
     bmsTelemetry.battery_fail_level = 0;
     bmsTelemetry.voltage_differential = 0.2;

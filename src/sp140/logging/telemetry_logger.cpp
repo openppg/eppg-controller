@@ -16,6 +16,7 @@
 namespace telemetry_log {
 namespace {
 
+constexpr int16_t kInvalidTempDC = -32768; // Sentinel: invalid/NaN temperature (INT16_MIN)
 constexpr uint32_t kHeaderMagic = 0x52474F4Cu; // "LOGR"
 constexpr uint32_t kMetaMagic = 0x4D455441u;   // "ATEM"
 constexpr uint16_t kRecordVersion = 1;
@@ -1001,7 +1002,7 @@ void emitBlackboxSnapshot() {
         clampI16(static_cast<int32_t>(lroundf(gLastEsc.cap_temp * 10.0f)),
                  -32768, 32767);
     if (std::isnan(gLastEsc.motor_temp)) {
-      payload.esc_motor_temp_dC = BLE_BMS_EXTENDED_INVALID_TEMP;
+      payload.esc_motor_temp_dC = kInvalidTempDC;
     } else {
       payload.esc_motor_temp_dC =
           clampI16(static_cast<int32_t>(lroundf(gLastEsc.motor_temp * 10.0f)),
@@ -1026,7 +1027,7 @@ void emitBlackboxSnapshot() {
   }
 
   for (size_t i = 0; i < 8u; ++i)
-    payload.temp_dC[i] = BLE_BMS_EXTENDED_INVALID_TEMP;
+    payload.temp_dC[i] = kInvalidTempDC;
   if (gHaveBms) {
     payload.temp_dC[0] = clampI16(
         static_cast<int32_t>(lroundf(gLastBms.mos_temperature * 10.0f)), -32768,
@@ -1217,7 +1218,7 @@ void logEscFast(const STR_ESC_TELEMETRY_140 &telemetry) {
         clampI16(static_cast<int32_t>(lroundf(telemetry.mcu_temp * 10.0f)),
                  -32768, 32767);
     if (std::isnan(telemetry.motor_temp)) {
-      payload.motor_temp_dC = BLE_BMS_EXTENDED_INVALID_TEMP;
+      payload.motor_temp_dC = kInvalidTempDC;
     } else {
       payload.motor_temp_dC =
           clampI16(static_cast<int32_t>(lroundf(telemetry.motor_temp * 10.0f)),

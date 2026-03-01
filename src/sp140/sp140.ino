@@ -20,13 +20,9 @@
 #include "../../inc/sp140/altimeter.h"
 #include "../../inc/sp140/ble.h"
 #include "../../inc/sp140/ble/ble_core.h"
-#include "../../inc/sp140/ble/bms_service.h"
 #include "../../inc/sp140/ble/config_service.h"
-#include "../../inc/sp140/ble/controller_service.h"
-#include "../../inc/sp140/ble/esc_service.h"
 #include "../../inc/sp140/ble/fastlink_service.h"
 #include "../../inc/sp140/bms.h"
-#include "../../inc/sp140/debug.h"
 #include "../../inc/sp140/esc.h"
 #include "../../inc/sp140/globals.h" // device config
 #include "../../inc/sp140/logging/telemetry_logger.h"
@@ -150,55 +146,6 @@ extern TaskHandle_t bleStateUpdateTaskHandle;
 extern TaskHandle_t deviceStateUpdateTaskHandle;
 extern TaskHandle_t buttonTaskHandle;
 extern TaskHandle_t vibeTaskHandle;
-
-static TaskHandle_t stackLoggerTaskHandle = NULL;
-static const uint32_t STACK_LOGGER_INTERVAL_MS = 5000; // Log every 5 seconds
-
-static void stackWatermarkLoggerTask(void *parameter) {
-  // Give the system a moment to spin up all tasks
-  vTaskDelay(pdMS_TO_TICKS(5000));
-
-  for (;;) {
-    USBSerial.println(
-        "[StackLogger] Task stack high-water marks (words / bytes):");
-
-    struct TaskEntry {
-      const char *label;
-      TaskHandle_t *handlePtr;
-    };
-    TaskEntry taskEntries[] = {
-        {"blinkLed", &blinkLEDTaskHandle},
-        {"throttle", &throttleTaskHandle},
-        {"watchdog", &watchdogTaskHandle},
-        {"UI", &uiTaskHandle},
-        {"BMS", &bmsTaskHandle},
-        {"Monitoring", &monitoringTaskHandle},
-        {"Audio", &audioTaskHandle},
-        {"WebSerial", &webSerialTaskHandle},
-        {"BLEStateUpdate", &bleStateUpdateTaskHandle},
-        {"StateUpdate", &deviceStateUpdateTaskHandle},
-        {"ButtonHandler", &buttonTaskHandle},
-        {"Vibration", &vibeTaskHandle},
-    };
-
-    for (const auto &entry : taskEntries) {
-      TaskHandle_t handle = entry.handlePtr ? *entry.handlePtr : NULL;
-      if (handle != NULL) {
-        UBaseType_t words = uxTaskGetStackHighWaterMark(handle);
-        const char *rtosName = pcTaskGetName(handle);
-        unsigned int bytes = (unsigned int)(words * sizeof(StackType_t));
-        USBSerial.printf("  %-14s [RTOS:%s] HWM: %u words (%u bytes)\n",
-                         entry.label, (rtosName ? rtosName : "?"),
-                         (unsigned int)words, bytes);
-      } else {
-        USBSerial.printf("  %-14s handle NULL\n", entry.label);
-      }
-    }
-
-    USBSerial.flush();
-    vTaskDelay(pdMS_TO_TICKS(STACK_LOGGER_INTERVAL_MS));
-  }
-}
 
 // Forward declarations for tasks defined in other compilation units
 extern void vibeTask(void *parameter);
@@ -402,8 +349,8 @@ void dataLoggerTask(void *pvParameters) {
     const unsigned long now = millis();
     if ((now - lastCtrlSampleMs) >= 1000u) {
       telemetryHubWriteController(getAltitude(deviceData), getBaroTemperature(),
-                                  getVerticalSpeed(), temperatureRead(),
-                                  getLastThrottleRaw(), now);
+                                  getBaroPressure(), getVerticalSpeed(),
+                                  temperatureRead(), getLastThrottleRaw(), now);
       lastCtrlSampleMs = now;
     }
 
@@ -434,68 +381,12 @@ void bleNotifyTask(void *pvParameters) {
   (void)pvParameters;
 
   TickType_t lastWake = xTaskGetTickCount();
-  const TickType_t notifyTicks =
-      pdMS_TO_TICKS(20); // 50 Hz feed for ESC batcher
-  uint32_t lastEscSeq = 0u;
-  uint32_t lastBmsSeq = 0u;
-  uint32_t lastCtrlSeq = 0u;
-  unsigned long lastCtrlNotifyMs = 0u;
-  unsigned long lastRssiSampleMs = 0u;
-  uint8_t linkDegradeLevel = 0u; // 0=full,1=warning,2=critical
-  uint8_t escWarningDivider = 0u;
-  uint8_t escCriticalDivider = 0u;
+  const TickType_t notifyTicks = pdMS_TO_TICKS(20); // 50 Hz
 
   for (;;) {
     const unsigned long now = millis();
-    if (deviceConnected && connectedHandle != BLE_HS_CONN_HANDLE_NONE &&
-        (now - lastRssiSampleMs) >= 1000u) {
-      int8_t rssi = -127;
-      if (ble_gap_conn_rssi(connectedHandle, &rssi) == 0) {
-        if (rssi < -85) {
-          linkDegradeLevel = 2u;
-        } else if (rssi < -75) {
-          linkDegradeLevel = 1u;
-        } else {
-          linkDegradeLevel = 0u;
-        }
-      }
-      lastRssiSampleMs = now;
-    }
-
     TelemetryHub hub = {};
     if (telemetryHubRead(&hub, pdMS_TO_TICKS(2))) {
-      if (hub.escSeq != lastEscSeq) {
-        lastEscSeq = hub.escSeq;
-        bool sendEscFrame = true;
-        if (linkDegradeLevel == 1u) {
-          escWarningDivider = (escWarningDivider + 1u) % 2u; // ~25 Hz feed
-          sendEscFrame = (escWarningDivider == 0u);
-        } else if (linkDegradeLevel == 2u) {
-          escCriticalDivider = (escCriticalDivider + 1u) % 5u; // ~10 Hz feed
-          sendEscFrame = (escCriticalDivider == 0u);
-        }
-        if (sendEscFrame) {
-          updateESCPackedTelemetry(hub.esc);
-        }
-      }
-
-      if (hub.bmsSeq != lastBmsSeq) {
-        lastBmsSeq = hub.bmsSeq;
-        updateBMSPackedTelemetry(hub.bms, 0);
-        if (linkDegradeLevel == 0u) {
-          updateBMSExtendedTelemetry(hub.bms, 0);
-        }
-      }
-
-      if (hub.ctrlSeq != lastCtrlSeq && (now - lastCtrlNotifyMs) >= 1000u) {
-        lastCtrlSeq = hub.ctrlSeq;
-        if (linkDegradeLevel < 2u) {
-          updateControllerPackedTelemetry(hub.altitude, hub.baro_temp,
-                                          hub.vario, hub.mcu_temp);
-        }
-        lastCtrlNotifyMs = now;
-      }
-
       // Unified Fast-Link Telemetry (The exhaustive high-speed pipeline)
       static uint32_t fastLinkPacketId = 0;
       BLE_FastLink_Telemetry fastLink = {};
@@ -506,6 +397,7 @@ void bleNotifyTask(void *pvParameters) {
       // Controller mapping
       fastLink.altitude = hub.altitude;
       fastLink.baro_temp = hub.baro_temp;
+      fastLink.baro_pressure = hub.baro_pressure;
       fastLink.vario = hub.vario;
       fastLink.mcu_temp = hub.mcu_temp;
       fastLink.pot_raw = hub.pot_raw;
@@ -515,14 +407,21 @@ void bleNotifyTask(void *pvParameters) {
       fastLink.esc_status = (uint8_t)hub.esc.escState;
       fastLink.esc_volts = hub.esc.volts;
       fastLink.esc_amps = hub.esc.amps;
+      fastLink.esc_phase_current = hub.esc.phase_current;
       fastLink.esc_rpm = hub.esc.eRPM;
       fastLink.esc_temp_mos = hub.esc.mos_temp;
       fastLink.esc_temp_cap = hub.esc.cap_temp;
       fastLink.esc_temp_mcu = hub.esc.mcu_temp;
       fastLink.esc_temp_motor = hub.esc.motor_temp;
       fastLink.esc_inPWM = hub.esc.inPWM;
+      fastLink.esc_outPWM = hub.esc.comm_pwm;
+      fastLink.esc_v_modulation = hub.esc.v_modulation;
       fastLink.esc_error = hub.esc.running_error;
       fastLink.esc_selfcheck = hub.esc.selfcheck_error;
+      fastLink.esc_hardware_id = hub.esc.hardware_id;
+      fastLink.esc_fw_version = hub.esc.fw_version;
+      fastLink.esc_bootloader_version = hub.esc.bootloader_version;
+      memcpy(fastLink.esc_sn_code, hub.esc.sn_code, sizeof(fastLink.esc_sn_code));
 
       // BMS mapping
       fastLink.bms_status = (uint8_t)hub.bms.bmsState;
@@ -530,17 +429,22 @@ void bleNotifyTask(void *pvParameters) {
       fastLink.bms_volts = hub.bms.battery_voltage;
       fastLink.bms_amps = hub.bms.battery_current;
       fastLink.bms_power = hub.bms.power;
-      fastLink.bms_energy_cycle = hub.bms.energy_cycle;
+      fastLink.bms_energy_cycle_ah = hub.bms.energy_cycle_ah;
       fastLink.bms_battery_cycle = hub.bms.battery_cycle;
       fastLink.bms_fail_level = hub.bms.battery_fail_level;
       fastLink.bms_is_charging = hub.bms.is_charging ? 1 : 0;
       fastLink.bms_is_charge_mos = hub.bms.is_charge_mos ? 1 : 0;
       fastLink.bms_is_discharge_mos = hub.bms.is_discharge_mos ? 1 : 0;
+      fastLink.bms_charge_wire = hub.bms.charge_wire_connected ? 1 : 0;
+      fastLink.bms_low_soc_warning = hub.bms.low_soc_warning ? 1 : 0;
+      fastLink.bms_battery_ready = hub.bms.battery_ready ? 1 : 0;
       fastLink.bms_highest_temp = hub.bms.highest_temperature;
       fastLink.bms_lowest_temp = hub.bms.lowest_temperature;
       fastLink.bms_cell_max = hub.bms.highest_cell_voltage;
       fastLink.bms_cell_min = hub.bms.lowest_cell_voltage;
       fastLink.bms_voltage_diff = hub.bms.voltage_differential;
+      memcpy(fastLink.bms_battery_id, hub.bms.battery_id, sizeof(fastLink.bms_battery_id));
+      fastLink.bms_type = hub.bms.bms_type;
 
       // Extended BMS mapped into FastLink
       for (int i = 0; i < BMS_CELLS_NUM; i++) {
@@ -672,13 +576,6 @@ void bmsTask(void *pvParameters) {
   TickType_t lastWake = xTaskGetTickCount();
   const TickType_t bmsTicks = pdMS_TO_TICKS(100); // 10 Hz
   for (;;) {
-#ifdef SCREEN_DEBUG
-    float altitude = 0;
-    generateFakeTelemetry(escTelemetryData, bmsTelemetryData,
-                          unifiedBatteryData, altitude);
-    telemetryHubWriteBms(bmsTelemetryData);
-    telemetryHubWriteEsc(escTelemetryData);
-#else
     if (bmsCanInitialized) {
       updateBMSData();
       if (bms_can->isConnected()) {
@@ -708,7 +605,6 @@ void bmsTask(void *pvParameters) {
       unifiedBatteryData.soc = 0.0;
       unifiedBatteryData.power = 0.0;
     }
-#endif
 
     lastBmsRunMs = millis();
     vTaskDelayUntil(&lastWake, bmsTicks);
@@ -802,10 +698,7 @@ void setup() {
   // Initialise alert display aggregation & UI
   initAlertDisplay();
 
-#ifndef SCREEN_DEBUG
-  // Pass the hardware SPI instance to the BMS_CAN initialization
   initBMSCAN(hardwareSPI);
-#endif
 
   initESC();
   eepromSemaphore = xSemaphoreCreateBinary();
@@ -932,11 +825,6 @@ void setupTasks() {
   xTaskCreatePinnedToCore(vibeTask, "Vibration", 1536, NULL, 2, &vibeTaskHandle,
                           1);
 
-#ifdef OPENPPG_DEBUG
-  // Create periodic stack watermark logger (low priority)
-  xTaskCreatePinnedToCore(stackWatermarkLoggerTask, "StackLogger", 3072, NULL,
-                          1, &stackLoggerTaskHandle, 1);
-#endif
 }
 
 void setup140() {
