@@ -2,3 +2,6 @@
 .vscode/*
 eppg-controller.ino.cpp
 src/sp140/sp140.ino.cpp
+
+# Claude Code local settings (machine-specific)
+.claude/settings.local.json

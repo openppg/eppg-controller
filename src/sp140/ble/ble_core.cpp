@@ -25,7 +25,17 @@ namespace {
 constexpr uint8_t kExtAdvInstance = 0;
 constexpr const char *kAdvertisingName = "OpenPPG";
 constexpr TickType_t kConnTuneDelayTicks = pdMS_TO_TICKS(180);
+constexpr TickType_t kPairingTimeoutTicks = pdMS_TO_TICKS(60000);
 TimerHandle_t gConnTuneTimer = nullptr;
+TimerHandle_t gPairingTimer = nullptr;
+bool pairingModeActive = false;
+
+void onPairingTimeout(TimerHandle_t timer) {
+  (void)timer;
+  pairingModeActive = false;
+  USBSerial.println("[BLE] Pairing mode expired, re-enabling whitelist");
+  restartBLEAdvertising();
+}
 
 void applyPreferredLinkParams(TimerHandle_t timer) {
   (void)timer;
@@ -64,14 +74,16 @@ void startAdvertising(NimBLEServer *server) {
   adv.setMinInterval(32); // 20ms (32 * 0.625ms)
   adv.setMaxInterval(48); // 30ms (48 * 0.625ms)
 
-  // Whitelisting: If we have bonds, only allow those devices to scan/connect.
+  // Whitelisting: If we have bonds and pairing mode is not active,
+  // only allow bonded devices to connect.
   size_t bondCount = NimBLEDevice::getNumBonds();
-  if (bondCount > 0) {
+  if (bondCount > 0 && !pairingModeActive) {
     for (size_t i = 0; i < bondCount; ++i) {
       NimBLEDevice::whiteListAdd(NimBLEDevice::getBondedAddress(i));
     }
+    adv.setScanFilter(false, true); // Only whitelisted devices can connect
   } else {
-    // Ensure filter policy is completely open when no bonds exist
+    // Open advertising: no bonds yet, or pairing mode is active
     adv.setScanFilter(false, false);
     size_t wlCount = NimBLEDevice::getWhiteListCount();
     for (size_t i = 0; i < wlCount; i++) {
@@ -98,9 +110,23 @@ void startAdvertising(NimBLEServer *server) {
   advertising->setConnectableMode(BLE_GAP_CONN_MODE_UND);
   advertising->addServiceUUID(NimBLEUUID(CONFIG_SERVICE_UUID));
   advertising->enableScanResponse(true);
+
+  // High-frequency advertising for "instant" connection
+  advertising->setMinInterval(32); // 20ms (32 * 0.625ms)
+  advertising->setMaxInterval(48); // 30ms (48 * 0.625ms)
+
+  // Whitelisting for bonded devices (unless pairing mode is active)
+  size_t bondCount = NimBLEDevice::getNumBonds();
+  if (bondCount > 0 && !pairingModeActive) {
+    for (size_t i = 0; i < bondCount; ++i) {
+      NimBLEDevice::whiteListAdd(NimBLEDevice::getBondedAddress(i));
+    }
+    advertising->setScanFilter(false, true);
+  }
+
   const bool started = advertising->start();
-  USBSerial.printf("[BLE] Legacy advertising start=%s\n",
-                   started ? "OK" : "FAIL");
+  USBSerial.printf("[BLE] Legacy adv start=%s (bonds: %u)\n",
+                   started ? "OK" : "FAIL", bondCount);
 #endif
 }
 
@@ -183,4 +209,22 @@ void restartBLEAdvertising() {
   }
 
   startAdvertising(pServer);
+}
+
+void enterBLEPairingMode() {
+  pairingModeActive = true;
+
+  if (gPairingTimer == nullptr) {
+    gPairingTimer =
+        xTimerCreate("blePair", kPairingTimeoutTicks, pdFALSE, nullptr,
+                     onPairingTimeout);
+  }
+
+  if (gPairingTimer != nullptr) {
+    xTimerStop(gPairingTimer, 0);
+    xTimerStart(gPairingTimer, 0);
+  }
+
+  USBSerial.println("[BLE] Pairing mode active for 60s");
+  restartBLEAdvertising();
 }

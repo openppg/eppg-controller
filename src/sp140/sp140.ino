@@ -971,6 +971,7 @@ void buttonHandlerTask(void *parameter) {
   bool lastButtonState = HIGH;
   bool buttonState;
   bool unbondHoldHandled = false;
+  bool pairingHoldHandled = false;
 
   while (true) {
     buttonState = digitalRead(board_config.button_top);
@@ -984,6 +985,7 @@ void buttonHandlerTask(void *parameter) {
         if (buttonState == LOW) { // Button pressed
           buttonPressed = true;
           unbondHoldHandled = false;
+          pairingHoldHandled = false;
           buttonPressStartTime = currentTime;
           USBSerial.println("Button pressed");
           USBSerial.print("Arm sequence state: ");
@@ -1000,7 +1002,8 @@ void buttonHandlerTask(void *parameter) {
           // Disarmed long hold toggles performance mode on release.
           if (currentState == DISARMED &&
               holdDuration >= PERFORMANCE_MODE_HOLD_MS &&
-              holdDuration < 10000 && !unbondHoldHandled) {
+              holdDuration < 10000 && !unbondHoldHandled &&
+              !pairingHoldHandled) {
             perfModeSwitch();
             lastButtonState = buttonState;
             continue;
@@ -1046,9 +1049,12 @@ void buttonHandlerTask(void *parameter) {
       else if (buttonPressed) {
         uint32_t currentHoldTime = currentTime - buttonPressStartTime;
 
-        // Long hold while disarmed wipes all BLE bonds.
-        if (currentState == DISARMED && currentHoldTime >= 10000 &&
+        // Tiered long hold while disarmed:
+        //   10s = enter BLE pairing mode (single vibration)
+        //   20s = delete all bonds (double vibration + reboot)
+        if (currentState == DISARMED && currentHoldTime >= 20000 &&
             !unbondHoldHandled) {
+          // Tier 2: Delete all bonds
           const bool deleted = NimBLEDevice::deleteAllBonds();
           USBSerial.printf("[BLE] Delete all bonds: %s\n",
                            deleted ? "OK" : "FAILED");
@@ -1058,10 +1064,9 @@ void buttonHandlerTask(void *parameter) {
             vTaskDelay(pdMS_TO_TICKS(40));
           }
           pulseVibeMotor();
-          // The BLE radio can get stuck when tearing down an active Extended
-          // Advertising whitelist. Rebooting the ESP guarantees the stack
-          // initializes completely pristine and open.
-          USBSerial.println("[BLE] Bonds cleared. Revolting system to apply "
+          vTaskDelay(pdMS_TO_TICKS(300));
+          pulseVibeMotor();
+          USBSerial.println("[BLE] Bonds cleared. Rebooting to apply "
                             "open advertising...");
           vTaskDelay(pdMS_TO_TICKS(500));
           ESP.restart();
@@ -1069,6 +1074,15 @@ void buttonHandlerTask(void *parameter) {
           buttonPressed = false;
           buttonPressStartTime = currentTime;
           continue;
+        }
+
+        if (currentState == DISARMED && currentHoldTime >= 10000 &&
+            !pairingHoldHandled) {
+          // Tier 1: Enter pairing mode (open advertising for 60s)
+          enterBLEPairingMode();
+          pulseVibeMotor();
+          USBSerial.println("[BLE] Pairing mode activated via button hold");
+          pairingHoldHandled = true;
         }
 
         // Handle cruise control (when armed or cruising and held long enough)
