@@ -15,6 +15,9 @@ static CanardAdapter adapter;
 static uint8_t memory_pool[1024] __attribute__((aligned(8)));
 static SineEsc esc(adapter);
 static unsigned long lastSuccessfulCommTimeMs = 0;  // Store millis() time of last successful ESC comm
+// Flag set by requestEscHardwareInfo() (may be called from BLE task),
+// consumed safely inside readESCTelemetry() on the throttle task.
+static volatile bool s_hwInfoRequested = false;
 
 
 STR_ESC_TELEMETRY_140 escTelemetryData = {
@@ -138,7 +141,19 @@ void readESCTelemetry() {
       // Log state change only if it actually changed
       USBSerial.printf("ESC State: %d -> CONNECTED\n", escTelemetryData.escState);
       escTelemetryData.escState = TelemetryState::CONNECTED;
+      // Auto-request hardware info on first connection if not already populated
+      if (escTelemetryData.hardware_id == 0) {
+        USBSerial.println("ESC: Auto-requesting hardware info");
+        esc.getHardwareInfo();
+      }
     }
+  }
+
+  // Process any pending hardware info request (set from BLE command or retry)
+  if (s_hwInfoRequested) {
+    s_hwInfoRequested = false;
+    USBSerial.println("ESC: Sending GetHwInfo (app-requested)");
+    esc.getHardwareInfo();
   }
 
   // Populate static hardware info whenever available (comes in once after boot)
@@ -151,6 +166,16 @@ void readESCTelemetry() {
   }
 
   adapter.processTxRxOnce();  // Process CAN messages
+}
+
+/**
+ * Request ESC hardware info (HW ID, FW version, bootloader version, serial number).
+ * Thread-safe: sets a flag that is consumed by readESCTelemetry() on its next
+ * tick, keeping all CAN traffic on the throttle task.
+ * Called by the BLE command characteristic handler (0x01 from the app).
+ */
+void requestEscHardwareInfo() {
+  s_hwInfoRequested = true;
 }
 
 /**
