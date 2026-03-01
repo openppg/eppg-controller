@@ -24,6 +24,7 @@
 #include "../../inc/sp140/ble/config_service.h"
 #include "../../inc/sp140/ble/controller_service.h"
 #include "../../inc/sp140/ble/esc_service.h"
+#include "../../inc/sp140/ble/fastlink_service.h"
 #include "../../inc/sp140/bms.h"
 #include "../../inc/sp140/debug.h"
 #include "../../inc/sp140/esc.h"
@@ -419,9 +420,8 @@ void dataLoggerTask(void *pvParameters) {
       }
       if (hub.ctrlSeq != lastCtrlSeq) {
         lastCtrlSeq = hub.ctrlSeq;
-        telemetry_log::logController(
-            hub.altitude, hub.baro_temp, hub.vario, hub.mcu_temp, hub.pot_raw,
-            hub.uptime_ms);
+        telemetry_log::logController(hub.altitude, hub.baro_temp, hub.vario,
+                                     hub.mcu_temp, hub.pot_raw, hub.uptime_ms);
       }
     }
 
@@ -434,7 +434,8 @@ void bleNotifyTask(void *pvParameters) {
   (void)pvParameters;
 
   TickType_t lastWake = xTaskGetTickCount();
-  const TickType_t notifyTicks = pdMS_TO_TICKS(20); // 50 Hz feed for ESC batcher
+  const TickType_t notifyTicks =
+      pdMS_TO_TICKS(20); // 50 Hz feed for ESC batcher
   uint32_t lastEscSeq = 0u;
   uint32_t lastBmsSeq = 0u;
   uint32_t lastCtrlSeq = 0u;
@@ -489,11 +490,74 @@ void bleNotifyTask(void *pvParameters) {
       if (hub.ctrlSeq != lastCtrlSeq && (now - lastCtrlNotifyMs) >= 1000u) {
         lastCtrlSeq = hub.ctrlSeq;
         if (linkDegradeLevel < 2u) {
-          updateControllerPackedTelemetry(hub.altitude, hub.baro_temp, hub.vario,
-                                          hub.mcu_temp);
+          updateControllerPackedTelemetry(hub.altitude, hub.baro_temp,
+                                          hub.vario, hub.mcu_temp);
         }
         lastCtrlNotifyMs = now;
       }
+
+      // Unified Fast-Link Telemetry (The exhaustive high-speed pipeline)
+      static uint32_t fastLinkPacketId = 0;
+      BLE_FastLink_Telemetry fastLink = {};
+      fastLink.version = 2; // V2 Exhaustive
+      fastLink.packet_id = fastLinkPacketId++;
+      fastLink.uptime_ms = now;
+
+      // Controller mapping
+      fastLink.altitude = hub.altitude;
+      fastLink.baro_temp = hub.baro_temp;
+      fastLink.vario = hub.vario;
+      fastLink.mcu_temp = hub.mcu_temp;
+      fastLink.pot_raw = hub.pot_raw;
+      fastLink.device_state = (uint8_t)currentState;
+
+      // ESC mapping
+      fastLink.esc_status = (uint8_t)hub.esc.escState;
+      fastLink.esc_volts = hub.esc.volts;
+      fastLink.esc_amps = hub.esc.amps;
+      fastLink.esc_rpm = hub.esc.eRPM;
+      fastLink.esc_temp_mos = hub.esc.mos_temp;
+      fastLink.esc_temp_cap = hub.esc.cap_temp;
+      fastLink.esc_temp_mcu = hub.esc.mcu_temp;
+      fastLink.esc_temp_motor = hub.esc.motor_temp;
+      fastLink.esc_inPWM = hub.esc.inPWM;
+      fastLink.esc_error = hub.esc.running_error;
+      fastLink.esc_selfcheck = hub.esc.selfcheck_error;
+
+      // BMS mapping
+      fastLink.bms_status = (uint8_t)hub.bms.bmsState;
+      fastLink.bms_soc = hub.bms.soc;
+      fastLink.bms_volts = hub.bms.battery_voltage;
+      fastLink.bms_amps = hub.bms.battery_current;
+      fastLink.bms_power = hub.bms.power;
+      fastLink.bms_energy_cycle = hub.bms.energy_cycle;
+      fastLink.bms_battery_cycle = hub.bms.battery_cycle;
+      fastLink.bms_fail_level = hub.bms.battery_fail_level;
+      fastLink.bms_is_charging = hub.bms.is_charging ? 1 : 0;
+      fastLink.bms_is_charge_mos = hub.bms.is_charge_mos ? 1 : 0;
+      fastLink.bms_is_discharge_mos = hub.bms.is_discharge_mos ? 1 : 0;
+      fastLink.bms_highest_temp = hub.bms.highest_temperature;
+      fastLink.bms_lowest_temp = hub.bms.lowest_temperature;
+      fastLink.bms_cell_max = hub.bms.highest_cell_voltage;
+      fastLink.bms_cell_min = hub.bms.lowest_cell_voltage;
+      fastLink.bms_voltage_diff = hub.bms.voltage_differential;
+
+      // Extended BMS mapped into FastLink
+      for (int i = 0; i < BMS_CELLS_NUM; i++) {
+        fastLink.bms_cell_voltages[i] = hub.bms.cell_voltages[i];
+      }
+
+      // Pack the 8 temperatures into the sensor array
+      fastLink.bms_temp_sensors[0] = hub.bms.mos_temperature;
+      fastLink.bms_temp_sensors[1] = hub.bms.balance_temperature;
+      fastLink.bms_temp_sensors[2] = hub.bms.t1_temperature;
+      fastLink.bms_temp_sensors[3] = hub.bms.t2_temperature;
+      fastLink.bms_temp_sensors[4] = hub.bms.t3_temperature;
+      fastLink.bms_temp_sensors[5] = hub.bms.t4_temperature;
+      fastLink.bms_temp_sensors[6] = 0.0f; // Unused
+      fastLink.bms_temp_sensors[7] = 0.0f; // Unused
+
+      updateFastLinkTelemetry(fastLink);
     }
 
     vTaskDelayUntil(&lastWake, notifyTicks);
@@ -935,8 +999,8 @@ void buttonHandlerTask(void *parameter) {
 
           // Disarmed long hold toggles performance mode on release.
           if (currentState == DISARMED &&
-              holdDuration >= PERFORMANCE_MODE_HOLD_MS && holdDuration < 10000 &&
-              !unbondHoldHandled) {
+              holdDuration >= PERFORMANCE_MODE_HOLD_MS &&
+              holdDuration < 10000 && !unbondHoldHandled) {
             perfModeSwitch();
             lastButtonState = buttonState;
             continue;
@@ -993,9 +1057,14 @@ void buttonHandlerTask(void *parameter) {
             pServer->disconnect(connectedHandle);
             vTaskDelay(pdMS_TO_TICKS(40));
           }
-          restartBLEAdvertising();
-          USBSerial.println("[BLE] Advertising restarted after bond reset");
           pulseVibeMotor();
+          // The BLE radio can get stuck when tearing down an active Extended
+          // Advertising whitelist. Rebooting the ESP guarantees the stack
+          // initializes completely pristine and open.
+          USBSerial.println("[BLE] Bonds cleared. Revolting system to apply "
+                            "open advertising...");
+          vTaskDelay(pdMS_TO_TICKS(500));
+          ESP.restart();
           unbondHoldHandled = true;
           buttonPressed = false;
           buttonPressStartTime = currentTime;
@@ -1004,7 +1073,7 @@ void buttonHandlerTask(void *parameter) {
 
         // Handle cruise control (when armed or cruising and held long enough)
         if ((currentState == ARMED || currentState == ARMED_CRUISING) &&
-                 currentHoldTime >= CRUISE_HOLD_TIME_MS) {
+            currentHoldTime >= CRUISE_HOLD_TIME_MS) {
           USBSerial.println("Cruise control button activated");
           toggleCruise();
           buttonPressed = false;

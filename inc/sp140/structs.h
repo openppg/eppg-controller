@@ -192,6 +192,60 @@ typedef struct {
   uint32_t uptime_ms; // Time since boot (ms)
 } BLE_Controller_Telemetry_V1;
 
+// Fast-Link Unified Telemetry Struct (V2 - Exhaustive)
+// Designed for High-Bandwidth BLE 5.0 (2M PHY, DLE)
+// Total size: ~176 bytes (Well within 251-byte DLE and 517-byte MTU)
+typedef struct {
+  uint8_t version;    // Protocol version (2)
+  uint32_t packet_id; // Sequential packet ID for drop detection
+  uint32_t uptime_ms; // Time since boot (ms)
+
+  // Controller Data
+  float altitude;       // Barometric altitude (m)
+  float baro_temp;      // Barometric sensor temperature (°C)
+  float vario;          // Vertical speed (m/s)
+  float mcu_temp;       // ESP32 internal temperature (°C)
+  uint16_t pot_raw;     // Raw throttle potentiometer (0..4095)
+  uint8_t device_state; // 0=DISARMED, 1=ARMED, 2=ARMED_CRUISING
+
+  // ESC Data
+  uint8_t esc_status;     // TelemetryState enum
+  float esc_volts;        // ESC Voltage (V)
+  float esc_amps;         // ESC Current (A)
+  int32_t esc_rpm;        // Electrical RPM
+  float esc_temp_mos;     // MOSFET Temp (°C)
+  float esc_temp_cap;     // Capacitor Temp (°C)
+  float esc_temp_mcu;     // MCU Temp (°C)
+  float esc_temp_motor;   // Motor Temp (°C)
+  uint16_t esc_inPWM;     // Input PWM command
+  uint16_t esc_error;     // Runtime error bitmask
+  uint16_t esc_selfcheck; // Self-check error bitmask
+
+  // BMS Data
+  uint8_t bms_status;           // TelemetryState enum
+  float bms_soc;                // State of Charge (%)
+  float bms_volts;              // Total Battery Voltage (V)
+  float bms_amps;               // Battery Current (A)
+  float bms_power;              // Power (kW)
+  float bms_energy_cycle;       // Energy per cycle (kWh)
+  uint32_t bms_battery_cycle;   // Battery cycle count
+  uint8_t bms_fail_level;       // Battery failure status
+  uint8_t bms_is_charging;      // Charging state (0/1)
+  uint8_t bms_is_charge_mos;    // Charge MOSFET state (0/1)
+  uint8_t bms_is_discharge_mos; // Discharge MOSFET state (0/1)
+  float bms_highest_temp;       // Highest temperature (°C)
+  float bms_lowest_temp;        // Lowest temperature (°C)
+  float bms_cell_max;           // Highest cell voltage (V)
+  float bms_cell_min;           // Lowest cell voltage (V)
+  float bms_voltage_diff;       // Cell voltage differential (V)
+
+  // Extended BMS arrays
+  float bms_cell_voltages[BMS_CELLS_NUM]; // Array of 24 cell voltages
+
+  // Array of 8 temperatures (MOS, BAL, T1-T4, unused, unused)
+  float bms_temp_sensors[8];
+} BLE_FastLink_Telemetry;
+
 #pragma pack(pop)
 
 #endif // INC_SP140_STRUCTS_H_
