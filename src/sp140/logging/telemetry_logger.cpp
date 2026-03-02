@@ -11,6 +11,7 @@
 #include <cstring>
 #include <vector>
 
+#include "sp140/clamp_utils.h"
 #include "sp140/telemetry_hub.h"
 
 namespace telemetry_log {
@@ -233,21 +234,7 @@ struct GapCursorRuntime {
 
 GapCursorRuntime gGapCursor = {};
 
-uint32_t clampU32(int64_t value, uint32_t min_v, uint32_t max_v) {
-  if (value < static_cast<int64_t>(min_v))
-    return min_v;
-  if (value > static_cast<int64_t>(max_v))
-    return max_v;
-  return static_cast<uint32_t>(value);
-}
-
-int16_t clampI16(int32_t value, int16_t min_v, int16_t max_v) {
-  if (value < static_cast<int32_t>(min_v))
-    return min_v;
-  if (value > static_cast<int32_t>(max_v))
-    return max_v;
-  return static_cast<int16_t>(value);
-}
+// clampU32 and clampI16 are now in sp140/clamp_utils.h
 
 uint32_t crc32Buffer(const void *data, size_t len) {
   return esp_crc32_le(0u, reinterpret_cast<const uint8_t *>(data), len);
