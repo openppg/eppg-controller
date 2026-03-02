@@ -253,6 +253,7 @@ TaskHandle_t uiTaskHandle = NULL;
 TaskHandle_t bmsTaskHandle = NULL;
 TaskHandle_t vibeTaskHandle = NULL;       // Vibration motor task
 TaskHandle_t monitoringTaskHandle = NULL; // Sensor monitoring task
+TaskHandle_t ctrlSensorTaskHandle = NULL;
 TaskHandle_t dataLoggerTaskHandle = NULL;
 TaskHandle_t bleNotifyTaskHandle = NULL;
 
@@ -335,6 +336,26 @@ void throttleTask(void *pvParameters) {
   vTaskDelete(NULL); // should never reach this
 }
 
+// Lightweight task: reads controller sensors and writes to TelemetryHub at 10Hz.
+// Separated from dataLoggerTask because telemetry_log::tick() can block on flash.
+void ctrlSensorTask(void *pvParameters) {
+  (void)pvParameters;
+  TickType_t lastWake = xTaskGetTickCount();
+  const TickType_t sensorTicks = pdMS_TO_TICKS(100); // 10 Hz
+
+  for (;;) {
+    const unsigned long now = millis();
+    float alt = getAltitude(deviceData);
+    float bt = getBaroTemperature();
+    float bp = getBaroPressure();
+    float vs = getVerticalSpeed();
+    float mt = temperatureRead();
+    uint16_t pr = getLastThrottleRaw();
+    telemetryHubWriteController(alt, bt, bp, vs, mt, pr, now);
+    vTaskDelayUntil(&lastWake, sensorTicks);
+  }
+}
+
 void dataLoggerTask(void *pvParameters) {
   (void)pvParameters;
 
@@ -343,16 +364,12 @@ void dataLoggerTask(void *pvParameters) {
   uint32_t lastEscSeq = 0u;
   uint32_t lastBmsSeq = 0u;
   uint32_t lastCtrlSeq = 0u;
-  unsigned long lastCtrlSampleMs = 0u;
 
   for (;;) {
     const unsigned long now = millis();
-    if ((now - lastCtrlSampleMs) >= 1000u) {
-      telemetryHubWriteController(getAltitude(deviceData), getBaroTemperature(),
-                                  getBaroPressure(), getVerticalSpeed(),
-                                  temperatureRead(), getLastThrottleRaw(), now);
-      lastCtrlSampleMs = now;
-    }
+
+    // Controller sensor reads moved to bleNotifyTask to avoid I2C conflicts.
+    // This task only handles logging from the hub.
 
     TelemetryHub hub = {};
     if (telemetryHubRead(&hub, pdMS_TO_TICKS(2))) {
@@ -373,6 +390,7 @@ void dataLoggerTask(void *pvParameters) {
     }
 
     telemetry_log::tick();
+
     vTaskDelayUntil(&lastWake, loggerTicks);
   }
 }
@@ -422,6 +440,7 @@ void bleNotifyTask(void *pvParameters) {
       fastLink.esc_fw_version = hub.esc.fw_version;
       fastLink.esc_bootloader_version = hub.esc.bootloader_version;
       memcpy(fastLink.esc_sn_code, hub.esc.sn_code, sizeof(fastLink.esc_sn_code));
+      fastLink.esc_runtime_ms = hub.esc.esc_runtime_ms;
 
       // BMS mapping
       fastLink.bms_status = (uint8_t)hub.bms.bmsState;
@@ -790,6 +809,8 @@ void setupTasks() {
   // Split UI and BMS into dedicated tasks
   xTaskCreatePinnedToCore(uiTask, "UI", 5888, NULL, 2, &uiTaskHandle, 1);
   xTaskCreatePinnedToCore(bmsTask, "BMS", 2304, NULL, 2, &bmsTaskHandle, 1);
+  xTaskCreate(ctrlSensorTask, "CtrlSensor", 4096, NULL, 2,
+              &ctrlSensorTaskHandle);
   xTaskCreate(dataLoggerTask, "DataLogger", 8192, NULL, 1,
               &dataLoggerTaskHandle);
   xTaskCreatePinnedToCore(bleNotifyTask, "BLENotify", 8192, NULL, 1,
@@ -1175,6 +1196,7 @@ void handleThrottle() {
   // Handle throttle based on current device state
   switch (currentState) {
   case DISARMED:
+    readThrottleRaw();  // Keep pot_raw updated for telemetry even when disarmed
     resetThrottleState(prevPwm);
     finalPwm = ESC_DISARMED_PWM;
     break;

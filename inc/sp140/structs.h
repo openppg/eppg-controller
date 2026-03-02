@@ -32,6 +32,7 @@ typedef struct {
   TelemetryState escState;    // Current connection state
   uint16_t running_error;     // Runtime error bitmask
   uint16_t selfcheck_error;   // Self-check error bitmask
+  uint32_t esc_runtime_ms;    // ESC internal runtime (ms) from time_10ms × 10
   // Static hardware info (populated from GetHwInfo response)
   uint16_t hardware_id;
   uint16_t fw_version;

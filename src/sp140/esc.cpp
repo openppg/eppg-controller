@@ -91,6 +91,7 @@ void readESCTelemetry() {
     if (newEscReportedTimeMs != previousEscReportedTimeMs) {
       // Timestamp is new, process the telemetry data
       escTelemetryData.lastUpdateMs = newEscReportedTimeMs;
+      escTelemetryData.esc_runtime_ms = newEscReportedTimeMs;
 
       // Update telemetry data
       escTelemetryData.volts = res->voltage / 10.0f;
