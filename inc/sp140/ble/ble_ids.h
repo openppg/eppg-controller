@@ -24,12 +24,6 @@
 #define MANUFACTURER_NAME_UUID "2A29"
 #define DEVICE_UNIQUE_ID_UUID "B1571560-345F-4974-A14D-66E98740232F"
 
-// BMS service
-#define BMS_TELEMETRY_SERVICE_UUID "9E0F2FA3-3F2B-49C0-A6A3-3D8923062133"
-
-// ESC service
-#define ESC_TELEMETRY_SERVICE_UUID "C154DAE9-1984-40EA-B20F-5B23F9CBA0A9"
-
 // Log sync service (historical backfill)
 #define LOG_SYNC_SERVICE_UUID "F21F9A40-7A3D-4E08-9A8E-2014C5207A10"
 #define LOG_SYNC_CONTROL_UUID "F21F9A41-7A3D-4E08-9A8E-2014C5207A10"
@@ -37,31 +31,10 @@
 #define LOG_SYNC_META_UUID "F21F9A43-7A3D-4E08-9A8E-2014C5207A10"
 #define LOG_SYNC_STATUS_UUID "F21F9A44-7A3D-4E08-9A8E-2014C5207A10"
 
-// ============================================================================
-// Binary Packed Telemetry Characteristics (V1)
-// High-efficiency binary telemetry for reduced BLE overhead
-// ============================================================================
-
-// Packed BMS telemetry characteristic (single binary packet per BMS)
-// For multi-BMS, multiple notifications sent with different bms_id values
-#define BMS_PACKED_TELEMETRY_UUID "ABAB6342-D068-45A7-9D45-FBCE8E4D4DF1"
-
-// Extended BMS data (cell voltages + temps array) - separate packet for
-// detailed data
-#define BMS_EXTENDED_TELEMETRY_UUID "93431570-64A3-448D-AC97-4655B2D1458F"
-
-// Packed ESC telemetry characteristic
-#define ESC_PACKED_TELEMETRY_UUID "D3C2B470-007F-494E-95C5-8E275A181A3A"
-
-// Controller telemetry service and characteristic (ESP32 sensors: altitude,
-// baro, vario, temps)
-#define CONTROLLER_SERVICE_UUID "01C63B60-0891-4655-BBCA-8E745C48A175"
-#define CONTROLLER_TELEMETRY_UUID "01C63B61-0891-4655-BBCA-8E745C48A176"
-
 // Fast-Link Unified Telemetry (V1)
 #define FAST_LINK_TELEMETRY_SERVICE_UUID "45A17001-B73B-49E1-8B39-5E9ED5E1B930"
-#define FAST_LINK_TELEMETRY_UUID         "45A17002-B73B-49E1-8B39-5E9ED5E1B930"
+#define FAST_LINK_TELEMETRY_UUID "45A17002-B73B-49E1-8B39-5E9ED5E1B930"
 // App writes 0x01 here to trigger a GetHwInfo request to the ESC
-#define FAST_LINK_COMMAND_UUID           "45A17003-B73B-49E1-8B39-5E9ED5E1B930"
+#define FAST_LINK_COMMAND_UUID "45A17003-B73B-49E1-8B39-5E9ED5E1B930"
 
 #endif // INC_SP140_BLE_BLE_IDS_H_

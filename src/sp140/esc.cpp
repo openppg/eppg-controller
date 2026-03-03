@@ -19,6 +19,12 @@ static unsigned long lastSuccessfulCommTimeMs = 0;  // Store millis() time of la
 // consumed safely inside readESCTelemetry() on the throttle task.
 static volatile bool s_hwInfoRequested = false;
 
+// ESC runtime accumulation — unwraps the uint16 time_10ms counter (~10.9 min period)
+// Unsigned subtraction naturally handles wrap: (uint16_t)(current - last) is correct even across rollover.
+static uint16_t sEscLastTime10ms = 0;
+static uint32_t sEscAccumulatedRuntimeMs = 0;
+static bool sEscFirstUpdate = true;
+
 
 STR_ESC_TELEMETRY_140 escTelemetryData = {
   .escState = TelemetryState::NOT_CONNECTED,
@@ -77,21 +83,27 @@ void readESCTelemetry() {
   // Only proceed if TWAI is initialized
   if (!escTwaiInitialized) { return; }  // NOLINT(whitespace/newline)
 
-  // Store the last known ESC timestamp before checking for new data
-  unsigned long previousEscReportedTimeMs = escTelemetryData.lastUpdateMs;
-
   const SineEscModel &model = esc.getModel();
 
   if (model.hasSetThrottleSettings2Response) {
     const sine_esc_SetThrottleSettings2Response *res = &model.setThrottleSettings2Response;
 
-    unsigned long newEscReportedTimeMs = res->time_10ms * 10;
+    uint16_t rawTime10ms = res->time_10ms;
 
-    // Check if the timestamp from the ESC has actually changed
-    if (newEscReportedTimeMs != previousEscReportedTimeMs) {
+    // Check if the timestamp from the ESC has actually changed (stale-data guard)
+    if (sEscFirstUpdate || rawTime10ms != sEscLastTime10ms) {
+      // Unwrap the uint16 counter using unsigned subtraction — naturally correct across rollover.
+      // e.g. last=65000, current=100: (uint16_t)(100-65000) = 636 ticks = 6360ms elapsed.
+      if (!sEscFirstUpdate) {
+        uint16_t deltaTicks = rawTime10ms - sEscLastTime10ms;
+        sEscAccumulatedRuntimeMs += (uint32_t)deltaTicks * 10UL;
+      }
+      sEscFirstUpdate = false;
+      sEscLastTime10ms = rawTime10ms;
+
       // Timestamp is new, process the telemetry data
-      escTelemetryData.lastUpdateMs = newEscReportedTimeMs;
-      escTelemetryData.esc_runtime_ms = newEscReportedTimeMs;
+      escTelemetryData.lastUpdateMs = sEscAccumulatedRuntimeMs;
+      escTelemetryData.esc_runtime_ms = sEscAccumulatedRuntimeMs;
 
       // Update telemetry data
       escTelemetryData.volts = res->voltage / 10.0f;
@@ -135,7 +147,10 @@ void readESCTelemetry() {
       // Log state change only if it actually changed
       USBSerial.printf("ESC State: %d -> NOT_CONNECTED (Timeout)\n", escTelemetryData.escState);
       escTelemetryData.escState = TelemetryState::NOT_CONNECTED;
-      // Optional: Consider resetting telemetry values here if needed when disconnected
+      // Reset runtime accumulator so it restarts from zero on reconnect
+      sEscAccumulatedRuntimeMs = 0;
+      sEscLastTime10ms = 0;
+      sEscFirstUpdate = true;
     }
   } else {
     if (escTelemetryData.escState != TelemetryState::CONNECTED) {
