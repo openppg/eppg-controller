@@ -91,7 +91,7 @@ void readESCTelemetry() {
     uint16_t rawTime10ms = res->time_10ms;
 
     // Check if the timestamp from the ESC has actually changed (stale-data guard)
-    if (sEscFirstUpdate || rawTime10ms != sEscLastTime10ms) {
+    if (rawTime10ms != sEscLastTime10ms) {
       // Unwrap the uint16 counter using unsigned subtraction — naturally correct across rollover.
       // e.g. last=65000, current=100: (uint16_t)(100-65000) = 636 ticks = 6360ms elapsed.
       if (!sEscFirstUpdate) {
@@ -147,9 +147,10 @@ void readESCTelemetry() {
       // Log state change only if it actually changed
       USBSerial.printf("ESC State: %d -> NOT_CONNECTED (Timeout)\n", escTelemetryData.escState);
       escTelemetryData.escState = TelemetryState::NOT_CONNECTED;
-      // Reset runtime accumulator so it restarts from zero on reconnect
+      // Reset runtime accumulator so it restarts from zero on reconnect.
+      // Keep sEscLastTime10ms at its last real value so the stale-data guard
+      // continues to reject the unchanged res->time_10ms from the SINE library.
       sEscAccumulatedRuntimeMs = 0;
-      sEscLastTime10ms = 0;
       sEscFirstUpdate = true;
     }
   } else {

@@ -2,6 +2,7 @@
 #include "sp140/ble.h" // For deviceConnected
 #include "sp140/ble/ble_ids.h"
 #include "sp140/esc.h" // For requestEscHardwareInfo()
+#include "sp140/structs.h" // For BLE_FastLink_Telemetry
 #include <NimBLECharacteristic.h>
 #include <NimBLEDevice.h>
 
@@ -36,6 +37,14 @@ void initFastLinkBleService(NimBLEServer *pServer) {
   pFastLinkCharacteristic = pService->createCharacteristic(
       FAST_LINK_TELEMETRY_UUID,
       NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
+
+  // Set initial value so GATT reads before the first notify return a valid
+  // version byte instead of all-zeros (which the app rejects as version 0).
+  BLE_FastLink_Telemetry initialData = {};
+  initialData.version = FASTLINK_PROTOCOL_VERSION;
+  pFastLinkCharacteristic->setValue(
+      reinterpret_cast<uint8_t *>(&initialData),
+      sizeof(BLE_FastLink_Telemetry));
 
   // Write-without-response command channel: app sends 0x01 to request ESC hw info
   auto *pCommandCharacteristic = pService->createCharacteristic(
