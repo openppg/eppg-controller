@@ -28,7 +28,6 @@
 #include "../../inc/sp140/bms.h"
 #include "../../inc/sp140/esc.h"
 #include "../../inc/sp140/globals.h" // device config
-#include "../../inc/sp140/logging/telemetry_logger.h"
 #include "../../inc/sp140/lvgl/lvgl_alerts.h"
 #include "../../inc/sp140/lvgl/lvgl_core.h"
 #include "../../inc/sp140/lvgl/lvgl_main_screen.h"
@@ -202,7 +201,6 @@ void changeDeviceState(DeviceState newState) {
   if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
     DeviceState oldState = currentState;
     currentState = newState;
-    telemetry_log::onDeviceStateChange(oldState, newState);
 
     // Send state update to queue
     uint8_t state = (uint8_t)newState;
@@ -257,7 +255,6 @@ TaskHandle_t bmsTaskHandle = NULL;
 TaskHandle_t vibeTaskHandle = NULL;       // Vibration motor task
 TaskHandle_t monitoringTaskHandle = NULL; // Sensor monitoring task
 TaskHandle_t ctrlSensorTaskHandle = NULL;
-TaskHandle_t dataLoggerTaskHandle = NULL;
 TaskHandle_t bleNotifyTaskHandle = NULL;
 
 QueueHandle_t melodyQueue = NULL;
@@ -340,7 +337,6 @@ void throttleTask(void *pvParameters) {
 }
 
 // Lightweight task: reads controller sensors and writes to TelemetryHub at 10Hz.
-// Separated from dataLoggerTask because telemetry_log::tick() can block on flash.
 void ctrlSensorTask(void *pvParameters) {
   (void)pvParameters;
   TickType_t lastWake = xTaskGetTickCount();
@@ -356,45 +352,6 @@ void ctrlSensorTask(void *pvParameters) {
     uint16_t pr = getLastThrottleRaw();
     telemetryHubWriteController(alt, bt, bp, vs, mt, pr, now);
     vTaskDelayUntil(&lastWake, sensorTicks);
-  }
-}
-
-void dataLoggerTask(void *pvParameters) {
-  (void)pvParameters;
-
-  TickType_t lastWake = xTaskGetTickCount();
-  const TickType_t loggerTicks = pdMS_TO_TICKS(20); // 50 Hz
-  uint32_t lastEscSeq = 0u;
-  uint32_t lastBmsSeq = 0u;
-  uint32_t lastCtrlSeq = 0u;
-
-  for (;;) {
-    const unsigned long now = millis();
-
-    // Controller sensor reads moved to bleNotifyTask to avoid I2C conflicts.
-    // This task only handles logging from the hub.
-
-    TelemetryHub hub = {};
-    if (telemetryHubRead(&hub, pdMS_TO_TICKS(2))) {
-      if (hub.escSeq != lastEscSeq) {
-        lastEscSeq = hub.escSeq;
-        telemetry_log::logEscFast(hub.esc);
-      }
-      if (hub.bmsSeq != lastBmsSeq) {
-        lastBmsSeq = hub.bmsSeq;
-        telemetry_log::logBmsMain(hub.bms);
-        telemetry_log::logBmsCells(hub.bms);
-      }
-      if (hub.ctrlSeq != lastCtrlSeq) {
-        lastCtrlSeq = hub.ctrlSeq;
-        telemetry_log::logController(hub.altitude, hub.baro_temp, hub.vario,
-                                     hub.mcu_temp, hub.pot_raw, hub.uptime_ms);
-      }
-    }
-
-    telemetry_log::tick();
-
-    vTaskDelayUntil(&lastWake, loggerTicks);
   }
 }
 
@@ -749,7 +706,6 @@ void setup() {
 
   telemetryHubInit();
   setupBLE();
-  telemetry_log::init();
 
   // Initialize the simple monitoring system (but keep it disabled initially)
   initSimpleMonitor();
@@ -816,8 +772,6 @@ void setupTasks() {
   xTaskCreatePinnedToCore(bmsTask, "BMS", 2304, NULL, 2, &bmsTaskHandle, 1);
   xTaskCreate(ctrlSensorTask, "CtrlSensor", 4096, NULL, 2,
               &ctrlSensorTaskHandle);
-  xTaskCreate(dataLoggerTask, "DataLogger", 8192, NULL, 1,
-              &dataLoggerTaskHandle);
   xTaskCreatePinnedToCore(bleNotifyTask, "BLENotify", 8192, NULL, 1,
                           &bleNotifyTaskHandle, 1);
   xTaskCreate(deviceStateUpdateTask, "State Update Task", 2048, NULL, 1,

@@ -7,7 +7,6 @@ TelemetryHub gTelemetryHub = {};
 void telemetryHubInit() {
   memset(&gTelemetryHub, 0, sizeof(gTelemetryHub));
   gTelemetryHub.mutex = xSemaphoreCreateMutex();
-  gTelemetryHub.loggingMode = LoggingMode::STREAMING;
 }
 
 void telemetryHubWriteEsc(const STR_ESC_TELEMETRY_140& data) {
@@ -51,19 +50,3 @@ bool telemetryHubRead(TelemetryHub* out, TickType_t timeout) {
   return true;
 }
 
-void telemetryHubSetLoggingMode(LoggingMode mode) {
-  if (gTelemetryHub.mutex == nullptr) return;
-  if (xSemaphoreTake(gTelemetryHub.mutex, pdMS_TO_TICKS(5)) != pdTRUE) return;
-  gTelemetryHub.loggingMode = mode;
-  xSemaphoreGive(gTelemetryHub.mutex);
-}
-
-LoggingMode telemetryHubGetLoggingMode() {
-  if (gTelemetryHub.mutex == nullptr) return LoggingMode::STREAMING;
-  if (xSemaphoreTake(gTelemetryHub.mutex, pdMS_TO_TICKS(5)) != pdTRUE) {
-    return LoggingMode::STREAMING;
-  }
-  LoggingMode mode = gTelemetryHub.loggingMode;
-  xSemaphoreGive(gTelemetryHub.mutex);
-  return mode;
-}

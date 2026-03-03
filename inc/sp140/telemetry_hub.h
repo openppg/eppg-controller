@@ -7,17 +7,10 @@
 
 #include "sp140/structs.h"
 
-// Logging mode state machine for RAM buffer / gap file management
-enum class LoggingMode : uint8_t {
-  STREAMING,      // BLE connected, phone is logging, RAM buffer is rolling
-  GAP_RECORDING,  // BLE disconnected, writing to RAM + LittleFS
-  GAP_SYNCING     // BLE reconnected, syncing gap file while also streaming live
-};
-
 // Central telemetry data hub. Producers (throttle task, BMS task) write into
-// this struct; consumers (BLE notify task, data logger task, UI task) read from
-// it. Each field has a monotonic sequence counter so consumers can detect new
-// data without consuming it.
+// this struct; consumers (BLE notify task, UI task) read from it. Each field
+// has a monotonic sequence counter so consumers can detect new data without
+// consuming it.
 struct TelemetryHub {
   SemaphoreHandle_t mutex;
 
@@ -39,8 +32,6 @@ struct TelemetryHub {
   uint32_t uptime_ms;
   uint32_t ctrlSeq;
 
-  // Logging mode for gap file management
-  LoggingMode loggingMode;
 };
 
 // Initialize the hub (creates mutex, zeros all fields)
@@ -64,12 +55,6 @@ void telemetryHubWriteController(float altitude, float baro_temp,
 
 // Read a snapshot of the entire hub. Returns true if mutex acquired.
 bool telemetryHubRead(TelemetryHub* out, TickType_t timeout = pdMS_TO_TICKS(5));
-
-// Set logging mode (called by BLE connect/disconnect handlers)
-void telemetryHubSetLoggingMode(LoggingMode mode);
-
-// Get current logging mode
-LoggingMode telemetryHubGetLoggingMode();
 
 // Global hub instance
 extern TelemetryHub gTelemetryHub;

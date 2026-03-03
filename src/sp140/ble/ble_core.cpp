@@ -11,8 +11,6 @@
 #include "sp140/ble/ble_ids.h"
 #include "sp140/ble/config_service.h"
 #include "sp140/ble/fastlink_service.h"
-#include "sp140/ble/log_sync_service.h"
-#include "sp140/logging/telemetry_logger.h"
 #if CONFIG_BT_NIMBLE_EXT_ADV
 #include <NimBLEExtAdvertising.h>
 #endif
@@ -131,7 +129,6 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
   void onConnect(NimBLEServer *server, NimBLEConnInfo &connInfo) override {
     deviceConnected = true;
     connectedHandle = connInfo.getConnHandle();
-    telemetry_log::onBleReconnect();
 
     if (gConnTuneTimer != nullptr) {
       xTimerStop(gConnTuneTimer, 0);
@@ -148,7 +145,6 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
     }
     deviceConnected = false;
     connectedHandle = BLE_HS_CONN_HANDLE_NONE;
-    telemetry_log::onBleDisconnect();
     USBSerial.printf("Device disconnected reason=%d\n", reason);
     startAdvertising(server);
     USBSerial.println("Started advertising");
@@ -189,7 +185,6 @@ void setupBLE() {
 
   initConfigBleService(pServer, uniqueId);
   initFastLinkBleService(pServer);
-  initLogSyncBleService(pServer);
 
   startAdvertising(pServer);
 
