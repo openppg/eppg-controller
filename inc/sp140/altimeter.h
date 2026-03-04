@@ -5,6 +5,7 @@
 #include "sp140/structs.h"
 #include <Arduino.h>
 #include <CircularBuffer.hpp>
+#include <freertos/semphr.h>
 
 
 // Constants

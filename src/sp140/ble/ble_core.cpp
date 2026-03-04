@@ -17,13 +17,15 @@
 
 namespace {
 
-constexpr uint8_t kExtAdvInstance = 0;
 constexpr const char *kAdvertisingName = "OpenPPG";
 constexpr TickType_t kConnTuneDelayTicks = pdMS_TO_TICKS(180);
 constexpr TickType_t kPairingTimeoutTicks = pdMS_TO_TICKS(60000);
 TimerHandle_t gConnTuneTimer = nullptr;
 TimerHandle_t gPairingTimer = nullptr;
 bool pairingModeActive = false;
+NimBLEAddress lastConnectedAddr;  // Track last connected device for directed adv
+bool hasLastConnectedAddr = false;
+TaskHandle_t reconnectAdvTaskHandle = nullptr;
 
 void onPairingTimeout(TimerHandle_t timer) {
   (void)timer;
@@ -56,8 +58,8 @@ void startAdvertising(NimBLEServer *server) {
   }
 
 #if CONFIG_BT_NIMBLE_EXT_ADV
-  // Use legacy-connectable advertising for maximum phone discoverability.
-  // Extended connectable+scannable combinations are less interoperable.
+  // Legacy connectable undirected advertising via the extended API.
+  // Legacy PDUs avoid NimBLE's extended-adv EBUSY state machine bug.
   NimBLEExtAdvertisement adv(BLE_HCI_LE_PHY_1M, BLE_HCI_LE_PHY_1M);
   adv.setLegacyAdvertising(true);
   adv.setConnectable(true);
@@ -86,9 +88,7 @@ void startAdvertising(NimBLEServer *server) {
     }
   }
 
-  // Keep payload within 31-byte legacy limit so name + UUID reliably fit.
-  // Note: Flutter app's `startScan()` specifically filters for
-  // CONFIG_SERVICE_UUID.
+  // Flutter app's `startScan()` filters for CONFIG_SERVICE_UUID.
   adv.addServiceUUID(NimBLEUUID(CONFIG_SERVICE_UUID));
 
   auto *advertising = server->getAdvertising();
@@ -96,27 +96,40 @@ void startAdvertising(NimBLEServer *server) {
   advertising->removeAll();
   const bool configured = advertising->setInstanceData(kExtAdvInstance, adv);
   const bool started = configured && advertising->start(kExtAdvInstance);
-  USBSerial.printf("[BLE] Adv configure=%d start=%d (bonds: %u)\n", configured,
-                   started, bondCount);
+  USBSerial.printf("[BLE] Ext adv configure=%d start=%d (bonds: %u)\n",
+                   configured, started, bondCount);
 #else
   auto *advertising = server->getAdvertising();
-  advertising->setName(kAdvertisingName);
-  advertising->setDiscoverableMode(BLE_GAP_DISC_MODE_GEN);
-  advertising->setConnectableMode(BLE_GAP_CONN_MODE_UND);
-  advertising->addServiceUUID(NimBLEUUID(CONFIG_SERVICE_UUID));
-  advertising->enableScanResponse(true);
 
-  // High-frequency advertising for "instant" connection
-  advertising->setMinInterval(32); // 20ms (32 * 0.625ms)
-  advertising->setMaxInterval(48); // 30ms (48 * 0.625ms)
+  // Stop before reconfiguring (safe even if not running)
+  advertising->stop();
 
-  // Whitelisting for bonded devices (unless pairing mode is active)
+  // Configure payload once — NimBLE accumulates addServiceUUID calls
+  static bool payloadConfigured = false;
+  if (!payloadConfigured) {
+    advertising->setName(kAdvertisingName);
+    advertising->setDiscoverableMode(BLE_GAP_DISC_MODE_GEN);
+    advertising->setConnectableMode(BLE_GAP_CONN_MODE_UND);
+    advertising->addServiceUUID(NimBLEUUID(CONFIG_SERVICE_UUID));
+    advertising->enableScanResponse(true);
+    advertising->setMinInterval(32); // 20ms (32 * 0.625ms)
+    advertising->setMaxInterval(48); // 30ms (48 * 0.625ms)
+    payloadConfigured = true;
+  }
+
+  // Update whitelist on every call (bonds/pairing state may change)
   size_t bondCount = NimBLEDevice::getNumBonds();
   if (bondCount > 0 && !pairingModeActive) {
     for (size_t i = 0; i < bondCount; ++i) {
       NimBLEDevice::whiteListAdd(NimBLEDevice::getBondedAddress(i));
     }
     advertising->setScanFilter(false, true);
+  } else {
+    advertising->setScanFilter(false, false);
+    size_t wlCount = NimBLEDevice::getWhiteListCount();
+    for (size_t i = 0; i < wlCount; i++) {
+      NimBLEDevice::whiteListRemove(NimBLEDevice::getWhiteListAddress(0));
+    }
   }
 
   const bool started = advertising->start();
@@ -125,16 +138,53 @@ void startAdvertising(NimBLEServer *server) {
 #endif
 }
 
+// Persistent reconnect advertising task.
+// Refreshes advertising every 5s until reconnected.
+void reconnectAdvTask(void *pvParameters) {
+  (void)pvParameters;
+  USBSerial.println("[BLE] Reconnect adv task started");
+
+  // Undirected legacy advertising with service UUID.
+  // Refresh every 5s — advertising can silently stop if a brief L2CAP
+  // connection attempt interrupts it, so periodic restart is essential.
+  startAdvertising(pServer);
+
+  for (;;) {
+    if (deviceConnected || pairingModeActive || pServer == nullptr) {
+      break;
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(5000));
+
+    if (deviceConnected || pairingModeActive) break;
+
+    startAdvertising(pServer);
+  }
+
+  USBSerial.println("[BLE] Reconnect adv task ended");
+  reconnectAdvTaskHandle = nullptr;
+  vTaskDelete(nullptr);
+}
+
 class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
   void onConnect(NimBLEServer *server, NimBLEConnInfo &connInfo) override {
     deviceConnected = true;
     connectedHandle = connInfo.getConnHandle();
+    lastConnectedAddr = connInfo.getAddress();
+    hasLastConnectedAddr = true;
+
+    // Stop the reconnect advertising task if it's running
+    if (reconnectAdvTaskHandle != nullptr) {
+      vTaskDelete(reconnectAdvTaskHandle);
+      reconnectAdvTaskHandle = nullptr;
+    }
 
     if (gConnTuneTimer != nullptr) {
       xTimerStop(gConnTuneTimer, 0);
       xTimerStart(gConnTuneTimer, 0);
     }
-    USBSerial.printf("Device connected handle=%u\n", connectedHandle);
+    USBSerial.printf("Device connected handle=%u addr=%s\n", connectedHandle,
+                     lastConnectedAddr.toString().c_str());
   }
 
   void onDisconnect(NimBLEServer *server, NimBLEConnInfo &connInfo,
@@ -146,8 +196,17 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
     deviceConnected = false;
     connectedHandle = BLE_HS_CONN_HANDLE_NONE;
     USBSerial.printf("Device disconnected reason=%d\n", reason);
-    startAdvertising(server);
-    USBSerial.println("Started advertising");
+
+    // Start persistent reconnect advertising task.
+    // Refreshes advertising every 5s until reconnected.
+    if (hasLastConnectedAddr && !pairingModeActive &&
+        reconnectAdvTaskHandle == nullptr) {
+      xTaskCreate(reconnectAdvTask, "BLEReconAdv", 3072, nullptr, 1,
+                  &reconnectAdvTaskHandle);
+    } else {
+      // Fallback: just start normal advertising
+      startAdvertising(server);
+    }
   }
 };
 
