@@ -18,14 +18,11 @@
 namespace {
 
 constexpr const char *kAdvertisingName = "OpenPPG";
-constexpr TickType_t kConnTuneDelayTicks = pdMS_TO_TICKS(180);
+constexpr TickType_t kConnTuneDelayTicks = pdMS_TO_TICKS(1200);
 constexpr TickType_t kPairingTimeoutTicks = pdMS_TO_TICKS(60000);
 TimerHandle_t gConnTuneTimer = nullptr;
 TimerHandle_t gPairingTimer = nullptr;
 bool pairingModeActive = false;
-NimBLEAddress lastConnectedAddr;  // Track last connected device for directed adv
-bool hasLastConnectedAddr = false;
-TaskHandle_t reconnectAdvTaskHandle = nullptr;
 
 void onPairingTimeout(TimerHandle_t timer) {
   (void)timer;
@@ -44,12 +41,10 @@ void applyPreferredLinkParams(TimerHandle_t timer) {
     return;
   }
 
+  // Keep reconnect path conservative; avoid immediate PHY / data-length
+  // HCI procedures that can destabilize some phone reconnections.
   server->updateConnParams(handle, 12, 24, 0, 200);
-  server->setDataLen(handle, 251);
-  const bool phyOk = server->updatePhy(handle, BLE_GAP_LE_PHY_2M_MASK,
-                                       BLE_GAP_LE_PHY_2M_MASK, 0);
-  USBSerial.printf("[BLE] Link tune handle=%u phy2m=%s\n", handle,
-                   phyOk ? "OK" : "FAIL");
+  USBSerial.printf("[BLE] Link tune handle=%u connParams=REQUESTED\n", handle);
 }
 
 void startAdvertising(NimBLEServer *server) {
@@ -71,21 +66,13 @@ void startAdvertising(NimBLEServer *server) {
   adv.setMinInterval(32); // 20ms (32 * 0.625ms)
   adv.setMaxInterval(48); // 30ms (48 * 0.625ms)
 
-  // Whitelisting: If we have bonds and pairing mode is not active,
-  // only allow bonded devices to connect.
+  // Always allow connects during reconnect advertising.
+  // Security is intentionally disabled for zero-touch reconnect behavior.
   size_t bondCount = NimBLEDevice::getNumBonds();
-  if (bondCount > 0 && !pairingModeActive) {
-    for (size_t i = 0; i < bondCount; ++i) {
-      NimBLEDevice::whiteListAdd(NimBLEDevice::getBondedAddress(i));
-    }
-    adv.setScanFilter(false, true); // Only whitelisted devices can connect
-  } else {
-    // Open advertising: no bonds yet, or pairing mode is active
-    adv.setScanFilter(false, false);
-    size_t wlCount = NimBLEDevice::getWhiteListCount();
-    for (size_t i = 0; i < wlCount; i++) {
-      NimBLEDevice::whiteListRemove(NimBLEDevice::getWhiteListAddress(0));
-    }
+  adv.setScanFilter(false, false);
+  size_t wlCount = NimBLEDevice::getWhiteListCount();
+  for (size_t i = 0; i < wlCount; i++) {
+    NimBLEDevice::whiteListRemove(NimBLEDevice::getWhiteListAddress(0));
   }
 
   // Flutter app's `startScan()` filters for CONFIG_SERVICE_UUID.
@@ -117,19 +104,13 @@ void startAdvertising(NimBLEServer *server) {
     payloadConfigured = true;
   }
 
-  // Update whitelist on every call (bonds/pairing state may change)
+  // Always allow connects during reconnect advertising.
+  // Security is intentionally disabled for zero-touch reconnect behavior.
   size_t bondCount = NimBLEDevice::getNumBonds();
-  if (bondCount > 0 && !pairingModeActive) {
-    for (size_t i = 0; i < bondCount; ++i) {
-      NimBLEDevice::whiteListAdd(NimBLEDevice::getBondedAddress(i));
-    }
-    advertising->setScanFilter(false, true);
-  } else {
-    advertising->setScanFilter(false, false);
-    size_t wlCount = NimBLEDevice::getWhiteListCount();
-    for (size_t i = 0; i < wlCount; i++) {
-      NimBLEDevice::whiteListRemove(NimBLEDevice::getWhiteListAddress(0));
-    }
+  advertising->setScanFilter(false, false);
+  size_t wlCount = NimBLEDevice::getWhiteListCount();
+  for (size_t i = 0; i < wlCount; i++) {
+    NimBLEDevice::whiteListRemove(NimBLEDevice::getWhiteListAddress(0));
   }
 
   const bool started = advertising->start();
@@ -138,53 +119,17 @@ void startAdvertising(NimBLEServer *server) {
 #endif
 }
 
-// Persistent reconnect advertising task.
-// Refreshes advertising every 5s until reconnected.
-void reconnectAdvTask(void *pvParameters) {
-  (void)pvParameters;
-  USBSerial.println("[BLE] Reconnect adv task started");
-
-  // Undirected legacy advertising with service UUID.
-  // Refresh every 5s — advertising can silently stop if a brief L2CAP
-  // connection attempt interrupts it, so periodic restart is essential.
-  startAdvertising(pServer);
-
-  for (;;) {
-    if (deviceConnected || pairingModeActive || pServer == nullptr) {
-      break;
-    }
-
-    vTaskDelay(pdMS_TO_TICKS(5000));
-
-    if (deviceConnected || pairingModeActive) break;
-
-    startAdvertising(pServer);
-  }
-
-  USBSerial.println("[BLE] Reconnect adv task ended");
-  reconnectAdvTaskHandle = nullptr;
-  vTaskDelete(nullptr);
-}
-
 class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
   void onConnect(NimBLEServer *server, NimBLEConnInfo &connInfo) override {
     deviceConnected = true;
     connectedHandle = connInfo.getConnHandle();
-    lastConnectedAddr = connInfo.getAddress();
-    hasLastConnectedAddr = true;
-
-    // Stop the reconnect advertising task if it's running
-    if (reconnectAdvTaskHandle != nullptr) {
-      vTaskDelete(reconnectAdvTaskHandle);
-      reconnectAdvTaskHandle = nullptr;
-    }
 
     if (gConnTuneTimer != nullptr) {
       xTimerStop(gConnTuneTimer, 0);
       xTimerStart(gConnTuneTimer, 0);
     }
     USBSerial.printf("Device connected handle=%u addr=%s\n", connectedHandle,
-                     lastConnectedAddr.toString().c_str());
+                     connInfo.getAddress().toString().c_str());
   }
 
   void onDisconnect(NimBLEServer *server, NimBLEConnInfo &connInfo,
@@ -197,16 +142,8 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
     connectedHandle = BLE_HS_CONN_HANDLE_NONE;
     USBSerial.printf("Device disconnected reason=%d\n", reason);
 
-    // Start persistent reconnect advertising task.
-    // Refreshes advertising every 5s until reconnected.
-    if (hasLastConnectedAddr && !pairingModeActive &&
-        reconnectAdvTaskHandle == nullptr) {
-      xTaskCreate(reconnectAdvTask, "BLEReconAdv", 3072, nullptr, 1,
-                  &reconnectAdvTaskHandle);
-    } else {
-      // Fallback: just start normal advertising
-      startAdvertising(server);
-    }
+    // Restart advertising once and keep it stable for inbound reconnects.
+    startAdvertising(server);
   }
 };
 
@@ -216,8 +153,9 @@ void setupBLE() {
   // Initialize NimBLE with device name
   NimBLEDevice::init(kAdvertisingName);
 
-  // Bonding and LE secure connections ("Just Works").
-  NimBLEDevice::setSecurityAuth(true, false, true);
+  // Disable BLE pairing/bond requirements for zero-touch reconnect.
+  // No user interaction should be needed after install.
+  NimBLEDevice::setSecurityAuth(false, false, false);
   NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
   NimBLEDevice::setSecurityInitKey(BLE_SM_PAIR_KEY_DIST_ENC |
                                    BLE_SM_PAIR_KEY_DIST_ID);
