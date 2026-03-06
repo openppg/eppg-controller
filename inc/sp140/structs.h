@@ -114,8 +114,9 @@ typedef struct {
   char battery_id[33]; // Null-terminated battery serial/ID string (up to 32
                        // chars)
 
-  // BMS type detected by firmware (0=unknown, 1=Type A LE cells, 2=Type B BE
-  // cells)
+  // BMS type detected by firmware (0=unknown, 1=Type A older, 2=Type B newer)
+  // Note: library auto-detection currently maps big-endian cells -> Type A,
+  // little-endian cells -> Type B.
   uint8_t bms_type;
 } STR_BMS_TELEMETRY_140;
 #pragma pack(pop)
@@ -192,7 +193,7 @@ typedef struct {
   uint16_t bms_cell_min_mV;        // Lowest cell voltage (mV, native 1 mV resolution)
   uint16_t bms_voltage_diff_mV;    // Cell voltage differential (mV)
   char bms_battery_id[33];         // Battery serial/ID string (null-terminated)
-  uint8_t bms_type;                // BMS type (0=unknown, 1=Type A LE, 2=Type B BE)
+  uint8_t bms_type;                // BMS type (0=unknown, 1=Type A older, 2=Type B newer)
 
   // Extended BMS arrays (compressed)
   uint16_t bms_cell_voltages_mV[BMS_CELLS_NUM]; // 24 cell voltages (mV, native resolution)
