@@ -946,8 +946,8 @@ void buttonHandlerTask(void *parameter) {
           pulseVibeMotor();
           vTaskDelay(pdMS_TO_TICKS(300));
           pulseVibeMotor();
-          USBSerial.println("[BLE] Bonds cleared. Rebooting to apply "
-                            "open advertising...");
+          USBSerial.println("[BLE] Bonds cleared. Rebooting with BLE locked "
+                            "until pairing mode is reopened...");
           vTaskDelay(pdMS_TO_TICKS(500));
           ESP.restart();
           unbondHoldHandled = true;

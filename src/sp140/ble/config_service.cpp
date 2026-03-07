@@ -24,6 +24,19 @@ extern volatile DeviceState currentState;
 
 namespace {
 
+constexpr uint32_t kReadSecure =
+    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_ENC;
+constexpr uint32_t kReadWriteSecure =
+    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE |
+    NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::WRITE_ENC;
+constexpr uint32_t kNotifyReadSecure =
+    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY |
+    NIMBLE_PROPERTY::READ_ENC;
+constexpr uint32_t kReadWriteNotifyIndicateSecure =
+    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE |
+    NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::INDICATE |
+    NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::WRITE_ENC;
+
 class MetricAltCallbacks : public NimBLECharacteristicCallbacks {
   void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
     (void)connInfo;
@@ -254,13 +267,13 @@ void initConfigBleService(NimBLEServer* server, const std::string& uniqueId) {
 
   NimBLECharacteristic* unixTime = configService->createCharacteristic(
       NimBLEUUID(UNIX_TIME_UUID),
-      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
+      kReadWriteSecure);
   static TimeCallbacks timeCallbacks;
   unixTime->setCallbacks(&timeCallbacks);
 
   NimBLECharacteristic* timezone = configService->createCharacteristic(
       NimBLEUUID(TIMEZONE_UUID),
-      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
+      kReadWriteSecure);
   static TimezoneCallbacks timezoneCallbacks;
   timezone->setCallbacks(&timezoneCallbacks);
   timezone->setValue(reinterpret_cast<uint8_t*>(&deviceData.timezone_offset),
@@ -268,13 +281,13 @@ void initConfigBleService(NimBLEServer* server, const std::string& uniqueId) {
 
   pDeviceStateCharacteristic = configService->createCharacteristic(
       NimBLEUUID(DEVICE_STATE_UUID),
-      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
+      kNotifyReadSecure);
   uint8_t initialState = DISARMED;
   pDeviceStateCharacteristic->setValue(&initialState, sizeof(initialState));
 
   NimBLECharacteristic* metricAlt = configService->createCharacteristic(
       NimBLEUUID(METRIC_ALT_UUID),
-      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
+      kReadWriteSecure);
   static MetricAltCallbacks metricAltCallbacks;
   metricAlt->setCallbacks(&metricAltCallbacks);
   int metricAltValue = deviceData.metric_alt ? 1 : 0;
@@ -282,7 +295,7 @@ void initConfigBleService(NimBLEServer* server, const std::string& uniqueId) {
 
   NimBLECharacteristic* performanceMode = configService->createCharacteristic(
       NimBLEUUID(PERFORMANCE_MODE_UUID),
-      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
+      kReadWriteSecure);
   static PerformanceModeCallbacks performanceModeCallbacks;
   performanceMode->setCallbacks(&performanceModeCallbacks);
   int performanceValue = deviceData.performance_mode ? 1 : 0;
@@ -290,7 +303,7 @@ void initConfigBleService(NimBLEServer* server, const std::string& uniqueId) {
 
   NimBLECharacteristic* screenRotation = configService->createCharacteristic(
       NimBLEUUID(SCREEN_ROTATION_UUID),
-      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
+      kReadWriteSecure);
   static ScreenRotationCallbacks screenRotationCallbacks;
   screenRotation->setCallbacks(&screenRotationCallbacks);
   int screenValue = (deviceData.screen_rotation == 1) ? 1 : 3;
@@ -298,14 +311,14 @@ void initConfigBleService(NimBLEServer* server, const std::string& uniqueId) {
 
   NimBLECharacteristic* theme = configService->createCharacteristic(
       NimBLEUUID(THEME_UUID),
-      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
+      kReadWriteSecure);
   static ThemeCallbacks themeCallbacks;
   theme->setCallbacks(&themeCallbacks);
   theme->setValue(&deviceData.theme, sizeof(deviceData.theme));
 
   NimBLECharacteristic* seaPressure = configService->createCharacteristic(
       NimBLEUUID(SEA_PRESSURE_UUID),
-      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
+      kReadWriteSecure);
   static SeaPressureCallbacks seaPressureCallbacks;
   seaPressure->setCallbacks(&seaPressureCallbacks);
   seaPressure->setValue(
@@ -314,42 +327,39 @@ void initConfigBleService(NimBLEServer* server, const std::string& uniqueId) {
 
   NimBLECharacteristic* metricTemp = configService->createCharacteristic(
       NimBLEUUID(METRIC_TEMP_UUID),
-      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
+      kReadWriteSecure);
   static MetricTempCallbacks metricTempCallbacks;
   metricTemp->setCallbacks(&metricTempCallbacks);
   uint8_t metricTempValue = deviceData.metric_temp ? 1 : 0;
   metricTemp->setValue(&metricTempValue, sizeof(metricTempValue));
 
   NimBLECharacteristic* firmwareVersion = configService->createCharacteristic(
-      NimBLEUUID(FW_VERSION_UUID), NIMBLE_PROPERTY::READ);
+      NimBLEUUID(FW_VERSION_UUID), kReadSecure);
   uint8_t versionBytes[2] = {VERSION_MAJOR, VERSION_MINOR};
   firmwareVersion->setValue(versionBytes, sizeof(versionBytes));
 
   NimBLECharacteristic* hardwareRevision = configService->createCharacteristic(
-      NimBLEUUID(HW_REVISION_UUID), NIMBLE_PROPERTY::READ);
+      NimBLEUUID(HW_REVISION_UUID), kReadSecure);
   hardwareRevision->setValue(&deviceData.revision, sizeof(deviceData.revision));
 
   NimBLECharacteristic* armedTime = configService->createCharacteristic(
-      NimBLEUUID(ARMED_TIME_UUID), NIMBLE_PROPERTY::READ);
+      NimBLEUUID(ARMED_TIME_UUID), kReadSecure);
   armedTime->setValue(reinterpret_cast<uint8_t*>(&deviceData.armed_time),
                       sizeof(deviceData.armed_time));
 
   pThrottleCharacteristic = configService->createCharacteristic(
       NimBLEUUID(THROTTLE_VALUE_UUID),
-      NIMBLE_PROPERTY::READ |
-      NIMBLE_PROPERTY::WRITE |
-      NIMBLE_PROPERTY::NOTIFY |
-      NIMBLE_PROPERTY::INDICATE);
+      kReadWriteNotifyIndicateSecure);
   static ThrottleValueCallbacks throttleValueCallbacks;
   pThrottleCharacteristic->setCallbacks(&throttleValueCallbacks);
 
   NimBLEService* deviceInfoService = server->createService(NimBLEUUID(DEVICE_INFO_SERVICE_UUID));
   NimBLECharacteristic* manufacturer = deviceInfoService->createCharacteristic(
-      NimBLEUUID(MANUFACTURER_NAME_UUID), NIMBLE_PROPERTY::READ);
+      NimBLEUUID(MANUFACTURER_NAME_UUID), kReadSecure);
   manufacturer->setValue("OpenPPG");
 
   NimBLECharacteristic* uniqueIdCharacteristic = deviceInfoService->createCharacteristic(
-      NimBLEUUID(DEVICE_UNIQUE_ID_UUID), NIMBLE_PROPERTY::READ);
+      NimBLEUUID(DEVICE_UNIQUE_ID_UUID), kReadSecure);
   uniqueIdCharacteristic->setValue(uniqueId);  // Already uppercase string
 
   configService->start();

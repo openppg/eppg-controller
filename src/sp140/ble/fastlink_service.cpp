@@ -14,6 +14,12 @@ uint32_t gFastLinkNotifyFailCount = 0;
 uint32_t gFastLinkSkippedNoConnCount = 0;
 uint32_t gFastLinkLastStatsMs = 0;
 
+constexpr uint32_t kFastLinkTelemetryProperties =
+    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY |
+    NIMBLE_PROPERTY::READ_ENC;
+constexpr uint32_t kFastLinkCommandProperties =
+    NIMBLE_PROPERTY::WRITE_NR | NIMBLE_PROPERTY::WRITE_ENC;
+
 // Handles write commands from the app on FAST_LINK_COMMAND_UUID.
 // Command 0x01: request ESC hardware info (HW ID, FW version, bootloader, serial).
 class FastLinkCommandCallbacks : public NimBLECharacteristicCallbacks {
@@ -52,7 +58,7 @@ void initFastLinkBleService(NimBLEServer *pServer) {
 
   pFastLinkCharacteristic = pService->createCharacteristic(
       FAST_LINK_TELEMETRY_UUID,
-      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
+      kFastLinkTelemetryProperties);
   pFastLinkCharacteristic->setCallbacks(&telemetryCallbacks);
 
   // Set initial value so GATT reads before the first notify return a valid
@@ -66,7 +72,7 @@ void initFastLinkBleService(NimBLEServer *pServer) {
   // Write-without-response command channel: app sends 0x01 to request ESC hw info
   auto *pCommandCharacteristic = pService->createCharacteristic(
       FAST_LINK_COMMAND_UUID,
-      NIMBLE_PROPERTY::WRITE_NR);
+      kFastLinkCommandProperties);
   pCommandCharacteristic->setCallbacks(&commandCallbacks);
 
   pService->start();
