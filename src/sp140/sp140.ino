@@ -37,6 +37,7 @@
 
 #include "../../inc/sp140/buzzer.h"
 #include "../../inc/sp140/device_state.h"
+#include "../../inc/sp140/diagnostics.h"
 #include "../../inc/sp140/led.h"
 #include "../../inc/sp140/mode.h"
 #include "../../inc/sp140/throttle.h"
@@ -304,6 +305,7 @@ void watchdogTask(void *parameter) {
   ESP_ERROR_CHECK(esp_task_wdt_add(NULL));
 #endif
   for (;;) {
+    diagnosticsRefreshHeartbeat();
 #ifndef OPENPPG_DEBUG
     esp_task_wdt_reset();
 #endif
@@ -653,6 +655,7 @@ void setupWatchdog() {
 
 void setup() {
   USBSerial.begin(115200); // This is for debug output and WebSerial
+  diagnosticsInit();
   USBSerial.print("Build date/time: ");
   USBSerial.println(buildDate);
 
@@ -806,7 +809,7 @@ void setupTasks() {
 
   // Create WebSerial task
   xTaskCreate(webSerialTask, "WebSerial",
-              3072, // Larger stack for ArduinoJson parsing & CDC handling
+              6144, // Diagnostics JSON serialization needs more stack headroom
               NULL, 1, &webSerialTaskHandle);
 
   // Create monitoring task
@@ -949,6 +952,8 @@ void buttonHandlerTask(void *parameter) {
           USBSerial.println("[BLE] Bonds cleared. Rebooting with BLE locked "
                             "until pairing mode is reopened...");
           vTaskDelay(pdMS_TO_TICKS(500));
+          diagnosticsMarkPlannedRestart(
+              PlannedRestartReason::BLE_UNBOND_REBOOT);
           ESP.restart();
           unbondHoldHandled = true;
           buttonPressed = false;
@@ -1316,12 +1321,7 @@ void webSerialTask(void *pvParameters) {
     if (USBSerial.available()) {
       // Check if we're allowed to process commands
       if (currentState == DISARMED) {
-        parse_serial_commands();
-
-        // Clear any remaining data
-        while (USBSerial.available()) {
-          USBSerial.read();
-        }
+        poll_serial_commands();
       }
     }
     vTaskDelay(pdMS_TO_TICKS(100)); // Check every 100ms

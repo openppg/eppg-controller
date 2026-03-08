@@ -3,6 +3,7 @@
 
 #include <Preferences.h>  // Add ESP32 Preferences library
 #include "../../inc/sp140/throttle.h"
+#include "../../inc/sp140/diagnostics.h"
 
 /**
  * WebSerial Protocol Documentation
@@ -68,6 +69,15 @@ const char* KEY_TIMEZONE_OFFSET = "tz_offset";
 
 // Create a Preferences instance
 Preferences preferences;
+
+namespace {
+
+constexpr size_t kWebSerialCommandBufferSize = 256;
+char gWebSerialCommandBuffer[kWebSerialCommandBufferSize] = {};
+size_t gWebSerialCommandLength = 0;
+bool gWebSerialCommandOverflow = false;
+
+}  // namespace
 
 // Read saved data from Preferences
 void refreshDeviceData() {
@@ -193,69 +203,114 @@ void resetDeviceData() {
  * Parse commands from Serial connection
  * Handles commands like reboot to bootloader and sync device settings
  */
-void parse_serial_commands() {
-  if (USBSerial.available()) {
-    // With ArduinoJson 7, we no longer need to specify capacity
-    JsonDocument doc;
+void parse_serial_command_line(const char* json_line) {
+  if (json_line == nullptr || json_line[0] == '\0') {
+    return;
+  }
 
-    DeserializationError error = deserializeJson(doc, USBSerial);
+  JsonDocument doc;
+  DeserializationError error = deserializeJson(doc, json_line);
+  if (error) {
+    return;
+  }
 
-    // Handle parsing results
-    if (error) {
-      // Silently ignore non-JSON input or parsing errors
+  if (!doc["command"].isNull()) {
+    String command = doc["command"].as<String>();
+
+    if (command == "reboot") {
+      USBSerial.println("Rebooting");
+      diagnosticsMarkPlannedRestart(
+          PlannedRestartReason::USB_COMMAND_REBOOT);
+      ESP.restart();
+      return;
+    } else if (command == "sync") {
+      send_device_data();
+      return;
+    } else if (command == "diag_sync") {
+      diagnosticsSendJson(USBSerial);
+      USBSerial.println();
+      return;
+    } else if (command == "diag_clear") {
+      diagnosticsClearPersistentData();
+      diagnosticsSendJson(USBSerial);
+      USBSerial.println();
+      return;
+    }
+  }
+
+  if (!doc["settings"].isNull()) {
+    JsonObject settings = doc["settings"].as<JsonObject>();
+
+    if (!settings.isNull()) {
+      if (!settings["screen_rot"].isNull()) {
+        deviceData.screen_rotation = settings["screen_rot"].as<unsigned int>();
+      }
+
+      if (!settings["sea_pressure"].isNull()) {
+        deviceData.sea_pressure = settings["sea_pressure"].as<float>();
+      }
+
+      if (!settings["metric_temp"].isNull()) {
+        deviceData.metric_temp = settings["metric_temp"].as<bool>();
+      }
+
+      if (!settings["metric_alt"].isNull()) {
+        deviceData.metric_alt = settings["metric_alt"].as<bool>();
+      }
+
+      if (!settings["performance_mode"].isNull()) {
+        deviceData.performance_mode = settings["performance_mode"].as<int>();
+      }
+
+      if (!settings["theme"].isNull()) {
+        deviceData.theme = settings["theme"].as<int>();
+      }
+    }
+
+    sanitizeDeviceData();
+    writeDeviceData();
+    send_device_data();
+  }
+}
+
+void poll_serial_commands() {
+  while (USBSerial.available()) {
+    const int byte_read = USBSerial.read();
+    if (byte_read < 0) {
       return;
     }
 
-    if (!doc["command"].isNull()) {
-      String command = doc["command"].as<String>();
-
-      if (command == "reboot") {
-        USBSerial.println("Rebooting");
-        ESP.restart();
-        return;
-      } else if (command == "sync") {
-        send_device_data();
-        return;
-      }
+    const char ch = static_cast<char>(byte_read);
+    if (ch == '\r') {
+      continue;
     }
 
-    // Handle device settings updates
-    if (!doc["settings"].isNull()) {
-      JsonObject settings = doc["settings"].as<JsonObject>();
+    if (gWebSerialCommandOverflow) {
+      if (ch == '\n') {
+        gWebSerialCommandOverflow = false;
+        gWebSerialCommandLength = 0;
+      }
+      continue;
+    }
 
-      if (!settings.isNull()) {
-        if (!settings["screen_rot"].isNull()) {
-          deviceData.screen_rotation = settings["screen_rot"].as<unsigned int>();
-        }
-
-        if (!settings["sea_pressure"].isNull()) {
-          deviceData.sea_pressure = settings["sea_pressure"].as<float>();
-        }
-
-        if (!settings["metric_temp"].isNull()) {
-          deviceData.metric_temp = settings["metric_temp"].as<bool>();
-        }
-
-        if (!settings["metric_alt"].isNull()) {
-          deviceData.metric_alt = settings["metric_alt"].as<bool>();
-        }
-
-        if (!settings["performance_mode"].isNull()) {
-          deviceData.performance_mode = settings["performance_mode"].as<int>();
-        }
-
-        if (!settings["theme"].isNull()) {
-          deviceData.theme = settings["theme"].as<int>();
-        }
+    if (ch == '\n') {
+      if (gWebSerialCommandLength == 0) {
+        continue;
       }
 
-      sanitizeDeviceData();
-      writeDeviceData();
-      // resetRotation(deviceData.screen_rotation);
-      // setTheme(deviceData.theme);
-
-      send_device_data();
+      gWebSerialCommandBuffer[gWebSerialCommandLength] = '\0';
+      parse_serial_command_line(gWebSerialCommandBuffer);
+      gWebSerialCommandLength = 0;
+      return;
     }
+
+    if (gWebSerialCommandLength + 1 >= kWebSerialCommandBufferSize) {
+      gWebSerialCommandOverflow = true;
+      gWebSerialCommandLength = 0;
+      continue;
+    }
+
+    gWebSerialCommandBuffer[gWebSerialCommandLength++] = ch;
   }
 }
 
