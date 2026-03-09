@@ -30,13 +30,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          token: ${{ secrets.GH_TOKEN }}
+          token: ${{ secrets.GH_TOKEN || github.token }}
           persist-credentials: true
           show-progress: false
       - name: Setup Git Credentials
         run: |
           git config --global credential.helper store
-          echo "https://oauth2:${{ secrets.GH_TOKEN }}@github.com" > ~/.git-credentials
+          echo "https://oauth2:${{ secrets.GH_TOKEN || github.token }}@github.com" > ~/.git-credentials
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
@@ -60,13 +60,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          token: ${{ secrets.GH_TOKEN }}
+          token: ${{ secrets.GH_TOKEN || github.token }}
           persist-credentials: true
           show-progress: false
       - name: Setup Git Credentials
         run: |
           git config --global credential.helper store
-          echo "https://oauth2:${{ secrets.GH_TOKEN }}@github.com" > ~/.git-credentials
+          echo "https://oauth2:${{ secrets.GH_TOKEN || github.token }}@github.com" > ~/.git-credentials
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
