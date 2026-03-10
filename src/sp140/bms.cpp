@@ -10,8 +10,6 @@ void logBmsCellProbeConnectionTransitions(const float sanitizedCellTemps[BMS_CEL
   static bool wasConnected[BMS_CELL_PROBE_COUNT] = {false, false, false, false};
 
   for (uint8_t i = 0; i < BMS_CELL_PROBE_COUNT; i++) {
-    // Use already-sanitized telemetry values so connection detection and
-    // downstream behavior stay consistent.
     const bool connected = !isnan(sanitizedCellTemps[i]);
 
     if (!hasPreviousState) {
@@ -29,41 +27,6 @@ void logBmsCellProbeConnectionTransitions(const float sanitizedCellTemps[BMS_CEL
   }
 
   hasPreviousState = true;
-}
-
-void recomputeBmsTemperatureExtrema(STR_BMS_TELEMETRY_140& telemetry) {  // NOLINT(runtime/references)
-  const float allTemps[] = {
-    telemetry.mos_temperature,
-    telemetry.balance_temperature,
-    telemetry.t1_temperature,
-    telemetry.t2_temperature,
-    telemetry.t3_temperature,
-    telemetry.t4_temperature
-  };
-
-  bool hasValidReading = false;
-  float highest = NAN;
-  float lowest = NAN;
-
-  for (float temp : allTemps) {
-    // Disconnected probes are stored as NaN; exclude them from extrema.
-    if (isnan(temp)) {
-      continue;
-    }
-
-    if (!hasValidReading) {
-      highest = temp;
-      lowest = temp;
-      hasValidReading = true;
-      continue;
-    }
-
-    if (temp > highest) highest = temp;
-    if (temp < lowest) lowest = temp;
-  }
-
-  telemetry.highest_temperature = highest;
-  telemetry.lowest_temperature = lowest;
 }
 
 }  // namespace
@@ -131,28 +94,31 @@ void updateBMSData() {
     bmsTelemetryData.cell_voltages[i] = bms_can->getCellVoltage(i);
   }
 
-  // Populate individual temperature sensors
+  // Populate temperature sensors (library returns NaN for disconnected probes)
   bmsTelemetryData.mos_temperature = bms_can->getTemperature(0);      // BMS MOSFET
   bmsTelemetryData.balance_temperature = bms_can->getTemperature(1);  // BMS Balance resistors
 
-  const float rawCellTemps[BMS_CELL_PROBE_COUNT] = {
+  // Cell probes: library already returns NaN for disconnected. Apply app-level
+  // policy (tolerate up to N disconnected before alerting).
+  const float cellTemps[BMS_CELL_PROBE_COUNT] = {
     bms_can->getTemperature(2),
     bms_can->getTemperature(3),
     bms_can->getTemperature(4),
     bms_can->getTemperature(5)
   };
   float sanitizedCellTemps[BMS_CELL_PROBE_COUNT];
-
-  sanitizeCellProbeTemps(rawCellTemps, sanitizedCellTemps);
-  bmsTelemetryData.t1_temperature = sanitizedCellTemps[0];  // Cell probe 1
-  bmsTelemetryData.t2_temperature = sanitizedCellTemps[1];  // Cell probe 2
-  bmsTelemetryData.t3_temperature = sanitizedCellTemps[2];  // Cell probe 3
-  bmsTelemetryData.t4_temperature = sanitizedCellTemps[3];  // Cell probe 4
+  sanitizeCellProbeTemps(cellTemps, sanitizedCellTemps);
+  bmsTelemetryData.t1_temperature = sanitizedCellTemps[0];
+  bmsTelemetryData.t2_temperature = sanitizedCellTemps[1];
+  bmsTelemetryData.t3_temperature = sanitizedCellTemps[2];
+  bmsTelemetryData.t4_temperature = sanitizedCellTemps[3];
 
   // Emit transition logs to help field-debug intermittent probe wiring issues.
   logBmsCellProbeConnectionTransitions(sanitizedCellTemps);
-  // Keep published high/low temperatures aligned with sanitized probe values.
-  recomputeBmsTemperatureExtrema(bmsTelemetryData);
+
+  // Library already excludes disconnected probes from high/low temps
+  bmsTelemetryData.highest_temperature = bms_can->getHighestTemperature();
+  bmsTelemetryData.lowest_temperature = bms_can->getLowestTemperature();
 
   bmsTelemetryData.lastUpdateMs = millis();
   unsigned long dur = bmsTelemetryData.lastUpdateMs - tStart;

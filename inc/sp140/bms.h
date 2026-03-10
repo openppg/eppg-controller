@@ -11,43 +11,36 @@
 #define MCP_CS 5        // MCP2515 CS pin
 #define MCP_BAUDRATE 250000
 
-// BMS cell probe disconnect handling.
-// The BMS reports TEMP_PROBE_DISCONNECTED (-40C) for unplugged probes.
-// Detection is handled by the BMS_CAN library; policy (how many disconnected
-// probes to tolerate) lives here in the application.
+// BMS cell probe disconnect policy.
+// The library returns NaN for disconnected probes. This app tolerates up to
+// BMS_MAX_IGNORED_DISCONNECTED_PROBES disconnected; beyond that the NaN is
+// replaced with the sentinel value so downstream temp monitors fire an alert.
 constexpr uint8_t BMS_CELL_PROBE_COUNT = 4;
 constexpr uint8_t BMS_MAX_IGNORED_DISCONNECTED_PROBES = 2;
 
-inline float sanitizeBmsCellTempC(float tempC) {
-  // Return NaN for disconnected/invalid readings so monitor/UI logic can skip
-  // this probe the same way we handle disconnected ESC motor temp.
-  return (!isnan(tempC) && tempC > BMS_CAN::TEMP_PROBE_DISCONNECTED) ? tempC : NAN;
-}
-
 inline void sanitizeCellProbeTemps(
-    const float rawTemps[BMS_CELL_PROBE_COUNT],
-    float sanitizedTemps[BMS_CELL_PROBE_COUNT]) {
-  uint8_t ignoredDisconnectedProbeCount = 0;
+    const float temps[BMS_CELL_PROBE_COUNT],
+    float out[BMS_CELL_PROBE_COUNT]) {
+  uint8_t disconnectedCount = 0;
 
+  // First pass: count disconnected probes (NaN from library)
   for (uint8_t i = 0; i < BMS_CELL_PROBE_COUNT; i++) {
-    const float tempC = rawTemps[i];
+    if (isnan(temps[i])) disconnectedCount++;
+  }
 
-    if (isnan(tempC) || tempC < BMS_CAN::TEMP_PROBE_DISCONNECTED) {
-      sanitizedTemps[i] = NAN;
-      continue;
+  // Second pass: if within tolerance, pass NaN through (silently ignored).
+  // If too many are disconnected, replace excess NaN with the sentinel value
+  // so temperature monitors fire a CRIT_LOW alert.
+  uint8_t ignoredCount = 0;
+  for (uint8_t i = 0; i < BMS_CELL_PROBE_COUNT; i++) {
+    if (!isnan(temps[i])) {
+      out[i] = temps[i];
+    } else if (ignoredCount < BMS_MAX_IGNORED_DISCONNECTED_PROBES) {
+      out[i] = NAN;
+      ignoredCount++;
+    } else {
+      out[i] = BMS_CAN::TEMP_PROBE_DISCONNECTED;
     }
-
-    if (tempC == BMS_CAN::TEMP_PROBE_DISCONNECTED) {
-      if (ignoredDisconnectedProbeCount < BMS_MAX_IGNORED_DISCONNECTED_PROBES) {
-        sanitizedTemps[i] = NAN;
-        ignoredDisconnectedProbeCount++;
-      } else {
-        sanitizedTemps[i] = tempC;
-      }
-      continue;
-    }
-
-    sanitizedTemps[i] = tempC;
   }
 }
 
