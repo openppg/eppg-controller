@@ -76,8 +76,8 @@ typedef struct {
   float power;                  // Power (kW)
   float highest_cell_voltage;   // Highest individual cell voltage (V)
   float lowest_cell_voltage;    // Lowest individual cell voltage (V)
-  float highest_temperature;    // Highest temperature reading (°C)
-  float lowest_temperature;     // Lowest temperature reading (°C)
+  float highest_temperature;    // Highest valid temperature reading (°C), NaN if unavailable
+  float lowest_temperature;     // Lowest valid temperature reading (°C), NaN if unavailable
   float energy_cycle;          // Energy per cycle (kWh)
   uint32_t battery_cycle;      // Battery cycle count
   uint8_t battery_fail_level;  // Battery failure status
@@ -92,10 +92,10 @@ typedef struct {
   // Individual temperature sensors
   float mos_temperature;        // BMS MOSFET temperature (°C) - index 0
   float balance_temperature;    // BMS balance resistor temperature (°C) - index 1
-  float t1_temperature;         // T1 cell temperature sensor (°C) - index 2
-  float t2_temperature;         // T2 cell temperature sensor (°C) - index 3
-  float t3_temperature;         // T3 cell temperature sensor (°C) - index 4
-  float t4_temperature;         // T4 cell temperature sensor (°C) - index 5
+  float t1_temperature;         // T1 cell temperature sensor (°C), NaN if disconnected - index 2
+  float t2_temperature;         // T2 cell temperature sensor (°C), NaN if disconnected - index 3
+  float t3_temperature;         // T3 cell temperature sensor (°C), NaN if disconnected - index 4
+  float t4_temperature;         // T4 cell temperature sensor (°C), NaN if disconnected - index 5
 } STR_BMS_TELEMETRY_140;
 #pragma pack(pop)
 
