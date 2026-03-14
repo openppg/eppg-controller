@@ -25,7 +25,7 @@ typedef struct {
   float inPWM;
   float outPWM;
   uint8_t statusFlag;
-  word checksum;
+  uint16_t checksum;
   unsigned long lastUpdateMs;  // Timestamp of last telemetry update
   TelemetryState escState;       // Current connection state
   uint16_t running_error;      // Runtime error bitmask
@@ -67,6 +67,7 @@ struct UnifiedBatteryData {
 };
 
 #define BMS_CELLS_NUM 24  // Maximum number of cells supported
+#define BMS_TEMPERATURE_SENSORS_NUM 6  // MOS, Balance, T1-T4
 
 // BMS telemetry data
 typedef struct {
@@ -138,6 +139,29 @@ typedef struct {
   uint32_t lastUpdateMs;        // Timestamp of last update
 } BLE_BMS_Telemetry_V1;
 
+// Binary packed Extended BMS telemetry for BLE transmission
+// Contains summary fields + per-cell voltages + per-probe temperatures.
+// Min/max/differential are omitted — clients compute from the arrays.
+typedef struct {
+  uint8_t version;              // Protocol version (1)
+  uint8_t bms_id;               // BMS identifier (0-3 for multi-BMS)
+  uint8_t connection_state;     // TelemetryState enum value
+  float soc;                    // State of charge (%)
+  float battery_voltage;        // Total battery voltage (V)
+  float battery_current;        // Battery current (A)
+  float power;                  // Power (kW)
+  uint8_t battery_fail_level;   // Battery failure status
+  uint8_t is_charge_mos;        // Charge MOSFET state (0/1)
+  uint8_t is_discharge_mos;     // Discharge MOSFET state (0/1)
+  uint8_t is_charging;          // Charging state (0/1)
+  uint32_t battery_cycle;       // Battery cycle count
+  float energy_cycle;           // Energy per cycle (kWh)
+  uint32_t lastUpdateMs;        // Timestamp of last update
+  float cell_voltages[BMS_CELLS_NUM];  // Per-cell voltages (V)
+  // Temperature ordering: [mos, balance, t1, t2, t3, t4]
+  float temperatures[BMS_TEMPERATURE_SENSORS_NUM];  // Probe temperatures (deg C)
+} BLE_BMS_Extended_Telemetry_V1;
+
 // Binary packed ESC telemetry for BLE transmission (~46 bytes)
 typedef struct {
   uint8_t version;              // Protocol version (1)
@@ -166,6 +190,9 @@ typedef struct {
   uint16_t pot_raw;             // Raw potentiometer reading (0..4095)
   uint32_t uptime_ms;           // Time since boot (ms)
 } BLE_Controller_Telemetry_V1;
+
+static_assert(sizeof(BLE_BMS_Extended_Telemetry_V1) <= 182,
+              "Extended BMS packet exceeds BLE payload budget for MTU 185");
 
 #pragma pack(pop)
 
