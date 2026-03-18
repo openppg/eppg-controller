@@ -2,7 +2,6 @@
 // OpenPPG
 #include "Arduino.h"
 
-#include <limits>
 #include <cmath>
 
 #include "../../inc/sp140/esp32s3-config.h"
@@ -361,103 +360,11 @@ void bleNotifyTask(void *pvParameters) {
 
   TickType_t lastWake = xTaskGetTickCount();
   const TickType_t notifyTicks = pdMS_TO_TICKS(20); // 50 Hz
-  constexpr int32_t kI8Min = std::numeric_limits<int8_t>::min();
-  constexpr int32_t kI8Max = std::numeric_limits<int8_t>::max();
-  constexpr int32_t kU8Max = std::numeric_limits<uint8_t>::max();
-  constexpr int32_t kI16Min = std::numeric_limits<int16_t>::min();
-  constexpr int32_t kI16Max = std::numeric_limits<int16_t>::max();
-  constexpr int32_t kU16Max = std::numeric_limits<uint16_t>::max();
-  constexpr int64_t kU32Max = std::numeric_limits<uint32_t>::max();
-
-  const auto toI8 = [=](int32_t value) -> int8_t { return static_cast<int8_t>(constrain(value, kI8Min, kI8Max)); };
-  const auto toU8 = [=](int32_t value) -> uint8_t { return static_cast<uint8_t>(constrain(value, 0, kU8Max)); };
-  const auto toI16 = [=](int32_t value) -> int16_t { return static_cast<int16_t>(constrain(value, kI16Min, kI16Max)); };
-  const auto toU16 = [=](int32_t value) -> uint16_t { return static_cast<uint16_t>(constrain(value, 0, kU16Max)); };
-  const auto toU32 = [=](int64_t value) -> uint32_t {
-    return static_cast<uint32_t>(constrain(value, 0LL, kU32Max));
-  };
 
   for (;;) {
-    const unsigned long now = millis();
     TelemetryHub hub = {};
     if (telemetryHubRead(&hub, pdMS_TO_TICKS(2))) {
-      // Unified Fast-Link Telemetry (The exhaustive high-speed pipeline)
-      static uint32_t fastLinkPacketId = 0;
-      BLE_FastLink_Telemetry fastLink = {};
-      fastLink.version = FASTLINK_PROTOCOL_VERSION;
-      fastLink.packet_id = fastLinkPacketId++;
-      fastLink.uptime_ms = now;
-
-      // Controller mapping (float -> fixed-point)
-      fastLink.altitude_cm = static_cast<int32_t>(lroundf(hub.altitude * 100.0f));
-      fastLink.baro_temp_dC = toI16(static_cast<int32_t>(lroundf(hub.baro_temp * 10.0f)));
-      fastLink.baro_pressure_dHPa = toU16(static_cast<int32_t>(lroundf(hub.baro_pressure * 10.0f)));
-      fastLink.vario_cmps = toI16(static_cast<int32_t>(lroundf(hub.vario * 100.0f)));
-      fastLink.mcu_temp_dC = toI16(static_cast<int32_t>(lroundf(hub.mcu_temp * 10.0f)));
-      fastLink.pot_raw = hub.pot_raw;
-      fastLink.device_state = (uint8_t)currentState;
-
-      // ESC mapping (float -> fixed-point, matches native CAN 0.1-unit resolution)
-      fastLink.esc_status = (uint8_t)hub.esc.escState;
-      fastLink.esc_volts_dV = toU16(static_cast<int32_t>(lroundf(hub.esc.volts * 10.0f)));
-      fastLink.esc_amps_dA = toI16(static_cast<int32_t>(lroundf(hub.esc.amps * 10.0f)));
-      fastLink.esc_phase_current_dA = toI16(static_cast<int32_t>(lroundf(hub.esc.phase_current * 10.0f)));
-      fastLink.esc_rpm = hub.esc.eRPM;
-      fastLink.esc_temp_mos_dC = toI16(static_cast<int32_t>(lroundf(hub.esc.mos_temp * 10.0f)));
-      fastLink.esc_temp_cap_dC = toI16(static_cast<int32_t>(lroundf(hub.esc.cap_temp * 10.0f)));
-      fastLink.esc_temp_mcu_dC = toI16(static_cast<int32_t>(lroundf(hub.esc.mcu_temp * 10.0f)));
-      fastLink.esc_temp_motor_dC = std::isnan(hub.esc.motor_temp)
-          ? kNoTempSensorDC
-          : toI16(static_cast<int32_t>(lroundf(hub.esc.motor_temp * 10.0f)));
-      fastLink.esc_inPWM = hub.esc.inPWM;
-      fastLink.esc_outPWM = hub.esc.comm_pwm;
-      fastLink.esc_v_modulation = hub.esc.v_modulation;
-      fastLink.esc_error = hub.esc.running_error;
-      fastLink.esc_selfcheck = hub.esc.selfcheck_error;
-      fastLink.esc_hardware_id = hub.esc.hardware_id;
-      fastLink.esc_fw_version = hub.esc.fw_version;
-      fastLink.esc_bootloader_version = hub.esc.bootloader_version;
-      memcpy(fastLink.esc_sn_code, hub.esc.sn_code, sizeof(fastLink.esc_sn_code));
-      fastLink.esc_runtime_ms = hub.esc.esc_runtime_ms;
-
-      // BMS mapping (float -> fixed-point, matches native CAN resolution)
-      fastLink.bms_status = (uint8_t)hub.bms.bmsState;
-      fastLink.bms_soc = toU8(static_cast<int32_t>(lroundf(hub.bms.soc)));
-      fastLink.bms_volts_dV = toU16(static_cast<int32_t>(lroundf(hub.bms.battery_voltage * 10.0f)));
-      fastLink.bms_amps_dA = toI16(static_cast<int32_t>(lroundf(hub.bms.battery_current * 10.0f)));
-      fastLink.bms_energy_cycle_mAh = toU32(static_cast<int64_t>(lroundf(hub.bms.energy_cycle_ah * 1000.0f)));
-      fastLink.bms_battery_cycle = hub.bms.battery_cycle;
-      fastLink.bms_fail_level = hub.bms.battery_fail_level;
-      fastLink.bms_is_charging = hub.bms.is_charging ? 1 : 0;
-      fastLink.bms_is_charge_mos = hub.bms.is_charge_mos ? 1 : 0;
-      fastLink.bms_is_discharge_mos = hub.bms.is_discharge_mos ? 1 : 0;
-      fastLink.bms_charge_wire = hub.bms.charge_wire_connected ? 1 : 0;
-      fastLink.bms_low_soc_warning = hub.bms.low_soc_warning ? 1 : 0;
-      fastLink.bms_battery_ready = hub.bms.battery_ready ? 1 : 0;
-      fastLink.bms_highest_temp_C = toI8(static_cast<int32_t>(lroundf(hub.bms.highest_temperature)));
-      fastLink.bms_lowest_temp_C = toI8(static_cast<int32_t>(lroundf(hub.bms.lowest_temperature)));
-      fastLink.bms_cell_max_mV = toU16(static_cast<int32_t>(lroundf(hub.bms.highest_cell_voltage * 1000.0f)));
-      fastLink.bms_cell_min_mV = toU16(static_cast<int32_t>(lroundf(hub.bms.lowest_cell_voltage * 1000.0f)));
-      fastLink.bms_voltage_diff_mV = toU16(static_cast<int32_t>(lroundf(hub.bms.voltage_differential * 1000.0f)));
-      memcpy(fastLink.bms_battery_id, hub.bms.battery_id, sizeof(fastLink.bms_battery_id));
-      fastLink.bms_type = hub.bms.bms_type;
-
-      // Cell voltages: float V -> uint16_t mV (native 1 mV resolution)
-      for (int i = 0; i < BMS_CELLS_NUM; i++) {
-        fastLink.bms_cell_voltages_mV[i] = toU16(static_cast<int32_t>(lroundf(hub.bms.cell_voltages[i] * 1000.0f)));
-      }
-
-      // Temperature sensors: float C -> int8_t C (native 1C resolution)
-      fastLink.bms_temp_sensors_C[0] = toI8(static_cast<int32_t>(lroundf(hub.bms.mos_temperature)));
-      fastLink.bms_temp_sensors_C[1] = toI8(static_cast<int32_t>(lroundf(hub.bms.balance_temperature)));
-      fastLink.bms_temp_sensors_C[2] = toI8(static_cast<int32_t>(lroundf(hub.bms.t1_temperature)));
-      fastLink.bms_temp_sensors_C[3] = toI8(static_cast<int32_t>(lroundf(hub.bms.t2_temperature)));
-      fastLink.bms_temp_sensors_C[4] = toI8(static_cast<int32_t>(lroundf(hub.bms.t3_temperature)));
-      fastLink.bms_temp_sensors_C[5] = toI8(static_cast<int32_t>(lroundf(hub.bms.t4_temperature)));
-      fastLink.bms_temp_sensors_C[6] = 0;
-      fastLink.bms_temp_sensors_C[7] = 0;
-
-      updateFastLinkTelemetry(fastLink);
+      publishFastLinkTelemetry(hub, currentState);
     }
 
     vTaskDelayUntil(&lastWake, notifyTicks);
