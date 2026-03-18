@@ -8,4 +8,8 @@ void setupBLE();
 // Allow modules to trigger advertising after disconnects.
 void restartBLEAdvertising();
 
+// Temporarily disable whitelist filtering so a new device can bond.
+// Advertising reopens for ~60 seconds then whitelisting is restored.
+void enterBLEPairingMode();
+
 #endif  // INC_SP140_BLE_BLE_CORE_H_

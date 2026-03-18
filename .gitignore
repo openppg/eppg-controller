@@ -2,3 +2,4 @@
 .vscode/*
 eppg-controller.ino.cpp
 src/sp140/sp140.ino.cpp
+diagnostics-logs/

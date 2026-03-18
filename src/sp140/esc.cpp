@@ -15,6 +15,15 @@ static CanardAdapter adapter;
 static uint8_t memory_pool[1024] __attribute__((aligned(8)));
 static SineEsc esc(adapter);
 static unsigned long lastSuccessfulCommTimeMs = 0;  // Store millis() time of last successful ESC comm
+// Flag set by requestEscHardwareInfo() (may be called from BLE task),
+// consumed safely inside readESCTelemetry() on the throttle task.
+static volatile bool s_hwInfoRequested = false;
+
+// ESC runtime accumulation — unwraps the uint16 time_10ms counter (~10.9 min period)
+// Unsigned subtraction naturally handles wrap: (uint16_t)(current - last) is correct even across rollover.
+static uint16_t sEscLastTime10ms = 0;
+static uint32_t sEscAccumulatedRuntimeMs = 0;
+static bool sEscFirstUpdate = true;
 
 
 STR_ESC_TELEMETRY_140 escTelemetryData = {
@@ -74,20 +83,27 @@ void readESCTelemetry() {
   // Only proceed if TWAI is initialized
   if (!escTwaiInitialized) { return; }  // NOLINT(whitespace/newline)
 
-  // Store the last known ESC timestamp before checking for new data
-  unsigned long previousEscReportedTimeMs = escTelemetryData.lastUpdateMs;
-
   const SineEscModel &model = esc.getModel();
 
   if (model.hasSetThrottleSettings2Response) {
     const sine_esc_SetThrottleSettings2Response *res = &model.setThrottleSettings2Response;
 
-    unsigned long newEscReportedTimeMs = res->time_10ms * 10;
+    uint16_t rawTime10ms = res->time_10ms;
 
-    // Check if the timestamp from the ESC has actually changed
-    if (newEscReportedTimeMs != previousEscReportedTimeMs) {
+    // Check if the timestamp from the ESC has actually changed (stale-data guard)
+    if (rawTime10ms != sEscLastTime10ms) {
+      // Unwrap the uint16 counter using unsigned subtraction — naturally correct across rollover.
+      // e.g. last=65000, current=100: (uint16_t)(100-65000) = 636 ticks = 6360ms elapsed.
+      if (!sEscFirstUpdate) {
+        uint16_t deltaTicks = rawTime10ms - sEscLastTime10ms;
+        sEscAccumulatedRuntimeMs += (uint32_t)deltaTicks * 10UL;
+      }
+      sEscFirstUpdate = false;
+      sEscLastTime10ms = rawTime10ms;
+
       // Timestamp is new, process the telemetry data
-      escTelemetryData.lastUpdateMs = newEscReportedTimeMs;
+      escTelemetryData.lastUpdateMs = sEscAccumulatedRuntimeMs;
+      escTelemetryData.esc_runtime_ms = sEscAccumulatedRuntimeMs;
 
       // Update telemetry data
       escTelemetryData.volts = res->voltage / 10.0f;
@@ -104,8 +120,11 @@ void readESCTelemetry() {
         // Store invalid motor temp as NaN. Downstream consumers can skip on isnan().
         escTelemetryData.motor_temp = NAN;
       }
+      escTelemetryData.phase_current = res->current / 10.0f;
       escTelemetryData.eRPM = res->speed;
       escTelemetryData.inPWM = res->recv_pwm / 10.0f;
+      escTelemetryData.comm_pwm = res->comm_pwm;
+      escTelemetryData.v_modulation = res->v_modulation;
       watts = escTelemetryData.amps * escTelemetryData.volts;
 
       // Store error bitmasks
@@ -128,17 +147,52 @@ void readESCTelemetry() {
       // Log state change only if it actually changed
       USBSerial.printf("ESC State: %d -> NOT_CONNECTED (Timeout)\n", escTelemetryData.escState);
       escTelemetryData.escState = TelemetryState::NOT_CONNECTED;
-      // Optional: Consider resetting telemetry values here if needed when disconnected
+      // Reset runtime accumulator so it restarts from zero on reconnect.
+      // Keep sEscLastTime10ms at its last real value so the stale-data guard
+      // continues to reject the unchanged res->time_10ms from the SINE library.
+      sEscAccumulatedRuntimeMs = 0;
+      sEscFirstUpdate = true;
     }
   } else {
     if (escTelemetryData.escState != TelemetryState::CONNECTED) {
       // Log state change only if it actually changed
       USBSerial.printf("ESC State: %d -> CONNECTED\n", escTelemetryData.escState);
       escTelemetryData.escState = TelemetryState::CONNECTED;
+      // Auto-request hardware info on first connection if not already populated
+      if (escTelemetryData.hardware_id == 0) {
+        USBSerial.println("ESC: Auto-requesting hardware info");
+        esc.getHardwareInfo();
+      }
     }
   }
 
+  // Process any pending hardware info request (set from BLE command or retry)
+  if (s_hwInfoRequested) {
+    s_hwInfoRequested = false;
+    USBSerial.println("ESC: Sending GetHwInfo (app-requested)");
+    esc.getHardwareInfo();
+  }
+
+  // Populate static hardware info whenever available (comes in once after boot)
+  if (model.hasGetHardwareInfoResponse) {
+    const sine_esc_GetHwInfoResponse *hw = &model.getHardwareInfoResponse;
+    escTelemetryData.hardware_id = hw->hardware_id;
+    escTelemetryData.fw_version = hw->app_version;
+    escTelemetryData.bootloader_version = hw->bootloader_version;
+    memcpy(escTelemetryData.sn_code, hw->sn_code, sizeof(escTelemetryData.sn_code));
+  }
+
   adapter.processTxRxOnce();  // Process CAN messages
+}
+
+/**
+ * Request ESC hardware info (HW ID, FW version, bootloader version, serial number).
+ * Thread-safe: sets a flag that is consumed by readESCTelemetry() on its next
+ * tick, keeping all CAN traffic on the throttle task.
+ * Called by the BLE command characteristic handler (0x01 from the app).
+ */
+void requestEscHardwareInfo() {
+  s_hwInfoRequested = true;
 }
 
 /**
