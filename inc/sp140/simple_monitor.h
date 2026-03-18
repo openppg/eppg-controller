@@ -91,14 +91,6 @@ struct ILogger {
   virtual ~ILogger() = default;
 };
 
-// Telemetry snapshot for thread-safe handoff
-struct TelemetrySnapshot {
-  STR_ESC_TELEMETRY_140 esc;
-  STR_BMS_TELEMETRY_140 bms;
-};
-
-extern QueueHandle_t telemetrySnapshotQueue;
-
 // Serial logger implementation
 struct SerialLogger : ILogger {
   void log(SensorID id, AlertLevel lvl, float v) override;
