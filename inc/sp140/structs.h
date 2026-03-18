@@ -160,7 +160,7 @@ typedef struct {
   int16_t esc_temp_cap_dC;         // Capacitor Temp (deci-C, x10)
   int16_t esc_temp_mcu_dC;         // MCU Temp (deci-C, x10)
   int16_t esc_temp_motor_dC;       // Motor Temp (deci-C, x10), INT16_MIN = no sensor
-  uint16_t esc_inPWM;              // Input PWM command (recv_pwm, raw)
+  uint16_t esc_inPWM;              // Input PWM command (recv_pwm, native units)
   uint16_t esc_outPWM;             // Commutation PWM output (comm_pwm, raw)
   uint16_t esc_v_modulation;       // Voltage modulation index (raw)
   uint16_t esc_error;              // Runtime error bitmask

@@ -84,7 +84,7 @@ BLE_FastLink_Telemetry buildFastLinkTelemetry(const TelemetryHub &hub,
   fastLink.esc_temp_motor_dC = std::isnan(hub.esc.motor_temp)
       ? kNoTempSensorDC
       : toI16(scaled(hub.esc.motor_temp, 10.0f));
-  fastLink.esc_inPWM = hub.esc.inPWM;
+  fastLink.esc_inPWM = toU16(scaled(hub.esc.inPWM, 10.0f));
   fastLink.esc_outPWM = hub.esc.comm_pwm;
   fastLink.esc_v_modulation = hub.esc.v_modulation;
   fastLink.esc_error = hub.esc.running_error;
