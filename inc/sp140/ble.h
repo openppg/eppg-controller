@@ -9,7 +9,6 @@
 extern NimBLECharacteristic* pThrottleCharacteristic;
 extern NimBLECharacteristic* pDeviceStateCharacteristic;
 extern NimBLEServer* pServer;
-extern volatile uint16_t connectedHandle;
 extern volatile bool deviceConnected;
 extern volatile bool oldDeviceConnected;
 

@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include "sp140/bms.h"
 #include "sp140/simple_monitor.h"
 #include "sp140/monitor_config.h"
 
@@ -235,6 +236,166 @@ TEST(SimpleMonitor, BMSTemperatureAlerts) {
     tempMon.check();
     ASSERT_EQ(logger.entries.size(), 2u);
     EXPECT_EQ(logger.entries.back().lvl, AlertLevel::CRIT_HIGH);
+}
+
+TEST(SimpleMonitor, BMSCellTemperatureDisconnectedIsIgnored) {
+  FakeLogger logger;
+  float fakeTemp = 30.0f;
+
+  SensorMonitor cellTempMon(
+    SensorID::BMS_T1_Temp,
+    SensorCategory::BMS,
+    bmsCellTempThresholds,
+    [&]() { return fakeTemp; },
+    &logger);
+
+  cellTempMon.check();  // Baseline OK
+  EXPECT_TRUE(logger.entries.empty());
+
+  // Disconnected probe reading should be treated as invalid (sanitized to NaN upstream).
+  fakeTemp = NAN;
+  cellTempMon.check();
+  EXPECT_TRUE(logger.entries.empty());
+
+  // Remaining connected probes still report alerts normally.
+  fakeTemp = 54.0f;
+  cellTempMon.check();
+  ASSERT_EQ(logger.entries.size(), 1u);
+  EXPECT_EQ(logger.entries.back().lvl, AlertLevel::WARN_HIGH);
+}
+
+TEST(SimpleMonitor, BMSCellTemperatureDisconnectClearsActiveAlert) {
+  FakeLogger logger;
+  float fakeTemp = 55.0f;
+
+  SensorMonitor cellTempMon(
+    SensorID::BMS_T2_Temp,
+    SensorCategory::BMS,
+    bmsCellTempThresholds,
+    [&]() { return fakeTemp; },
+    &logger);
+
+  // Enter warning state first.
+  cellTempMon.check();
+  ASSERT_EQ(logger.entries.size(), 1u);
+  EXPECT_EQ(logger.entries.back().lvl, AlertLevel::WARN_HIGH);
+
+  // Disconnect should clear the active alert.
+  fakeTemp = NAN;
+  cellTempMon.check();
+  ASSERT_EQ(logger.entries.size(), 2u);
+  EXPECT_EQ(logger.entries.back().lvl, AlertLevel::OK);
+}
+
+// sanitizeCellProbeTemps now receives NaN from the library for disconnected
+// probes. It applies app policy: up to 2 NaN are passed through silently;
+// beyond that, NaN is replaced with the sentinel so temp monitors alert.
+
+TEST(SimpleMonitor, BMSCellProbeSanitizerIgnoresUpToTwoDisconnected) {
+  // Two disconnected (NaN from library), two connected
+  const float temps[BMS_CELL_PROBE_COUNT] = {NAN, -39.0f, NAN, 12.0f};
+  float out[BMS_CELL_PROBE_COUNT] = {};
+
+  sanitizeCellProbeTemps(temps, out);
+
+  EXPECT_TRUE(isnan(out[0]));
+  EXPECT_FLOAT_EQ(out[1], -39.0f);
+  EXPECT_TRUE(isnan(out[2]));
+  EXPECT_FLOAT_EQ(out[3], 12.0f);
+}
+
+TEST(SimpleMonitor, BMSCellProbeSanitizerAlertsOnThirdDisconnected) {
+  // Three disconnected: first two become NaN, third becomes sentinel for alert
+  const float temps[BMS_CELL_PROBE_COUNT] = {NAN, NAN, NAN, 25.0f};
+  float out[BMS_CELL_PROBE_COUNT] = {};
+
+  sanitizeCellProbeTemps(temps, out);
+
+  EXPECT_TRUE(isnan(out[0]));
+  EXPECT_TRUE(isnan(out[1]));
+  EXPECT_FLOAT_EQ(out[2], BMS_CAN::TEMP_PROBE_DISCONNECTED);
+  EXPECT_FLOAT_EQ(out[3], 25.0f);
+}
+
+TEST(SimpleMonitor, BMSCellProbeSanitizerAlertsOnThirdAndFourthDisconnected) {
+  // All four disconnected: first two NaN, third and fourth become sentinel
+  const float temps[BMS_CELL_PROBE_COUNT] = {NAN, NAN, NAN, NAN};
+  float out[BMS_CELL_PROBE_COUNT] = {};
+
+  sanitizeCellProbeTemps(temps, out);
+
+  EXPECT_TRUE(isnan(out[0]));
+  EXPECT_TRUE(isnan(out[1]));
+  EXPECT_FLOAT_EQ(out[2], BMS_CAN::TEMP_PROBE_DISCONNECTED);
+  EXPECT_FLOAT_EQ(out[3], BMS_CAN::TEMP_PROBE_DISCONNECTED);
+}
+
+TEST(SimpleMonitor, BMSCellProbeSanitizerPassesThroughValidTemps) {
+  const float temps[BMS_CELL_PROBE_COUNT] = {10.0f, 20.0f, 30.0f, 40.0f};
+  float out[BMS_CELL_PROBE_COUNT] = {};
+
+  sanitizeCellProbeTemps(temps, out);
+
+  EXPECT_FLOAT_EQ(out[0], 10.0f);
+  EXPECT_FLOAT_EQ(out[1], 20.0f);
+  EXPECT_FLOAT_EQ(out[2], 30.0f);
+  EXPECT_FLOAT_EQ(out[3], 40.0f);
+}
+
+TEST(SimpleMonitor, BMSCellProbeDisconnectTransitionTriggersAndClearsAlert) {
+  FakeLogger logger;
+  float sanitizedTemps[BMS_CELL_PROBE_COUNT] = {NAN, NAN, NAN, NAN};
+
+  SensorMonitor t1Mon(
+    SensorID::BMS_T1_Temp,
+    SensorCategory::BMS,
+    bmsCellTempThresholds,
+    [&]() { return sanitizedTemps[0]; },
+    &logger);
+  SensorMonitor t2Mon(
+    SensorID::BMS_T2_Temp,
+    SensorCategory::BMS,
+    bmsCellTempThresholds,
+    [&]() { return sanitizedTemps[1]; },
+    &logger);
+  SensorMonitor t3Mon(
+    SensorID::BMS_T3_Temp,
+    SensorCategory::BMS,
+    bmsCellTempThresholds,
+    [&]() { return sanitizedTemps[2]; },
+    &logger);
+  SensorMonitor t4Mon(
+    SensorID::BMS_T4_Temp,
+    SensorCategory::BMS,
+    bmsCellTempThresholds,
+    [&]() { return sanitizedTemps[3]; },
+    &logger);
+
+  const auto evaluateCycle = [&](const float temps[BMS_CELL_PROBE_COUNT]) {
+    sanitizeCellProbeTemps(temps, sanitizedTemps);
+    t1Mon.check();
+    t2Mon.check();
+    t3Mon.check();
+    t4Mon.check();
+  };
+
+  // Two disconnected probes (NaN) are within tolerance - no alert.
+  const float twoDisconnected[BMS_CELL_PROBE_COUNT] = {NAN, NAN, 5.0f, 6.0f};
+  evaluateCycle(twoDisconnected);
+  EXPECT_TRUE(logger.entries.empty());
+
+  // Third disconnect exceeds tolerance - sentinel triggers CRIT_LOW alert.
+  const float threeDisconnected[BMS_CELL_PROBE_COUNT] = {NAN, NAN, NAN, 6.0f};
+  evaluateCycle(threeDisconnected);
+  ASSERT_EQ(logger.entries.size(), 1u);
+  EXPECT_EQ(logger.entries[0].id, SensorID::BMS_T3_Temp);
+  EXPECT_EQ(logger.entries[0].lvl, AlertLevel::CRIT_LOW);
+
+  // Returning to two disconnected clears the alert.
+  evaluateCycle(twoDisconnected);
+  ASSERT_EQ(logger.entries.size(), 2u);
+  EXPECT_EQ(logger.entries[1].id, SensorID::BMS_T3_Temp);
+  EXPECT_EQ(logger.entries[1].lvl, AlertLevel::OK);
 }
 
 TEST(SimpleMonitor, MonitorIDAccess) {

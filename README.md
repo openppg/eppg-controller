@@ -1,8 +1,18 @@
 # EPPG Controller
 
-![Build](https://github.com/openppg/eppg-controller/actions/workflows/config.yml/badge.svg)
+[![Build](https://github.com/openppg/eppg-controller/actions/workflows/config.yml/badge.svg)](https://github.com/openppg/eppg-controller/actions/workflows/config.yml)
 
 Arduino based logic for OpenPPG SP140 Throttle Controller
+
+### Key Features
+
+- CAN bus communication with ESC and BMS
+- LVGL-based LCD display interface
+- Bluetooth Low Energy (BLE) connectivity via NimBLE
+- Barometric altitude sensing (BMP3XX)
+- Multiple flight modes (manual, cruise)
+- Real-time sensor monitoring with hysteresis-based alerting
+- Web-based configuration via [config.openppg.com](https://config.openppg.com) (no firmware flash needed)
 
 #### This master branch is only for testing the latest firmware for the SP140 controllers running the ESP32-S3 processor.
 
@@ -39,10 +49,6 @@ OpenPPG supports flashing the firmware PlatformIO. Older versions were also comp
 3. Open the folder using the PlatformIO "open project" option inside of VSCode.
 4. The first time you build the project it will download the libraries.
 
-#### Download and Prepare OpenPPG Code
-
-1. Download the latest controller code zip from [here](https://github.com/openppg/eppg-controller/archive/master.zip)
-
 #### Flash the OpenPPG Code
 
 1. First make sure the code compiles by hitting the check button in the bottom left "Build".
@@ -65,10 +71,21 @@ $ esptool.py --chip esp32s3 merge_bin \
   0x10000 .pio/build/OpenPPG-CESP32S3-CAN-SP140/firmware.bin
 ```
 
+## Testing
+
+Unit tests use [Google Test](https://github.com/google/googletest) and run natively (no hardware required):
+
+```bash
+pio test -e native-test
+```
+
+Test suites cover ESC error handling, throttle processing, hysteresis logic, sensor monitoring, and logging.
+
+CI automatically runs cpplint, unit tests, and a full firmware build on every push.
+
 ## Config tool
 
-The open source web based config tool for updating certain settings over USB (without needing to flash firmware) can be found at https://config.openppg.com.
-
+The open source web based config tool for updating certain settings over USB (without needing to flash firmware) can be found at [config.openppg.com](https://config.openppg.com).
 
 ## Help improve these docs
 

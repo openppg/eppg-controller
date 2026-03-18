@@ -22,20 +22,18 @@ extern void writeDeviceData();
 extern QueueHandle_t throttleUpdateQueue;
 extern volatile DeviceState currentState;
 
-namespace {
-
-constexpr uint32_t kReadSecure =
-    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_ENC;
+// NIMBLE property flag combinations used by config service characteristics.
+// Defined at file scope (translation-unit local) to avoid namespace indentation.
+constexpr uint32_t kReadSecure = NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_ENC;
 constexpr uint32_t kReadWriteSecure =
-    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE |
-    NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::WRITE_ENC;
+    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::WRITE_ENC;
 constexpr uint32_t kNotifyReadSecure =
-    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY |
-    NIMBLE_PROPERTY::READ_ENC;
+    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ_ENC;
 constexpr uint32_t kReadWriteNotifyIndicateSecure =
-    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE |
-    NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::INDICATE |
-    NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::WRITE_ENC;
+    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::NOTIFY |
+    NIMBLE_PROPERTY::INDICATE | NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::WRITE_ENC;
+
+namespace {
 
 class MetricAltCallbacks : public NimBLECharacteristicCallbacks {
   void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {

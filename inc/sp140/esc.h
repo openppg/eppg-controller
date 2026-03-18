@@ -20,11 +20,6 @@ void setESCThrottle(int throttlePWM);
 void readESCTelemetry();
 bool setupTWAI();
 
-// Request ESC hardware info (HW ID, FW version, bootloader, serial number).
-// Thread-safe: sets a flag consumed by readESCTelemetry() on its next tick.
-// Also called automatically the first time the ESC connects.
-void requestEscHardwareInfo();
-
 // ESC Error Decoding Functions
 String decodeRunningError(uint16_t errorCode);
 String decodeSelfCheckError(uint16_t errorCode);

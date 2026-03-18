@@ -6,7 +6,6 @@
 Adafruit_BMP3XX bmp;
 bool bmpPresent = false;
 float groundAltitude = 0;
-static SemaphoreHandle_t i2cMutex = nullptr;
 
 struct AltitudeReading {
   float altitude;
@@ -17,18 +16,15 @@ struct AltitudeReading {
 CircularBuffer<AltitudeReading, VARIO_BUFFER_SIZE> altitudeBuffer;
 
 float getAltitude(const STR_DEVICE_DATA_140_V1& deviceData) {
-  if (bmpPresent && i2cMutex != nullptr) {
-    if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
-      const float altitude = bmp.readAltitude(deviceData.sea_pressure);
-      xSemaphoreGive(i2cMutex);
-      float relativeAltitude = altitude - groundAltitude;
+  if (bmpPresent) {
+    const float altitude = bmp.readAltitude(deviceData.sea_pressure);
+    float relativeAltitude = altitude - groundAltitude;
 
-      // Add new reading to buffer with timestamp
-      AltitudeReading reading = {relativeAltitude, millis()};
-      altitudeBuffer.push(reading);
+    // Add new reading to buffer with timestamp
+    AltitudeReading reading = {relativeAltitude, millis()};
+    altitudeBuffer.push(reading);
 
-      return relativeAltitude;
-    }
+    return relativeAltitude;
   }
   return __FLT_MIN__;
 }
@@ -57,43 +53,30 @@ float getVerticalSpeed() {
 
 // set the ground altitude to the current altitude
 void setGroundAltitude(const STR_DEVICE_DATA_140_V1& deviceData) {
-  if (bmpPresent && i2cMutex != nullptr) {
-    if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-      groundAltitude = bmp.readAltitude(deviceData.sea_pressure);
-      xSemaphoreGive(i2cMutex);
-      altitudeBuffer.clear();  // Clear the buffer when resetting ground altitude
-    }
+  if (bmpPresent) {
+    groundAltitude = bmp.readAltitude(deviceData.sea_pressure);
+    altitudeBuffer.clear();  // Clear the buffer when resetting ground altitude
   }
 }
 
 // Get the temperature in degrees Celsius
 float getBaroTemperature() {
-  if (bmpPresent && i2cMutex != nullptr) {
-    if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
-      float temp = bmp.readTemperature();
-      xSemaphoreGive(i2cMutex);
-      return temp;
-    }
+  if (bmpPresent) {
+    return bmp.readTemperature();
   }
-  return __FLT_MIN__;
+  return __FLT_MIN__;  // Return a very small number if BMP is not present
 }
 
 // Get the pressure in hPa
 float getBaroPressure() {
-  if (bmpPresent && i2cMutex != nullptr) {
-    if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
-      float pressure = bmp.readPressure() / 100.0f;
-      xSemaphoreGive(i2cMutex);
-      return pressure;
-    }
+  if (bmpPresent) {
+    return bmp.readPressure() / 100.0f;  // Convert Pa to hPa
   }
-  return __FLT_MIN__;
+  return __FLT_MIN__;  // Return a very small number if BMP is not present
 }
 
 // Start the bmp3XX sensor
 bool setupAltimeter() {
-  i2cMutex = xSemaphoreCreateMutex();
-
   // pull down pin 40 to high to set the address
   pinMode(40, OUTPUT);
   digitalWrite(40, HIGH);
