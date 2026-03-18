@@ -104,8 +104,8 @@ bool startAdvertising(NimBLEServer *server) {
   adv.setFlags(BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP);
 
   // High-frequency advertising for "instant" connection
-  adv.setMinInterval(32); // 20ms (32 * 0.625ms)
-  adv.setMaxInterval(48); // 30ms (48 * 0.625ms)
+  adv.setMinInterval(32);  // 20ms (32 * 0.625ms)
+  adv.setMaxInterval(48);  // 30ms (48 * 0.625ms)
 
   // Open advertising only during the explicit pairing window. Normal runtime
   // advertising only accepts bonded devices from the controller whitelist.
@@ -142,8 +142,8 @@ bool startAdvertising(NimBLEServer *server) {
     advertising->setConnectableMode(BLE_GAP_CONN_MODE_UND);
     advertising->addServiceUUID(NimBLEUUID(CONFIG_SERVICE_UUID));
     advertising->enableScanResponse(true);
-    advertising->setMinInterval(32); // 20ms (32 * 0.625ms)
-    advertising->setMaxInterval(48); // 30ms (48 * 0.625ms)
+    advertising->setMinInterval(32);  // 20ms (32 * 0.625ms)
+    advertising->setMaxInterval(48);  // 30ms (48 * 0.625ms)
     payloadConfigured = true;
   }
 
@@ -248,7 +248,7 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
   }
 };
 
-} // namespace
+}  // namespace
 
 void setupBLE() {
   // Initialize NimBLE with device name

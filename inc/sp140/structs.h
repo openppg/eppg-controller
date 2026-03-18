@@ -8,8 +8,8 @@
 
 // Telemetry connection state
 enum class TelemetryState : uint8_t {
-  NOT_CONNECTED, // Not receiving data
-  CONNECTED,     // Receiving data normally
+  NOT_CONNECTED,  // Not receiving data
+  CONNECTED,      // Receiving data normally
 };
 
 // v1 ESC telemetry
@@ -20,15 +20,15 @@ typedef struct {
   float mcu_temp;
   float motor_temp;    // Motor temperature in °C
   float amps;          // DC bus current (A)
-  float phase_current; // AC phase current into motor windings (A)
+  float phase_current;  // AC phase current into motor windings (A)
   float eRPM;
   float inPWM;
   float outPWM;
   uint16_t comm_pwm;     // Commutation PWM output to motor (raw ESC units)
-  uint16_t v_modulation; // Voltage modulation index (raw ESC units)
+  uint16_t v_modulation;  // Voltage modulation index (raw ESC units)
   uint8_t statusFlag;
   uint16_t checksum;
-  unsigned long lastUpdateMs; // Timestamp of last telemetry update
+  unsigned long lastUpdateMs;  // Timestamp of last telemetry update
   TelemetryState escState;    // Current connection state
   uint16_t running_error;     // Runtime error bitmask
   uint16_t selfcheck_error;   // Self-check error bitmask
@@ -49,10 +49,10 @@ typedef struct {
   float sea_pressure;       // 1013.25 mbar
   bool metric_temp;         // true
   bool metric_alt;          // false
-  uint8_t performance_mode; // 0,1,2
-  uint8_t theme;            // 0,1 for light/dark
-  uint8_t revision; // 2040 board revision (1=original, 2=rev1, 3=esp32s3)
-  int32_t timezone_offset; // Timezone offset in seconds from UTC
+  uint8_t performance_mode;  // 0,1,2
+  uint8_t theme;             // 0,1 for light/dark
+  uint8_t revision;  // 2040 board revision (1=original, 2=rev1, 3=esp32s3)
+  int32_t timezone_offset;  // Timezone offset in seconds from UTC
 } STR_DEVICE_DATA_140_V1;
 
 // Tone struct (passed between cores)
@@ -70,11 +70,11 @@ struct BatteryVoltagePoint {
 struct UnifiedBatteryData {
   float volts;
   float amps;
-  float power; // power in kW
-  float soc;   // State of Charge
+  float power;  // power in kW
+  float soc;    // State of Charge
 };
 
-#define BMS_CELLS_NUM 24 // Maximum number of cells supported
+#define BMS_CELLS_NUM 24  // Maximum number of cells supported
 
 // BMS telemetry data
 typedef struct {
@@ -94,8 +94,8 @@ typedef struct {
   bool is_charging;
   bool is_charge_mos;
   bool is_discharge_mos;
-  TelemetryState bmsState;      // Current connection state
-  float cell_voltages[BMS_CELLS_NUM]; // Individual cell voltages
+  TelemetryState bmsState;            // Current connection state
+  float cell_voltages[BMS_CELLS_NUM];  // Individual cell voltages
 
   // Individual temperature sensors
   float mos_temperature;        // BMS MOSFET temperature (°C) - index 0
@@ -106,13 +106,13 @@ typedef struct {
   float t4_temperature;         // T4 cell temperature sensor (°C), NaN if disconnected - index 5
 
   // Additional status flags
-  bool charge_wire_connected; // Charge wire physically connected
-  bool low_soc_warning;       // BMS low SOC warning active
-  bool battery_ready;         // BMS reports battery ready for use
+  bool charge_wire_connected;  // Charge wire physically connected
+  bool low_soc_warning;        // BMS low SOC warning active
+  bool battery_ready;          // BMS reports battery ready for use
 
   // Static battery identity (populated when available)
-  char battery_id[33]; // Null-terminated battery serial/ID string (up to 32
-                       // chars)
+  char battery_id[33];  // Null-terminated battery serial/ID string (up to 32
+                        // chars)
 
   // BMS type detected by firmware (0=unknown, 1=Type A older, 2=Type B newer)
   // Note: library auto-detection currently maps big-endian cells -> Type A,
@@ -129,7 +129,7 @@ struct MelodyRequest {
 };
 
 static constexpr uint8_t FASTLINK_PROTOCOL_VERSION = 3;
-static constexpr int16_t kNoTempSensorDC = INT16_MIN; // Sentinel: NaN / disconnected
+static constexpr int16_t kNoTempSensorDC = INT16_MIN;  // Sentinel: NaN / disconnected
 
 #pragma pack(push, 1)
 
@@ -137,14 +137,14 @@ static constexpr int16_t kNoTempSensorDC = INT16_MIN; // Sentinel: NaN / disconn
 // Designed for High-Bandwidth BLE 5.0 (2M PHY, DLE)
 // All float fields converted to fixed-point integers matching native sensor resolution
 typedef struct {
-  uint8_t version;    // Protocol version (3)
-  uint32_t packet_id; // Sequential packet ID for drop detection
-  uint32_t uptime_ms; // Time since boot (ms)
+  uint8_t version;     // Protocol version (3)
+  uint32_t packet_id;  // Sequential packet ID for drop detection
+  uint32_t uptime_ms;  // Time since boot (ms)
 
   // Controller Data
   int32_t altitude_cm;         // Barometric altitude (cm, x100 from meters)
   int16_t baro_temp_dC;        // Barometric sensor temperature (deci-C, x10)
-  uint16_t baro_pressure_dHPa; // Barometric pressure (deci-hPa, x10)
+  uint16_t baro_pressure_dHPa;  // Barometric pressure (deci-hPa, x10)
   int16_t vario_cmps;          // Vertical speed (cm/s, x100 from m/s)
   int16_t mcu_temp_dC;         // ESP32 internal temperature (deci-C, x10)
   uint16_t pot_raw;            // Raw throttle potentiometer (0..4095)
@@ -196,7 +196,7 @@ typedef struct {
   uint8_t bms_type;                // BMS type (0=unknown, 1=Type A older, 2=Type B newer)
 
   // Extended BMS arrays (compressed)
-  uint16_t bms_cell_voltages_mV[BMS_CELLS_NUM]; // 24 cell voltages (mV, native resolution)
+  uint16_t bms_cell_voltages_mV[BMS_CELLS_NUM];  // 24 cell voltages (mV, native resolution)
   int8_t bms_temp_sensors_C[8];    // 8 temps (C, MOS/BAL/T1-T4/unused/unused)
 } BLE_FastLink_Telemetry;
 
@@ -205,4 +205,4 @@ typedef struct {
 static_assert(sizeof(BLE_FastLink_Telemetry) == 198,
               "BLE_FastLink_Telemetry V3 size mismatch - update if struct changes");
 
-#endif // INC_SP140_STRUCTS_H_
+#endif  // INC_SP140_STRUCTS_H_

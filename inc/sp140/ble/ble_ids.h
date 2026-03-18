@@ -30,4 +30,4 @@
 // App writes 0x01 here to trigger a GetHwInfo request to the ESC
 #define FAST_LINK_COMMAND_UUID "45A17003-B73B-49E1-8B39-5E9ED5E1B930"
 
-#endif // INC_SP140_BLE_BLE_IDS_H_
+#endif  // INC_SP140_BLE_BLE_IDS_H_

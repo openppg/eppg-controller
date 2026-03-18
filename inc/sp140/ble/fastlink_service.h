@@ -7,4 +7,4 @@
 void initFastLinkBleService(NimBLEServer *pServer);
 void updateFastLinkTelemetry(const BLE_FastLink_Telemetry &data);
 
-#endif // INC_SP140_BLE_FASTLINK_SERVICE_H_
+#endif  // INC_SP140_BLE_FASTLINK_SERVICE_H_

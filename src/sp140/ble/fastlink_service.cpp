@@ -1,8 +1,8 @@
 #include "sp140/ble/fastlink_service.h"
-#include "sp140/ble.h" // For deviceConnected
+#include "sp140/ble.h"  // For deviceConnected
 #include "sp140/ble/ble_ids.h"
-#include "sp140/esc.h" // For requestEscHardwareInfo()
-#include "sp140/structs.h" // For BLE_FastLink_Telemetry
+#include "sp140/esc.h"  // For requestEscHardwareInfo()
+#include "sp140/structs.h"  // For BLE_FastLink_Telemetry
 #include <Arduino.h>
 #include <NimBLECharacteristic.h>
 #include <NimBLEDevice.h>
@@ -15,10 +15,10 @@ uint32_t gFastLinkSkippedNoConnCount = 0;
 uint32_t gFastLinkLastStatsMs = 0;
 
 constexpr uint32_t kFastLinkTelemetryProperties =
-    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY |
-    NIMBLE_PROPERTY::READ_ENC;
+NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY |
+NIMBLE_PROPERTY::READ_ENC;
 constexpr uint32_t kFastLinkCommandProperties =
-    NIMBLE_PROPERTY::WRITE_NR | NIMBLE_PROPERTY::WRITE_ENC;
+NIMBLE_PROPERTY::WRITE_NR | NIMBLE_PROPERTY::WRITE_ENC;
 
 // Handles write commands from the app on FAST_LINK_COMMAND_UUID.
 // Command 0x01: request ESC hardware info (HW ID, FW version, bootloader, serial).

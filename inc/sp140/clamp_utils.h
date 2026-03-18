@@ -33,4 +33,4 @@ inline uint32_t clampU32(int64_t value, uint32_t min_v, uint32_t max_v) {
   return static_cast<uint32_t>(value);
 }
 
-#endif // INC_SP140_CLAMP_UTILS_H_
+#endif  // INC_SP140_CLAMP_UTILS_H_

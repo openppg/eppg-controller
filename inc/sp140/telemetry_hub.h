@@ -31,7 +31,6 @@ struct TelemetryHub {
   uint16_t pot_raw;
   uint32_t uptime_ms;
   uint32_t ctrlSeq;
-
 };
 
 // Initialize the hub (creates mutex, zeros all fields)

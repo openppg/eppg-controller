@@ -7,10 +7,9 @@
 #include <CircularBuffer.hpp>
 #include <freertos/semphr.h>
 
-
 // Constants
-#define VARIO_BUFFER_SIZE 50 // Number of samples to average for vertical speed
-#define MAX_VERTICAL_SPEED 250.0f // Maximum vertical speed to display (m/s)
+#define VARIO_BUFFER_SIZE 50  // Number of samples to average for vertical speed
+#define MAX_VERTICAL_SPEED 250.0f  // Maximum vertical speed to display (m/s)
 
 // Set up the barometer
 bool setupAltimeter();
@@ -30,4 +29,4 @@ float getBaroTemperature();
 // Get the pressure in hPa
 float getBaroPressure();
 
-#endif // INC_SP140_ALTIMETER_H_
+#endif  // INC_SP140_ALTIMETER_H_
