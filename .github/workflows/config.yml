@@ -30,13 +30,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          token: ${{ secrets.GH_TOKEN }}
+          token: ${{ secrets.GH_TOKEN || github.token }}
           persist-credentials: true
           show-progress: false
       - name: Setup Git Credentials
         run: |
           git config --global credential.helper store
-          echo "https://oauth2:${{ secrets.GH_TOKEN }}@github.com" > ~/.git-credentials
+          echo "https://oauth2:${{ secrets.GH_TOKEN || github.token }}@github.com" > ~/.git-credentials
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
@@ -60,13 +60,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          token: ${{ secrets.GH_TOKEN }}
+          token: ${{ secrets.GH_TOKEN || github.token }}
           persist-credentials: true
           show-progress: false
       - name: Setup Git Credentials
         run: |
           git config --global credential.helper store
-          echo "https://oauth2:${{ secrets.GH_TOKEN }}@github.com" > ~/.git-credentials
+          echo "https://oauth2:${{ secrets.GH_TOKEN || github.token }}@github.com" > ~/.git-credentials
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
@@ -97,7 +97,7 @@ jobs:
             0xe000 /home/runner/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin \
             0x10000 .pio/build/OpenPPG-CESP32S3-CAN-SP140/firmware.bin
       - name: Archive ESP32S3 Firmware
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: OpenPPG-CESP32S3-CAN-SP140-firmware
           path: .pio/build/OpenPPG-CESP32S3-CAN-SP140/full-controller-firmware.bin

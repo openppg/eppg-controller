@@ -78,32 +78,32 @@ struct UnifiedBatteryData {
 
 // BMS telemetry data
 typedef struct {
-  float soc;                  // State of Charge (%)
-  float battery_voltage;      // Total battery voltage (V)
-  float battery_current;      // Battery current (A)
-  float power;                // Power (kW)
-  float highest_cell_voltage; // Highest individual cell voltage (V)
-  float lowest_cell_voltage;  // Lowest individual cell voltage (V)
-  float highest_temperature;  // Highest temperature reading (°C)
-  float lowest_temperature;   // Lowest temperature reading (°C)
-  float energy_cycle_ah;      // Energy per cycle (Ah)
-  uint32_t battery_cycle;     // Battery cycle count
-  uint8_t battery_fail_level; // Battery failure status
-  float voltage_differential; // Highest cell minus lowest cell voltage (V)
-  unsigned long lastUpdateMs; // Timestamp of last telemetry update
+  float soc;                    // State of Charge (%)
+  float battery_voltage;        // Total battery voltage (V)
+  float battery_current;        // Battery current (A)
+  float power;                  // Power (kW)
+  float highest_cell_voltage;   // Highest individual cell voltage (V)
+  float lowest_cell_voltage;    // Lowest individual cell voltage (V)
+  float highest_temperature;    // Highest valid temperature reading (°C), NaN if unavailable
+  float lowest_temperature;     // Lowest valid temperature reading (°C), NaN if unavailable
+  float energy_cycle_ah;        // Energy per cycle (Ah)
+  uint32_t battery_cycle;       // Battery cycle count
+  uint8_t battery_fail_level;   // Battery failure status
+  float voltage_differential;   // Highest cell minus lowest cell voltage (V)
+  unsigned long lastUpdateMs;   // Timestamp of last telemetry update
   bool is_charging;
   bool is_charge_mos;
   bool is_discharge_mos;
-  TelemetryState bmsState;            // Current connection state
+  TelemetryState bmsState;      // Current connection state
   float cell_voltages[BMS_CELLS_NUM]; // Individual cell voltages
 
   // Individual temperature sensors
-  float mos_temperature;     // BMS MOSFET temperature (°C) - index 0
-  float balance_temperature; // BMS balance resistor temperature (°C) - index 1
-  float t1_temperature;      // T1 cell temperature sensor (°C) - index 2
-  float t2_temperature;      // T2 cell temperature sensor (°C) - index 3
-  float t3_temperature;      // T3 cell temperature sensor (°C) - index 4
-  float t4_temperature;      // T4 cell temperature sensor (°C) - index 5
+  float mos_temperature;        // BMS MOSFET temperature (°C) - index 0
+  float balance_temperature;    // BMS balance resistor temperature (°C) - index 1
+  float t1_temperature;         // T1 cell temperature sensor (°C), NaN if disconnected - index 2
+  float t2_temperature;         // T2 cell temperature sensor (°C), NaN if disconnected - index 3
+  float t3_temperature;         // T3 cell temperature sensor (°C), NaN if disconnected - index 4
+  float t4_temperature;         // T4 cell temperature sensor (°C), NaN if disconnected - index 5
 
   // Additional status flags
   bool charge_wire_connected; // Charge wire physically connected
