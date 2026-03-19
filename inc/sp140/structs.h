@@ -127,7 +127,7 @@ struct AltimeterTelemetry {
   float temperature;        // Barometer temperature (°C)
   float pressure;           // Barometric pressure (hPa)
   float verticalSpeed;      // Vertical speed (m/s)
-  unsigned long lastUpdate; // Timestamp of last reading (millis)
+  unsigned long lastUpdate;  // Timestamp of last reading (millis)
   bool connected;           // Sensor available and responding
 };
 

@@ -8,13 +8,13 @@
 #include <cmath>
 
 #include "../../inc/sp140/esp32s3-config.h"
-#include "../../inc/sp140/structs.h" // data structs
+#include "../../inc/sp140/structs.h"  // data structs
 #include "../../inc/sp140/utilities.h"
-#include <Adafruit_NeoPixel.h> // RGB LED
+#include <Adafruit_NeoPixel.h>  // RGB LED
 #include <ArduinoJson.h>
-#include <CircularBuffer.hpp> // smooth out readings
+#include <CircularBuffer.hpp>  // smooth out readings
 #include <SPI.h>
-#include <TimeLib.h> // convert time to hours mins etc
+#include <TimeLib.h>  // convert time to hours mins etc
 #include <Wire.h>
 
 // ESP32S3 (CAN) specific libraries here
@@ -28,7 +28,7 @@
 #include "../../inc/sp140/ble/fastlink_service.h"
 #include "../../inc/sp140/bms.h"
 #include "../../inc/sp140/esc.h"
-#include "../../inc/sp140/globals.h" // device config
+#include "../../inc/sp140/globals.h"  // device config
 #include "../../inc/sp140/lvgl/lvgl_alerts.h"
 #include "../../inc/sp140/lvgl/lvgl_core.h"
 #include "../../inc/sp140/lvgl/lvgl_main_screen.h"
@@ -70,22 +70,22 @@ int8_t bmsCS = MCP_CS;
 
 #define BUTTON_DEBOUNCE_TIME_MS 50
 #define FIRST_CLICK_MAX_HOLD_MS                                                \
-  500 // Maximum time for first click to be considered a click
-#define SECOND_HOLD_TIME_MS 2000 // How long to hold on second press to arm
+  500  // Maximum time for first click to be considered a click
+#define SECOND_HOLD_TIME_MS 2000  // How long to hold on second press to arm
 #define CRUISE_HOLD_TIME_MS 2000
-#define BUTTON_SEQUENCE_TIMEOUT_MS 1500 // Time window for arm/disarm sequence
+#define BUTTON_SEQUENCE_TIMEOUT_MS 1500  // Time window for arm/disarm sequence
 #define PERFORMANCE_MODE_HOLD_MS 3000   // Longer hold time for performance mode
 
 // Throttle control constants moved to inc/sp140/throttle.h
 #define CRUISE_MAX_PERCENTAGE                                                  \
-  0.60 // Maximum cruise throttle as a percentage of the total ESC range (e.g.,
+  0.60  // Maximum cruise throttle as a percentage of the total ESC range (e.g.,
        // 0.60 = 60%)
 #define CRUISE_DISENGAGE_POT_THRESHOLD_PERCENTAGE                              \
-  0.80 // Current pot must be >= this % of activation value to disengage
+  0.80  // Current pot must be >= this % of activation value to disengage
 #define CRUISE_DISENGAGE_GRACE_PERIOD_MS                                       \
-  2000 // Delay before checking pot disengagement after cruise activation
+  2000  // Delay before checking pot disengagement after cruise activation
 #define CRUISE_ACTIVATION_MAX_POT_PERCENTAGE                                   \
-  0.70 // Prevent cruise activation if pot is above this percentage
+  0.70  // Prevent cruise activation if pot is above this percentage
 
 // Button state tracking
 volatile bool buttonPressed = false;
@@ -94,8 +94,8 @@ volatile uint32_t buttonReleaseStartTime = 0;
 volatile bool armSequenceStarted = false;
 TaskHandle_t buttonTaskHandle = NULL;
 
-UBaseType_t uxCoreAffinityMask0 = (1 << 0); // Core 0
-UBaseType_t uxCoreAffinityMask1 = (1 << 1); // Core 1
+UBaseType_t uxCoreAffinityMask0 = (1 << 0);  // Core 0
+UBaseType_t uxCoreAffinityMask1 = (1 << 1);  // Core 1
 
 HardwareConfig board_config;
 bool bmsCanInitialized = false;
@@ -106,7 +106,7 @@ UnifiedBatteryData unifiedBatteryData = {0.0f, 0.0f, 0.0f, 0.0f};  // volts, amp
 // Throttle PWM smoothing buffer is managed in throttle.cpp
 
 Adafruit_NeoPixel pixels(1, 21, NEO_GRB + NEO_KHZ800);
-uint32_t led_color = LED_RED; // current LED color
+uint32_t led_color = LED_RED;  // current LED color
 
 // Global variable for device state
 volatile DeviceState currentState = DISARMED;
@@ -191,7 +191,7 @@ void bleStateUpdateTask(void *parameter) {
 
         // Only notify if requested and connected
         if (update.needsNotify && deviceConnected && !isOtaInProgress()) {
-          vTaskDelay(pdMS_TO_TICKS(10)); // Additional delay before notify
+          vTaskDelay(pdMS_TO_TICKS(10));  // Additional delay before notify
           pDeviceStateCharacteristic->notify();
         }
       }
@@ -208,7 +208,7 @@ void deviceStateUpdateTask(void *parameter) {
   while (true) {
     if (xQueueReceive(deviceStateQueue, &state, portMAX_DELAY) == pdTRUE) {
       if (pDeviceStateCharacteristic != nullptr && deviceConnected) {
-        vTaskDelay(pdMS_TO_TICKS(20)); // Give BLE stack breathing room
+        vTaskDelay(pdMS_TO_TICKS(20));  // Give BLE stack breathing room
         pDeviceStateCharacteristic->setValue(&state, sizeof(state));
         // Temporarily remove the notify call
         // pDeviceStateCharacteristic->notify();
@@ -227,7 +227,7 @@ void changeDeviceState(DeviceState newState) {
     // Send state update to queue
     uint8_t state = (uint8_t)newState;
     if (deviceStateQueue != NULL) {
-      xQueueOverwrite(deviceStateQueue, &state); // Always use latest state
+      xQueueOverwrite(deviceStateQueue, &state);  // Always use latest state
     }
 
     USBSerial.print("Device State Changed to: ");
@@ -275,7 +275,7 @@ TaskHandle_t watchdogTaskHandle = NULL;
 TaskHandle_t uiTaskHandle = NULL;
 TaskHandle_t bmsTaskHandle = NULL;
 TaskHandle_t vibeTaskHandle = NULL;       // Vibration motor task
-TaskHandle_t monitoringTaskHandle = NULL; // Sensor monitoring task
+TaskHandle_t monitoringTaskHandle = NULL;  // Sensor monitoring task
 TaskHandle_t ctrlSensorTaskHandle = NULL;
 TaskHandle_t bleNotifyTaskHandle = NULL;
 
@@ -283,10 +283,10 @@ QueueHandle_t melodyQueue = NULL;
 TaskHandle_t audioTaskHandle = NULL;
 
 QueueHandle_t throttleUpdateQueue = NULL;
-QueueHandle_t vibeQueue = NULL; // Vibration motor queue
+QueueHandle_t vibeQueue = NULL;  // Vibration motor queue
 
 unsigned long lastDisarmTime = 0;
-const unsigned long DISARM_COOLDOWN = 500; // 500ms cooldown
+const unsigned long DISARM_COOLDOWN = 500;  // 500ms cooldown
 
 // Timestamps updated by core tasks for watchdog monitoring
 volatile uint32_t lastThrottleRunMs = 0;
@@ -335,35 +335,35 @@ void watchdogTask(void *parameter) {
 }
 
 void blinkLEDTask(void *pvParameters) {
-  (void)pvParameters; // this is a standard idiom to avoid compiler warnings
+  (void)pvParameters;  // this is a standard idiom to avoid compiler warnings
                       // about unused parameters.
 
   for (;;) {
     blinkLED();                     // call blinkLED function
-    vTaskDelay(pdMS_TO_TICKS(500)); // wait for 500ms
+    vTaskDelay(pdMS_TO_TICKS(500));  // wait for 500ms
   }
-  vTaskDelete(NULL); // should never reach this
+  vTaskDelete(NULL);  // should never reach this
 }
 
 void throttleTask(void *pvParameters) {
-  (void)pvParameters; // this is a standard idiom to avoid compiler warnings
+  (void)pvParameters;  // this is a standard idiom to avoid compiler warnings
                       // about unused parameters.
 
   TickType_t lastWake = xTaskGetTickCount();
-  const TickType_t throttleTicks = pdMS_TO_TICKS(20); // 50 Hz
+  const TickType_t throttleTicks = pdMS_TO_TICKS(20);  // 50 Hz
   for (;;) {
     handleThrottle();
     lastThrottleRunMs = millis();
     vTaskDelayUntil(&lastWake, throttleTicks);
   }
-  vTaskDelete(NULL); // should never reach this
+  vTaskDelete(NULL);  // should never reach this
 }
 
 // Lightweight task: reads controller sensors and writes to TelemetryHub at 10Hz.
 void ctrlSensorTask(void *pvParameters) {
   (void)pvParameters;
   TickType_t lastWake = xTaskGetTickCount();
-  const TickType_t sensorTicks = pdMS_TO_TICKS(100); // 10 Hz
+  const TickType_t sensorTicks = pdMS_TO_TICKS(100);  // 10 Hz
 
   for (;;) {
     const unsigned long now = millis();
@@ -382,7 +382,7 @@ void bleNotifyTask(void *pvParameters) {
   (void)pvParameters;
 
   TickType_t lastWake = xTaskGetTickCount();
-  const TickType_t notifyTicks = pdMS_TO_TICKS(20); // 50 Hz
+  const TickType_t notifyTicks = pdMS_TO_TICKS(20);  // 50 Hz
 
   for (;;) {
     TelemetryHub hub = {};
@@ -420,10 +420,10 @@ void refreshDisplay() {
         (rawAltitude != __FLT_MIN__) ? rawAltitude : lastGoodAltitude;
 
     // Determine the altitude to show on the display
-    float altitudeToShow = 0.0f; // Default to 0
+    float altitudeToShow = 0.0f;  // Default to 0
     if (currentState != DISARMED) {
       altitudeToShow =
-          currentRelativeAltitude; // Show relative altitude when armed/cruising
+          currentRelativeAltitude;  // Show relative altitude when armed/cruising
     }
     bool isArmed = (currentState != DISARMED);
     bool isCruising = (currentState == ARMED_CRUISING);
@@ -471,11 +471,11 @@ void refreshDisplay() {
       if (alertUpdate.criticalAlertsActive != lastCriticalState) {
         if (alertUpdate.criticalAlertsActive) {
           USBSerial.println("[UI] Starting critical border flash");
-          startCriticalBorderFlashDirect(); // Direct control - we already have
+          startCriticalBorderFlashDirect();  // Direct control - we already have
                                             // the mutex
         } else {
           USBSerial.println("[UI] Stopping critical border flash");
-          stopCriticalBorderFlashDirect(); // Direct control - we already have
+          stopCriticalBorderFlashDirect();  // Direct control - we already have
                                            // the mutex
         }
         lastCriticalState = alertUpdate.criticalAlertsActive;
@@ -504,7 +504,7 @@ void monitoringTask(void *pvParameters) {
 // UI task: fixed 20 Hz refresh and snapshot publish
 void uiTask(void *pvParameters) {
   TickType_t lastWake = xTaskGetTickCount();
-  const TickType_t uiTicks = pdMS_TO_TICKS(50); // 20 Hz
+  const TickType_t uiTicks = pdMS_TO_TICKS(50);  // 20 Hz
   for (;;) {
     refreshDisplay();
     lastUiRunMs = millis();
@@ -574,7 +574,7 @@ void altimeterTask(void *pvParameters) {
 }
 
 void loadHardwareConfig() {
-  board_config = s3_config; // ESP32S3 is only supported board
+  board_config = s3_config;  // ESP32S3 is only supported board
 
   // Throttle input is initialized via initThrottleInput()
 }
@@ -589,12 +589,12 @@ void printBootMessage() {
 void setupBarometer() {
   const int bmp_enabler = 9;
   pinMode(bmp_enabler, OUTPUT);
-  digitalWrite(bmp_enabler, HIGH); // barometer fix for V2 board
+  digitalWrite(bmp_enabler, HIGH);  // barometer fix for V2 board
 }
 
 
 void setupLED() {
-  pinMode(board_config.led_sw, OUTPUT); // set up the internal LED2 pin
+  pinMode(board_config.led_sw, OUTPUT);  // set up the internal LED2 pin
   if (board_config.enable_neopixel) {
     pixels.begin();
     setLEDColor(led_color);
@@ -610,7 +610,7 @@ void setupWatchdog() {
 #ifndef OPENPPG_DEBUG
   // Initialize Task Watchdog
   ESP_ERROR_CHECK(
-      esp_task_wdt_init(3000, true)); // 3 second timeout, panic on timeout
+      esp_task_wdt_init(3000, true));  // 3 second timeout, panic on timeout
 #endif                                // OPENPPG_DEBUG
 }
 
@@ -701,7 +701,7 @@ void setupTasks() {
   xTaskCreatePinnedToCore(watchdogTask, "watchdog", 1536, NULL, 3,
                           &watchdogTaskHandle, 0);
   xTaskCreate(webSerialTask, "WebSerial",
-              6144, // Diagnostics JSON serialization needs more stack headroom
+              6144,  // Diagnostics JSON serialization needs more stack headroom
               NULL, 1, &webSerialTaskHandle);
   xTaskCreate(monitoringTask, "Monitoring", 4864, NULL, 1,
               &monitoringTaskHandle);
@@ -905,7 +905,7 @@ void buttonHandlerTask(void *parameter) {
       if (buttonState != lastButtonState) {
         lastDebounceTime = currentTime;
 
-        if (buttonState == LOW) { // Button pressed
+        if (buttonState == LOW) {  // Button pressed
           buttonPressed = true;
           unbondHoldHandled = false;
           pairingHoldHandled = false;
@@ -913,7 +913,7 @@ void buttonHandlerTask(void *parameter) {
           USBSerial.println("Button pressed");
           USBSerial.print("Arm sequence state: ");
           USBSerial.println(armSequenceStarted ? "ACTIVE" : "INACTIVE");
-        } else { // Button released
+        } else {  // Button released
           buttonPressed = false;
           buttonReleaseStartTime = currentTime;
 
@@ -964,7 +964,7 @@ void buttonHandlerTask(void *parameter) {
             armSequenceStarted = false;
             buttonPressed = false;
             buttonPressStartTime =
-                currentTime; // Reset to prevent immediate cruise activation
+                currentTime;  // Reset to prevent immediate cruise activation
           }
         }
       } else if (buttonPressed) {  // Only handle other button actions if we're not in an arm sequence
@@ -1034,7 +1034,7 @@ void disarmESC() { setESCThrottle(ESC_DISARMED_PWM); }
 void resetSmoothing() { throttleFilterClear(); }
 
 void resumeLEDTask() {
-  vTaskResume(blinkLEDTaskHandle); // blink LED while disarmed
+  vTaskResume(blinkLEDTaskHandle);  // blink LED while disarmed
 }
 
 void runDisarmAlert() {
@@ -1070,7 +1070,7 @@ void disarmSystem() {
   writeDeviceData();
 
   vTaskDelay(pdMS_TO_TICKS(
-      500)); // TODO: just disable button thread to not allow immediate rearming
+      500));  // TODO: just disable button thread to not allow immediate rearming
   // Set the last disarm time
   lastDisarmTime = millis();
 }
@@ -1105,7 +1105,7 @@ void toggleCruise() {
       // Check if throttle is too high to activate cruise
       int currentPotVal = readThrottleRaw();
       const int activationThreshold =
-          (int)(4095 * CRUISE_ACTIVATION_MAX_POT_PERCENTAGE); // Calculate 70%
+          (int)(4095 * CRUISE_ACTIVATION_MAX_POT_PERCENTAGE);  // Calculate 70%
                                                               // threshold
 
       if (currentPotVal > activationThreshold) {
@@ -1123,7 +1123,7 @@ void toggleCruise() {
     }
     break;
   case ARMED_CRUISING:
-    changeDeviceState(ARMED); // Disengage cruise
+    changeDeviceState(ARMED);  // Disengage cruise
     pulseVibeMotor();
     break;
   case DISARMED:
@@ -1175,7 +1175,7 @@ void handleCruisingThrottle(uint16_t &currentCruiseThrottlePWM, int potVal) {
 
   // Check for cruise disengagement via potentiometer override
   if (shouldDisengageCruise(potVal)) {
-    changeDeviceState(ARMED); // Transition back to normal ARMED state
+    changeDeviceState(ARMED);  // Transition back to normal ARMED state
     pulseVibeMotor();
   }
 }
@@ -1193,7 +1193,7 @@ void handleCruisingThrottle(uint16_t &currentCruiseThrottlePWM, int potVal) {
  */
 void handleThrottle() {
   static uint16_t currentCruiseThrottlePWM = ESC_MIN_PWM;
-  static int prevPwm = ESC_MIN_PWM; // Previous PWM for ramping
+  static int prevPwm = ESC_MIN_PWM;  // Previous PWM for ramping
   uint16_t newPWM;
 
   // Check for throttle updates from cruise activation
@@ -1217,7 +1217,7 @@ void handleThrottle() {
 
   case ARMED_CRUISING:
     handleCruisingThrottle(currentCruiseThrottlePWM, readThrottleRaw());
-    finalPwm = currentCruiseThrottlePWM; // Use cruise PWM
+    finalPwm = currentCruiseThrottlePWM;  // Use cruise PWM
     break;
 
   case ARMED:
@@ -1257,23 +1257,23 @@ bool throttleEngaged() { return !throttleSafe(); }
 bool armSystem() {
   uint16_t arm_melody[] = {2093, 2637};
   // const unsigned int arm_vibes[] = { 1, 85, 1, 85, 1, 85, 1 };
-  setESCThrottle(ESC_DISARMED_PWM); // initialize the signal to low
+  setESCThrottle(ESC_DISARMED_PWM);  // initialize the signal to low
 
   armedAtMillis = millis();
-  armedSecs = 0; // Reset armed seconds for new session
+  armedSecs = 0;  // Reset armed seconds for new session
   setGroundAltitude(deviceData);
 
   vTaskSuspend(blinkLEDTaskHandle);
-  setLEDs(HIGH); // solid LED while armed
+  setLEDs(HIGH);  // solid LED while armed
   playMelody(arm_melody, 2);
   // runVibePattern(arm_vibes, 7);
-  pulseVibeMotor(); // Ensure this is the active call
+  pulseVibeMotor();  // Ensure this is the active call
   return true;
 }
 
 void afterCruiseStart() {
   cruisedPotVal =
-      readThrottleRaw(); // Store the raw pot value (0-4095) at activation
+      readThrottleRaw();  // Store the raw pot value (0-4095) at activation
   cruisedAtMillis = millis();
 
   // Calculate cruise PWM using the same mapping as normal throttle
@@ -1326,7 +1326,7 @@ void audioTask(void *parameter) {
         TickType_t delayTicks = pdMS_TO_TICKS(request.duration);
         if (delayTicks == 0) {
           delayTicks = 1;
-        } // Ensure non-zero delay
+        }  // Ensure non-zero delay
         vTaskDelayUntil(&nextWakeTime, delayTicks);
       }
       stopTone();
@@ -1345,11 +1345,11 @@ bool initBMSCAN(SPIClass *spi) {
 
   if (!bms_can->begin()) {
     USBSerial.println("Error initializing BMS_CAN");
-    bmsCanInitialized = false; // BMS initialization failed
+    bmsCanInitialized = false;  // BMS initialization failed
     return false;
   }
   USBSerial.println("BMS CAN initialized successfully");
-  bmsCanInitialized = true; // BMS successfully initialized
+  bmsCanInitialized = true;  // BMS successfully initialized
   return true;
 }
 
@@ -1362,6 +1362,6 @@ void webSerialTask(void *pvParameters) {
         poll_serial_commands();
       }
     }
-    vTaskDelay(pdMS_TO_TICKS(100)); // Check every 100ms
+    vTaskDelay(pdMS_TO_TICKS(100));  // Check every 100ms
   }
 }
