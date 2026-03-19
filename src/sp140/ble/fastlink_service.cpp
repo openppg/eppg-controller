@@ -5,6 +5,7 @@
 
 #include "sp140/ble.h"  // For deviceConnected
 #include "sp140/ble/ble_ids.h"
+#include "sp140/ble/ota_service.h"
 #include "sp140/esc.h"  // For requestEscHardwareInfo()
 #include <Arduino.h>
 #include <NimBLECharacteristic.h>
@@ -15,6 +16,7 @@ NimBLECharacteristic *pFastLinkCharacteristic = nullptr;
 uint32_t gFastLinkNotifyOkCount = 0;
 uint32_t gFastLinkNotifyFailCount = 0;
 uint32_t gFastLinkSkippedNoConnCount = 0;
+uint32_t gFastLinkSkippedOtaCount = 0;
 uint32_t gFastLinkLastStatsMs = 0;
 uint32_t gFastLinkPacketId = 0;
 
@@ -137,7 +139,9 @@ void updateFastLinkTelemetry(const BLE_FastLink_Telemetry &data) {
   if (pFastLinkCharacteristic != nullptr) {
     pFastLinkCharacteristic->setValue((uint8_t *)&data,
                                       sizeof(BLE_FastLink_Telemetry));
-    if (deviceConnected) {
+    if (isOtaInProgress()) {
+      ++gFastLinkSkippedOtaCount;
+    } else if (deviceConnected) {
       const bool sent = pFastLinkCharacteristic->notify();
       if (sent) {
         ++gFastLinkNotifyOkCount;
@@ -152,13 +156,15 @@ void updateFastLinkTelemetry(const BLE_FastLink_Telemetry &data) {
     if (nowMs - gFastLinkLastStatsMs >= 2000) {
       gFastLinkLastStatsMs = nowMs;
       USBSerial.printf(
-          "[FASTLINK] stats ok=%lu fail=%lu skippedNoConn=%lu v=%u packet=%lu uptime=%lu connected=%d\n",
+          "[FASTLINK] stats ok=%lu fail=%lu skippedNoConn=%lu skippedOta=%lu v=%u packet=%lu uptime=%lu connected=%d ota=%d\n",
           static_cast<unsigned long>(gFastLinkNotifyOkCount),
           static_cast<unsigned long>(gFastLinkNotifyFailCount),
           static_cast<unsigned long>(gFastLinkSkippedNoConnCount),
+          static_cast<unsigned long>(gFastLinkSkippedOtaCount),
           static_cast<unsigned>(data.version),
           static_cast<unsigned long>(data.packet_id),
-          static_cast<unsigned long>(data.uptime_ms), deviceConnected ? 1 : 0);
+          static_cast<unsigned long>(data.uptime_ms), deviceConnected ? 1 : 0,
+          isOtaInProgress() ? 1 : 0);
     }
   }
 }

@@ -1083,6 +1083,11 @@ void handleArmFail() {
 
 void toggleArm() {
   if (currentState == DISARMED) {
+    if (isOtaInProgress()) {
+      USBSerial.println("Arm blocked: OTA update in progress");
+      return;
+    }
+
     // Check if enough time has passed since last disarm
     if (millis() - lastDisarmTime >= DISARM_COOLDOWN) {
       if (!throttleEngaged()) {
@@ -1100,6 +1105,11 @@ void toggleArm() {
 void toggleCruise() {
   switch (currentState) {
   case ARMED:
+    if (isOtaInProgress()) {
+      USBSerial.println("Cruise blocked: OTA update in progress");
+      break;
+    }
+
     // Check if throttle is engaged (not at zero)
     if (throttleEngaged()) {
       // Check if throttle is too high to activate cruise
