@@ -62,6 +62,16 @@ uint16_t crc16_ccitt(const uint8_t* buffer, size_t len) {
     return crc16;
 }
 
+void resetOtaState() {
+    updateHandle = 0;
+    updatePartition = nullptr;
+    imageTotalLen = 0;
+    sectorBufferLen = 0;
+    currentSectorIndex = 0;
+    receivedBytes = 0;
+    packetCount = 0;
+}
+
 void sendAck(uint16_t sector, uint16_t status, uint16_t expectedSector = 0) {
     if (pRecvFwChar) {
         uint8_t packet[6];
@@ -106,36 +116,51 @@ void sendCommandResponse(uint16_t ackId, uint16_t status) {
     }
 }
 
-void resetOtaState() {
-    updateHandle = 0;
-    updatePartition = nullptr;
-    imageTotalLen = 0;
-    sectorBufferLen = 0;
-    currentSectorIndex = 0;
-    receivedBytes = 0;
-    packetCount = 0;
-}
+// Forward declaration
+void abortOtaImpl();
 
-}  // namespace
+void handleCmdStart(const uint8_t* data) {
+    USBSerial.println("OTA: CMD_START");
 
-void abortOta() {
-    if (otaInProgress) {
-        if (updateHandle) esp_ota_abort(updateHandle);
-        otaInProgress = false;
-        requestNormalConnParams();
-        USBSerial.println("OTA: Aborted.");
+    if (currentState == ARMED || currentState == ARMED_CRUISING) {
+        USBSerial.println("OTA Blocked: Device ARMED");
+        sendCommandResponse(CMD_START, 0x0001);
+        return;
     }
+
+    // Clean slate before acquiring new partition/handle
     resetOtaState();
-}
 
-void checkOtaTimeout() {
-    if (otaInProgress && (millis() - lastOtaActivityMs > OTA_TIMEOUT_MS)) {
-        USBSerial.println("OTA: Idle timeout, aborting.");
-        abortOta();
+    updatePartition = esp_ota_get_next_update_partition(nullptr);
+    if (!updatePartition) {
+        USBSerial.println("OTA Error: No partition");
+        sendCommandResponse(CMD_START, 0x0001);
+        return;
     }
-}
 
-namespace {
+    uint32_t imageLen = static_cast<uint32_t>(data[2])
+                      | (static_cast<uint32_t>(data[3]) << 8)
+                      | (static_cast<uint32_t>(data[4]) << 16)
+                      | (static_cast<uint32_t>(data[5]) << 24);
+    if (imageLen > updatePartition->size) {
+        USBSerial.printf("OTA Error: Image size %u > partition %u\n", imageLen, updatePartition->size);
+        sendCommandResponse(CMD_START, 0x0001);
+        return;
+    }
+
+    esp_err_t err = esp_ota_begin(updatePartition, imageLen, &updateHandle);
+    if (err != ESP_OK) {
+        USBSerial.printf("OTA Error: Begin failed 0x%x\n", err);
+        sendCommandResponse(CMD_START, 0x0001);
+        return;
+    }
+
+    otaInProgress = true;
+    imageTotalLen = imageLen;
+    lastOtaActivityMs = millis();
+    requestFastConnParams();
+    sendCommandResponse(CMD_START, 0x0000);  // Accept
+}
 
 class OtaCommandCallback : public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic* pChar, NimBLEConnInfo& connInfo) override {
@@ -161,47 +186,7 @@ class OtaCommandCallback : public NimBLECharacteristicCallbacks {
         }
 
         if (cmdId == CMD_START) {
-            USBSerial.println("OTA: CMD_START");
-
-            if (currentState == ARMED || currentState == ARMED_CRUISING) {
-                 USBSerial.println("OTA Blocked: Device ARMED");
-                 sendCommandResponse(CMD_START, 0x0001);  // Reject
-                 return;
-            }
-
-            updatePartition = esp_ota_get_next_update_partition(nullptr);
-            if (!updatePartition) {
-                USBSerial.println("OTA Error: No partition");
-                sendCommandResponse(CMD_START, 0x0001);
-                return;
-            }
-
-            // Validate image length (Bytes 2-5 of payload -> data[2]..data[5])
-            uint32_t imageLen = static_cast<uint32_t>(data[2])
-                              | (static_cast<uint32_t>(data[3]) << 8)
-                              | (static_cast<uint32_t>(data[4]) << 16)
-                              | (static_cast<uint32_t>(data[5]) << 24);
-            if (imageLen > updatePartition->size) {
-                USBSerial.printf("OTA Error: Image size %u > partition %u\n", imageLen, updatePartition->size);
-                sendCommandResponse(CMD_START, 0x0001);
-                return;
-            }
-
-            esp_err_t err = esp_ota_begin(updatePartition, OTA_SIZE_UNKNOWN, &updateHandle);
-            if (err != ESP_OK) {
-                USBSerial.printf("OTA Error: Begin failed 0x%x\n", err);
-                sendCommandResponse(CMD_START, 0x0001);
-                return;
-            }
-
-            resetOtaState();
-            otaInProgress = true;
-            imageTotalLen = imageLen;
-            lastOtaActivityMs = millis();
-            requestFastConnParams();
-
-            sendCommandResponse(CMD_START, 0x0000);  // Accept
-
+            handleCmdStart(data);
         } else if (cmdId == CMD_END) {
             USBSerial.println("OTA: CMD_END");
             if (otaInProgress) {
@@ -209,7 +194,7 @@ class OtaCommandCallback : public NimBLECharacteristicCallbacks {
                 if (receivedBytes != imageTotalLen) {
                     USBSerial.printf("OTA Error: Size Mismatch Rx:%u Exp:%u\n", receivedBytes, imageTotalLen);
                     sendCommandResponse(CMD_END, 0x0001);  // Fail
-                    abortOta();
+                    abortOtaImpl();
                     return;
                 }
 
@@ -227,7 +212,7 @@ class OtaCommandCallback : public NimBLECharacteristicCallbacks {
                     USBSerial.println("OTA Error: OTA End Failed");
                 }
                 sendCommandResponse(CMD_END, 0x0001);  // Fail
-                abortOta();
+                abortOtaImpl();
             } else {
                 sendCommandResponse(CMD_END, 0x0001);  // Not in progress
             }
@@ -300,7 +285,7 @@ class OtaDataCallback : public NimBLECharacteristicCallbacks {
                     // Must abort: the OTA handle's internal write offset may
                     // have advanced partially, so retrying this sector would
                     // write data at the wrong position and corrupt the image.
-                    abortOta();
+                    abortOtaImpl();
                 }
             } else {
                 USBSerial.printf("OTA Error: CRC fail exp 0x%04X got 0x%04X\n", rxCrc, calcCrc);
@@ -322,10 +307,33 @@ class OtaDataCallback : public NimBLECharacteristicCallbacks {
     }
 };
 
+void abortOtaImpl() {
+    if (otaInProgress) {
+        if (updateHandle) esp_ota_abort(updateHandle);
+        otaInProgress = false;
+        requestNormalConnParams();
+        USBSerial.println("OTA: Aborted.");
+    }
+    resetOtaState();
+}
+
 static OtaCommandCallback cmdCallback;
 static OtaDataCallback dataCallback;
 
 }  // namespace
+
+void abortOta() { abortOtaImpl(); }
+
+void checkOtaTimeout() {
+    if (otaInProgress && (millis() - lastOtaActivityMs > OTA_TIMEOUT_MS)) {
+        USBSerial.println("OTA: Idle timeout, aborting.");
+        abortOtaImpl();
+    }
+}
+
+bool isOtaInProgress() {
+    return otaInProgress;
+}
 
 void initOtaBleService(NimBLEServer* pServer) {
     NimBLEService* pService = pServer->createService(OTA_SERVICE_UUID);
@@ -339,7 +347,7 @@ void initOtaBleService(NimBLEServer* pServer) {
         NIMBLE_PROPERTY::INDICATE);
     pRecvFwChar->setCallbacks(&dataCallback);
 
-    // Progress (Indicate only; app subscribes)
+    // Progress (Indicate only; app subscribes for transfer progress)
     pProgressChar = pService->createCharacteristic(
         OTA_PROGRESS_UUID,
         NIMBLE_PROPERTY::NOTIFY |
@@ -360,8 +368,4 @@ void initOtaBleService(NimBLEServer* pServer) {
         NIMBLE_PROPERTY::INDICATE);
 
     pService->start();
-}
-
-bool isOtaInProgress() {
-    return otaInProgress;
 }
