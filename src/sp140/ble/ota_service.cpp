@@ -147,7 +147,7 @@ class OtaCommandCallback : public NimBLECharacteristicCallbacks {
         uint16_t rxCrc = data[18] | (data[19] << 8);
         uint16_t calcCrc = crc16_ccitt(data, 18);
         if (rxCrc != calcCrc) {
-            USBSerial.printf("OTA Error: CMD CRC Fail Exp %04X Got %04X\n", rxCrc, calcCrc);
+            USBSerial.printf("OTA Error: CMD CRC Fail Exp %04X Got %04X\n", calcCrc, rxCrc);
             sendCommandResponse(cmdId, 0x0001);  // Reject (Status 1)
             return;
         }
@@ -169,7 +169,10 @@ class OtaCommandCallback : public NimBLECharacteristicCallbacks {
             }
 
             // Validate image length (Bytes 2-5 of payload -> data[2]..data[5])
-            uint32_t imageLen = data[2] | (data[3] << 8) | (data[4] << 16) | (data[5] << 24);
+            uint32_t imageLen = static_cast<uint32_t>(data[2])
+                              | (static_cast<uint32_t>(data[3]) << 8)
+                              | (static_cast<uint32_t>(data[4]) << 16)
+                              | (static_cast<uint32_t>(data[5]) << 24);
             if (imageLen > updatePartition->size) {
                 USBSerial.printf("OTA Error: Image size %u > partition %u\n", imageLen, updatePartition->size);
                 sendCommandResponse(CMD_START, 0x0001);
@@ -188,6 +191,7 @@ class OtaCommandCallback : public NimBLECharacteristicCallbacks {
             receivedBytes = 0;
             sectorBufferLen = 0;
             currentSectorIndex = 0;
+            packetCount = 0;
             lastOtaActivityMs = millis();
             requestFastConnParams();
 
@@ -287,11 +291,11 @@ class OtaDataCallback : public NimBLECharacteristicCallbacks {
                     sectorBufferLen = 0;
                 } else {
                     USBSerial.printf("OTA Error: Write failed 0x%x\n", err);
-                    sendAck(sector, ACK_ERR_SECTOR, currentSectorIndex);  // Force retry
-                    sectorBufferLen = 0;
-                    // Don't hard abort yet, allow retry?
-                    // Espressif tools usually retry logic is client side.
-                    // If we return ERR_SECTOR, client re-sends sector.
+                    sendAck(sector, ACK_ERR_SECTOR, currentSectorIndex);
+                    // Must abort: the OTA handle's internal write offset may
+                    // have advanced partially, so retrying this sector would
+                    // write data at the wrong position and corrupt the image.
+                    abortOta();
                 }
             } else {
                 USBSerial.printf("OTA Error: CRC fail exp 0x%04X got 0x%04X\n", rxCrc, calcCrc);
