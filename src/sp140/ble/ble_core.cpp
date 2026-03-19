@@ -311,7 +311,7 @@ void setupBLE() {
 
   startAdvertising(pServer);
 
-  USBSerial.println("BLE device ready (advertising deferred)");
+  USBSerial.println("BLE device ready");
 }
 
 void requestFastConnParams() {

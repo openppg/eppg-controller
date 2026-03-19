@@ -106,6 +106,16 @@ void sendCommandResponse(uint16_t ackId, uint16_t status) {
     }
 }
 
+void resetOtaState() {
+    updateHandle = 0;
+    updatePartition = nullptr;
+    imageTotalLen = 0;
+    sectorBufferLen = 0;
+    currentSectorIndex = 0;
+    receivedBytes = 0;
+    packetCount = 0;
+}
+
 }  // namespace
 
 void abortOta() {
@@ -115,9 +125,7 @@ void abortOta() {
         requestNormalConnParams();
         USBSerial.println("OTA: Aborted.");
     }
-    sectorBufferLen = 0;
-    currentSectorIndex = 0;
-    receivedBytes = 0;
+    resetOtaState();
 }
 
 void checkOtaTimeout() {
@@ -186,12 +194,9 @@ class OtaCommandCallback : public NimBLECharacteristicCallbacks {
                 return;
             }
 
+            resetOtaState();
             otaInProgress = true;
             imageTotalLen = imageLen;
-            receivedBytes = 0;
-            sectorBufferLen = 0;
-            currentSectorIndex = 0;
-            packetCount = 0;
             lastOtaActivityMs = millis();
             requestFastConnParams();
 

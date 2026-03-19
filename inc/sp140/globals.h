@@ -21,8 +21,6 @@ extern UnifiedBatteryData unifiedBatteryData;  // Instance to hold battery data
 
 extern STR_BMS_TELEMETRY_140 bmsTelemetryData;
 
-extern AltimeterTelemetry altimeterData;
-
 // Hardware/Connection Status Flags
 extern bool bmsCanInitialized;
 extern bool escTwaiInitialized;
