@@ -280,7 +280,7 @@ void setupBLE() {
   NimBLEDevice::setMTU(517);
 
   // Set TX power to +9dBm for reliable connections at distance
-  NimBLEDevice::setPower(9);
+  NimBLEDevice::setPowerLevel(ESP_PWR_LVL_P9);
 
   pServer = NimBLEDevice::createServer();
   static BleServerConnectionCallbacks serverCallbacks;
