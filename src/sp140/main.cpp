@@ -75,6 +75,7 @@ int8_t bmsCS = MCP_CS;
 #define CRUISE_HOLD_TIME_MS 2000
 #define BUTTON_SEQUENCE_TIMEOUT_MS 1500  // Time window for arm/disarm sequence
 #define PERFORMANCE_MODE_HOLD_MS 3000   // Longer hold time for performance mode
+#define BLE_PAIRING_HOLD_MS 10000
 
 // Throttle control constants moved to inc/sp140/throttle.h
 #define CRUISE_MAX_PERCENTAGE                                                  \
@@ -881,7 +882,7 @@ void buttonHandlerTask(void *parameter) {
           // Disarmed long hold toggles performance mode on release.
           if (currentState == DISARMED &&
               holdDuration >= PERFORMANCE_MODE_HOLD_MS &&
-              holdDuration < 10000 && !pairingHoldHandled) {
+              holdDuration < BLE_PAIRING_HOLD_MS && !pairingHoldHandled) {
             perfModeSwitch();
             lastButtonState = buttonState;
             continue;
@@ -927,7 +928,7 @@ void buttonHandlerTask(void *parameter) {
 
         // Long hold while disarmed: 10s = enter BLE pairing mode
         // Clears existing bonds and opens advertising for 60s.
-        if (currentState == DISARMED && currentHoldTime >= 10000 &&
+        if (currentState == DISARMED && currentHoldTime >= BLE_PAIRING_HOLD_MS &&
             !pairingHoldHandled) {
           enterBLEPairingMode();
           pulseVibeMotor();
