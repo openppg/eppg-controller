@@ -25,6 +25,72 @@ static void cruise_flash_timer_cb(lv_timer_t* timer);
 static void arm_fail_flash_timer_cb(lv_timer_t* timer);
 static void critical_border_flash_timer_cb(lv_timer_t* timer);
 
+namespace {
+
+bool labelTextMatches(lv_obj_t* label, const char* text) {
+  return label != NULL && strcmp(lv_label_get_text(label), text) == 0;
+}
+
+void setLabelTextIfChanged(lv_obj_t* label, const char* text) {
+  if (label != NULL && !labelTextMatches(label, text)) {
+    lv_label_set_text(label, text);
+  }
+}
+
+void setObjHiddenIfNeeded(lv_obj_t* obj, bool hidden) {
+  if (obj == NULL) {
+    return;
+  }
+  const bool isHidden = lv_obj_has_flag(obj, LV_OBJ_FLAG_HIDDEN);
+  if (hidden && !isHidden) {
+    lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
+  } else if (!hidden && isHidden) {
+    lv_obj_clear_flag(obj, LV_OBJ_FLAG_HIDDEN);
+  }
+}
+
+void setBarValueIfChanged(lv_obj_t* bar, int value) {
+  if (bar != NULL && lv_bar_get_value(bar) != value) {
+    lv_bar_set_value(bar, value, LV_ANIM_OFF);
+  }
+}
+
+enum class TempState : uint8_t { Hidden, Warn, Crit };
+
+void applyTempBgState(lv_obj_t* bg, TempState state) {
+  if (bg == NULL) {
+    return;
+  }
+  static TempState lastBattState = TempState::Hidden;
+  static TempState lastEscState = TempState::Hidden;
+  static TempState lastMotorState = TempState::Hidden;
+  TempState* lastState = nullptr;
+  if (bg == batt_temp_bg) {
+    lastState = &lastBattState;
+  } else if (bg == esc_temp_bg) {
+    lastState = &lastEscState;
+  } else if (bg == motor_temp_bg) {
+    lastState = &lastMotorState;
+  }
+
+  if (lastState != nullptr && *lastState == state) {
+    return;
+  }
+  if (lastState != nullptr) {
+    *lastState = state;
+  }
+
+  if (state == TempState::Hidden) {
+    setObjHiddenIfNeeded(bg, true);
+    return;
+  }
+
+  setObjHiddenIfNeeded(bg, false);
+  lv_obj_set_style_bg_color(bg, state == TempState::Crit ? LVGL_RED : LVGL_YELLOW, LV_PART_MAIN);
+}
+
+}  // namespace
+
 // --- Cruise Icon Flashing Implementation ---
 static void cruise_flash_timer_cb(lv_timer_t* timer) {
   // This callback runs within the LVGL task handler, which is already protected by lvglMutex
@@ -330,7 +396,6 @@ void updateLvglMainScreen(
   float altitude, bool armed, bool cruising,
   unsigned int armedStartMillis
 ) {
-  bool darkMode = (deviceData.theme == 1);
   float batteryPercent = unifiedBatteryData.soc;
   float totalVolts = unifiedBatteryData.volts;
   float lowestCellV = bmsTelemetry.lowest_cell_voltage;
@@ -359,15 +424,9 @@ void updateLvglMainScreen(
   bool bmsConnected = (bmsTelemetry.bmsState == TelemetryState::CONNECTED);
   bool escConnected = (escTelemetry.escState == TelemetryState::CONNECTED);
 
-  // Check if spinner exists before styling it
-  if (spinner != NULL) {
-    lv_obj_set_style_arc_color(spinner, darkMode ? lv_color_make(100, 100, 100) : lv_color_make(230, 230, 230), LV_PART_MAIN);
-    lv_obj_set_style_arc_color(spinner, lv_palette_main(LV_PALETTE_BLUE), LV_PART_INDICATOR);
-  }
-
   // Update battery bar and percentage
   if (bmsConnected && batteryPercent >= 0) {
-    lv_bar_set_value(battery_bar, (int)batteryPercent, LV_ANIM_OFF);
+    setBarValueIfChanged(battery_bar, (int)batteryPercent);
 
     // Set color based on percentage
     lv_color_t batteryColor = LVGL_RED;
@@ -382,35 +441,43 @@ void updateLvglMainScreen(
     // Update battery percentage text
     char buffer[10];
     snprintf(buffer, sizeof(buffer), "%d%%", (int)batteryPercent);
-    lv_label_set_text(battery_label, buffer);
+    setLabelTextIfChanged(battery_label, buffer);
     lv_obj_set_style_text_color(battery_label, LVGL_BLACK, 0);
   } else if (escConnected) {
     // clear the battery bar, we handle voltage later
-    lv_bar_set_value(battery_bar, 0, LV_ANIM_OFF);
+    setBarValueIfChanged(battery_bar, 0);
   } else {
-    lv_bar_set_value(battery_bar, 0, LV_ANIM_OFF);
-    lv_label_set_text(battery_label, "NO DATA");
+    setBarValueIfChanged(battery_bar, 0);
+    setLabelTextIfChanged(battery_label, "NO DATA");
     lv_obj_set_style_text_color(battery_label, LVGL_RED, 0);
   }
 
   // Update left voltage (cell voltage)
+  static int lastVoltageLeftMode = -1;
   if (voltage_left_label != NULL) {  // Check object exists
     if (bmsConnected) {
         char buffer[10];
         snprintf(buffer, sizeof(buffer), "%2.2fv", lowestCellV);
-        lv_label_set_text(voltage_left_label, buffer);
+        setLabelTextIfChanged(voltage_left_label, buffer);
 
         // Always use black text for better readability
         lv_obj_set_style_text_color(voltage_left_label, LVGL_BLACK, 0);
         // Restore default position when BMS is connected
-        lv_obj_align(voltage_left_label, LV_ALIGN_TOP_LEFT, 3, 12);
+        if (lastVoltageLeftMode != 0) {
+          lv_obj_align(voltage_left_label, LV_ALIGN_TOP_LEFT, 3, 12);
+          lastVoltageLeftMode = 0;
+        }
     } else if (escConnected) {
         lv_obj_set_style_text_color(voltage_left_label, LVGL_BLACK, 0);
-        lv_label_set_text(voltage_left_label, "NO\nBMS");
+        setLabelTextIfChanged(voltage_left_label, "NO\nBMS");
         // Move up by 10 pixels when showing NO BMS
-        lv_obj_align(voltage_left_label, LV_ALIGN_TOP_LEFT, 3, 2);
+        if (lastVoltageLeftMode != 1) {
+          lv_obj_align(voltage_left_label, LV_ALIGN_TOP_LEFT, 3, 2);
+          lastVoltageLeftMode = 1;
+        }
     } else {
-        lv_label_set_text(voltage_left_label, "");
+        setLabelTextIfChanged(voltage_left_label, "");
+        lastVoltageLeftMode = 2;
     }
   }
 
@@ -420,24 +487,24 @@ void updateLvglMainScreen(
     if (bmsConnected) {
         char buffer[10];
         snprintf(buffer, sizeof(buffer), "%2.0fv", totalVolts);
-        lv_label_set_text(voltage_right_label, buffer);
+        setLabelTextIfChanged(voltage_right_label, buffer);
         // Ensure battery label shows percentage if BMS is connected
         if (batteryPercent >= 0) {
            char batt_buffer[10];
            snprintf(batt_buffer, sizeof(batt_buffer), "%d%%", (int)batteryPercent);
-           lv_label_set_text(battery_label, batt_buffer);
+           setLabelTextIfChanged(battery_label, batt_buffer);
            lv_obj_set_style_text_color(battery_label, LVGL_BLACK, 0);
         }
 
     } else if (escConnected) {
-        lv_label_set_text(voltage_right_label, "");
+        setLabelTextIfChanged(voltage_right_label, "");
 
         char buffer[10];
         snprintf(buffer, sizeof(buffer), "%2.1fv", totalVolts);
-        lv_label_set_text(battery_label, buffer);
+        setLabelTextIfChanged(battery_label, buffer);
         lv_obj_set_style_text_color(battery_label, LVGL_BLACK, 0);
     } else {
-        lv_label_set_text(voltage_right_label, "");
+        setLabelTextIfChanged(voltage_right_label, "");
     }
   }
 
@@ -452,11 +519,6 @@ void updateLvglMainScreen(
         }
         if (kWatts < 0.0f) {
           kWatts = 0.0f;
-        }
-
-        // Clear all positions first
-        for (int i = 0; i < 4; i++) {
-          lv_label_set_text(power_char_labels[i], "");
         }
 
         // Carry-safe rounding to one decimal place (e.g., 9.95 -> 10.0)
@@ -474,25 +536,27 @@ void updateLvglMainScreen(
         // Tens digit (only show if >= 10kW)
         if (tens > 0) {
           snprintf(power_digit_buffers[0], sizeof(power_digit_buffers[0]), "%d", tens);
-          lv_label_set_text(power_char_labels[0], power_digit_buffers[0]);
+          setLabelTextIfChanged(power_char_labels[0], power_digit_buffers[0]);
+        } else {
+          setLabelTextIfChanged(power_char_labels[0], "");
         }
 
         // Ones digit (always show)
         snprintf(power_digit_buffers[1], sizeof(power_digit_buffers[1]), "%d", ones);
-        lv_label_set_text(power_char_labels[1], power_digit_buffers[1]);
+        setLabelTextIfChanged(power_char_labels[1], power_digit_buffers[1]);
 
         // Decimal point
-        lv_label_set_text(power_char_labels[2], ".");
+        setLabelTextIfChanged(power_char_labels[2], ".");
 
         // Tenths digit
         snprintf(power_digit_buffers[3], sizeof(power_digit_buffers[3]), "%d", decimal_part);
-        lv_label_set_text(power_char_labels[3], power_digit_buffers[3]);
+        setLabelTextIfChanged(power_char_labels[3], power_digit_buffers[3]);
 
         // Unit label is static and already set to "kW"
     } else {
         // Clear all positions when no data
         for (int i = 0; i < 4; i++) {
-          lv_label_set_text(power_char_labels[i], "");
+          setLabelTextIfChanged(power_char_labels[i], "");
         }
         // Keep unit label visible even when no data
     }
@@ -500,7 +564,7 @@ void updateLvglMainScreen(
 
   // Update performance mode - Re-added this section
   if (perf_mode_label != NULL) {  // Check object exists
-      lv_label_set_text(perf_mode_label, deviceData.performance_mode == 0 ? "CHILL " : "SPORT");
+      setLabelTextIfChanged(perf_mode_label, deviceData.performance_mode == 0 ? "CHILL " : "SPORT");
   }
 
   // Update armed time
@@ -512,19 +576,19 @@ void updateLvglMainScreen(
     const int sessionSeconds = (armedStartMillis > 0) ? ((_lastArmedMillis - armedStartMillis) / 1000) : 0;
     char timeBuffer[10];
     snprintf(timeBuffer, sizeof(timeBuffer), "%02d:%02d", sessionSeconds / 60, sessionSeconds % 60);
-    lv_label_set_text(armed_time_label, timeBuffer);
+    setLabelTextIfChanged(armed_time_label, timeBuffer);
   }
 
   // Update altitude - populate individual character positions
   if (altitude == __FLT_MIN__) {
     // Show error in first few positions
-    lv_label_set_text(altitude_char_labels[0], "E");
-    lv_label_set_text(altitude_char_labels[1], "R");
-    lv_label_set_text(altitude_char_labels[2], "R");
-    lv_label_set_text(altitude_char_labels[3], "");
-    lv_label_set_text(altitude_char_labels[4], "");
-    lv_label_set_text(altitude_char_labels[5], "");
-    lv_label_set_text(altitude_char_labels[6], "");
+    setLabelTextIfChanged(altitude_char_labels[0], "E");
+    setLabelTextIfChanged(altitude_char_labels[1], "R");
+    setLabelTextIfChanged(altitude_char_labels[2], "R");
+    setLabelTextIfChanged(altitude_char_labels[3], "");
+    setLabelTextIfChanged(altitude_char_labels[4], "");
+    setLabelTextIfChanged(altitude_char_labels[5], "");
+    setLabelTextIfChanged(altitude_char_labels[6], "");
   } else {
     if (deviceData.metric_alt) {  // Display meters if metric altitude is enabled
       // Explicitly handle small negative values to avoid "-0.0"
@@ -550,9 +614,8 @@ void updateLvglMainScreen(
       // Populate each character position using static character buffers
       static char digit_buffers[7][12];  // Static buffers for single digits
 
-      // Clear all positions first
       for (int i = 0; i < 7; i++) {
-        lv_label_set_text(altitude_char_labels[i], "");
+        setLabelTextIfChanged(altitude_char_labels[i], "");
       }
 
       // Determine the leftmost digit position needed
@@ -563,43 +626,45 @@ void updateLvglMainScreen(
 
       // Place negative sign if needed (one position left of leftmost digit)
       if (isNegative && leftmost_pos > 0) {
-        lv_label_set_text(altitude_char_labels[leftmost_pos - 1], "-");
+        setLabelTextIfChanged(altitude_char_labels[leftmost_pos - 1], "-");
       }
 
       // Thousands digit
       if (thousands > 0) {
         snprintf(digit_buffers[0], sizeof(digit_buffers[0]), "%d", thousands);
-        lv_label_set_text(altitude_char_labels[0], digit_buffers[0]);
+        setLabelTextIfChanged(altitude_char_labels[0], digit_buffers[0]);
       }
 
       // Hundreds digit
       if (thousands > 0 || hundreds > 0) {
         snprintf(digit_buffers[1], sizeof(digit_buffers[1]), "%d", hundreds);
-        lv_label_set_text(altitude_char_labels[1], digit_buffers[1]);
+        setLabelTextIfChanged(altitude_char_labels[1], digit_buffers[1]);
       }
 
       // Tens digit
       if (whole_part >= 10) {
         snprintf(digit_buffers[2], sizeof(digit_buffers[2]), "%d", tens);
-        lv_label_set_text(altitude_char_labels[2], digit_buffers[2]);
+        setLabelTextIfChanged(altitude_char_labels[2], digit_buffers[2]);
       }
 
       // Ones digit (always show)
       snprintf(digit_buffers[3], sizeof(digit_buffers[3]), "%d", ones);
-      lv_label_set_text(altitude_char_labels[3], digit_buffers[3]);
+      setLabelTextIfChanged(altitude_char_labels[3], digit_buffers[3]);
 
       // Decimal point
-      lv_label_set_text(altitude_char_labels[4], ".");
+      setLabelTextIfChanged(altitude_char_labels[4], ".");
 
       // Tenths digit
       snprintf(digit_buffers[5], sizeof(digit_buffers[5]), "%d", decimal_part);
-      lv_label_set_text(altitude_char_labels[5], digit_buffers[5]);
+      setLabelTextIfChanged(altitude_char_labels[5], digit_buffers[5]);
 
       // Adjust width of position 4 back to narrow for meters (decimal point)
-      lv_obj_set_size(altitude_char_labels[4], 8, 24);  // decimal_width=8, char_height=24
+      if (lv_obj_get_width(altitude_char_labels[4]) != 8) {
+        lv_obj_set_size(altitude_char_labels[4], 8, 24);  // decimal_width=8, char_height=24
+      }
 
       // Unit
-      lv_label_set_text(altitude_char_labels[6], "m");
+      setLabelTextIfChanged(altitude_char_labels[6], "m");
     } else {
       // For feet - no decimal point needed
       float feet_float = altitude * 3.28084f;
@@ -616,11 +681,13 @@ void updateLvglMainScreen(
       static char digit_buffers_ft[7][12];  // Static buffers for feet
 
       // Adjust width of position 4 for feet (should be normal width, not narrow)
-      lv_obj_set_size(altitude_char_labels[4], 17, 24);  // char_width=19, char_height=24
+      if (lv_obj_get_width(altitude_char_labels[4]) != 17) {
+        lv_obj_set_size(altitude_char_labels[4], 17, 24);  // char_width=19, char_height=24
+      }
 
       // Clear all positions first
       for (int i = 0; i < 7; i++) {
-        lv_label_set_text(altitude_char_labels[i], "");
+        setLabelTextIfChanged(altitude_char_labels[i], "");
       }
 
       // Determine the leftmost digit position needed
@@ -632,110 +699,93 @@ void updateLvglMainScreen(
 
       // Place negative sign if needed (one position left of leftmost digit)
       if (isNegative && leftmost_pos > 0) {
-        lv_label_set_text(altitude_char_labels[leftmost_pos - 1], "-");
+        setLabelTextIfChanged(altitude_char_labels[leftmost_pos - 1], "-");
       }
 
       // Ten-thousands digit in position 0
       if (ten_thousands > 0) {
         snprintf(digit_buffers_ft[0], sizeof(digit_buffers_ft[0]), "%d", ten_thousands);
-        lv_label_set_text(altitude_char_labels[0], digit_buffers_ft[0]);
+        setLabelTextIfChanged(altitude_char_labels[0], digit_buffers_ft[0]);
       }
 
       // Thousands digit in position 1
       if (ten_thousands > 0 || thousands > 0) {
         snprintf(digit_buffers_ft[1], sizeof(digit_buffers_ft[1]), "%d", thousands);
-        lv_label_set_text(altitude_char_labels[1], digit_buffers_ft[1]);
+        setLabelTextIfChanged(altitude_char_labels[1], digit_buffers_ft[1]);
       }
 
       // Hundreds digit in position 2
       if (ten_thousands > 0 || thousands > 0 || hundreds > 0) {
         snprintf(digit_buffers_ft[2], sizeof(digit_buffers_ft[2]), "%d", hundreds);
-        lv_label_set_text(altitude_char_labels[2], digit_buffers_ft[2]);
+        setLabelTextIfChanged(altitude_char_labels[2], digit_buffers_ft[2]);
       }
 
       // Tens digit in position 3
       if (feet >= 10) {
         snprintf(digit_buffers_ft[3], sizeof(digit_buffers_ft[3]), "%d", tens);
-        lv_label_set_text(altitude_char_labels[3], digit_buffers_ft[3]);
+        setLabelTextIfChanged(altitude_char_labels[3], digit_buffers_ft[3]);
       }
 
       // Ones digit in position 4 (always show) - now has normal width
       snprintf(digit_buffers_ft[4], sizeof(digit_buffers_ft[4]), "%d", ones);
-      lv_label_set_text(altitude_char_labels[4], digit_buffers_ft[4]);
+      setLabelTextIfChanged(altitude_char_labels[4], digit_buffers_ft[4]);
 
       // Feet unit in position 6 (same as meters, with proper spacing)
-      lv_label_set_text(altitude_char_labels[6], "f");
+      setLabelTextIfChanged(altitude_char_labels[6], "f");
     }
   }
 
   // Update temperature labels
   // -- Battery Temperature --
   if (batt_temp_label != NULL && batt_letter_label != NULL) {  // Check labels exist
-    lv_obj_remove_style(batt_temp_bg, &style_warning, 0);
-    lv_obj_remove_style(batt_temp_bg, &style_critical, 0);
-
     if (bmsTelemetry.bmsState == TelemetryState::CONNECTED && hasValidBatteryTemp) {
-      lv_label_set_text_fmt(batt_temp_label, "%d", static_cast<int>(batteryTemp));
-      if (batteryTemp >= bmsCellTempThresholds.critHigh) {
-        lv_obj_add_style(batt_temp_bg, &style_critical, 0);
-        lv_obj_clear_flag(batt_temp_bg, LV_OBJ_FLAG_HIDDEN);
-      } else if (batteryTemp >= bmsCellTempThresholds.warnHigh) {
-        lv_obj_add_style(batt_temp_bg, &style_warning, 0);
-        lv_obj_clear_flag(batt_temp_bg, LV_OBJ_FLAG_HIDDEN);
-      } else {
-        lv_obj_add_flag(batt_temp_bg, LV_OBJ_FLAG_HIDDEN);
-      }
+      char tempBuffer[8];
+      snprintf(tempBuffer, sizeof(tempBuffer), "%d", static_cast<int>(batteryTemp));
+      setLabelTextIfChanged(batt_temp_label, tempBuffer);
+      applyTempBgState(
+        batt_temp_bg,
+        batteryTemp >= bmsCellTempThresholds.critHigh ? TempState::Crit :
+        batteryTemp >= bmsCellTempThresholds.warnHigh ? TempState::Warn :
+        TempState::Hidden);
     } else {
       // No valid cell probe connected: show "-" instead of a fake low reading.
-      lv_label_set_text(batt_temp_label, "-");
-      lv_obj_add_flag(batt_temp_bg, LV_OBJ_FLAG_HIDDEN);
+      setLabelTextIfChanged(batt_temp_label, "-");
+      applyTempBgState(batt_temp_bg, TempState::Hidden);
     }
   }
 
   // -- ESC Temperature --
   if (esc_temp_label != NULL && esc_letter_label != NULL) {  // Check labels exist
-    lv_obj_remove_style(esc_temp_bg, &style_warning, 0);
-    lv_obj_remove_style(esc_temp_bg, &style_critical, 0);
-
     if (escTelemetry.escState == TelemetryState::CONNECTED) {
-      lv_label_set_text_fmt(esc_temp_label, "%d", static_cast<int>(escTemp));
-
-      if (escTemp >= escMosTempThresholds.critHigh) {
-        lv_obj_add_style(esc_temp_bg, &style_critical, 0);
-        lv_obj_clear_flag(esc_temp_bg, LV_OBJ_FLAG_HIDDEN);
-      } else if (escTemp >= escMosTempThresholds.warnHigh) {
-        lv_obj_add_style(esc_temp_bg, &style_warning, 0);
-        lv_obj_clear_flag(esc_temp_bg, LV_OBJ_FLAG_HIDDEN);
-      } else {
-        lv_obj_add_flag(esc_temp_bg, LV_OBJ_FLAG_HIDDEN);
-      }
+      char tempBuffer[8];
+      snprintf(tempBuffer, sizeof(tempBuffer), "%d", static_cast<int>(escTemp));
+      setLabelTextIfChanged(esc_temp_label, tempBuffer);
+      applyTempBgState(
+        esc_temp_bg,
+        escTemp >= escMosTempThresholds.critHigh ? TempState::Crit :
+        escTemp >= escMosTempThresholds.warnHigh ? TempState::Warn :
+        TempState::Hidden);
     } else {
-      lv_label_set_text(esc_temp_label, "-");
-      lv_obj_add_flag(esc_temp_bg, LV_OBJ_FLAG_HIDDEN);
+      setLabelTextIfChanged(esc_temp_label, "-");
+      applyTempBgState(esc_temp_bg, TempState::Hidden);
     }
   }
 
   // -- Motor Temperature --
   if (motor_temp_label != NULL && motor_letter_label != NULL) {  // Check labels exist
-    lv_obj_remove_style(motor_temp_bg, &style_warning, 0);
-    lv_obj_remove_style(motor_temp_bg, &style_critical, 0);
-
     // Show motor temp only for a valid numeric reading while ESC is connected.
     if (escTelemetry.escState == TelemetryState::CONNECTED && !isnan(motorTemp)) {
-      lv_label_set_text_fmt(motor_temp_label, "%d", static_cast<int>(motorTemp));
-
-      if (motorTemp >= motorTempThresholds.critHigh) {
-        lv_obj_add_style(motor_temp_bg, &style_critical, 0);
-        lv_obj_clear_flag(motor_temp_bg, LV_OBJ_FLAG_HIDDEN);
-      } else if (motorTemp >= motorTempThresholds.warnHigh) {
-        lv_obj_add_style(motor_temp_bg, &style_warning, 0);
-        lv_obj_clear_flag(motor_temp_bg, LV_OBJ_FLAG_HIDDEN);
-      } else {
-        lv_obj_add_flag(motor_temp_bg, LV_OBJ_FLAG_HIDDEN);
-      }
+      char tempBuffer[8];
+      snprintf(tempBuffer, sizeof(tempBuffer), "%d", static_cast<int>(motorTemp));
+      setLabelTextIfChanged(motor_temp_label, tempBuffer);
+      applyTempBgState(
+        motor_temp_bg,
+        motorTemp >= motorTempThresholds.critHigh ? TempState::Crit :
+        motorTemp >= motorTempThresholds.warnHigh ? TempState::Warn :
+        TempState::Hidden);
     } else {
-      lv_label_set_text(motor_temp_label, "-");
-      lv_obj_add_flag(motor_temp_bg, LV_OBJ_FLAG_HIDDEN);
+      setLabelTextIfChanged(motor_temp_label, "-");
+      applyTempBgState(motor_temp_bg, TempState::Hidden);
     }
   }
 
@@ -743,18 +793,18 @@ void updateLvglMainScreen(
   if (armed) {
     // Set background to CYAN when armed, regardless of cruise state
     lv_obj_set_style_bg_color(arm_indicator, LVGL_CYAN, LV_PART_MAIN);
-    lv_obj_clear_flag(arm_indicator, LV_OBJ_FLAG_HIDDEN);
+    setObjHiddenIfNeeded(arm_indicator, false);
   } else {
-    lv_obj_add_flag(arm_indicator, LV_OBJ_FLAG_HIDDEN);
+    setObjHiddenIfNeeded(arm_indicator, true);
   }
 
   // Update Cruise Control Icon Visibility (conditional)
   // Only update based on `cruising` state if not currently flashing
   if (!isFlashingCruiseIcon) {
     if (cruising) {
-      lv_obj_clear_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);
+      setObjHiddenIfNeeded(cruise_icon_img, false);
     } else {
-      lv_obj_add_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);
+      setObjHiddenIfNeeded(cruise_icon_img, true);
     }
     // Restore original color after flashing is done
     lv_obj_set_style_img_recolor(cruise_icon_img, original_cruise_icon_color, LV_PART_MAIN);
@@ -763,17 +813,13 @@ void updateLvglMainScreen(
   // Update Charging Icon Visibility - only when BMS is connected and reports charging
   if (charging_icon_img != NULL) {  // Check object exists
     bool showChargingIcon = (bmsTelemetry.bmsState == TelemetryState::CONNECTED) && bmsTelemetry.is_charging;
-    if (showChargingIcon) {
-      lv_obj_clear_flag(charging_icon_img, LV_OBJ_FLAG_HIDDEN);
-    } else {
-      lv_obj_add_flag(charging_icon_img, LV_OBJ_FLAG_HIDDEN);
-    }
+    setObjHiddenIfNeeded(charging_icon_img, !showChargingIcon);
   }
 
   // Update Arm Fail Warning Icon Visibility (conditional)
   // Only hide if not currently flashing
   if (!isFlashingArmFailIcon && arm_fail_warning_icon_img != NULL) {
-    lv_obj_add_flag(arm_fail_warning_icon_img, LV_OBJ_FLAG_HIDDEN);
+    setObjHiddenIfNeeded(arm_fail_warning_icon_img, true);
     // Ensure color is reset if flashing ended abruptly elsewhere (though cb should handle it)
     lv_obj_set_style_img_recolor(arm_fail_warning_icon_img, original_arm_fail_icon_color, LV_PART_MAIN);
   }

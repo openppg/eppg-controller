@@ -393,20 +393,19 @@ void refreshDisplay() {
   }
 
   if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(40)) == pdTRUE) {
-    // Get the current relative altitude (updates buffer for vario)
-    // WORKAROUND: Cache last good altitude to avoid brief "ERR" flashes caused
-    // by I2C mutex contention between this task (20Hz) and ctrlSensorTask (10Hz).
-    // Both call getAltitude() which competes for i2cMutex with a 20ms timeout.
-    // TODO: Ideally the UI should read altitude from TelemetryHub (already
-    // populated by ctrlSensorTask) to eliminate the contention entirely, but
-    // that change needs careful integration testing with BLE FastLink telemetry.
+    // Read controller telemetry from the hub instead of hitting the barometer
+    // directly in the UI task. That removes I2C work and mutex contention from
+    // the frame path.
     static float lastGoodAltitude = 0.0f;
-    const float rawAltitude = getAltitude(deviceData);
-    if (rawAltitude != __FLT_MIN__) {
-      lastGoodAltitude = rawAltitude;
+    TelemetryHub hub = {};
+    float currentRelativeAltitude = lastGoodAltitude;
+    if (telemetryHubRead(&hub, pdMS_TO_TICKS(1)) && hub.ctrlSeq > 0) {
+      if (hub.altitude != __FLT_MIN__) {
+        lastGoodAltitude = hub.altitude;
+      }
+      currentRelativeAltitude =
+          (hub.altitude != __FLT_MIN__) ? hub.altitude : lastGoodAltitude;
     }
-    const float currentRelativeAltitude =
-        (rawAltitude != __FLT_MIN__) ? rawAltitude : lastGoodAltitude;
 
     // Determine the altitude to show on the display
     float altitudeToShow = 0.0f;  // Default to 0
