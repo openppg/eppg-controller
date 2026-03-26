@@ -54,15 +54,17 @@ const LV_ATTRIBUTE_MEM_ALIGN LV_ATTRIBUTE_LARGE_CONST LV_ATTRIBUTE_IMG_WARNING_2
   0x00, 0x00, 0x00, 0x00,
 };
 
-const lv_img_dsc_t warning_2135850_30 = {
-  // Header struct (lv_img_header_t)
-  {
-    LV_IMG_CF_ALPHA_1BIT,  // Color format
-    0,  // Always zero
-    0,  // Reserved
-    30,  // Width
-    30,  // Height
+const lv_image_dsc_t warning_2135850_30 = {
+  .header = {
+    .magic = LV_IMAGE_HEADER_MAGIC,
+    .cf = LV_COLOR_FORMAT_A1,
+    .flags = 0,
+    .w = 30,
+    .h = 30,
+    .stride = 4,  /* ceil(30/8) = 4 bytes per row */
+    .reserved_2 = 0,
   },
-  120,  // Data size
-  warning_2135850_30_map,  // Pointer to image data
+  .data_size = 120,
+  .data = warning_2135850_30_map,
+  .reserved = NULL,
 };

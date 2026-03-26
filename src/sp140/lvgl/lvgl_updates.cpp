@@ -42,7 +42,7 @@ static void cruise_flash_timer_cb(lv_timer_t* timer) {
 
   // Toggle visibility
   if (lv_obj_has_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN)) {
-    lv_obj_clear_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);
   } else {
     lv_obj_add_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);
   }
@@ -79,7 +79,7 @@ void startCruiseIconFlash() {
     isFlashingCruiseIcon = true;
 
     // Start with the icon visible
-    lv_obj_clear_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);
 
     // Create the timer (250ms interval for on/off cycle)
     cruise_flash_timer = lv_timer_create(cruise_flash_timer_cb, 250, NULL);
@@ -87,11 +87,11 @@ void startCruiseIconFlash() {
       // Failed to create timer, reset state
       isFlashingCruiseIcon = false;
       lv_obj_add_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);  // Hide it again
-      lv_obj_set_style_img_recolor(cruise_icon_img, original_cruise_icon_color, LV_PART_MAIN);  // Restore color on failure
+      lv_obj_set_style_image_recolor(cruise_icon_img, original_cruise_icon_color, LV_PART_MAIN);  // Restore color on failure
       USBSerial.println("Error: Failed to create cruise flash timer!");
     } else {
       // Set icon to red for flashing
-      lv_obj_set_style_img_recolor(cruise_icon_img, LVGL_RED, LV_PART_MAIN);
+      lv_obj_set_style_image_recolor(cruise_icon_img, LVGL_RED, LV_PART_MAIN);
     }
 
     xSemaphoreGive(lvglMutex);
@@ -117,7 +117,7 @@ static void arm_fail_flash_timer_cb(lv_timer_t* timer) {
 
   // Toggle visibility
   if (lv_obj_has_flag(arm_fail_warning_icon_img, LV_OBJ_FLAG_HIDDEN)) {
-    lv_obj_clear_flag(arm_fail_warning_icon_img, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(arm_fail_warning_icon_img, LV_OBJ_FLAG_HIDDEN);
   } else {
     lv_obj_add_flag(arm_fail_warning_icon_img, LV_OBJ_FLAG_HIDDEN);
   }
@@ -133,7 +133,7 @@ static void arm_fail_flash_timer_cb(lv_timer_t* timer) {
     // Ensure icon is hidden after flashing
     lv_obj_add_flag(arm_fail_warning_icon_img, LV_OBJ_FLAG_HIDDEN);
     // Restore original color after flashing is done
-    lv_obj_set_style_img_recolor(arm_fail_warning_icon_img, original_arm_fail_icon_color, LV_PART_MAIN);
+    lv_obj_set_style_image_recolor(arm_fail_warning_icon_img, original_arm_fail_icon_color, LV_PART_MAIN);
   }
 }
 
@@ -156,10 +156,10 @@ void startArmFailIconFlash() {
     isFlashingArmFailIcon = true;
 
     // Start with the icon visible
-    lv_obj_clear_flag(arm_fail_warning_icon_img, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(arm_fail_warning_icon_img, LV_OBJ_FLAG_HIDDEN);
 
     // Set icon to red for flashing
-    lv_obj_set_style_img_recolor(arm_fail_warning_icon_img, LVGL_RED, LV_PART_MAIN);
+    lv_obj_set_style_image_recolor(arm_fail_warning_icon_img, LVGL_RED, LV_PART_MAIN);
 
     // Create the timer (250ms interval for on/off cycle)
     arm_fail_flash_timer = lv_timer_create(arm_fail_flash_timer_cb, 250, NULL);
@@ -167,7 +167,7 @@ void startArmFailIconFlash() {
       // Failed to create timer, reset state
       isFlashingArmFailIcon = false;
       lv_obj_add_flag(arm_fail_warning_icon_img, LV_OBJ_FLAG_HIDDEN);  // Hide it again
-      lv_obj_set_style_img_recolor(arm_fail_warning_icon_img, original_arm_fail_icon_color, LV_PART_MAIN);  // Restore color
+      lv_obj_set_style_image_recolor(arm_fail_warning_icon_img, original_arm_fail_icon_color, LV_PART_MAIN);  // Restore color
       USBSerial.println("Error: Failed to create arm fail flash timer!");
     }
 
@@ -187,7 +187,7 @@ static void critical_border_flash_timer_cb(lv_timer_t* timer) {
       lv_obj_set_style_border_opa(critical_border, LV_OPA_0, LV_PART_MAIN);
       lv_timer_set_period(timer, 700);  // Off duration
       // Invalidate entire screen when hiding to ensure clean removal of border pixels
-      lv_obj_invalidate(lv_scr_act());
+      lv_obj_invalidate(lv_screen_active());
     } else {
       lv_obj_set_style_border_opa(critical_border, LV_OPA_100, LV_PART_MAIN);
       lv_timer_set_period(timer, 300);  // On duration
@@ -200,7 +200,7 @@ static void critical_border_flash_timer_cb(lv_timer_t* timer) {
       lv_obj_invalidate(critical_border);
     }
     // Force immediate refresh to minimize tearing
-    lv_refr_now(lv_disp_get_default());
+    lv_refr_now(lv_display_get_default());
   }
 }
 
@@ -224,7 +224,7 @@ void stopCriticalBorderFlash() {
     if (critical_border != NULL) {
       lv_obj_set_style_border_opa(critical_border, LV_OPA_0, LV_PART_MAIN);
       // Invalidate entire screen to ensure clean removal
-      lv_obj_invalidate(lv_scr_act());
+      lv_obj_invalidate(lv_screen_active());
     }
     isFlashingCriticalBorder = false;
     xSemaphoreGive(lvglMutex);
@@ -243,7 +243,7 @@ void startCriticalBorderFlashDirect() {
     lv_obj_invalidate(critical_border);  // Ensure clean initial draw
     critical_border_flash_timer = lv_timer_create(critical_border_flash_timer_cb, 300, NULL);
     // Force immediate refresh for clean start
-    lv_refr_now(lv_disp_get_default());
+    lv_refr_now(lv_display_get_default());
   }
 }
 
@@ -254,9 +254,9 @@ void stopCriticalBorderFlashDirect() {
   }
   if (critical_border != NULL) {
     lv_obj_set_style_border_opa(critical_border, LV_OPA_0, LV_PART_MAIN);
-    lv_obj_invalidate(lv_scr_act());  // Ensure clean removal of border
+    lv_obj_invalidate(lv_screen_active());  // Ensure clean removal of border
     // Force immediate refresh for clean stop
-    lv_refr_now(lv_disp_get_default());
+    lv_refr_now(lv_display_get_default());
   }
   isFlashingCriticalBorder = false;
 }
@@ -678,10 +678,10 @@ void updateLvglMainScreen(
       lv_label_set_text_fmt(batt_temp_label, "%d", static_cast<int>(batteryTemp));
       if (batteryTemp >= bmsCellTempThresholds.critHigh) {
         lv_obj_add_style(batt_temp_bg, &style_critical, 0);
-        lv_obj_clear_flag(batt_temp_bg, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(batt_temp_bg, LV_OBJ_FLAG_HIDDEN);
       } else if (batteryTemp >= bmsCellTempThresholds.warnHigh) {
         lv_obj_add_style(batt_temp_bg, &style_warning, 0);
-        lv_obj_clear_flag(batt_temp_bg, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(batt_temp_bg, LV_OBJ_FLAG_HIDDEN);
       } else {
         lv_obj_add_flag(batt_temp_bg, LV_OBJ_FLAG_HIDDEN);
       }
@@ -702,10 +702,10 @@ void updateLvglMainScreen(
 
       if (escTemp >= escMosTempThresholds.critHigh) {
         lv_obj_add_style(esc_temp_bg, &style_critical, 0);
-        lv_obj_clear_flag(esc_temp_bg, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(esc_temp_bg, LV_OBJ_FLAG_HIDDEN);
       } else if (escTemp >= escMosTempThresholds.warnHigh) {
         lv_obj_add_style(esc_temp_bg, &style_warning, 0);
-        lv_obj_clear_flag(esc_temp_bg, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(esc_temp_bg, LV_OBJ_FLAG_HIDDEN);
       } else {
         lv_obj_add_flag(esc_temp_bg, LV_OBJ_FLAG_HIDDEN);
       }
@@ -726,10 +726,10 @@ void updateLvglMainScreen(
 
       if (motorTemp >= motorTempThresholds.critHigh) {
         lv_obj_add_style(motor_temp_bg, &style_critical, 0);
-        lv_obj_clear_flag(motor_temp_bg, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(motor_temp_bg, LV_OBJ_FLAG_HIDDEN);
       } else if (motorTemp >= motorTempThresholds.warnHigh) {
         lv_obj_add_style(motor_temp_bg, &style_warning, 0);
-        lv_obj_clear_flag(motor_temp_bg, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(motor_temp_bg, LV_OBJ_FLAG_HIDDEN);
       } else {
         lv_obj_add_flag(motor_temp_bg, LV_OBJ_FLAG_HIDDEN);
       }
@@ -743,7 +743,7 @@ void updateLvglMainScreen(
   if (armed) {
     // Set background to CYAN when armed, regardless of cruise state
     lv_obj_set_style_bg_color(arm_indicator, LVGL_CYAN, LV_PART_MAIN);
-    lv_obj_clear_flag(arm_indicator, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(arm_indicator, LV_OBJ_FLAG_HIDDEN);
   } else {
     lv_obj_add_flag(arm_indicator, LV_OBJ_FLAG_HIDDEN);
   }
@@ -752,19 +752,19 @@ void updateLvglMainScreen(
   // Only update based on `cruising` state if not currently flashing
   if (!isFlashingCruiseIcon) {
     if (cruising) {
-      lv_obj_clear_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_remove_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);
     } else {
       lv_obj_add_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);
     }
     // Restore original color after flashing is done
-    lv_obj_set_style_img_recolor(cruise_icon_img, original_cruise_icon_color, LV_PART_MAIN);
+    lv_obj_set_style_image_recolor(cruise_icon_img, original_cruise_icon_color, LV_PART_MAIN);
   }
 
   // Update Charging Icon Visibility - only when BMS is connected and reports charging
   if (charging_icon_img != NULL) {  // Check object exists
     bool showChargingIcon = (bmsTelemetry.bmsState == TelemetryState::CONNECTED) && bmsTelemetry.is_charging;
     if (showChargingIcon) {
-      lv_obj_clear_flag(charging_icon_img, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_remove_flag(charging_icon_img, LV_OBJ_FLAG_HIDDEN);
     } else {
       lv_obj_add_flag(charging_icon_img, LV_OBJ_FLAG_HIDDEN);
     }
@@ -775,7 +775,7 @@ void updateLvglMainScreen(
   if (!isFlashingArmFailIcon && arm_fail_warning_icon_img != NULL) {
     lv_obj_add_flag(arm_fail_warning_icon_img, LV_OBJ_FLAG_HIDDEN);
     // Ensure color is reset if flashing ended abruptly elsewhere (though cb should handle it)
-    lv_obj_set_style_img_recolor(arm_fail_warning_icon_img, original_arm_fail_icon_color, LV_PART_MAIN);
+    lv_obj_set_style_image_recolor(arm_fail_warning_icon_img, original_arm_fail_icon_color, LV_PART_MAIN);
   }
 
   // Update climb rate indicator

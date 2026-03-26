@@ -783,7 +783,7 @@ void setup() {
 
   // Load main screen
   if (main_screen != NULL) {
-    lv_scr_load(main_screen);
+    lv_screen_load(main_screen);
     USBSerial.println("Main screen loaded");
   } else {
     USBSerial.println("Error: Main screen object is NULL after setup attempt");

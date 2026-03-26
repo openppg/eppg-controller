@@ -58,7 +58,7 @@ void setAltitudeVisibility(bool visible) {
   for (int i = 0; i < 7; i++) {
     if (altitude_char_labels[i]) {
       if (visible) {
-        lv_obj_clear_flag(altitude_char_labels[i], LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(altitude_char_labels[i], LV_OBJ_FLAG_HIDDEN);
       } else {
         lv_obj_add_flag(altitude_char_labels[i], LV_OBJ_FLAG_HIDDEN);
       }
@@ -104,7 +104,7 @@ void init_temp_styles(bool darkMode) {
 // Function to show the loading overlay
 void showLoadingOverlay() {
   if (spinner_overlay != NULL) {
-    lv_obj_clear_flag(spinner_overlay, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(spinner_overlay, LV_OBJ_FLAG_HIDDEN);
   }
 }
 
@@ -118,14 +118,14 @@ void hideLoadingOverlay() {
 // Setup the main screen layout once
 void setupMainScreen(bool darkMode) {
   if (main_screen != NULL) {
-    lv_obj_del(main_screen);
+    lv_obj_delete(main_screen);
   }
 
   // Create main screen
   main_screen = lv_obj_create(NULL);
 
   // Disable scrollbars
-  lv_obj_clear_flag(main_screen, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_remove_flag(main_screen, LV_OBJ_FLAG_SCROLLABLE);
 
   // Set theme based on dark/light mode
   lv_obj_set_style_bg_color(main_screen,
@@ -425,7 +425,7 @@ void setupMainScreen(bool darkMode) {
   // Draw divider lines
   // Create horizontal line between top and middle sections
   lv_obj_t* h_line1 = lv_line_create(main_screen);
-  static lv_point_t h_line1_points[] = {{0, 37}, {SCREEN_WIDTH, 37}};
+  static lv_point_precise_t h_line1_points[] = {{0, 37}, {SCREEN_WIDTH, 37}};
   lv_line_set_points(h_line1, h_line1_points, 2);
   lv_obj_set_style_line_color(h_line1,
                              LVGL_GRAY,
@@ -434,7 +434,7 @@ void setupMainScreen(bool darkMode) {
 
   // Create horizontal line between middle and bottom sections (stop at new section boundary)
   lv_obj_t* h_line2 = lv_line_create(main_screen);
-  static lv_point_t h_line2_points[] = {{0, 70}, {148, 70}};
+  static lv_point_precise_t h_line2_points[] = {{0, 70}, {148, 70}};
   lv_line_set_points(h_line2, h_line2_points, 2);
   lv_obj_set_style_line_color(h_line2,
                              LVGL_GRAY,
@@ -443,7 +443,7 @@ void setupMainScreen(bool darkMode) {
 
   // Create vertical line in middle section
   lv_obj_t* v_line1 = lv_line_create(main_screen);
-  static lv_point_t v_line1_points[] = {{102, 37}, {102, 70}};
+  static lv_point_precise_t v_line1_points[] = {{102, 37}, {102, 70}};
   lv_line_set_points(v_line1, v_line1_points, 2);
   lv_obj_set_style_line_color(v_line1,
                              LVGL_GRAY,
@@ -452,7 +452,7 @@ void setupMainScreen(bool darkMode) {
 
   // Create vertical line in bottom section
   lv_obj_t* v_line2 = lv_line_create(main_screen);
-  static lv_point_t v_line2_points[] = {{117, 70}, {117, 128}};
+  static lv_point_precise_t v_line2_points[] = {{117, 70}, {117, 128}};
   lv_line_set_points(v_line2, v_line2_points, 2);
   lv_obj_set_style_line_color(v_line2,
                              LVGL_GRAY,
@@ -461,7 +461,7 @@ void setupMainScreen(bool darkMode) {
 
   // Create vertical line for new far-right section
   lv_obj_t* v_line3 = lv_line_create(main_screen);
-  static lv_point_t v_line3_points[] = {{148, 37}, {148, 128}};
+  static lv_point_precise_t v_line3_points[] = {{148, 37}, {148, 128}};
   lv_line_set_points(v_line3, v_line3_points, 2);
   lv_obj_set_style_line_color(v_line3,
                              LVGL_GRAY,
@@ -471,7 +471,7 @@ void setupMainScreen(bool darkMode) {
   // Create horizontal dividers for temperature section
   // Line between B and E at Y=89
   lv_obj_t* h_line3 = lv_line_create(main_screen);
-  static lv_point_t h_line3_points[] = {{117, 89}, {148, 89}};
+  static lv_point_precise_t h_line3_points[] = {{117, 89}, {148, 89}};
   lv_line_set_points(h_line3, h_line3_points, 2);
   lv_obj_set_style_line_color(h_line3,
                              LVGL_GRAY,
@@ -480,7 +480,7 @@ void setupMainScreen(bool darkMode) {
 
   // Line between E and M at Y=109
   lv_obj_t* h_line4 = lv_line_create(main_screen);
-  static lv_point_t h_line4_points[] = {{117, 109}, {148, 109}};
+  static lv_point_precise_t h_line4_points[] = {{117, 109}, {148, 109}};
   lv_line_set_points(h_line4, h_line4_points, 2);
   lv_obj_set_style_line_color(h_line4,
                              LVGL_GRAY,
@@ -498,8 +498,8 @@ void setupMainScreen(bool darkMode) {
   lv_obj_add_flag(arm_indicator, LV_OBJ_FLAG_HIDDEN);
 
   // Create cruise control icon (initially hidden)
-  cruise_icon_img = lv_img_create(main_screen);
-  lv_img_set_src(cruise_icon_img, &cruise_control_340255_30);  // Use the new 30x30 image descriptor
+  cruise_icon_img = lv_image_create(main_screen);
+  lv_image_set_src(cruise_icon_img, &cruise_control_340255_30);  // Use the new 30x30 image descriptor
 
   // Set icon color using recoloring based on theme
   lv_color_t icon_color;
@@ -508,34 +508,34 @@ void setupMainScreen(bool darkMode) {
   } else {
     icon_color = lv_color_black();  // Black icon on light background
   }
-  lv_obj_set_style_img_recolor(cruise_icon_img, icon_color, LV_PART_MAIN);
-  lv_obj_set_style_img_recolor_opa(cruise_icon_img, LV_OPA_COVER, LV_PART_MAIN);  // Make icon fully opaque
+  lv_obj_set_style_image_recolor(cruise_icon_img, icon_color, LV_PART_MAIN);
+  lv_obj_set_style_image_recolor_opa(cruise_icon_img, LV_OPA_COVER, LV_PART_MAIN);  // Make icon fully opaque
 
   lv_obj_align(cruise_icon_img, LV_ALIGN_CENTER, 5, -11);
   lv_obj_move_foreground(cruise_icon_img);  // Ensure icon is on the top layer
   lv_obj_add_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);  // Hide initially
 
   // Create charging icon (initially hidden)
-  charging_icon_img = lv_img_create(main_screen);
-  lv_img_set_src(charging_icon_img, &energy_539741_26);
+  charging_icon_img = lv_image_create(main_screen);
+  lv_image_set_src(charging_icon_img, &energy_539741_26);
   lv_obj_align_to(charging_icon_img, battery_label, LV_ALIGN_OUT_RIGHT_MID, 3, 0);  // Align to right of battery label
 
   // Set charging icon color based on theme
-  lv_obj_set_style_img_recolor(charging_icon_img, icon_color, LV_PART_MAIN);  // Use same icon_color as cruise
-  lv_obj_set_style_img_recolor_opa(charging_icon_img, LV_OPA_COVER, LV_PART_MAIN);
+  lv_obj_set_style_image_recolor(charging_icon_img, icon_color, LV_PART_MAIN);  // Use same icon_color as cruise
+  lv_obj_set_style_image_recolor_opa(charging_icon_img, LV_OPA_COVER, LV_PART_MAIN);
 
   lv_obj_move_foreground(charging_icon_img);  // Ensure icon is on top
   lv_obj_add_flag(charging_icon_img, LV_OBJ_FLAG_HIDDEN);  // Hide initially
 
   // Create arm fail warning icon (initially hidden)
-  arm_fail_warning_icon_img = lv_img_create(main_screen);
-  lv_img_set_src(arm_fail_warning_icon_img, &warning_2135850_30);
+  arm_fail_warning_icon_img = lv_image_create(main_screen);
+  lv_image_set_src(arm_fail_warning_icon_img, &warning_2135850_30);
   // Align in the same position as the cruise icon
   lv_obj_align(arm_fail_warning_icon_img, LV_ALIGN_CENTER, 12, -9);
 
   // Set icon color based on theme (using the same logic as cruise icon)
-  lv_obj_set_style_img_recolor(arm_fail_warning_icon_img, icon_color, LV_PART_MAIN);
-  lv_obj_set_style_img_recolor_opa(arm_fail_warning_icon_img, LV_OPA_COVER, LV_PART_MAIN);
+  lv_obj_set_style_image_recolor(arm_fail_warning_icon_img, icon_color, LV_PART_MAIN);
+  lv_obj_set_style_image_recolor_opa(arm_fail_warning_icon_img, LV_OPA_COVER, LV_PART_MAIN);
 
   lv_obj_move_foreground(arm_fail_warning_icon_img);  // Ensure icon is on top
   lv_obj_add_flag(arm_fail_warning_icon_img, LV_OBJ_FLAG_HIDDEN);  // Hide initially
@@ -549,7 +549,8 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_style_border_width(spinner_overlay, 0, LV_PART_MAIN);
 
   // Create spinning animation at the top center - now place on top of overlay
-  spinner = lv_spinner_create(spinner_overlay, 1000, 60);  // 1000ms period, 60 arcade width
+  spinner = lv_spinner_create(spinner_overlay);
+  lv_spinner_set_anim_params(spinner, 1000, 60);  // 1000ms period, 60 arc width
   lv_obj_set_size(spinner, 80, 80);  // Even larger spinner for visibility
   lv_obj_align(spinner, LV_ALIGN_CENTER, 0, 0);  // Position at center of screen
 
@@ -578,7 +579,7 @@ void setupMainScreen(bool darkMode) {
 
     // Create horizontal divider line running from section start to screen edge
     climb_rate_divider_lines[i] = lv_line_create(main_screen);
-    static lv_point_t line_points[13][2];  // Static array for all line points
+    static lv_point_precise_t line_points[13][2];  // Static array for all line points
     line_points[i][0].x = 148;  // Start at section boundary
     line_points[i][0].y = y_pos;
     line_points[i][1].x = 160;  // End at screen edge
@@ -637,5 +638,5 @@ void setupMainScreen(bool darkMode) {
   init_temp_styles(darkMode);
 
   // Load the screen
-  lv_scr_load(main_screen);
+  lv_screen_load(main_screen);
 }

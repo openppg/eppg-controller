@@ -54,14 +54,17 @@ const LV_ATTRIBUTE_MEM_ALIGN LV_ATTRIBUTE_LARGE_CONST LV_ATTRIBUTE_IMG_CRUISE_CO
   0x00, 0x00, 0x00, 0x00,
 };
 
-const lv_img_dsc_t cruise_control_340255_30 = {
-  {
-    LV_IMG_CF_ALPHA_1BIT,
-    0,
-    0,
-    30,
-    30,
+const lv_image_dsc_t cruise_control_340255_30 = {
+  .header = {
+    .magic = LV_IMAGE_HEADER_MAGIC,
+    .cf = LV_COLOR_FORMAT_A1,
+    .flags = 0,
+    .w = 30,
+    .h = 30,
+    .stride = 4,  /* ceil(30/8) = 4 bytes per row */
+    .reserved_2 = 0,
   },
-  120,
-  cruise_control_340255_30_map,
+  .data_size = 120,
+  .data = cruise_control_340255_30_map,
+  .reserved = NULL,
 };
