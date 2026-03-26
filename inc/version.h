@@ -2,11 +2,8 @@
 #pragma once
 
 #define VERSION_MAJOR 8
-#define VERSION_MINOR 1
-
-#ifndef VERSION_BUILD
-#define VERSION_BUILD 0
-#endif
+#define VERSION_MINOR 0
+#define VERSION_BUILD 80
 
 // Define a version string
 #define VERSION_STRING STRINGIFY(VERSION_MAJOR) "." STRINGIFY(VERSION_MINOR)
