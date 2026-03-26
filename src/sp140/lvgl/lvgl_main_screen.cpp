@@ -233,7 +233,7 @@ void setupMainScreen(bool darkMode) {
   // Layout: [thousands][hundreds][tens][ones][.][tenths][m]  (7 positions total)
   int char_width = 19;      // Slightly tighter character width spacing
   int decimal_width = 8;    // Slightly wider decimal point for proportional spacing
-  int char_height = 24;     // Larger character height
+  int char_height = 30;     // Match lv_font_montserrat_28 line_height (v9: 30px)
   int unit_width = 12;      // Narrower width for unit character to reduce buffer
 
   // Calculate total width needed and position from the right

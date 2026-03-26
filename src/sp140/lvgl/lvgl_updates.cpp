@@ -596,7 +596,7 @@ void updateLvglMainScreen(
       lv_label_set_text(altitude_char_labels[5], digit_buffers[5]);
 
       // Adjust width of position 4 back to narrow for meters (decimal point)
-      lv_obj_set_size(altitude_char_labels[4], 8, 24);  // decimal_width=8, char_height=24
+      lv_obj_set_size(altitude_char_labels[4], 8, 30);  // decimal_width=8, char_height=30
 
       // Unit
       lv_label_set_text(altitude_char_labels[6], "m");
@@ -616,7 +616,7 @@ void updateLvglMainScreen(
       static char digit_buffers_ft[7][12];  // Static buffers for feet
 
       // Adjust width of position 4 for feet (should be normal width, not narrow)
-      lv_obj_set_size(altitude_char_labels[4], 17, 24);  // char_width=19, char_height=24
+      lv_obj_set_size(altitude_char_labels[4], 17, 30);  // char_width=19, char_height=30
 
       // Clear all positions first
       for (int i = 0; i < 7; i++) {
