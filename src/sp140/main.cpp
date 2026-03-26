@@ -626,6 +626,10 @@ void createAllSyncPrimitives() {
   if (melodyQueue == NULL) {
     USBSerial.println("Error creating melody queue");
   }
+
+  // Telemetry hub mutex - protects shared telemetry data between
+  // sensor-producer tasks (ESC/BMS/controller) and the BLE notify task.
+  telemetryHubInit();
 }
 
 /**
