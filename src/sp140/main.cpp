@@ -626,7 +626,6 @@ void createAllSyncPrimitives() {
   if (melodyQueue == NULL) {
     USBSerial.println("Error creating melody queue");
   }
-
 }
 
 /**
