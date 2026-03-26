@@ -57,28 +57,16 @@ void setBarValueIfChanged(lv_obj_t* bar, int value) {
 
 enum class TempState : uint8_t { Hidden, Warn, Crit };
 
+// Store last TempState in the widget's user_data so the helper stays generic.
 void applyTempBgState(lv_obj_t* bg, TempState state) {
   if (bg == NULL) {
     return;
   }
-  static TempState lastBattState = TempState::Hidden;
-  static TempState lastEscState = TempState::Hidden;
-  static TempState lastMotorState = TempState::Hidden;
-  TempState* lastState = nullptr;
-  if (bg == batt_temp_bg) {
-    lastState = &lastBattState;
-  } else if (bg == esc_temp_bg) {
-    lastState = &lastEscState;
-  } else if (bg == motor_temp_bg) {
-    lastState = &lastMotorState;
-  }
-
-  if (lastState != nullptr && *lastState == state) {
+  auto prev = static_cast<TempState>(reinterpret_cast<uintptr_t>(lv_obj_get_user_data(bg)));
+  if (prev == state) {
     return;
   }
-  if (lastState != nullptr) {
-    *lastState = state;
-  }
+  lv_obj_set_user_data(bg, reinterpret_cast<void*>(static_cast<uintptr_t>(state)));
 
   if (state == TempState::Hidden) {
     setObjHiddenIfNeeded(bg, true);
@@ -87,6 +75,22 @@ void applyTempBgState(lv_obj_t* bg, TempState state) {
 
   setObjHiddenIfNeeded(bg, false);
   lv_obj_set_style_bg_color(bg, state == TempState::Crit ? LVGL_RED : LVGL_YELLOW, LV_PART_MAIN);
+}
+
+void setStyleColorIfChanged(lv_obj_t* obj, lv_color_t color, lv_style_selector_t sel) {
+  if (obj == NULL) return;
+  lv_color_t cur = lv_obj_get_style_text_color(obj, sel);
+  if (cur.full != color.full) {
+    lv_obj_set_style_text_color(obj, color, sel);
+  }
+}
+
+void setBgColorIfChanged(lv_obj_t* obj, lv_color_t color, lv_style_selector_t sel) {
+  if (obj == NULL) return;
+  lv_color_t cur = lv_obj_get_style_bg_color(obj, sel);
+  if (cur.full != color.full) {
+    lv_obj_set_style_bg_color(obj, color, sel);
+  }
 }
 
 }  // namespace
@@ -436,48 +440,45 @@ void updateLvglMainScreen(
       batteryColor = LVGL_YELLOW;
     }
 
-    lv_obj_set_style_bg_color(battery_bar, batteryColor, LV_PART_INDICATOR);
+    setBgColorIfChanged(battery_bar, batteryColor, LV_PART_INDICATOR);
 
     // Update battery percentage text
     char buffer[10];
     snprintf(buffer, sizeof(buffer), "%d%%", (int)batteryPercent);
     setLabelTextIfChanged(battery_label, buffer);
-    lv_obj_set_style_text_color(battery_label, LVGL_BLACK, 0);
+    setStyleColorIfChanged(battery_label, LVGL_BLACK, 0);
   } else if (escConnected) {
     // clear the battery bar, we handle voltage later
     setBarValueIfChanged(battery_bar, 0);
   } else {
     setBarValueIfChanged(battery_bar, 0);
     setLabelTextIfChanged(battery_label, "NO DATA");
-    lv_obj_set_style_text_color(battery_label, LVGL_RED, 0);
+    setStyleColorIfChanged(battery_label, LVGL_RED, 0);
   }
 
   // Update left voltage (cell voltage)
-  static int lastVoltageLeftMode = -1;
+  enum VoltLeftLayout : uint8_t { VL_INIT, VL_BMS, VL_NO_BMS, VL_NONE };
+  static VoltLeftLayout lastVoltLeftLayout = VL_INIT;
   if (voltage_left_label != NULL) {  // Check object exists
     if (bmsConnected) {
         char buffer[10];
         snprintf(buffer, sizeof(buffer), "%2.2fv", lowestCellV);
         setLabelTextIfChanged(voltage_left_label, buffer);
-
-        // Always use black text for better readability
-        lv_obj_set_style_text_color(voltage_left_label, LVGL_BLACK, 0);
-        // Restore default position when BMS is connected
-        if (lastVoltageLeftMode != 0) {
+        setStyleColorIfChanged(voltage_left_label, LVGL_BLACK, 0);
+        if (lastVoltLeftLayout != VL_BMS) {
           lv_obj_align(voltage_left_label, LV_ALIGN_TOP_LEFT, 3, 12);
-          lastVoltageLeftMode = 0;
+          lastVoltLeftLayout = VL_BMS;
         }
     } else if (escConnected) {
-        lv_obj_set_style_text_color(voltage_left_label, LVGL_BLACK, 0);
+        setStyleColorIfChanged(voltage_left_label, LVGL_BLACK, 0);
         setLabelTextIfChanged(voltage_left_label, "NO\nBMS");
-        // Move up by 10 pixels when showing NO BMS
-        if (lastVoltageLeftMode != 1) {
+        if (lastVoltLeftLayout != VL_NO_BMS) {
           lv_obj_align(voltage_left_label, LV_ALIGN_TOP_LEFT, 3, 2);
-          lastVoltageLeftMode = 1;
+          lastVoltLeftLayout = VL_NO_BMS;
         }
     } else {
         setLabelTextIfChanged(voltage_left_label, "");
-        lastVoltageLeftMode = 2;
+        lastVoltLeftLayout = VL_NONE;
     }
   }
 
@@ -493,7 +494,7 @@ void updateLvglMainScreen(
            char batt_buffer[10];
            snprintf(batt_buffer, sizeof(batt_buffer), "%d%%", (int)batteryPercent);
            setLabelTextIfChanged(battery_label, batt_buffer);
-           lv_obj_set_style_text_color(battery_label, LVGL_BLACK, 0);
+           setStyleColorIfChanged(battery_label, LVGL_BLACK, 0);
         }
 
     } else if (escConnected) {
@@ -502,7 +503,7 @@ void updateLvglMainScreen(
         char buffer[10];
         snprintf(buffer, sizeof(buffer), "%2.1fv", totalVolts);
         setLabelTextIfChanged(battery_label, buffer);
-        lv_obj_set_style_text_color(battery_label, LVGL_BLACK, 0);
+        setStyleColorIfChanged(battery_label, LVGL_BLACK, 0);
     } else {
         setLabelTextIfChanged(voltage_right_label, "");
     }
@@ -791,8 +792,7 @@ void updateLvglMainScreen(
 
   // Update armed indicator
   if (armed) {
-    // Set background to CYAN when armed, regardless of cruise state
-    lv_obj_set_style_bg_color(arm_indicator, LVGL_CYAN, LV_PART_MAIN);
+    setBgColorIfChanged(arm_indicator, LVGL_CYAN, LV_PART_MAIN);
     setObjHiddenIfNeeded(arm_indicator, false);
   } else {
     setObjHiddenIfNeeded(arm_indicator, true);

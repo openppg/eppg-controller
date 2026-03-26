@@ -398,14 +398,11 @@ void refreshDisplay() {
     // the frame path.
     static float lastGoodAltitude = 0.0f;
     TelemetryHub hub = {};
-    float currentRelativeAltitude = lastGoodAltitude;
-    if (telemetryHubRead(&hub, pdMS_TO_TICKS(1)) && hub.ctrlSeq > 0) {
-      if (hub.altitude != __FLT_MIN__) {
-        lastGoodAltitude = hub.altitude;
-      }
-      currentRelativeAltitude =
-          (hub.altitude != __FLT_MIN__) ? hub.altitude : lastGoodAltitude;
+    if (telemetryHubRead(&hub, pdMS_TO_TICKS(1)) && hub.ctrlSeq > 0
+        && hub.altitude != __FLT_MIN__) {
+      lastGoodAltitude = hub.altitude;
     }
+    const float currentRelativeAltitude = lastGoodAltitude;
 
     // Determine the altitude to show on the display
     float altitudeToShow = 0.0f;  // Default to 0

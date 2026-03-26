@@ -22,10 +22,6 @@ enum ScreenPage {
 #define LVGL_GRAY lv_color_make(128, 128, 128)
 
 
-// LVGL styles for temperature warnings and critical states
-extern lv_style_t style_warning;
-extern lv_style_t style_critical;
-
 // Main screen objects
 extern lv_obj_t* main_screen;
 extern lv_obj_t* battery_bar;
