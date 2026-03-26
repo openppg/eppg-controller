@@ -309,8 +309,6 @@ void setupBLE() {
   initFastLinkBleService(pServer);
   initOtaBleService(pServer);
 
-  startAdvertising(pServer);
-
   USBSerial.println("BLE device ready");
 }
 

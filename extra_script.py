@@ -1,7 +1,7 @@
 import subprocess
 
 Import("env")
-folder = env.GetProjectOption("src_folder")
+folder = env.GetProjectOption("custom_src_folder")
 
 # Generic
 env.Replace(

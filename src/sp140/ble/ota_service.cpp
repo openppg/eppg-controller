@@ -288,7 +288,8 @@ class OtaDataCallback : public NimBLECharacteristicCallbacks {
                     abortOtaImpl();
                 }
             } else {
-                USBSerial.printf("OTA Error: CRC fail exp 0x%04X got 0x%04X\n", rxCrc, calcCrc);
+                USBSerial.printf("OTA Error: CRC fail exp 0x%04X got 0x%04X\n",
+                                 calcCrc, rxCrc);
                 sendAck(sector, ACK_ERR_CRC);
                 sectorBufferLen = 0;
             }

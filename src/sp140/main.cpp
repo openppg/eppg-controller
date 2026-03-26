@@ -111,7 +111,6 @@ uint32_t led_color = LED_RED;  // current LED color
 // Global variable for device state
 volatile DeviceState currentState = DISARMED;
 
-SemaphoreHandle_t eepromSemaphore;
 SemaphoreHandle_t stateMutex;
 SemaphoreHandle_t lvglMutex;
 
@@ -122,15 +121,6 @@ struct BLEStateUpdate {
 };
 QueueHandle_t bleStateQueue = NULL;
 TaskHandle_t bleStateUpdateTaskHandle = NULL;
-
-// Altimeter telemetry for queue-based sharing
-struct AltimeterData {
-  float altitude;
-  float temperature;
-  float verticalSpeed;
-};
-QueueHandle_t altimeterQueue = NULL;
-TaskHandle_t altimeterTaskHandle = NULL;
 
 // Device state broadcast
 QueueHandle_t deviceStateQueue = NULL;
@@ -162,7 +152,6 @@ extern TaskHandle_t throttleTaskHandle;
 extern TaskHandle_t watchdogTaskHandle;
 extern TaskHandle_t uiTaskHandle;
 extern TaskHandle_t bmsTaskHandle;
-extern TaskHandle_t altimeterTaskHandle;
 extern TaskHandle_t monitoringTaskHandle;
 extern TaskHandle_t audioTaskHandle;
 extern TaskHandle_t webSerialTaskHandle;
@@ -552,27 +541,6 @@ void bmsTask(void *pvParameters) {
   }
 }
 
-// Altimeter task: ~20 Hz sampling, writes to queue for thread-safe access
-void altimeterTask(void *pvParameters) {
-  TickType_t lastWake = xTaskGetTickCount();
-  const TickType_t altTicks = pdMS_TO_TICKS(50);  // 20 Hz
-  AltimeterData data;
-
-  for (;;) {
-    // Read from sensor (this populates the internal vario buffer too)
-    data.altitude = getAltitude(deviceData);
-    data.temperature = getBaroTemperature();
-    data.verticalSpeed = getVerticalSpeed();
-
-    // Publish to queue for other tasks to consume
-    if (altimeterQueue != NULL) {
-      xQueueOverwrite(altimeterQueue, &data);
-    }
-
-    vTaskDelayUntil(&lastWake, altTicks);
-  }
-}
-
 void loadHardwareConfig() {
   board_config = s3_config;  // ESP32S3 is only supported board
 
@@ -635,14 +603,6 @@ void createAllSyncPrimitives() {
     USBSerial.println("Error creating state mutex");
   }
 
-  // EEPROM semaphore - guards Preferences writes
-  eepromSemaphore = xSemaphoreCreateBinary();
-  if (eepromSemaphore == NULL) {
-    USBSerial.println("Error creating EEPROM semaphore");
-  } else {
-    xSemaphoreGive(eepromSemaphore);  // Start in "available" state
-  }
-
   // Create all queues
   throttleUpdateQueue = xQueueCreate(1, sizeof(uint16_t));
   if (throttleUpdateQueue == NULL) {
@@ -667,11 +627,6 @@ void createAllSyncPrimitives() {
     USBSerial.println("Error creating melody queue");
   }
 
-  // Altimeter data queue for thread-safe sensor sharing
-  altimeterQueue = xQueueCreate(1, sizeof(AltimeterData));
-  if (altimeterQueue == NULL) {
-    USBSerial.println("Error creating altimeter queue");
-  }
 }
 
 /**
@@ -685,7 +640,6 @@ void setupTasks() {
                           &throttleTaskHandle, 0);
   xTaskCreatePinnedToCore(uiTask, "UI", 5888, NULL, 2, &uiTaskHandle, 1);
   xTaskCreatePinnedToCore(bmsTask, "BMS", 2304, NULL, 2, &bmsTaskHandle, 1);
-  xTaskCreatePinnedToCore(altimeterTask, "Altimeter", 2048, NULL, 2, &altimeterTaskHandle, 1);
   xTaskCreate(ctrlSensorTask, "CtrlSensor", 4096, NULL, 2,
               &ctrlSensorTaskHandle);
   xTaskCreatePinnedToCore(bleNotifyTask, "BLENotify", 8192, NULL, 1,
@@ -724,6 +678,7 @@ void setup() {
   USBSerial.begin(115200);
   USBSerial.print("Build date/time: ");
   USBSerial.println(buildDate);
+  diagnosticsInit();
 
   // Load device config from EEPROM first - may contain pin mappings
   refreshDeviceData();
