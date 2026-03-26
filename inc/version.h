@@ -2,7 +2,7 @@
 #pragma once
 
 #define VERSION_MAJOR 8
-#define VERSION_MINOR 1
+#define VERSION_MINOR 0
 
 #ifndef VERSION_BUILD
 #define VERSION_BUILD 0
