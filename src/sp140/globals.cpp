@@ -34,3 +34,4 @@ float watts = 0;
 float wattHoursUsed = 0;
 
 STR_DEVICE_DATA_140_V1 deviceData;
+

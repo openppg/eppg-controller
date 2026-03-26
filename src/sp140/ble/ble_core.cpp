@@ -11,6 +11,7 @@
 #include "sp140/ble/ble_ids.h"
 #include "sp140/ble/config_service.h"
 #include "sp140/ble/fastlink_service.h"
+#include "sp140/ble/ota_service.h"
 #if CONFIG_BT_NIMBLE_EXT_ADV
 #include <NimBLEExtAdvertising.h>
 #endif
@@ -25,6 +26,9 @@ TimerHandle_t gConnTuneTimer = nullptr;
 TimerHandle_t gPairingTimer = nullptr;
 TimerHandle_t gAdvertisingWatchdogTimer = nullptr;
 bool pairingModeActive = false;
+
+// Store the active connection handle for conn param updates
+uint16_t activeConnHandle = 0;
 
 void stopPairingModeTimer() {
   if (gPairingTimer != nullptr) {
@@ -188,6 +192,7 @@ void onAdvertisingWatchdog(TimerHandle_t timer) {
 
 class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
   void onConnect(NimBLEServer *server, NimBLEConnInfo &connInfo) override {
+    activeConnHandle = connInfo.getConnHandle();
     deviceConnected = true;
     connectedHandle = connInfo.getConnHandle();
 
@@ -209,6 +214,12 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
     }
     deviceConnected = false;
     connectedHandle = BLE_HS_CONN_HANDLE_NONE;
+
+    if (isOtaInProgress()) {
+      abortOta();
+      USBSerial.println("OTA aborted due to disconnect");
+    }
+
     USBSerial.printf("Device disconnected reason=%d\n", reason);
 
     // Restart immediately, then let the watchdog keep retrying forever if this
@@ -268,6 +279,9 @@ void setupBLE() {
   // Set MTU to maximum for high-performance telemetry
   NimBLEDevice::setMTU(517);
 
+  // Set TX power to +9dBm for reliable connections at distance
+  NimBLEDevice::setPowerLevel(ESP_PWR_LVL_P9);
+
   pServer = NimBLEDevice::createServer();
   static BleServerConnectionCallbacks serverCallbacks;
   pServer->setCallbacks(&serverCallbacks);
@@ -293,11 +307,25 @@ void setupBLE() {
 
   initConfigBleService(pServer, uniqueId);
   initFastLinkBleService(pServer);
-
-  startAdvertising(pServer);
+  initOtaBleService(pServer);
 
   USBSerial.println("BLE device ready");
-  USBSerial.println("Waiting for a client connection...");
+}
+
+void requestFastConnParams() {
+  if (pServer == nullptr || !deviceConnected) {
+    return;
+  }
+  // Tighten to 15ms interval for OTA throughput
+  pServer->updateConnParams(activeConnHandle, 12, 12, 0, 200);
+}
+
+void requestNormalConnParams() {
+  if (pServer == nullptr || !deviceConnected) {
+    return;
+  }
+  // Relax back to ~36ms for normal telemetry
+  pServer->updateConnParams(activeConnHandle, 24, 40, 0, 400);
 }
 
 void restartBLEAdvertising() {

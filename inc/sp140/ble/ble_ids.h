@@ -30,4 +30,11 @@
 // App writes 0x01 here to trigger a GetHwInfo request to the ESC
 #define FAST_LINK_COMMAND_UUID "45A17003-B73B-49E1-8B39-5E9ED5E1B930"
 
+// Espressif Standard OTA Service UUIDs (Android esp-ble-ota-android app)
+static const NimBLEUUID OTA_SERVICE_UUID("00008018-0000-1000-8000-00805f9b34fb");
+static const NimBLEUUID OTA_RECV_FW_UUID("00008020-0000-1000-8000-00805f9b34fb");   // Firmware data (Write/Indicate)
+static const NimBLEUUID OTA_PROGRESS_UUID("00008021-0000-1000-8000-00805f9b34fb");  // Progress (Indicate)
+static const NimBLEUUID OTA_COMMAND_UUID("00008022-0000-1000-8000-00805f9b34fb");   // Command (Write/Indicate)
+static const NimBLEUUID OTA_CUSTOMER_UUID("00008023-0000-1000-8000-00805f9b34fb");  // Customer (Indicate)
+
 #endif  // INC_SP140_BLE_BLE_IDS_H_

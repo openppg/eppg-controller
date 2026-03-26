@@ -145,7 +145,7 @@ void readESCTelemetry() {
   if (lastSuccessfulCommTimeMs == 0 || (currentTimeMs - lastSuccessfulCommTimeMs) > TELEMETRY_TIMEOUT_MS) {
     if (escTelemetryData.escState != TelemetryState::NOT_CONNECTED) {
       // Log state change only if it actually changed
-      USBSerial.printf("ESC State: %d -> NOT_CONNECTED (Timeout)\n", escTelemetryData.escState);
+      USBSerial.printf("ESC State: %d -> NOT_CONNECTED (Timeout)\n", static_cast<int>(escTelemetryData.escState));
       escTelemetryData.escState = TelemetryState::NOT_CONNECTED;
       // Reset runtime accumulator so it restarts from zero on reconnect.
       // Keep sEscLastTime10ms at its last real value so the stale-data guard
@@ -156,7 +156,7 @@ void readESCTelemetry() {
   } else {
     if (escTelemetryData.escState != TelemetryState::CONNECTED) {
       // Log state change only if it actually changed
-      USBSerial.printf("ESC State: %d -> CONNECTED\n", escTelemetryData.escState);
+      USBSerial.printf("ESC State: %d -> CONNECTED\n", static_cast<int>(escTelemetryData.escState));
       escTelemetryData.escState = TelemetryState::CONNECTED;
       // Auto-request hardware info on first connection if not already populated
       if (escTelemetryData.hardware_id == 0) {

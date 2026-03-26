@@ -429,12 +429,12 @@ CoreDumpSummary diagReadCoreDumpSummary(DiagResetReason reason) {
     return summary;
   }
 
+#if CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH && CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF
   if (esp_core_dump_image_check() != ESP_OK) {
     return summary;
   }
 
   summary.present = 1;
-#if CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH && CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF
   esp_core_dump_summary_t core_dump = {};
   if (esp_core_dump_get_summary(&core_dump) == ESP_OK) {
     summary.valid = 1;

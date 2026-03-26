@@ -8,6 +8,12 @@ void setupBLE();
 // Allow modules to trigger advertising after disconnects.
 void restartBLEAdvertising();
 
+// Request fast connection parameters (15ms interval) for OTA transfers.
+void requestFastConnParams();
+
+// Restore normal connection parameters (~36ms interval) after OTA.
+void requestNormalConnParams();
+
 // Temporarily disable whitelist filtering so a new device can bond.
 // Advertising reopens for ~60 seconds then whitelisting is restored.
 void enterBLEPairingMode();
