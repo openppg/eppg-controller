@@ -36,18 +36,18 @@ void stopPairingModeTimer() {
   }
 }
 
-void clearWhiteList() {
-  while (NimBLEDevice::getWhiteListCount() > 0) {
-    NimBLEDevice::whiteListRemove(NimBLEDevice::getWhiteListAddress(0));
-  }
-}
-
 size_t syncWhiteListFromBonds() {
-  clearWhiteList();
-
+  // Add bonded addresses that aren't already present.  Skip addresses already
+  // on the whitelist because NimBLE's whiteListAdd() internally calls
+  // whiteListRemove() first for duplicates, and whiteListRemove() fails with
+  // BLE_HS_EBUSY (rc=524) whenever the controller is advertising — even after
+  // an advertising->stop(), which is asynchronous at the HCI level.
   const int bondCount = NimBLEDevice::getNumBonds();
   for (int i = 0; i < bondCount; ++i) {
-    NimBLEDevice::whiteListAdd(NimBLEDevice::getBondedAddress(i));
+    const NimBLEAddress addr = NimBLEDevice::getBondedAddress(i);
+    if (!NimBLEDevice::onWhiteList(addr)) {
+      NimBLEDevice::whiteListAdd(addr);
+    }
   }
 
   return NimBLEDevice::getWhiteListCount();
@@ -87,11 +87,16 @@ bool startAdvertising(NimBLEServer *server) {
 
   const size_t bondCount = static_cast<size_t>(NimBLEDevice::getNumBonds());
   const bool allowOpenAdvertising = pairingModeActive;
+
+  // Stop advertising BEFORE modifying the whitelist — the BLE controller
+  // rejects whitelist changes while advertising with a whitelist filter
+  // (rc=524 / BLE_HS_EBUSY), which previously caused an infinite loop.
+  auto *advertising = server->getAdvertising();
+  advertising->stop();
+
   const size_t whiteListCount = syncWhiteListFromBonds();
 
   if (!allowOpenAdvertising && bondCount == 0) {
-    auto *advertising = server->getAdvertising();
-    advertising->stop();
     USBSerial.println(
         "[BLE] No bonds present and pairing mode inactive; advertising stopped");
     return false;
@@ -122,8 +127,6 @@ bool startAdvertising(NimBLEServer *server) {
   // Flutter app's `startScan()` filters for CONFIG_SERVICE_UUID.
   adv.addServiceUUID(NimBLEUUID(CONFIG_SERVICE_UUID));
 
-  auto *advertising = server->getAdvertising();
-  advertising->stop();
   advertising->removeAll();
   const bool configured = advertising->setInstanceData(kExtAdvInstance, adv);
   const bool started = configured && advertising->start(kExtAdvInstance);
@@ -133,11 +136,6 @@ bool startAdvertising(NimBLEServer *server) {
       static_cast<unsigned>(bondCount), static_cast<unsigned>(whiteListCount));
   return started;
 #else
-  auto *advertising = server->getAdvertising();
-
-  // Stop before reconfiguring (safe even if not running)
-  advertising->stop();
-
   // Configure payload once — NimBLE accumulates addServiceUUID calls
   static bool payloadConfigured = false;
   if (!payloadConfigured) {
@@ -245,6 +243,17 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
 
     if (!connInfo.isEncrypted() || !connInfo.isBonded()) {
       USBSerial.println("[BLE] Rejecting untrusted BLE session");
+
+      // If this address had a bond in NVS the phone must have forgotten its
+      // side of the keys.  Remove the stale bond so the controller stops
+      // advertising to a device that can never reconnect.
+      const NimBLEAddress addr = connInfo.getAddress();
+      if (NimBLEDevice::deleteBond(addr)) {
+        USBSerial.printf(
+            "[BLE] Removed stale bond for %s (phone-side forget)\n",
+            addr.toString().c_str());
+      }
+
       if (pServer != nullptr) {
         pServer->disconnect(connInfo.getConnHandle());
       }
@@ -337,6 +346,40 @@ void restartBLEAdvertising() {
 }
 
 void enterBLEPairingMode() {
+  // Single-bond model: clear any existing bond so the next device that
+  // connects becomes the sole bonded peer.
+  if (deviceConnected && pServer != nullptr &&
+      connectedHandle != BLE_HS_CONN_HANDLE_NONE) {
+    pServer->disconnect(connectedHandle);
+    vTaskDelay(pdMS_TO_TICKS(100));
+  }
+
+  // Stop advertising before modifying bonds — NimBLE's bond deletion can
+  // fail (EBUSY) if the controller is actively advertising.
+  if (pServer != nullptr) {
+    auto *advertising = pServer->getAdvertising();
+    if (advertising != nullptr) {
+      advertising->stop();
+    }
+  }
+  vTaskDelay(pdMS_TO_TICKS(50));
+
+  const int bondCount = NimBLEDevice::getNumBonds();
+  bool cleared = false;
+  if (bondCount > 0) {
+    cleared = NimBLEDevice::deleteAllBonds();
+    if (!cleared) {
+      // Retry individual bond deletion as fallback
+      for (int i = NimBLEDevice::getNumBonds() - 1; i >= 0; --i) {
+        NimBLEDevice::deleteBond(NimBLEDevice::getBondedAddress(i));
+      }
+      cleared = NimBLEDevice::getNumBonds() == 0;
+    }
+  }
+  USBSerial.printf("[BLE] Cleared bonds: %s (was %d, now %d)\n",
+                   cleared ? "OK" : (bondCount == 0 ? "NONE" : "FAILED"),
+                   bondCount, NimBLEDevice::getNumBonds());
+
   pairingModeActive = true;
 
   if (gPairingTimer == nullptr) {
