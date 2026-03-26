@@ -1,3 +1,4 @@
+import os
 import subprocess
 
 Import("env")
@@ -17,7 +18,7 @@ def get_git_revision_short_hash():
 git_revision = get_git_revision_short_hash()
 
 env.Append(CPPDEFINES=[
-    ("GIT_REV", f'\\"{git_revision}\\"')
+    ("GIT_REV", f'\\"{git_revision}\\"'),
 ])
 
 print(f"Current git revision: {git_revision}")
