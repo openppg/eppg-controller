@@ -22,6 +22,7 @@ def merge_bin_action(source, target, env):
         source[0].get_abspath(),
     ]
     print(f"Flash images to merge: {flash_images}")
+    flash_images = [str(image) for image in flash_images]
     merge_cmd = " ".join(
         [
             '"$PYTHONEXE"',
