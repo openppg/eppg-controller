@@ -26,6 +26,7 @@ TimerHandle_t gConnTuneTimer = nullptr;
 TimerHandle_t gPairingTimer = nullptr;
 TimerHandle_t gAdvertisingWatchdogTimer = nullptr;
 bool pairingModeActive = false;
+bool pairingModeTransitionActive = false;
 
 // Store the active connection handle for conn param updates
 uint16_t activeConnHandle = 0;
@@ -37,11 +38,19 @@ void stopPairingModeTimer() {
 }
 
 size_t syncWhiteListFromBonds() {
-  // Add bonded addresses that aren't already present.  Skip addresses already
-  // on the whitelist because NimBLE's whiteListAdd() internally calls
-  // whiteListRemove() first for duplicates, and whiteListRemove() fails with
-  // BLE_HS_EBUSY (rc=524) whenever the controller is advertising — even after
-  // an advertising->stop(), which is asynchronous at the HCI level.
+  // Reconcile the whitelist to the current bond store. The caller stops
+  // advertising before entering here so we can safely prune stale entries
+  // without the unbounded remove loop that previously hit BLE_HS_EBUSY.
+  for (size_t i = NimBLEDevice::getWhiteListCount(); i > 0; --i) {
+    const NimBLEAddress addr = NimBLEDevice::getWhiteListAddress(i - 1);
+    if (!NimBLEDevice::isBonded(addr)) {
+      NimBLEDevice::whiteListRemove(addr);
+    }
+  }
+
+  // Add bonded addresses that aren't already present. Skip addresses already
+  // on the whitelist because NimBLE's whiteListAdd() touches the controller
+  // whitelist immediately.
   const int bondCount = NimBLEDevice::getNumBonds();
   for (int i = 0; i < bondCount; ++i) {
     const NimBLEAddress addr = NimBLEDevice::getBondedAddress(i);
@@ -77,11 +86,12 @@ void applyPreferredLinkParams(TimerHandle_t timer) {
 }
 
 bool shouldAdvertiseWhilePowered() {
-  return pairingModeActive || NimBLEDevice::getNumBonds() > 0;
+  return !pairingModeTransitionActive &&
+         (pairingModeActive || NimBLEDevice::getNumBonds() > 0);
 }
 
 bool startAdvertising(NimBLEServer *server) {
-  if (server == nullptr) {
+  if (server == nullptr || pairingModeTransitionActive) {
     return false;
   }
 
@@ -222,7 +232,9 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
 
     // Restart immediately, then let the watchdog keep retrying forever if this
     // first post-disconnect start does not stick.
-    startAdvertising(server);
+    if (!pairingModeTransitionActive) {
+      startAdvertising(server);
+    }
   }
 
   void onAuthenticationComplete(NimBLEConnInfo &connInfo) override {
@@ -247,11 +259,20 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
       // If this address had a bond in NVS the phone must have forgotten its
       // side of the keys.  Remove the stale bond so the controller stops
       // advertising to a device that can never reconnect.
-      const NimBLEAddress addr = connInfo.getAddress();
-      if (NimBLEDevice::deleteBond(addr)) {
+      const NimBLEAddress identityAddr = connInfo.getIdAddress();
+      const NimBLEAddress peerAddr = connInfo.getAddress();
+      bool removedBond = NimBLEDevice::deleteBond(identityAddr);
+      if (!removedBond && identityAddr != peerAddr) {
+        removedBond = NimBLEDevice::deleteBond(peerAddr);
+      }
+      if (removedBond) {
+        NimBLEDevice::whiteListRemove(identityAddr);
+        if (identityAddr != peerAddr) {
+          NimBLEDevice::whiteListRemove(peerAddr);
+        }
         USBSerial.printf(
-            "[BLE] Removed stale bond for %s (phone-side forget)\n",
-            addr.toString().c_str());
+            "[BLE] Removed stale bond for id=%s peer=%s (phone-side forget)\n",
+            identityAddr.toString().c_str(), peerAddr.toString().c_str());
       }
 
       if (pServer != nullptr) {
@@ -346,6 +367,8 @@ void restartBLEAdvertising() {
 }
 
 void enterBLEPairingMode() {
+  pairingModeTransitionActive = true;
+
   // Single-bond model: clear any existing bond so the next device that
   // connects becomes the sole bonded peer.
   if (deviceConnected && pServer != nullptr &&
@@ -381,6 +404,7 @@ void enterBLEPairingMode() {
                    bondCount, NimBLEDevice::getNumBonds());
 
   pairingModeActive = true;
+  pairingModeTransitionActive = false;
 
   if (gPairingTimer == nullptr) {
     gPairingTimer = xTimerCreate("blePair", kPairingTimeoutTicks, pdFALSE,
