@@ -55,9 +55,14 @@ OpenPPG supports flashing the firmware PlatformIO. Older versions were also comp
 2. Connect the controller to your computer by using the USB port on the bottom of the controller.
 3. Flash the firmware by clicking "Upload" in the bottom left.
 
-### Building binary update file
+### Building binary update files
 
-esp32 uses esptool to build a binary file from the compiled .bin file.
+Use `.pio/build/OpenPPG-CESP32S3-CAN-SP140/firmware.bin` for BLE OTA updates.
+Only build the merged image when you need a full-flash recovery image.
+
+#### Full-flash image
+
+ESP32 uses esptool to build a merged image from the compiled app plus bootloader and partitions:
 
 ```bash
 $ esptool.py --chip esp32s3 merge_bin \

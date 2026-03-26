@@ -96,8 +96,13 @@ jobs:
             0x8000 .pio/build/OpenPPG-CESP32S3-CAN-SP140/partitions.bin \
             0xe000 /home/runner/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin \
             0x10000 .pio/build/OpenPPG-CESP32S3-CAN-SP140/firmware.bin
+      - name: Stage Firmware Artifacts
+        run: |
+          mkdir -p release-artifacts
+          cp .pio/build/OpenPPG-CESP32S3-CAN-SP140/firmware.bin release-artifacts/openppg-sp140-ota-firmware.bin
+          cp .pio/build/OpenPPG-CESP32S3-CAN-SP140/full-controller-firmware.bin release-artifacts/openppg-sp140-full-flash.bin
       - name: Archive ESP32S3 Firmware
         uses: actions/upload-artifact@v7
         with:
           name: OpenPPG-CESP32S3-CAN-SP140-firmware
-          path: .pio/build/OpenPPG-CESP32S3-CAN-SP140/full-controller-firmware.bin
+          path: release-artifacts/

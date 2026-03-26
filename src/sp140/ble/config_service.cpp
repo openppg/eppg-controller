@@ -335,7 +335,15 @@ void initConfigBleService(NimBLEServer* server, const std::string& uniqueId) {
 
   NimBLECharacteristic* firmwareVersion = configService->createCharacteristic(
       NimBLEUUID(FW_VERSION_UUID), kReadSecure);
-  uint8_t versionBytes[2] = {VERSION_MAJOR, VERSION_MINOR};
+  // Include an internal build number so the app can distinguish same-version OTA releases.
+  uint8_t versionBytes[6] = {
+      VERSION_MAJOR,
+      VERSION_MINOR,
+      static_cast<uint8_t>(VERSION_BUILD & 0xFF),
+      static_cast<uint8_t>((VERSION_BUILD >> 8) & 0xFF),
+      static_cast<uint8_t>((VERSION_BUILD >> 16) & 0xFF),
+      static_cast<uint8_t>((VERSION_BUILD >> 24) & 0xFF),
+  };
   firmwareVersion->setValue(versionBytes, sizeof(versionBytes));
 
   NimBLECharacteristic* hardwareRevision = configService->createCharacteristic(
