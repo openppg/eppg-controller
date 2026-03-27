@@ -74,7 +74,8 @@ int8_t bmsCS = MCP_CS;
 #define SECOND_HOLD_TIME_MS 2000  // How long to hold on second press to arm
 #define CRUISE_HOLD_TIME_MS 2000
 #define BUTTON_SEQUENCE_TIMEOUT_MS 1500  // Time window for arm/disarm sequence
-#define PERFORMANCE_MODE_HOLD_MS 3000   // Longer hold time for performance mode
+#define PERFORMANCE_MODE_HOLD_MS 3000  // Longer hold time for performance mode
+#define BLE_PAIRING_HOLD_MS 10000      // Hold duration to enter BLE pairing mode
 
 // Throttle control constants moved to inc/sp140/throttle.h
 #define CRUISE_MAX_PERCENTAGE                                                  \
@@ -851,7 +852,6 @@ void buttonHandlerTask(void *parameter) {
   uint32_t lastDebounceTime = 0;
   bool lastButtonState = HIGH;
   bool buttonState;
-  bool unbondHoldHandled = false;
   bool pairingHoldHandled = false;
 
   while (true) {
@@ -865,7 +865,6 @@ void buttonHandlerTask(void *parameter) {
 
         if (buttonState == LOW) {  // Button pressed
           buttonPressed = true;
-          unbondHoldHandled = false;
           pairingHoldHandled = false;
           buttonPressStartTime = currentTime;
           USBSerial.println("Button pressed");
@@ -883,7 +882,7 @@ void buttonHandlerTask(void *parameter) {
           // Disarmed long hold toggles performance mode on release.
           if (currentState == DISARMED &&
               holdDuration >= PERFORMANCE_MODE_HOLD_MS &&
-              holdDuration < 10000 && !unbondHoldHandled &&
+              holdDuration < BLE_PAIRING_HOLD_MS &&
               !pairingHoldHandled) {
             perfModeSwitch();
             lastButtonState = buttonState;
@@ -928,38 +927,9 @@ void buttonHandlerTask(void *parameter) {
       } else if (buttonPressed) {  // Only handle other button actions if we're not in an arm sequence
         uint32_t currentHoldTime = currentTime - buttonPressStartTime;
 
-        // Tiered long hold while disarmed:
-        //   10s = enter BLE pairing mode (single vibration)
-        //   20s = delete all bonds (double vibration + reboot)
-        if (currentState == DISARMED && currentHoldTime >= 20000 &&
-            !unbondHoldHandled) {
-          // Tier 2: Delete all bonds
-          const bool deleted = NimBLEDevice::deleteAllBonds();
-          USBSerial.printf("[BLE] Delete all bonds: %s\n",
-                           deleted ? "OK" : "FAILED");
-          if (deviceConnected && pServer != nullptr &&
-              connectedHandle != BLE_HS_CONN_HANDLE_NONE) {
-            pServer->disconnect(connectedHandle);
-            vTaskDelay(pdMS_TO_TICKS(40));
-          }
-          pulseVibeMotor();
-          vTaskDelay(pdMS_TO_TICKS(300));
-          pulseVibeMotor();
-          USBSerial.println("[BLE] Bonds cleared. Rebooting with BLE locked "
-                            "until pairing mode is reopened...");
-          vTaskDelay(pdMS_TO_TICKS(500));
-          diagnosticsMarkPlannedRestart(
-              PlannedRestartReason::BLE_UNBOND_REBOOT);
-          ESP.restart();
-          unbondHoldHandled = true;
-          buttonPressed = false;
-          buttonPressStartTime = currentTime;
-          continue;
-        }
-
-        if (currentState == DISARMED && currentHoldTime >= 10000 &&
-            !pairingHoldHandled) {
-          // Tier 1: Enter pairing mode (open advertising for 60s)
+        // Long hold while disarmed: enter BLE pairing mode (clears bonds).
+        if (currentState == DISARMED &&
+            currentHoldTime >= BLE_PAIRING_HOLD_MS && !pairingHoldHandled) {
           enterBLEPairingMode();
           pulseVibeMotor();
           USBSerial.println("[BLE] Pairing mode activated via button hold");
