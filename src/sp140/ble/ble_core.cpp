@@ -279,10 +279,11 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
         // bond (e.g. iOS cached old encryption keys).  Delete any peer data we
         // have and request fresh pairing instead of rejecting outright.
         const NimBLEAddress peerAddr = connInfo.getAddress();
-        USBSerial.printf("[BLE] Pairing mode: auth failed for %s, "
+        USBSerial.printf("[BLE] Pairing mode: auth failed for addr=%s id=%s, "
                          "requesting fresh pairing\n",
-                         peerAddr.toString().c_str());
-        NimBLEDevice::deleteBond(peerAddr);
+                         peerAddr.toString().c_str(),
+                         identityAddress.toString().c_str());
+        NimBLEDevice::deleteBond(identityAddress);
         ble_gap_security_initiate(connInfo.getConnHandle());
       } else {
         USBSerial.println("[BLE] Rejecting untrusted BLE session");
