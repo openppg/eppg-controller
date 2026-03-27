@@ -122,14 +122,29 @@ bool startAdvertising(NimBLEServer *server) {
   // Flutter app's `startScan()` filters for CONFIG_SERVICE_UUID.
   adv.addServiceUUID(NimBLEUUID(CONFIG_SERVICE_UUID));
 
+  // Scan response: manufacturer data with pairing-mode flag so the Flutter app
+  // can hide non-pairable controllers from the connect list.
+  // Format: Espressif company ID (0x02E5 LE) + 1 flag byte.
+  NimBLEExtAdvertisement scanRsp(BLE_HCI_LE_PHY_1M, BLE_HCI_LE_PHY_1M);
+  scanRsp.setLegacyAdvertising(true);
+  scanRsp.setScannable(true);
+  const uint8_t mfrData[] = {0xE5, 0x02,
+                             static_cast<uint8_t>(allowOpenAdvertising ? 0x01 : 0x00)};
+  scanRsp.setManufacturerData(mfrData, sizeof(mfrData));
+
   auto *advertising = server->getAdvertising();
   advertising->stop();
   advertising->removeAll();
   const bool configured = advertising->setInstanceData(kExtAdvInstance, adv);
-  const bool started = configured && advertising->start(kExtAdvInstance);
+  const bool scanRspConfigured =
+      configured ? advertising->setScanResponseData(kExtAdvInstance, scanRsp)
+                 : false;
+  const bool started =
+      configured && scanRspConfigured && advertising->start(kExtAdvInstance);
   USBSerial.printf(
-      "[BLE] Ext adv configure=%d start=%d mode=%s bonds=%u whitelist=%u\n",
-      configured, started, allowOpenAdvertising ? "OPEN" : "BONDED",
+      "[BLE] Ext adv cfg=%d scanRsp=%d start=%d mode=%s bonds=%u wl=%u\n",
+      configured, scanRspConfigured, started,
+      allowOpenAdvertising ? "OPEN" : "BONDED",
       static_cast<unsigned>(bondCount), static_cast<unsigned>(whiteListCount));
   return started;
 #else
@@ -158,6 +173,12 @@ bool startAdvertising(NimBLEServer *server) {
   } else {
     advertising->setScanFilter(false, true);
   }
+
+  // Manufacturer data with pairing-mode flag (updated every restart).
+  // Espressif company ID (0x02E5 LE) + 1 flag byte.
+  const std::string mfrPayload = {'\xE5', '\x02',
+                                  static_cast<char>(allowOpenAdvertising ? 0x01 : 0x00)};
+  advertising->setManufacturerData(mfrPayload);
 
   const bool started = advertising->start();
   USBSerial.printf("[BLE] Legacy adv start=%s mode=%s bonds=%u whitelist=%u\n",
@@ -201,9 +222,18 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
       xTimerStart(gConnTuneTimer, 0);
     }
     USBSerial.printf(
-        "Device connected handle=%u addr=%s bonded=%d encrypted=%d\n",
+        "Device connected handle=%u addr=%s bonded=%d encrypted=%d pairing=%d\n",
         connectedHandle, connInfo.getAddress().toString().c_str(),
-        connInfo.isBonded() ? 1 : 0, connInfo.isEncrypted() ? 1 : 0);
+        connInfo.isBonded() ? 1 : 0, connInfo.isEncrypted() ? 1 : 0,
+        pairingModeActive ? 1 : 0);
+
+    // During pairing mode, proactively request fresh security negotiation.
+    // This helps recover from stale iOS bonds where iOS tries to restore
+    // encryption with keys the controller no longer has (rc=19 failures).
+    if (pairingModeActive && !connInfo.isEncrypted()) {
+      USBSerial.println("[BLE] Pairing mode: requesting fresh security exchange");
+      ble_gap_security_initiate(connInfo.getConnHandle());
+    }
   }
 
   void onDisconnect(NimBLEServer *server, NimBLEConnInfo &connInfo,
@@ -244,9 +274,22 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
         connInfo.isEncrypted() ? 1 : 0, connInfo.getSecKeySize());
 
     if (!connInfo.isEncrypted() || !connInfo.isBonded()) {
-      USBSerial.println("[BLE] Rejecting untrusted BLE session");
-      if (pServer != nullptr) {
-        pServer->disconnect(connInfo.getConnHandle());
+      if (pairingModeActive) {
+        // During pairing mode, a failed auth likely means the phone has a stale
+        // bond (e.g. iOS cached old encryption keys).  Delete any peer data we
+        // have and request fresh pairing instead of rejecting outright.
+        const NimBLEAddress peerAddr = connInfo.getAddress();
+        USBSerial.printf("[BLE] Pairing mode: auth failed for addr=%s id=%s, "
+                         "requesting fresh pairing\n",
+                         peerAddr.toString().c_str(),
+                         identityAddress.toString().c_str());
+        NimBLEDevice::deleteBond(identityAddress);
+        ble_gap_security_initiate(connInfo.getConnHandle());
+      } else {
+        USBSerial.println("[BLE] Rejecting untrusted BLE session");
+        if (pServer != nullptr) {
+          pServer->disconnect(connInfo.getConnHandle());
+        }
       }
     }
   }
