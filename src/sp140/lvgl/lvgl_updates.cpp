@@ -359,12 +359,6 @@ void updateLvglMainScreen(
   bool bmsConnected = (bmsTelemetry.bmsState == TelemetryState::CONNECTED);
   bool escConnected = (escTelemetry.escState == TelemetryState::CONNECTED);
 
-  // Check if spinner exists before styling it
-  if (spinner != NULL) {
-    lv_obj_set_style_arc_color(spinner, darkMode ? lv_color_make(100, 100, 100) : lv_color_make(230, 230, 230), LV_PART_MAIN);
-    lv_obj_set_style_arc_color(spinner, lv_palette_main(LV_PALETTE_BLUE), LV_PART_INDICATOR);
-  }
-
   // Update battery bar and percentage
   if (bmsConnected && batteryPercent >= 0) {
     lv_bar_set_value(battery_bar, (int)batteryPercent, LV_ANIM_OFF);

@@ -42,8 +42,6 @@ extern lv_obj_t* batt_temp_label;
 extern lv_obj_t* esc_temp_label;
 extern lv_obj_t* motor_temp_label;
 extern lv_obj_t* arm_indicator;
-extern lv_obj_t* spinner;       // For the spinning animation
-extern lv_obj_t* spinner_overlay;  // Overlay for the spinner
 extern lv_obj_t* batt_letter_label;  // Letter label for Battery temp
 extern lv_obj_t* esc_letter_label;  // Letter label for ESC temp
 extern lv_obj_t* motor_letter_label;  // Letter label for Motor temp
@@ -62,10 +60,6 @@ extern lv_obj_t* climb_rate_fill_sections[12];
 
 // Critical border (used by flash animations)
 extern lv_obj_t* critical_border;
-
-// Loading overlay functions
-void showLoadingOverlay();
-void hideLoadingOverlay();
 
 // Helper functions
 void setAltitudeVisibility(bool visible);

@@ -30,8 +30,6 @@ lv_obj_t* batt_temp_label = NULL;
 lv_obj_t* esc_temp_label = NULL;
 lv_obj_t* motor_temp_label = NULL;
 lv_obj_t* arm_indicator = NULL;
-lv_obj_t* spinner = NULL;       // For the spinning animation
-lv_obj_t* spinner_overlay = NULL;  // Overlay for the spinner
 lv_obj_t* batt_letter_label = NULL;  // Letter label for Battery temp
 lv_obj_t* esc_letter_label = NULL;  // Letter label for ESC temp
 lv_obj_t* motor_letter_label = NULL;  // Letter label for Motor temp
@@ -99,20 +97,6 @@ void init_temp_styles(bool darkMode) {
   lv_style_set_bg_color(&style_critical, LVGL_RED);
   lv_style_set_text_color(&style_critical, LVGL_BLACK);
   lv_style_set_bg_opa(&style_critical, LV_OPA_100);
-}
-
-// Function to show the loading overlay
-void showLoadingOverlay() {
-  if (spinner_overlay != NULL) {
-    lv_obj_remove_flag(spinner_overlay, LV_OBJ_FLAG_HIDDEN);
-  }
-}
-
-// Function to hide the loading overlay
-void hideLoadingOverlay() {
-  if (spinner_overlay != NULL) {
-    lv_obj_add_flag(spinner_overlay, LV_OBJ_FLAG_HIDDEN);
-  }
 }
 
 // Setup the main screen layout once
@@ -539,35 +523,6 @@ void setupMainScreen(bool darkMode) {
 
   lv_obj_move_foreground(arm_fail_warning_icon_img);  // Ensure icon is on top
   lv_obj_add_flag(arm_fail_warning_icon_img, LV_OBJ_FLAG_HIDDEN);  // Hide initially
-
-  // Create semi-transparent overlay for the spinner
-  spinner_overlay = lv_obj_create(main_screen);
-  lv_obj_set_size(spinner_overlay, SCREEN_WIDTH, SCREEN_HEIGHT);
-  lv_obj_set_pos(spinner_overlay, 0, 0);
-  lv_obj_set_style_bg_color(spinner_overlay, darkMode ? LVGL_BLACK : LVGL_WHITE, LV_PART_MAIN);
-  lv_obj_set_style_bg_opa(spinner_overlay, LV_OPA_70, LV_PART_MAIN);  // 70% opacity
-  lv_obj_set_style_border_width(spinner_overlay, 0, LV_PART_MAIN);
-
-  // Create spinning animation at the top center - now place on top of overlay
-  spinner = lv_spinner_create(spinner_overlay);
-  lv_spinner_set_anim_params(spinner, 1000, 60);  // 1000ms period, 60 arc width
-  lv_obj_set_size(spinner, 80, 80);  // Even larger spinner for visibility
-  lv_obj_align(spinner, LV_ALIGN_CENTER, 0, 0);  // Position at center of screen
-
-  // Make the spinner more visible with strong colors and good contrast
-  lv_obj_set_style_arc_width(spinner, 8, LV_PART_INDICATOR);  // Thicker arc for indicator
-  lv_obj_set_style_arc_width(spinner, 8, LV_PART_MAIN);  // Thicker background arc
-
-  // Apply proper shading and gradients for a more attractive appearance
-  lv_obj_set_style_arc_rounded(spinner, true, LV_PART_INDICATOR);
-  lv_obj_set_style_arc_rounded(spinner, true, LV_PART_MAIN);
-
-  // Set spinner colors with better contrast
-  lv_obj_set_style_arc_color(spinner, darkMode ? lv_color_make(100, 100, 100) : lv_color_make(230, 230, 230), LV_PART_MAIN);
-  lv_obj_set_style_arc_color(spinner, lv_palette_main(LV_PALETTE_BLUE), LV_PART_INDICATOR);
-
-  // Hide the overlay by default
-  lv_obj_add_flag(spinner_overlay, LV_OBJ_FLAG_HIDDEN);
 
   // Create climb rate indicator horizontal divider lines in the far-right section
   const int climb_section_start_y = 37;
