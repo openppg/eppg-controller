@@ -139,7 +139,8 @@ bool startAdvertising(NimBLEServer *server) {
   const bool scanRspConfigured =
       configured ? advertising->setScanResponseData(kExtAdvInstance, scanRsp)
                  : false;
-  const bool started = configured && advertising->start(kExtAdvInstance);
+  const bool started =
+      configured && scanRspConfigured && advertising->start(kExtAdvInstance);
   USBSerial.printf(
       "[BLE] Ext adv cfg=%d scanRsp=%d start=%d mode=%s bonds=%u wl=%u\n",
       configured, scanRspConfigured, started,
