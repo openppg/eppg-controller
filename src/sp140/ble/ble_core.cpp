@@ -26,6 +26,7 @@ TimerHandle_t gConnTuneTimer = nullptr;
 TimerHandle_t gPairingTimer = nullptr;
 TimerHandle_t gAdvertisingWatchdogTimer = nullptr;
 bool pairingModeActive = false;
+bool pairingModeTransitionActive = false;
 
 // Store the active connection handle for conn param updates
 uint16_t activeConnHandle = 0;
@@ -36,18 +37,24 @@ void stopPairingModeTimer() {
   }
 }
 
-void clearWhiteList() {
-  while (NimBLEDevice::getWhiteListCount() > 0) {
-    NimBLEDevice::whiteListRemove(NimBLEDevice::getWhiteListAddress(0));
-  }
-}
-
 size_t syncWhiteListFromBonds() {
-  clearWhiteList();
+  // Reconcile the whitelist to the current bond store. Advertising must be
+  // stopped before calling this — the BLE controller rejects whitelist changes
+  // while advertising with a filter (rc=524 / BLE_HS_EBUSY). Prune stale
+  // entries first, then add any missing bonded addresses.
+  for (size_t i = NimBLEDevice::getWhiteListCount(); i > 0; --i) {
+    const NimBLEAddress addr = NimBLEDevice::getWhiteListAddress(i - 1);
+    if (!NimBLEDevice::isBonded(addr)) {
+      NimBLEDevice::whiteListRemove(addr);
+    }
+  }
 
   const int bondCount = NimBLEDevice::getNumBonds();
   for (int i = 0; i < bondCount; ++i) {
-    NimBLEDevice::whiteListAdd(NimBLEDevice::getBondedAddress(i));
+    const NimBLEAddress addr = NimBLEDevice::getBondedAddress(i);
+    if (!NimBLEDevice::onWhiteList(addr)) {
+      NimBLEDevice::whiteListAdd(addr);
+    }
   }
 
   return NimBLEDevice::getWhiteListCount();
@@ -77,21 +84,26 @@ void applyPreferredLinkParams(TimerHandle_t timer) {
 }
 
 bool shouldAdvertiseWhilePowered() {
-  return pairingModeActive || NimBLEDevice::getNumBonds() > 0;
+  return !pairingModeTransitionActive &&
+         (pairingModeActive || NimBLEDevice::getNumBonds() > 0);
 }
 
 bool startAdvertising(NimBLEServer *server) {
-  if (server == nullptr) {
+  if (server == nullptr || pairingModeTransitionActive) {
     return false;
   }
 
   const size_t bondCount = static_cast<size_t>(NimBLEDevice::getNumBonds());
   const bool allowOpenAdvertising = pairingModeActive;
+
+  // Stop advertising BEFORE modifying the whitelist — the BLE controller
+  // rejects whitelist changes while advertising with a filter (BLE_HS_EBUSY).
+  auto *advertising = server->getAdvertising();
+  advertising->stop();
+
   const size_t whiteListCount = syncWhiteListFromBonds();
 
   if (!allowOpenAdvertising && bondCount == 0) {
-    auto *advertising = server->getAdvertising();
-    advertising->stop();
     USBSerial.println(
         "[BLE] No bonds present and pairing mode inactive; advertising stopped");
     return false;
@@ -132,8 +144,6 @@ bool startAdvertising(NimBLEServer *server) {
                              static_cast<uint8_t>(allowOpenAdvertising ? 0x01 : 0x00)};
   scanRsp.setManufacturerData(mfrData, sizeof(mfrData));
 
-  auto *advertising = server->getAdvertising();
-  advertising->stop();
   advertising->removeAll();
   const bool configured = advertising->setInstanceData(kExtAdvInstance, adv);
   const bool scanRspConfigured =
@@ -148,11 +158,6 @@ bool startAdvertising(NimBLEServer *server) {
       static_cast<unsigned>(bondCount), static_cast<unsigned>(whiteListCount));
   return started;
 #else
-  auto *advertising = server->getAdvertising();
-
-  // Stop before reconfiguring (safe even if not running)
-  advertising->stop();
-
   // Configure payload once — NimBLE accumulates addServiceUUID calls
   static bool payloadConfigured = false;
   if (!payloadConfigured) {
@@ -252,9 +257,11 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
 
     USBSerial.printf("Device disconnected reason=%d\n", reason);
 
-    // Restart immediately, then let the watchdog keep retrying forever if this
-    // first post-disconnect start does not stick.
-    startAdvertising(server);
+    // Suppress the immediate advertising restart during a pairing transition —
+    // enterBLEPairingMode() issues its own startAdvertising after clearing bonds.
+    if (!pairingModeTransitionActive) {
+      startAdvertising(server);
+    }
   }
 
   void onAuthenticationComplete(NimBLEConnInfo &connInfo) override {
@@ -380,7 +387,43 @@ void restartBLEAdvertising() {
 }
 
 void enterBLEPairingMode() {
+  // Block advertising restarts (e.g. from onDisconnect) during this transition.
+  pairingModeTransitionActive = true;
+
+  // Single-bond model: disconnect the current peer so we can safely clear bonds.
+  if (deviceConnected && pServer != nullptr &&
+      connectedHandle != BLE_HS_CONN_HANDLE_NONE) {
+    pServer->disconnect(connectedHandle);
+    vTaskDelay(pdMS_TO_TICKS(100));
+  }
+
+  // Stop advertising before modifying bonds — NimBLE rejects bond deletion
+  // while the controller is advertising (BLE_HS_EBUSY).
+  if (pServer != nullptr) {
+    auto *adv = pServer->getAdvertising();
+    if (adv != nullptr) {
+      adv->stop();
+    }
+  }
+  vTaskDelay(pdMS_TO_TICKS(50));
+
+  const int bondCount = NimBLEDevice::getNumBonds();
+  bool cleared = false;
+  if (bondCount > 0) {
+    cleared = NimBLEDevice::deleteAllBonds();
+    if (!cleared) {
+      for (int i = NimBLEDevice::getNumBonds() - 1; i >= 0; --i) {
+        NimBLEDevice::deleteBond(NimBLEDevice::getBondedAddress(i));
+      }
+      cleared = NimBLEDevice::getNumBonds() == 0;
+    }
+  }
+  USBSerial.printf("[BLE] Cleared bonds: %s (was %d, now %d)\n",
+                   cleared ? "OK" : (bondCount == 0 ? "NONE" : "FAILED"),
+                   bondCount, NimBLEDevice::getNumBonds());
+
   pairingModeActive = true;
+  pairingModeTransitionActive = false;
 
   if (gPairingTimer == nullptr) {
     gPairingTimer = xTimerCreate("blePair", kPairingTimeoutTicks, pdFALSE,
