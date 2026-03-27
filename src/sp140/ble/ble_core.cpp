@@ -278,8 +278,6 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
         // bond (e.g. iOS cached old encryption keys).  Delete any peer data we
         // have and request fresh pairing instead of rejecting outright.
         const NimBLEAddress peerAddr = connInfo.getAddress();
-        const int bondIdx = NimBLEDevice::getNumBonds();
-        (void)bondIdx;  // suppress unused warning
         USBSerial.printf("[BLE] Pairing mode: auth failed for %s, "
                          "requesting fresh pairing\n",
                          peerAddr.toString().c_str());
