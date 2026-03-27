@@ -88,11 +88,6 @@ uint32_t diagAgeMs(uint32_t uptime_ms, uint32_t last_run_ms) {
   return uptime_ms - last_run_ms;
 }
 
-void zeroCoreDump(CoreDumpSummary* summary) {
-  if (summary == nullptr) return;
-  memset(summary, 0, sizeof(*summary));
-}
-
 void zeroPacket(BootDiagPacket* packet) {
   if (packet == nullptr) return;
   memset(packet, 0, sizeof(*packet));
