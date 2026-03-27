@@ -368,5 +368,4 @@ void initOtaBleService(NimBLEServer* pServer) {
         NIMBLE_PROPERTY::NOTIFY |
         NIMBLE_PROPERTY::INDICATE);
 
-    pService->start();
 }
