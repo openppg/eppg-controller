@@ -50,15 +50,17 @@ const LV_ATTRIBUTE_MEM_ALIGN LV_ATTRIBUTE_LARGE_CONST LV_ATTRIBUTE_IMG_ENERGY_53
   0x00, 0x00, 0x00,
 };
 
-const lv_img_dsc_t energy_539741_26 = {
-  // Header struct (lv_img_header_t)
-  {
-    LV_IMG_CF_ALPHA_1BIT, // Color format
-    0, // Always zero
-    0, // Reserved
-    24, // Width
-    26, // Height
+const lv_image_dsc_t energy_539741_26 = {
+  .header = {
+    .magic = LV_IMAGE_HEADER_MAGIC,
+    .cf = LV_COLOR_FORMAT_A1,
+    .flags = 0,
+    .w = 24,
+    .h = 26,
+    .stride = 3,  /* ceil(24/8) = 3 bytes per row */
+    .reserved_2 = 0,
   },
-  78, // Data size
-  energy_539741_26_map, // Pointer to image data
+  .data_size = 78,
+  .data = energy_539741_26_map,
+  .reserved = NULL,
 };

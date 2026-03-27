@@ -4,7 +4,9 @@
       "Bash(pio)",
       "Bash(pio run)",
       "Bash(cpplint:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(pio test:*)",
+      "Bash(pio run:*)"
     ],
     "deny": []
   }

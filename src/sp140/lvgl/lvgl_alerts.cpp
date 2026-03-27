@@ -32,12 +32,12 @@ void loadAlertSnapshot(const AlertSnapshot& snap) {
     if (critical_text_label == NULL) return;
     lv_label_set_text(critical_text_label, txt);
     lv_obj_set_style_text_color(critical_text_label, lv_color_make(255, 0, 0), 0);
-    lv_obj_clear_flag(critical_text_label, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(critical_text_label, LV_OBJ_FLAG_HIDDEN);
   } else {
     if (alert_text_label == NULL) return;
     lv_label_set_text(alert_text_label, txt);
     lv_obj_set_style_text_color(alert_text_label, lv_color_make(255, 165, 0), 0);
-    lv_obj_clear_flag(alert_text_label, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(alert_text_label, LV_OBJ_FLAG_HIDDEN);
   }
 }
 
@@ -137,7 +137,7 @@ void updateAlertCounterDisplay(const AlertCounts& counts) {
       snprintf(buf, sizeof(buf), "%u", counts.warningCount);
     }
     lv_label_set_text(warning_counter_label, buf);
-    lv_obj_clear_flag(warning_counter_circle, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(warning_counter_circle, LV_OBJ_FLAG_HIDDEN);
   } else {
     lv_obj_add_flag(warning_counter_circle, LV_OBJ_FLAG_HIDDEN);
   }
@@ -151,7 +151,7 @@ void updateAlertCounterDisplay(const AlertCounts& counts) {
       snprintf(buf, sizeof(buf), "%u", counts.criticalCount);
     }
     lv_label_set_text(critical_counter_label, buf);
-    lv_obj_clear_flag(critical_counter_circle, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(critical_counter_circle, LV_OBJ_FLAG_HIDDEN);
 
     // Simple positioning: align with alert text if no warnings, otherwise right of warning circle
     if (counts.warningCount == 0) {
@@ -195,7 +195,7 @@ void lv_showAlertTextWithLevel(SensorID id, AlertLevel level, bool critical) {
       // Place critical text to the right of the red bubble
       lv_obj_align_to(critical_text_label, critical_counter_circle, LV_ALIGN_OUT_RIGHT_MID, 4, 0);
     }
-    lv_obj_clear_flag(critical_text_label, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(critical_text_label, LV_OBJ_FLAG_HIDDEN);
   } else {
     // Use alert_text_label for warning alerts
     if (alert_text_label == NULL) return;
@@ -213,9 +213,9 @@ void lv_showAlertTextWithLevel(SensorID id, AlertLevel level, bool critical) {
       // Hide altitude since warning takes that space
       setAltitudeVisibility(false);
       if (warning_counter_circle && critical_counter_circle && altitude_char_labels[0]) {
-        lv_coord_t altY = lv_obj_get_y(altitude_char_labels[0]);
+        int32_t altY = lv_obj_get_y(altitude_char_labels[0]);
         // Align warning bubble X with critical bubble X so texts line up
-        lv_coord_t critX = lv_obj_get_x(critical_counter_circle);
+        int32_t critX = lv_obj_get_x(critical_counter_circle);
         // Place orange bubble aligned with critical bubble
         lv_obj_set_pos(warning_counter_circle, critX, altY + 2);
         // Place warning text to the right of the orange bubble
@@ -231,7 +231,7 @@ void lv_showAlertTextWithLevel(SensorID id, AlertLevel level, bool critical) {
         lv_obj_align_to(alert_text_label, warning_counter_circle, LV_ALIGN_OUT_RIGHT_MID, 4, 0);
       }
     }
-    lv_obj_clear_flag(alert_text_label, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(alert_text_label, LV_OBJ_FLAG_HIDDEN);
   }
 }
 

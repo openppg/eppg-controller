@@ -4,10 +4,9 @@
 #include "../../../inc/sp140/esp32s3-config.h"
 
 // Global variables for core LVGL functionality
-lv_disp_drv_t disp_drv;
-lv_disp_draw_buf_t draw_buf;
-lv_color_t buf[LVGL_BUFFER_SIZE];
-lv_color_t buf2[LVGL_BUFFER_SIZE];  // Second buffer for double buffering
+lv_display_t* main_display = nullptr;
+static uint8_t buf[LVGL_BUF_BYTES];
+static uint8_t buf2[LVGL_BUF_BYTES];
 Adafruit_ST7735* tft_driver = nullptr;
 uint32_t lvgl_last_update = 0;
 // Define the shared SPI bus mutex
@@ -16,9 +15,6 @@ SemaphoreHandle_t spiBusMutex = NULL;
 void setupLvglBuffer() {
   // Initialize LVGL library
   lv_init();
-
-  // Setup double buffer for LVGL to reduce tearing
-  lv_disp_draw_buf_init(&draw_buf, buf, buf2, LVGL_BUFFER_SIZE);
 }
 
 void setupLvglDisplay(
@@ -50,33 +46,28 @@ void setupLvglDisplay(
   // Initialize LVGL buffer
   setupLvglBuffer();
 
-  // Initialize display driver (use global disp_drv)
-  lv_disp_drv_init(&disp_drv);
+  // Create display and configure it
+  main_display = lv_display_create(SCREEN_WIDTH, SCREEN_HEIGHT);
+  lv_display_set_flush_cb(main_display, lvgl_flush_cb);
+  lv_display_set_buffers(main_display, buf, buf2, sizeof(buf), LV_DISPLAY_RENDER_MODE_PARTIAL);
+  lv_display_set_color_format(main_display, LV_COLOR_FORMAT_RGB565);
 
-  // Set display driver properties
-  disp_drv.hor_res = SCREEN_WIDTH;
-  disp_drv.ver_res = SCREEN_HEIGHT;
-  disp_drv.flush_cb = lvgl_flush_cb;
-  disp_drv.draw_buf = &draw_buf;
-
-  // Register the display driver
-  lv_disp_drv_register(&disp_drv);
   USBSerial.println("Display driver registered");
 
   // Set LVGL default theme - using default font
   lv_theme_t* theme = lv_theme_default_init(
-    lv_disp_get_default(),                // Display
+    main_display,                           // Display
     lv_palette_main(LV_PALETTE_BLUE),     // Primary color
     lv_palette_main(LV_PALETTE_AMBER),    // Secondary color
     deviceData.theme == 1,                // Dark mode
     LV_FONT_DEFAULT);                     // Default font
 
-  lv_disp_set_theme(lv_disp_get_default(), theme);
+  lv_display_set_theme(main_display, theme);
 }
 
 // Optimize the flush callback to minimize SPI transfers
 // CS pin management is handled here where actual SPI communication occurs
-void lvgl_flush_cb(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* color_p) {
+void lvgl_flush_cb(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map) {
   uint32_t w = (area->x2 - area->x1 + 1);
   uint32_t h = (area->y2 - area->y1 + 1);
 
@@ -87,7 +78,7 @@ void lvgl_flush_cb(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* color
       // SPI bus timeout - BMS might be doing long operation, skip display flush
       USBSerial.println("[DISPLAY] SPI bus timeout - skipping display flush");
       // Must still signal LVGL that flush is done to avoid deadlock
-      lv_disp_flush_ready(disp);
+      lv_display_flush_ready(disp);
       return;
     }
   }
@@ -99,7 +90,7 @@ void lvgl_flush_cb(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* color
 
   // Push colors - using DMA if available
   uint32_t len = w * h;
-  tft_driver->writePixels((uint16_t*)color_p, len);  // NOLINT(readability/casting)
+  tft_driver->writePixels((uint16_t*)px_map, len);  // NOLINT(readability/casting)
   tft_driver->endWrite();
 
   // Deselect display CS when done
@@ -109,7 +100,7 @@ void lvgl_flush_cb(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* color
   }
 
   // Indicate to LVGL that flush is done
-  lv_disp_flush_ready(disp);
+  lv_display_flush_ready(disp);
 }
 
 // LVGL tick handler - to be called from timer or in main loop
@@ -130,7 +121,7 @@ void updateLvgl() {
   // Update LVGL at the defined refresh rate
   if (current_ms - lvgl_last_update > LVGL_REFRESH_TIME) {
     lv_tick_handler();
-    lv_task_handler();
+    lv_timer_handler();
     lvgl_last_update = current_ms;
   }
 }
@@ -140,10 +131,10 @@ void displayLvglSplash(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
 
   // Create a new screen for the splash
   lv_obj_t* splash_screen = lv_obj_create(NULL);
-  lv_scr_load(splash_screen);
+  lv_screen_load(splash_screen);
 
   // Disable scrollbars
-  lv_obj_clear_flag(splash_screen, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_remove_flag(splash_screen, LV_OBJ_FLAG_SCROLLABLE);
 
   // Set background color based on theme
   lv_obj_set_style_bg_color(splash_screen,
