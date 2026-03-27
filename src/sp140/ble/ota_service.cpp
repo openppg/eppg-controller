@@ -367,5 +367,4 @@ void initOtaBleService(NimBLEServer* pServer) {
         OTA_CUSTOMER_UUID,
         NIMBLE_PROPERTY::NOTIFY |
         NIMBLE_PROPERTY::INDICATE);
-
 }

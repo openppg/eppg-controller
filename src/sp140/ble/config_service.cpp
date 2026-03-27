@@ -369,7 +369,6 @@ void initConfigBleService(NimBLEServer* server, const std::string& uniqueId) {
   NimBLECharacteristic* uniqueIdCharacteristic = deviceInfoService->createCharacteristic(
       NimBLEUUID(DEVICE_UNIQUE_ID_UUID), kReadSecure);
   uniqueIdCharacteristic->setValue(uniqueId);  // Already uppercase string
-
 }
 
 void updateThrottleBLE(int value) {

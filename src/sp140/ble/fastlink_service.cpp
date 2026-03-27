@@ -223,7 +223,6 @@ void initFastLinkBleService(NimBLEServer *pServer) {
       FAST_LINK_COMMAND_UUID,
       kFastLinkCommandProperties);
   pCommandCharacteristic->setCallbacks(&commandCallbacks);
-
 }
 
 void publishFastLinkTelemetry(const TelemetryHub &hub, DeviceState deviceState) {
