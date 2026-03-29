@@ -1,8 +1,8 @@
 #include "sp140/ble/ble_core.h"
 
 #include <Arduino.h>
-#include <algorithm>
-#include <cctype>
+#include <cstdio>
+#include <esp_mac.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/timers.h>
@@ -18,18 +18,43 @@
 
 namespace {
 
-constexpr const char *kAdvertisingName = "OpenPPG";
+constexpr size_t kAdvertisingNameCapacity = 32;
 constexpr TickType_t kConnTuneDelayTicks = pdMS_TO_TICKS(1200);
 constexpr TickType_t kPairingTimeoutTicks = pdMS_TO_TICKS(60000);
 constexpr TickType_t kAdvertisingWatchdogTicks = pdMS_TO_TICKS(1000);
 TimerHandle_t gConnTuneTimer = nullptr;
 TimerHandle_t gPairingTimer = nullptr;
 TimerHandle_t gAdvertisingWatchdogTimer = nullptr;
+char gAdvertisingName[kAdvertisingNameCapacity];
 bool pairingModeActive = false;
 bool pairingModeTransitionActive = false;
 
 // Store the active connection handle for conn param updates
 uint16_t activeConnHandle = 0;
+
+bool shouldAdvertiseWhilePowered();
+bool startAdvertising(NimBLEServer *server);
+
+// Builds gAdvertisingName from the BT MAC and returns the full MAC address
+// as an uppercase string for use as a unique device ID. Must be called before
+// NimBLEDevice::init() so the name is ready for the init call.
+std::string initAdvertisingName() {
+  constexpr const char *kBase = "OpenPPG SP140";
+  uint8_t mac[6] = {};
+  if (esp_read_mac(mac, ESP_MAC_BT) != ESP_OK) {
+    snprintf(gAdvertisingName, sizeof(gAdvertisingName), "%s", kBase);
+    USBSerial.println("[BLE] Failed to read BT MAC, using base advertising name");
+    return "";
+  }
+
+  snprintf(gAdvertisingName, sizeof(gAdvertisingName), "%s %02X%02X%02X",
+           kBase, mac[3], mac[4], mac[5]);
+
+  char uniqueId[18];
+  snprintf(uniqueId, sizeof(uniqueId), "%02X:%02X:%02X:%02X:%02X:%02X",
+           mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  return uniqueId;
+}
 
 void stopPairingModeTimer() {
   if (gPairingTimer != nullptr) {
@@ -116,7 +141,7 @@ bool startAdvertising(NimBLEServer *server) {
   adv.setLegacyAdvertising(true);
   adv.setConnectable(true);
   adv.setScannable(true);
-  adv.setName(kAdvertisingName);
+  adv.setName(gAdvertisingName);
   adv.setFlags(BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP);
 
   // High-frequency advertising for "instant" connection
@@ -161,7 +186,6 @@ bool startAdvertising(NimBLEServer *server) {
   // Configure payload once — NimBLE accumulates addServiceUUID calls
   static bool payloadConfigured = false;
   if (!payloadConfigured) {
-    advertising->setName(kAdvertisingName);
     advertising->setDiscoverableMode(BLE_GAP_DISC_MODE_GEN);
     advertising->setConnectableMode(BLE_GAP_CONN_MODE_UND);
     advertising->addServiceUUID(NimBLEUUID(CONFIG_SERVICE_UUID));
@@ -170,6 +194,7 @@ bool startAdvertising(NimBLEServer *server) {
     advertising->setMaxInterval(48);  // 30ms (48 * 0.625ms)
     payloadConfigured = true;
   }
+  advertising->setName(gAdvertisingName);
 
   // Open advertising only during the explicit pairing window. Normal runtime
   // advertising only accepts bonded devices from the controller whitelist.
@@ -312,8 +337,10 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
 }  // namespace
 
 void setupBLE() {
-  // Initialize NimBLE with device name
-  NimBLEDevice::init(kAdvertisingName);
+  const std::string uniqueId = initAdvertisingName();
+
+  // Initialize NimBLE with the computed controller-specific device name.
+  NimBLEDevice::init(gAdvertisingName);
 
   // Require bonded LE Secure Connections. The controller has no input/output,
   // so pairing stays frictionless ("Just Works") while reconnects restore an
@@ -348,12 +375,6 @@ void setupBLE() {
   if (gAdvertisingWatchdogTimer != nullptr) {
     xTimerStart(gAdvertisingWatchdogTimer, 0);
   }
-
-  NimBLEAddress bleAddress = NimBLEDevice::getAddress();
-  std::string uniqueId = bleAddress.toString();
-  std::transform(
-      uniqueId.begin(), uniqueId.end(), uniqueId.begin(),
-      [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
 
   initConfigBleService(pServer, uniqueId);
   initFastLinkBleService(pServer);
