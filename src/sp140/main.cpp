@@ -312,8 +312,12 @@ void setupSPI(const HardwareConfig &board_config) {
 
 void watchdogTask(void *parameter) {
 #ifndef OPENPPG_DEBUG
-  // Register this task with the hardware Task WDT; only this task feeds it
+  // Register this task with the hardware Task WDT
   ESP_ERROR_CHECK(esp_task_wdt_add(NULL));
+  // Also register the throttle task so a hung throttle triggers WDT reset
+  if (throttleTaskHandle != NULL) {
+    ESP_ERROR_CHECK(esp_task_wdt_add(throttleTaskHandle));
+  }
 #endif
   for (;;) {
     diagnosticsRefreshHeartbeat();
@@ -344,6 +348,9 @@ void throttleTask(void *pvParameters) {
   for (;;) {
     handleThrottle();
     lastThrottleRunMs = millis();
+#ifndef OPENPPG_DEBUG
+    esp_task_wdt_reset();  // Feed WDT from throttle task to detect hangs
+#endif
     vTaskDelayUntil(&lastWake, throttleTicks);
   }
   vTaskDelete(NULL);  // should never reach this
@@ -377,7 +384,8 @@ void bleNotifyTask(void *pvParameters) {
   for (;;) {
     TelemetryHub hub = {};
     if (telemetryHubRead(&hub, pdMS_TO_TICKS(2))) {
-      publishFastLinkTelemetry(hub, currentState);
+      const DeviceState stateSnap = currentState;  // Snapshot volatile state once
+      publishFastLinkTelemetry(hub, stateSnap);
     }
 
     // Check for stalled OTA updates
@@ -409,14 +417,17 @@ void refreshDisplay() {
     const float currentRelativeAltitude =
         (rawAltitude != __FLT_MIN__) ? rawAltitude : lastGoodAltitude;
 
+    // Snapshot state once to avoid race conditions from multiple volatile reads
+    const DeviceState stateSnap = currentState;
+
     // Determine the altitude to show on the display
     float altitudeToShow = 0.0f;  // Default to 0
-    if (currentState != DISARMED) {
+    if (stateSnap != DISARMED) {
       altitudeToShow =
           currentRelativeAltitude;  // Show relative altitude when armed/cruising
     }
-    bool isArmed = (currentState != DISARMED);
-    bool isCruising = (currentState == ARMED_CRUISING);
+    bool isArmed = (stateSnap != DISARMED);
+    bool isCruising = (stateSnap == ARMED_CRUISING);
 
     // Select the appropriate screen update function based on the current page
     switch (currentScreenPage) {
@@ -487,7 +498,7 @@ void monitoringTask(void *pvParameters) {
     if (telemetryHubRead(&hub, pdMS_TO_TICKS(5)) && monitoringEnabled) {
       checkAllSensorsWithData(hub.esc, hub.bms);
     }
-    vTaskDelay(pdMS_TO_TICKS(100));
+    vTaskDelay(pdMS_TO_TICKS(50));  // 20 Hz monitoring for safety-critical conditions
   }
 }
 
@@ -592,40 +603,54 @@ void setupWatchdog() {
 void createAllSyncPrimitives() {
   USBSerial.println("Creating sync primitives...");
 
+  bool allOk = true;
+
   // LVGL display mutex - protects all LVGL operations
   lvglMutex = xSemaphoreCreateMutex();
   if (lvglMutex == NULL) {
-    USBSerial.println("Error creating LVGL mutex");
+    USBSerial.println("FATAL: Error creating LVGL mutex");
+    allOk = false;
   }
 
   // State mutex - protects device state transitions
   stateMutex = xSemaphoreCreateMutex();
   if (stateMutex == NULL) {
-    USBSerial.println("Error creating state mutex");
+    USBSerial.println("FATAL: Error creating state mutex");
+    allOk = false;
   }
 
   // Create all queues
   throttleUpdateQueue = xQueueCreate(1, sizeof(uint16_t));
   if (throttleUpdateQueue == NULL) {
-    USBSerial.println("Error creating throttle update queue");
+    USBSerial.println("FATAL: Error creating throttle update queue");
+    allOk = false;
   }
 
   // BLE state queue
   bleStateQueue = xQueueCreate(5, sizeof(BLEStateUpdate));
   if (bleStateQueue == NULL) {
-    USBSerial.println("Error creating BLE state queue");
+    USBSerial.println("FATAL: Error creating BLE state queue");
+    allOk = false;
   }
 
   // Device state queue
   deviceStateQueue = xQueueCreate(1, sizeof(uint8_t));
   if (deviceStateQueue == NULL) {
-    USBSerial.println("Error creating device state queue");
+    USBSerial.println("FATAL: Error creating device state queue");
+    allOk = false;
   }
 
   // Melody queue for audio task - MUST be created before audioTask
   melodyQueue = xQueueCreate(5, sizeof(MelodyRequest));
   if (melodyQueue == NULL) {
-    USBSerial.println("Error creating melody queue");
+    USBSerial.println("FATAL: Error creating melody queue");
+    allOk = false;
+  }
+
+  // Halt boot if any critical sync primitive failed - system cannot operate safely
+  if (!allOk) {
+    USBSerial.println("FATAL: Sync primitive creation failed. Halting boot.");
+    while (true) { vTaskDelay(pdMS_TO_TICKS(1000)); }
   }
 
   // Telemetry hub mutex - protects shared telemetry data between
@@ -768,30 +793,28 @@ void setup() {
 
   setLEDColor(LED_GREEN);
 
-  // Show splash screen (blocking)
+  // Show splash screen (blocking) - release mutex between phases to reduce hold time
   if (xSemaphoreTake(lvglMutex, portMAX_DELAY) == pdTRUE) {
     displayLvglSplash(deviceData, 2000);
-    // Keep mutex held through main screen setup
+    xSemaphoreGive(lvglMutex);
   } else {
     USBSerial.println("Failed to acquire LVGL mutex for splash");
   }
 
-  // Setup main screen after splash
+  // Setup main screen after splash (re-acquire mutex)
   USBSerial.println("Setting up main screen...");
-  if (main_screen == NULL) {
-    setupMainScreen(deviceData.theme == 1);
-  }
+  if (xSemaphoreTake(lvglMutex, portMAX_DELAY) == pdTRUE) {
+    if (main_screen == NULL) {
+      setupMainScreen(deviceData.theme == 1);
+    }
 
-  // Load main screen
-  if (main_screen != NULL) {
-    lv_screen_load(main_screen);
-    USBSerial.println("Main screen loaded");
-  } else {
-    USBSerial.println("Error: Main screen object is NULL after setup attempt");
-  }
-
-  // Release LVGL mutex
-  if (lvglMutex != NULL && xSemaphoreGetMutexHolder(lvglMutex) == xTaskGetCurrentTaskHandle()) {
+    // Load main screen
+    if (main_screen != NULL) {
+      lv_screen_load(main_screen);
+      USBSerial.println("Main screen loaded");
+    } else {
+      USBSerial.println("Error: Main screen object is NULL after setup attempt");
+    }
     xSemaphoreGive(lvglMutex);
   }
 
@@ -1145,8 +1168,11 @@ void handleThrottle() {
 
   int finalPwm = ESC_DISARMED_PWM;
 
+  // Snapshot state once to avoid race conditions from multiple volatile reads
+  const DeviceState stateSnap = currentState;
+
   // Handle throttle based on current device state
-  switch (currentState) {
+  switch (stateSnap) {
   case DISARMED:
     readThrottleRaw();  // Keep pot_raw updated for telemetry even when disarmed
     resetThrottleState(prevPwm);

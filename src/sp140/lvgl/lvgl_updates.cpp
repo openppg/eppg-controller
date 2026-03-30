@@ -210,6 +210,10 @@ void startCriticalBorderFlash() {
       isFlashingCriticalBorder = true;
       lv_obj_set_style_border_opa(critical_border, LV_OPA_100, LV_PART_MAIN);  // Start visible
       critical_border_flash_timer = lv_timer_create(critical_border_flash_timer_cb, 300, NULL);
+      if (critical_border_flash_timer == NULL) {
+        USBSerial.println("[LVGL] Failed to create critical border flash timer");
+        isFlashingCriticalBorder = false;  // Reset state on failure
+      }
     }
     xSemaphoreGive(lvglMutex);
   }
@@ -242,6 +246,10 @@ void startCriticalBorderFlashDirect() {
     lv_obj_set_style_border_opa(critical_border, LV_OPA_100, LV_PART_MAIN);  // Start visible
     lv_obj_invalidate(critical_border);  // Ensure clean initial draw
     critical_border_flash_timer = lv_timer_create(critical_border_flash_timer_cb, 300, NULL);
+    if (critical_border_flash_timer == NULL) {
+      USBSerial.println("[LVGL] Failed to create critical border flash timer (direct)");
+      isFlashingCriticalBorder = false;  // Reset state on failure
+    }
     // Force immediate refresh for clean start
     lv_refr_now(lv_display_get_default());
   }

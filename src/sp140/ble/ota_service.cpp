@@ -229,6 +229,10 @@ class OtaDataCallback : public NimBLECharacteristicCallbacks {
         const uint8_t* data = (const uint8_t*)valStr.data();
 
         if (len < 3) return;  // Header: Sector(2) + Seq(1)
+        if (len > 520) {     // Max BLE MTU payload sanity check
+            USBSerial.println("OTA Error: Packet too large");
+            return;
+        }
 
         lastOtaActivityMs = millis();
         packetCount++;
@@ -270,6 +274,15 @@ class OtaDataCallback : public NimBLECharacteristicCallbacks {
             uint16_t calcCrc = crc16_ccitt(sectorBuffer, sectorBufferLen);
 
             if (rxCrc == calcCrc) {
+                // Abort early if this write would exceed the declared image size
+                if (receivedBytes + sectorBufferLen > imageTotalLen) {
+                    USBSerial.printf("OTA Error: Would exceed image size (%u + %u > %u)\n",
+                                     (unsigned)receivedBytes, (unsigned)sectorBufferLen,
+                                     (unsigned)imageTotalLen);
+                    sendAck(sector, ACK_ERR_LEN);
+                    abortOtaImpl();
+                    return;
+                }
                 esp_err_t err = esp_ota_write(updateHandle, sectorBuffer, sectorBufferLen);
                 if (err == ESP_OK) {
                     receivedBytes += sectorBufferLen;

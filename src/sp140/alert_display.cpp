@@ -201,6 +201,15 @@ static void recalcCountsAndPublish() {
  * Critical alert border/vibration is handled by UI task based on criticalAlertsActive flag.
  */
 static void handleAlertVibration(const AlertCounts& newCounts, const AlertCounts& previousCounts) {
+  // Handle critical alert transitions - strong vibration feedback
+  const int deltaCriticals = static_cast<int>(newCounts.criticalCount) - static_cast<int>(previousCounts.criticalCount);
+  if (deltaCriticals > 0) {
+    // New critical alert: triple pulse to urgently notify pilot
+    vTaskDelay(pdMS_TO_TICKS(50));
+    executeVibePattern(VIBE_TRIPLE_PULSE);
+    return;  // Don't also fire warning vibration
+  }
+
   // Handle warning transitions (only when no critical alerts)
   if (newCounts.criticalCount == 0) {
     const int deltaWarnings = static_cast<int>(newCounts.warningCount) - static_cast<int>(previousCounts.warningCount);
