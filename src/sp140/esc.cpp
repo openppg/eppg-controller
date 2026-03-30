@@ -183,15 +183,6 @@ void readESCTelemetry() {
   }
 
   adapter.processTxRxOnce();  // Process CAN messages
-
-  // Monitor CAN bus health and attempt recovery if needed
-  twai_status_info_t twai_status;
-  if (twai_get_status_info(&twai_status) == ESP_OK) {
-    if (twai_status.state == TWAI_STATE_BUS_OFF) {
-      USBSerial.println("ESC CAN: Bus-off detected, initiating recovery");
-      twai_initiate_recovery();
-    }
-  }
 }
 
 /**

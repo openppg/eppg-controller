@@ -2,7 +2,6 @@
 #include "sp140/structs.h"
 
 #include <Adafruit_BMP3XX.h>
-#include <cmath>
 
 Adafruit_BMP3XX bmp;
 bool bmpPresent = false;
@@ -43,11 +42,6 @@ float getVerticalSpeed() {
   const AltitudeReading& oldest = altitudeBuffer.first();
   const AltitudeReading& newest = altitudeBuffer.last();
 
-  // Guard against NaN/Inf altitude readings contaminating vario
-  if (!isfinite(newest.altitude) || !isfinite(oldest.altitude)) {
-    return 0.0f;
-  }
-
   // Calculate time difference in seconds
   float timeDiff = (newest.timestamp - oldest.timestamp) / 1000.0f;
   if (timeDiff <= 0) {
@@ -57,10 +51,7 @@ float getVerticalSpeed() {
   // Calculate vertical speed in meters per second
   float verticalSpeed = (newest.altitude - oldest.altitude) / timeDiff;
 
-  // Final NaN guard (belt-and-suspenders) and constrain to max vertical speed
-  if (!isfinite(verticalSpeed)) {
-    return 0.0f;
-  }
+  // Constrain to max vertical speed
   return constrain(verticalSpeed, -MAX_VERTICAL_SPEED, MAX_VERTICAL_SPEED);
 }
 

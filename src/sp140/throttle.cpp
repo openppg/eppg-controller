@@ -11,14 +11,6 @@ extern HardwareConfig board_config;
 static CircularBuffer<int, 8> pwmBuffer;
 static volatile uint16_t last_pot_raw = 0;
 
-// Stuck-throttle detection state
-static uint16_t stuckDetectLastRaw = 0;
-static uint32_t stuckDetectSameMs = 0;
-static bool throttleStuckDetected = false;
-static constexpr uint16_t STUCK_ADC_TOLERANCE = 5;        // ADC counts tolerance
-static constexpr uint32_t STUCK_HIGH_TIMEOUT_MS = 500;    // 500ms at max = stuck
-static constexpr uint16_t STUCK_HIGH_THRESHOLD = 4000;    // Near ADC max (4095)
-
 /**
  * Throttle easing function based on threshold/performance mode
  * Limits how quickly throttle can increase or decrease.
@@ -56,37 +48,11 @@ void initThrottleInput() {
 uint16_t readThrottleRaw() {
   uint16_t raw = analogRead(board_config.throttle_pin);
   last_pot_raw = raw;
-
-  // Stuck-throttle detection: flag if ADC reads near max for too long
-  if (raw >= STUCK_HIGH_THRESHOLD) {
-    if (abs((int)raw - (int)stuckDetectLastRaw) <= STUCK_ADC_TOLERANCE) {
-      if (stuckDetectSameMs == 0) {
-        stuckDetectSameMs = millis();
-      } else if (millis() - stuckDetectSameMs > STUCK_HIGH_TIMEOUT_MS) {
-        if (!throttleStuckDetected) {
-          throttleStuckDetected = true;
-          USBSerial.println("WARNING: Stuck throttle detected (ADC near max)");
-        }
-      }
-    } else {
-      stuckDetectSameMs = millis();  // Value changed, reset timer
-    }
-  } else {
-    // Normal range - clear stuck detection
-    stuckDetectSameMs = 0;
-    throttleStuckDetected = false;
-  }
-  stuckDetectLastRaw = raw;
-
   return raw;
 }
 
 uint16_t getLastThrottleRaw() {
   return last_pot_raw;
-}
-
-bool isThrottleStuck() {
-  return throttleStuckDetected;
 }
 
 /** Map raw ADC (0..4095) to PWM (ESC_MIN_PWM..ESC_MAX_PWM). */
