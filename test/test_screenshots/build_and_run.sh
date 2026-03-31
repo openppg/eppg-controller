@@ -1,8 +1,14 @@
 #!/bin/bash
 # Build and run the LVGL screenshot tests
-# Usage: ./test/test_screenshots/build_and_run.sh [--update-references]
+# Usage:
+#   ./test/test_screenshots/build_and_run.sh [--local] [--update-references]
 #
-# Prerequisites: cmake, g++ (or clang++)
+# --local  Use Ninja (if installed), ccache (if installed), and a portable CPU
+#          count for parallel builds. If the build dir was configured without
+#          --local, it is cleared once so the generator can switch to Ninja.
+#          You can also set EPPG_SCREENSHOT_LOCAL=1 instead of the flag.
+#
+# Prerequisites: cmake, g++ (or clang++), optional: ninja, ccache
 # LVGL and GoogleTest are fetched automatically if not cached.
 
 set -e
@@ -11,42 +17,113 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 BUILD_DIR="$PROJECT_ROOT/build-screenshot"
 
+LOCAL_BUILD=0
+if [ "${EPPG_SCREENSHOT_LOCAL:-}" = 1 ]; then
+  LOCAL_BUILD=1
+fi
+
+PASS_TO_TEST=()
+for arg in "$@"; do
+  case "$arg" in
+    --local) LOCAL_BUILD=1 ;;
+    *) PASS_TO_TEST+=("$arg") ;;
+  esac
+done
+
+UPDATE_REFS=0
+for arg in "${PASS_TO_TEST[@]}"; do
+  if [ "$arg" = "--update-references" ]; then
+    UPDATE_REFS=1
+    break
+  fi
+done
+
+# Parallel jobs: full portable count only with --local; CI keeps nproc || 4 (Linux).
+build_parallel_jobs() {
+  if [ "$LOCAL_BUILD" != 1 ]; then
+    nproc 2>/dev/null || echo 4
+    return
+  fi
+  if [ -n "${EPPG_SCREENSHOT_BUILD_JOBS:-}" ]; then
+    echo "$EPPG_SCREENSHOT_BUILD_JOBS"
+    return
+  fi
+  nproc 2>/dev/null && return
+  getconf _NPROCESSORS_ONLN 2>/dev/null && return
+  sysctl -n hw.ncpu 2>/dev/null && return
+  echo 4
+}
+
+CMAKE_GEN_ARGS=()
+CMAKE_CCACHE_ARGS=()
+if [ "$LOCAL_BUILD" = 1 ]; then
+  if command -v ninja >/dev/null 2>&1; then
+    CMAKE_GEN_ARGS=(-G Ninja)
+  else
+    echo "Warning: --local: 'ninja' not found; using CMake's default generator." >&2
+  fi
+  if command -v ccache >/dev/null 2>&1; then
+    CMAKE_CCACHE_ARGS=(
+      -DCMAKE_C_COMPILER_LAUNCHER=ccache
+      -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+    )
+  else
+    echo "Warning: --local: 'ccache' not found; building without compiler cache." >&2
+  fi
+fi
+
 echo "=== LVGL Screenshot Tests ==="
 echo "Project root: $PROJECT_ROOT"
 echo "Build dir:    $BUILD_DIR"
-
-# Create build directory
-mkdir -p "$BUILD_DIR"
-cd "$BUILD_DIR"
-
-# Configure with CMake (FetchContent will download LVGL and GoogleTest if needed)
-if [ ! -f "Makefile" ] && [ ! -f "build.ninja" ]; then
-  echo ""
-  echo "--- Configuring CMake ---"
-  cmake "$SCRIPT_DIR" \
-    -DCMAKE_BUILD_TYPE=Debug \
-    ${LVGL_DIR:+-DLVGL_DIR="$LVGL_DIR"} \
-    ${GTEST_DIR:+-DGTEST_DIR="$GTEST_DIR"}
+if [ "$LOCAL_BUILD" = 1 ]; then
+  ninja_status="default"
+  [ "${#CMAKE_GEN_ARGS[@]}" -gt 0 ] && ninja_status="Ninja"
+  ccache_status="off"
+  [ "${#CMAKE_CCACHE_ARGS[@]}" -gt 0 ] && ccache_status="on"
+  echo "Local fast path: generator=${ninja_status}, ccache=${ccache_status}, jobs=$(build_parallel_jobs)"
 fi
 
-# Build
+mkdir -p "$BUILD_DIR"
+
+# Switching to --local with Ninja: clear a Unix Makefiles (or other) cache once.
+if [ "$LOCAL_BUILD" = 1 ] && [ "${#CMAKE_GEN_ARGS[@]}" -gt 0 ]; then
+  if [ -f "$BUILD_DIR/CMakeCache.txt" ]; then
+    if ! grep -q '^CMAKE_GENERATOR:INTERNAL=Ninja$' "$BUILD_DIR/CMakeCache.txt" 2>/dev/null; then
+      echo "Local build: clearing $BUILD_DIR to switch CMake generator to Ninja..."
+      rm -rf "$BUILD_DIR"
+      mkdir -p "$BUILD_DIR"
+    fi
+  fi
+fi
+
+cd "$BUILD_DIR"
+
+echo ""
+echo "--- Configuring CMake ---"
+# shellcheck disable=SC2086
+cmake "$SCRIPT_DIR" \
+  -DCMAKE_BUILD_TYPE=Debug \
+  "${CMAKE_GEN_ARGS[@]}" \
+  "${CMAKE_CCACHE_ARGS[@]}" \
+  ${LVGL_DIR:+-DLVGL_DIR="$LVGL_DIR"} \
+  ${GTEST_DIR:+-DGTEST_DIR="$GTEST_DIR"}
+
 echo ""
 echo "--- Building ---"
-cmake --build . --parallel "$(nproc 2>/dev/null || echo 4)"
+cmake --build . --parallel "$(build_parallel_jobs)"
 
-# Run tests from project root (paths are relative)
 echo ""
 echo "--- Running tests ---"
 cd "$PROJECT_ROOT"
 mkdir -p test/test_screenshots/output
 mkdir -p test/test_screenshots/reference
 
-if [ "$1" = "--update-references" ]; then
+if [ "$UPDATE_REFS" = 1 ]; then
   echo "Updating reference screenshots..."
   rm -rf test/test_screenshots/reference/*.bmp
 fi
 
-"$BUILD_DIR/screenshot_tests" "$@"
+"$BUILD_DIR/screenshot_tests" "${PASS_TO_TEST[@]}"
 
 echo ""
 echo "--- Screenshots ---"
