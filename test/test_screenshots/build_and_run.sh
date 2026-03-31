@@ -85,14 +85,16 @@ fi
 
 mkdir -p "$BUILD_DIR"
 
-# Switching to --local with Ninja: clear a Unix Makefiles (or other) cache once.
-if [ "$LOCAL_BUILD" = 1 ] && [ "${#CMAKE_GEN_ARGS[@]}" -gt 0 ]; then
-  if [ -f "$BUILD_DIR/CMakeCache.txt" ]; then
-    if ! grep -q '^CMAKE_GENERATOR:INTERNAL=Ninja$' "$BUILD_DIR/CMakeCache.txt" 2>/dev/null; then
-      echo "Local build: clearing $BUILD_DIR to switch CMake generator to Ninja..."
-      rm -rf "$BUILD_DIR"
-      mkdir -p "$BUILD_DIR"
-    fi
+# If the cached generator or build type no longer matches, clear the build dir once.
+if [ -f "$BUILD_DIR/CMakeCache.txt" ]; then
+  cached_gen=$(grep '^CMAKE_GENERATOR:INTERNAL=' "$BUILD_DIR/CMakeCache.txt" 2>/dev/null | cut -d= -f2)
+  cached_type=$(grep '^CMAKE_BUILD_TYPE:STRING=' "$BUILD_DIR/CMakeCache.txt" 2>/dev/null | cut -d= -f2)
+  want_gen="Unix Makefiles"
+  [ "${#CMAKE_GEN_ARGS[@]}" -gt 0 ] && want_gen="Ninja"
+  if [ "$cached_gen" != "$want_gen" ] || [ "$cached_type" != "$BUILD_TYPE" ]; then
+    echo "Clearing $BUILD_DIR (generator/build type changed: ${cached_gen}/${cached_type} -> ${want_gen}/${BUILD_TYPE})..."
+    rm -rf "$BUILD_DIR"
+    mkdir -p "$BUILD_DIR"
   fi
 fi
 
@@ -100,9 +102,13 @@ cd "$BUILD_DIR"
 
 echo ""
 echo "--- Configuring CMake ---"
+# --local uses RelWithDebInfo: optimized binary (5-10x faster renderer) with debug symbols.
+# CI keeps Debug for faithful failure diagnostics.
+BUILD_TYPE="Debug"
+[ "$LOCAL_BUILD" = 1 ] && BUILD_TYPE="RelWithDebInfo"
 # shellcheck disable=SC2086
 cmake "$SCRIPT_DIR" \
-  -DCMAKE_BUILD_TYPE=Debug \
+  -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
   "${CMAKE_GEN_ARGS[@]}" \
   "${CMAKE_CCACHE_ARGS[@]}" \
   ${LVGL_DIR:+-DLVGL_DIR="$LVGL_DIR"} \

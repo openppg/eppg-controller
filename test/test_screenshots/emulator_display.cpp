@@ -12,8 +12,9 @@
 // Full-screen framebuffer: 160 x 128 pixels, RGB565
 static uint16_t framebuffer[SCREEN_WIDTH * SCREEN_HEIGHT];
 
-// LVGL draw buffers (full-screen for complete frame capture)
-static uint8_t lvgl_buf1[SCREEN_WIDTH * SCREEN_HEIGHT * 2];
+// LVGL draw buffer - must be aligned to LV_DRAW_BUF_ALIGN (4 bytes).
+// LVGL v9 asserts on misaligned buffers and spins in while(1) on failure.
+static uint8_t lvgl_buf1[SCREEN_WIDTH * SCREEN_HEIGHT * 2] __attribute__((aligned(4)));
 
 // Define globals declared in lvgl_core.h
 lv_display_t* main_display = nullptr;
@@ -81,9 +82,14 @@ lv_display_t* emulator_init_display(bool darkMode) {
 }
 
 void emulator_render_frame() {
-  // Tick LVGL forward to process any pending timers/animations
+  // Tick LVGL forward so any time-dependent layout/animation work is scheduled.
   lv_tick_inc(100);
-  // Force a full refresh
+  // Drain LVGL's internal timer queue before forcing the refresh.  Without
+  // this the first render on a freshly-created screen can block waiting for
+  // deferred layout passes that are only triggered by lv_timer_handler().
+  for (int i = 0; i < 64; i++) {
+    lv_timer_handler();
+  }
   lv_refr_now(main_display);
 }
 
