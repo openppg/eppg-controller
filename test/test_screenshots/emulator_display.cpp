@@ -192,6 +192,116 @@ int emulator_compare_bmp(const char* file_a, const char* file_b) {
   return diff_count;
 }
 
+// ---------------------------------------------------------------------------
+// 3-panel diff visualizer: [reference | output | diff-highlighted]
+// Matching pixels in the diff panel are dimmed to 30% brightness so regressions
+// jump out immediately. Differing pixels are shown as magenta (255, 0, 255).
+// The combined image is (SCREEN_WIDTH * 3 + 4) wide with 2-px white separators.
+// ---------------------------------------------------------------------------
+bool emulator_save_diff_bmp(const char* ref_path, const char* out_path,
+                             const char* diff_path) {
+  const int W = SCREEN_WIDTH;
+  const int H = SCREEN_HEIGHT;
+  const int PANEL_BYTES = W * H * 3;
+
+  // Heap-allocate pixel buffers (bottom-up BMP rows, BGR order)
+  uint8_t* ref_px  = static_cast<uint8_t*>(malloc(PANEL_BYTES));
+  uint8_t* out_px  = static_cast<uint8_t*>(malloc(PANEL_BYTES));
+  if (!ref_px || !out_px) { free(ref_px); free(out_px); return false; }
+
+  auto read_pixels = [&](const char* path, uint8_t* dst) -> bool {
+    FILE* f = fopen(path, "rb");
+    if (!f) return false;
+    fseek(f, 54, SEEK_SET);  // skip BMP header
+    bool ok = (fread(dst, 1, PANEL_BYTES, f) == (size_t)PANEL_BYTES);
+    fclose(f);
+    return ok;
+  };
+
+  if (!read_pixels(ref_path, ref_px) || !read_pixels(out_path, out_px)) {
+    free(ref_px); free(out_px); return false;
+  }
+
+  // Combined image layout: ref | 2px sep | output | 2px sep | diff
+  const int SEP = 2;
+  const int TOTAL_W = W * 3 + SEP * 2;
+  int row_bytes = TOTAL_W * 3;
+  int padding   = (4 - (row_bytes % 4)) % 4;
+  int padded    = row_bytes + padding;
+  int pix_size  = padded * H;
+  int file_size = 54 + pix_size;
+
+  FILE* f = fopen(diff_path, "wb");
+  if (!f) { free(ref_px); free(out_px); return false; }
+
+  // BMP file header
+  uint8_t fhdr[14] = {
+    'B', 'M',
+    (uint8_t)file_size,       (uint8_t)(file_size >> 8),
+    (uint8_t)(file_size >> 16),(uint8_t)(file_size >> 24),
+    0, 0, 0, 0, 54, 0, 0, 0
+  };
+  fwrite(fhdr, 1, 14, f);
+
+  // BMP info header
+  uint8_t ihdr[40] = {};
+  ihdr[0]  = 40;
+  ihdr[4]  = (uint8_t)TOTAL_W;         ihdr[5]  = (uint8_t)(TOTAL_W >> 8);
+  ihdr[8]  = (uint8_t)H;               ihdr[9]  = (uint8_t)(H >> 8);
+  ihdr[12] = 1;   // color planes
+  ihdr[14] = 24;  // bits per pixel
+  fwrite(ihdr, 1, 40, f);
+
+  // Rows are written bottom-up (matches how emulator_save_bmp stores them)
+  uint8_t pad_bytes[3] = {0, 0, 0};
+  for (int row = 0; row < H; row++) {
+    // Source row index inside the bottom-up pixel arrays
+    int src_row = row;  // same order: both arrays are bottom-up
+
+    for (int panel = 0; panel < 3; panel++) {
+      // Write 2-px white separator before panels 1 and 2
+      if (panel > 0) {
+        for (int s = 0; s < SEP; s++) {
+          uint8_t white[3] = {255, 255, 255};
+          fwrite(white, 1, 3, f);
+        }
+      }
+
+      for (int col = 0; col < W; col++) {
+        int idx = (src_row * W + col) * 3;
+        uint8_t r_b = ref_px[idx], r_g = ref_px[idx+1], r_r = ref_px[idx+2];
+        uint8_t o_b = out_px[idx], o_g = out_px[idx+1], o_r = out_px[idx+2];
+        bool differs = (r_b != o_b || r_g != o_g || r_r != o_r);
+
+        uint8_t px[3];
+        if (panel == 0) {
+          // Left: reference as-is
+          px[0] = r_b; px[1] = r_g; px[2] = r_r;
+        } else if (panel == 1) {
+          // Middle: output as-is
+          px[0] = o_b; px[1] = o_g; px[2] = o_r;
+        } else {
+          // Right: diff — magenta where different, dimmed output where same
+          if (differs) {
+            px[0] = 255; px[1] = 0; px[2] = 255;  // magenta (BGR)
+          } else {
+            px[0] = (uint8_t)(o_b * 30 / 100);
+            px[1] = (uint8_t)(o_g * 30 / 100);
+            px[2] = (uint8_t)(o_r * 30 / 100);
+          }
+        }
+        fwrite(px, 1, 3, f);
+      }
+    }
+    if (padding > 0) fwrite(pad_bytes, 1, padding, f);
+  }
+
+  fclose(f);
+  free(ref_px);
+  free(out_px);
+  return true;
+}
+
 void emulator_teardown() {
   // Delete the screen (which deletes all child widgets)
   // Don't call lv_deinit - keep LVGL alive across tests

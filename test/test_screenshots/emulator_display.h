@@ -22,9 +22,15 @@ void emulator_render_frame();
 // Returns true on success
 bool emulator_save_bmp(const char* filename);
 
-// Compare two BMP files pixel-by-pixel
-// Returns the number of differing pixels (0 = identical)
+// Compare two BMP files pixel-by-pixel.
+// Returns the number of differing pixels (0 = identical).
 int emulator_compare_bmp(const char* file_a, const char* file_b);
+
+// Save a 3-panel side-by-side diff BMP: [reference | output | diff-highlighted].
+// Differing pixels are shown as magenta in the diff panel; matching pixels are dimmed.
+// Returns true on success.
+bool emulator_save_diff_bmp(const char* ref_path, const char* out_path,
+                             const char* diff_path);
 
 // Clean up LVGL state between tests
 void emulator_teardown();

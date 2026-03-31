@@ -132,8 +132,17 @@ class ScreenshotTest : public ::testing::Test {
     snprintf(ref_path, sizeof(ref_path), "%s/%s.bmp", REFERENCE_DIR, name);
     if (file_exists(ref_path)) {
       int diff = emulator_compare_bmp(ref_path, out_path);
-      EXPECT_EQ(0, diff) << "Screenshot regression: " << name
-                         << " has " << diff << " differing pixels";
+      if (diff > 0) {
+        char diff_path[256];
+        snprintf(diff_path, sizeof(diff_path), "%s/%s_diff.bmp", OUTPUT_DIR, name);
+        emulator_save_diff_bmp(ref_path, out_path, diff_path);
+        EXPECT_EQ(0, diff)
+          << "Screenshot regression: " << name << " has " << diff << " differing pixels\n"
+          << "  Reference: " << ref_path << "\n"
+          << "  Output:    " << out_path << "\n"
+          << "  Diff:      " << diff_path << "  (magenta = changed pixels)\n"
+          << "  View all:  open " << OUTPUT_DIR;
+      }
     } else {
       // No reference yet - copy output as new reference
       printf("  [INFO] No reference for '%s' - generating initial reference\n", name);
@@ -316,7 +325,17 @@ TEST_F(ScreenshotTest, SplashScreen_Light) {
 
   if (file_exists(ref_path)) {
     int diff = emulator_compare_bmp(ref_path, out_path);
-    EXPECT_EQ(0, diff) << "Screenshot regression: splash_light has " << diff << " differing pixels";
+    if (diff > 0) {
+      char diff_path[256];
+      snprintf(diff_path, sizeof(diff_path), "%s/splash_light_diff.bmp", OUTPUT_DIR);
+      emulator_save_diff_bmp(ref_path, out_path, diff_path);
+      EXPECT_EQ(0, diff)
+        << "Screenshot regression: splash_light has " << diff << " differing pixels\n"
+        << "  Reference: " << ref_path << "\n"
+        << "  Output:    " << out_path << "\n"
+        << "  Diff:      " << diff_path << "  (magenta = changed pixels)\n"
+        << "  View all:  open " << OUTPUT_DIR;
+    }
   } else {
     printf("  [INFO] No reference for 'splash_light' - generating initial reference\n");
     FILE* src = fopen(out_path, "rb");
@@ -371,7 +390,17 @@ TEST_F(ScreenshotTest, SplashScreen_Dark) {
 
   if (file_exists(ref_path)) {
     int diff = emulator_compare_bmp(ref_path, out_path);
-    EXPECT_EQ(0, diff) << "Screenshot regression: splash_dark has " << diff << " differing pixels";
+    if (diff > 0) {
+      char diff_path[256];
+      snprintf(diff_path, sizeof(diff_path), "%s/splash_dark_diff.bmp", OUTPUT_DIR);
+      emulator_save_diff_bmp(ref_path, out_path, diff_path);
+      EXPECT_EQ(0, diff)
+        << "Screenshot regression: splash_dark has " << diff << " differing pixels\n"
+        << "  Reference: " << ref_path << "\n"
+        << "  Output:    " << out_path << "\n"
+        << "  Diff:      " << diff_path << "  (magenta = changed pixels)\n"
+        << "  View all:  open " << OUTPUT_DIR;
+    }
   } else {
     printf("  [INFO] No reference for 'splash_dark' - generating initial reference\n");
     FILE* src = fopen(out_path, "rb");
