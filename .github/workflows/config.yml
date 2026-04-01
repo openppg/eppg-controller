@@ -54,6 +54,25 @@ jobs:
       - name: Run Unit Tests
         run: platformio test -e native-test
 
+  screenshot-tests:
+    name: Screenshot Regression Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ github.token }}
+          show-progress: false
+      - name: Install Dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake g++
+      - name: Build & Run Screenshot Tests
+        run: ./test/test_screenshots/build_and_run.sh
+      - name: Upload Screenshots on Failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: screenshot-regression-output
+          path: test/test_screenshots/output/
+
   pio-build:
     name: PlatformIO Build
     runs-on: ubuntu-latest

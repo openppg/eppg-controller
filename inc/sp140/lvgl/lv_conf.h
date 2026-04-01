@@ -134,7 +134,7 @@
  *  WIDGET USAGE
  *=================*/
 
-#define LV_USE_ANIMIMAGE    0
+#define LV_USE_ANIMIMG      0
 
 #define LV_USE_ARC        1
 

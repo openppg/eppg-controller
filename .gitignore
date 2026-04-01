@@ -3,3 +3,6 @@
 eppg-controller.ino.cpp
 src/sp140/sp140.ino.cpp
 diagnostics-logs/
+build-screenshot/
+test/test_screenshots/output/*.bmp
+test/test_screenshots/output/png/
