@@ -530,7 +530,7 @@ void setupMainScreen(bool darkMode) {
   lv_label_set_text(ble_pairing_icon, LV_SYMBOL_BLUETOOTH);
   lv_obj_set_style_text_font(ble_pairing_icon, &lv_font_montserrat_14, 0);
   lv_obj_set_style_text_color(ble_pairing_icon, LVGL_BLUE, 0);
-  lv_obj_align(ble_pairing_icon, LV_ALIGN_RIGHT_MID, -20, 11);
+  lv_obj_set_pos(ble_pairing_icon, 103, 72);
   lv_obj_add_flag(ble_pairing_icon, LV_OBJ_FLAG_HIDDEN);  // Hide initially
 
   // Create climb rate indicator horizontal divider lines in the far-right section
