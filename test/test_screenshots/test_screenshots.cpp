@@ -606,6 +606,7 @@ static void render_splash(const char* name, bool darkMode) {
       char diff_path[256];
       snprintf(diff_path, sizeof(diff_path), "%s/%s_diff.bmp", OUTPUT_DIR, name);
       emulator_save_diff_bmp(ref_path, out_path, diff_path);
+      EXPECT_EQ(0, diff) << "Screenshot regression: " << name << " has " << diff << " differing pixels";
     }
   } else {
     printf("  [INFO] No reference for '%s' - generating initial reference\n", name);
