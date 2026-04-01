@@ -932,6 +932,7 @@ void buttonHandlerTask(void *parameter) {
             currentHoldTime >= BLE_PAIRING_HOLD_MS && !pairingHoldHandled) {
           enterBLEPairingMode();
           pulseVibeMotor();
+          startBLEPairingIconFlash();
           USBSerial.println("[BLE] Pairing mode activated via button hold");
           pairingHoldHandled = true;
         }

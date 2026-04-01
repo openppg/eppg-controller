@@ -555,6 +555,48 @@ TEST_F(ScreenshotTest, MainScreen_CriticalAlerts_Dark) {
 }
 
 // ============================================================
+// BLE pairing icon tests
+// ============================================================
+
+TEST_F(ScreenshotTest, MainScreen_BLEPairing_Light) {
+  auto dd = make_default_device_data(false);
+  auto esc = make_esc_connected();
+  auto bms = make_bms_connected();
+  auto ubd = make_unified_battery(72.0f, 88.5f, 0.0f);
+
+  emulator_init_display(false);
+  setupMainScreen(false);
+  updateLvglMainScreen(dd, esc, bms, ubd, 0.0f, false, false, 0);
+
+  // Show BLE pairing icon (normally toggled by flash timer)
+  if (ble_pairing_icon != NULL) {
+    lv_obj_remove_flag(ble_pairing_icon, LV_OBJ_FLAG_HIDDEN);
+  }
+
+  emulator_render_frame();
+  save_and_compare("main_ble_pairing_light");
+}
+
+TEST_F(ScreenshotTest, MainScreen_BLEPairing_Dark) {
+  auto dd = make_default_device_data(true);
+  auto esc = make_esc_connected();
+  auto bms = make_bms_connected();
+  auto ubd = make_unified_battery(72.0f, 88.5f, 0.0f);
+
+  emulator_init_display(true);
+  setupMainScreen(true);
+  updateLvglMainScreen(dd, esc, bms, ubd, 0.0f, false, false, 0);
+
+  // Show BLE pairing icon (normally toggled by flash timer)
+  if (ble_pairing_icon != NULL) {
+    lv_obj_remove_flag(ble_pairing_icon, LV_OBJ_FLAG_HIDDEN);
+  }
+
+  emulator_render_frame();
+  save_and_compare("main_ble_pairing_dark");
+}
+
+// ============================================================
 // Splash screen tests (recreated from lvgl_core.cpp displayLvglSplash)
 // Uses VERSION_MAJOR/VERSION_MINOR from version.h so references
 // auto-update on rebuild after a version bump — just run

@@ -53,6 +53,7 @@ extern lv_obj_t* motor_temp_bg;  // Background rectangle for Motor temp section
 extern lv_obj_t* cruise_icon_img;  // Cruise control icon image object
 extern lv_obj_t* charging_icon_img;  // Charging icon image object
 extern lv_obj_t* arm_fail_warning_icon_img;  // Arm fail warning icon
+extern lv_obj_t* ble_pairing_icon;  // BLE pairing mode icon (Bluetooth symbol)
 
 // Climb rate indicator objects
 extern lv_obj_t* climb_rate_divider_lines[13];

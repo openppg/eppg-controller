@@ -334,6 +334,7 @@ void emulator_teardown() {
   cruise_icon_img = NULL;
   charging_icon_img = NULL;
   arm_fail_warning_icon_img = NULL;
+  ble_pairing_icon = NULL;
   for (int i = 0; i < 13; i++) climb_rate_divider_lines[i] = NULL;
   for (int i = 0; i < 12; i++) climb_rate_fill_sections[i] = NULL;
   critical_border = NULL;
@@ -358,15 +359,19 @@ void emulator_teardown() {
   extern lv_timer_t* cruise_flash_timer;
   extern lv_timer_t* arm_fail_flash_timer;
   extern lv_timer_t* critical_border_flash_timer;
+  extern lv_timer_t* ble_pairing_flash_timer;
   extern bool isFlashingCruiseIcon;
   extern bool isFlashingArmFailIcon;
   extern bool isFlashingCriticalBorder;
+  extern bool isFlashingBLEPairingIcon;
   cruise_flash_timer = NULL;
   arm_fail_flash_timer = NULL;
   critical_border_flash_timer = NULL;
+  ble_pairing_flash_timer = NULL;
   isFlashingCruiseIcon = false;
   isFlashingArmFailIcon = false;
   isFlashingCriticalBorder = false;
+  isFlashingBLEPairingIcon = false;
 
   memset(framebuffer, 0, sizeof(framebuffer));
 }

@@ -25,6 +25,9 @@ extern lv_color_t original_arm_fail_icon_color;
 extern lv_timer_t* critical_border_flash_timer;
 extern bool isFlashingCriticalBorder;
 
+extern lv_timer_t* ble_pairing_flash_timer;
+extern bool isFlashingBLEPairingIcon;
+
 // Main update function
 void updateLvglMainScreen(
   const STR_DEVICE_DATA_140_V1& deviceData,
@@ -72,5 +75,9 @@ bool isCriticalBorderFlashing();
  */
 void startCriticalBorderFlashDirect();
 void stopCriticalBorderFlashDirect();
+
+// BLE pairing icon flash functions
+void startBLEPairingIconFlash();
+void stopBLEPairingIconFlash();
 
 #endif  // INC_SP140_LVGL_LVGL_UPDATES_H_

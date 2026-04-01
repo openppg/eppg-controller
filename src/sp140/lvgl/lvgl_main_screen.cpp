@@ -41,6 +41,7 @@ lv_obj_t* motor_temp_bg = NULL;  // Background rectangle for Motor temp section
 lv_obj_t* cruise_icon_img = NULL;  // Cruise control icon image object
 lv_obj_t* charging_icon_img = NULL;  // Charging icon image object
 lv_obj_t* arm_fail_warning_icon_img = NULL;  // Arm fail warning icon
+lv_obj_t* ble_pairing_icon = NULL;  // BLE pairing mode icon
 
 // Climb rate indicator horizontal divider lines (13 lines total)
 lv_obj_t* climb_rate_divider_lines[13] = {NULL};
@@ -523,6 +524,14 @@ void setupMainScreen(bool darkMode) {
 
   lv_obj_move_foreground(arm_fail_warning_icon_img);  // Ensure icon is on top
   lv_obj_add_flag(arm_fail_warning_icon_img, LV_OBJ_FLAG_HIDDEN);  // Hide initially
+
+  // Create BLE pairing icon (Bluetooth symbol, initially hidden)
+  ble_pairing_icon = lv_label_create(main_screen);
+  lv_label_set_text(ble_pairing_icon, LV_SYMBOL_BLUETOOTH);
+  lv_obj_set_style_text_font(ble_pairing_icon, &lv_font_montserrat_14, 0);
+  lv_obj_set_style_text_color(ble_pairing_icon, LVGL_BLUE, 0);
+  lv_obj_set_pos(ble_pairing_icon, 103, 72);
+  lv_obj_add_flag(ble_pairing_icon, LV_OBJ_FLAG_HIDDEN);  // Hide initially
 
   // Create climb rate indicator horizontal divider lines in the far-right section
   const int climb_section_start_y = 37;

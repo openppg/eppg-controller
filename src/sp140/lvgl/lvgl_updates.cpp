@@ -20,10 +20,14 @@ lv_color_t original_arm_fail_icon_color;
 lv_timer_t* critical_border_flash_timer = NULL;
 bool isFlashingCriticalBorder = false;
 
+lv_timer_t* ble_pairing_flash_timer = NULL;
+bool isFlashingBLEPairingIcon = false;
+
 // Timer callback declarations
 static void cruise_flash_timer_cb(lv_timer_t* timer);
 static void arm_fail_flash_timer_cb(lv_timer_t* timer);
 static void critical_border_flash_timer_cb(lv_timer_t* timer);
+static void ble_pairing_flash_timer_cb(lv_timer_t* timer);
 
 // --- Cruise Icon Flashing Implementation ---
 static void cruise_flash_timer_cb(lv_timer_t* timer) {
@@ -259,6 +263,63 @@ void stopCriticalBorderFlashDirect() {
     lv_refr_now(lv_display_get_default());
   }
   isFlashingCriticalBorder = false;
+}
+
+// --- BLE Pairing Icon Flashing Implementation ---
+static void ble_pairing_flash_timer_cb(lv_timer_t* timer) {
+  if (ble_pairing_icon == NULL) {
+    if (ble_pairing_flash_timer != NULL) {
+      lv_timer_del(ble_pairing_flash_timer);
+      ble_pairing_flash_timer = NULL;
+    }
+    isFlashingBLEPairingIcon = false;
+    return;
+  }
+
+  if (lv_obj_has_flag(ble_pairing_icon, LV_OBJ_FLAG_HIDDEN)) {
+    lv_obj_remove_flag(ble_pairing_icon, LV_OBJ_FLAG_HIDDEN);
+  } else {
+    lv_obj_add_flag(ble_pairing_icon, LV_OBJ_FLAG_HIDDEN);
+  }
+}
+
+void startBLEPairingIconFlash() {
+  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+    if (ble_pairing_icon == NULL) {
+      xSemaphoreGive(lvglMutex);
+      return;
+    }
+
+    if (ble_pairing_flash_timer != NULL) {
+      lv_timer_del(ble_pairing_flash_timer);
+      ble_pairing_flash_timer = NULL;
+    }
+
+    isFlashingBLEPairingIcon = true;
+    lv_obj_remove_flag(ble_pairing_icon, LV_OBJ_FLAG_HIDDEN);
+    ble_pairing_flash_timer = lv_timer_create(ble_pairing_flash_timer_cb, 500, NULL);
+    if (ble_pairing_flash_timer == NULL) {
+      isFlashingBLEPairingIcon = false;
+      lv_obj_add_flag(ble_pairing_icon, LV_OBJ_FLAG_HIDDEN);
+      USBSerial.println("Error: Failed to create BLE pairing flash timer!");
+    }
+
+    xSemaphoreGive(lvglMutex);
+  }
+}
+
+void stopBLEPairingIconFlash() {
+  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+    if (ble_pairing_flash_timer != NULL) {
+      lv_timer_del(ble_pairing_flash_timer);
+      ble_pairing_flash_timer = NULL;
+    }
+    if (ble_pairing_icon != NULL) {
+      lv_obj_add_flag(ble_pairing_icon, LV_OBJ_FLAG_HIDDEN);
+    }
+    isFlashingBLEPairingIcon = false;
+    xSemaphoreGive(lvglMutex);
+  }
 }
 
 // Update the climb rate indicator
