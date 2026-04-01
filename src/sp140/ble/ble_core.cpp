@@ -8,6 +8,7 @@
 #include <freertos/timers.h>
 
 #include "sp140/ble.h"
+#include "sp140/lvgl/lvgl_updates.h"
 #include "sp140/ble/ble_ids.h"
 #include "sp140/ble/config_service.h"
 #include "sp140/ble/fastlink_service.h"
@@ -88,6 +89,7 @@ size_t syncWhiteListFromBonds() {
 void onPairingTimeout(TimerHandle_t timer) {
   (void)timer;
   pairingModeActive = false;
+  stopBLEPairingIconFlash();
   USBSerial.println("[BLE] Pairing mode expired, re-enabling whitelist");
   restartBLEAdvertising();
 }
@@ -296,6 +298,7 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
       if (pairingModeActive) {
         pairingModeActive = false;
         stopPairingModeTimer();
+        stopBLEPairingIconFlash();
       }
     }
 
