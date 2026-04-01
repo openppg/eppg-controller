@@ -104,3 +104,33 @@ target_link_libraries(screenshot_tests PRIVATE
 
 # Suppress warnings in UI sources (they may use Arduino idioms)
 set_source_files_properties(${UI_SOURCES} PROPERTIES COMPILE_FLAGS "-w")
+
+# --- Video generator target ---
+add_executable(video_gen
+  ${UI_SOURCES}
+  ${EMULATOR_SOURCES}
+  ${CMAKE_CURRENT_SOURCE_DIR}/video_gen.cpp
+)
+
+target_include_directories(video_gen PRIVATE
+  ${STUBS_DIR}
+  ${PROJECT_ROOT}/inc
+  ${PROJECT_ROOT}/inc/sp140/lvgl
+  ${LVGL_DIR}
+  ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_compile_definitions(video_gen PRIVATE
+  LV_CONF_INCLUDE_SIMPLE
+  LV_LVGL_H_INCLUDE_SIMPLE
+  ARDUINO=1
+  NATIVE_SCREENSHOT_TEST=1
+)
+
+target_link_libraries(video_gen PRIVATE lvgl)
+
+set_source_files_properties(
+  ${UI_SOURCES}
+  ${CMAKE_CURRENT_SOURCE_DIR}/video_gen.cpp
+  PROPERTIES COMPILE_FLAGS "-w"
+)
