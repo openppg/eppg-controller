@@ -48,8 +48,8 @@ std::string initAdvertisingName() {
     return "";
   }
 
-  snprintf(gAdvertisingName, sizeof(gAdvertisingName), "%s %02X%02X%02X",
-           kBase, mac[3], mac[4], mac[5]);
+  snprintf(gAdvertisingName, sizeof(gAdvertisingName), "%s [%02X%02X]",
+           kBase, mac[4], mac[5]);
 
   char uniqueId[18];
   snprintf(uniqueId, sizeof(uniqueId), "%02X:%02X:%02X:%02X:%02X:%02X",
