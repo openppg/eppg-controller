@@ -384,6 +384,12 @@ void setupBLE() {
   initOtaBleService(pServer);
 
   USBSerial.println("BLE device ready");
+
+#ifdef BLE_PAIR_ON_BOOT
+  USBSerial.println("[BLE] BLE_PAIR_ON_BOOT: entering pairing mode automatically");
+  enterBLEPairingMode();
+  startBLEPairingIconFlash();
+#endif
 }
 
 void requestFastConnParams() {
