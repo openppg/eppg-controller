@@ -308,7 +308,21 @@ void startBLEPairingIconFlash() {
   }
 }
 
-void stopBLEPairingIconFlash() {
+void showBLEStatusIcon() {
+  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+    if (ble_pairing_flash_timer != NULL) {
+      lv_timer_del(ble_pairing_flash_timer);
+      ble_pairing_flash_timer = NULL;
+    }
+    if (ble_pairing_icon != NULL) {
+      lv_obj_remove_flag(ble_pairing_icon, LV_OBJ_FLAG_HIDDEN);
+    }
+    isFlashingBLEPairingIcon = false;
+    xSemaphoreGive(lvglMutex);
+  }
+}
+
+void hideBLEStatusIcon() {
   if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
     if (ble_pairing_flash_timer != NULL) {
       lv_timer_del(ble_pairing_flash_timer);
@@ -320,6 +334,10 @@ void stopBLEPairingIconFlash() {
     isFlashingBLEPairingIcon = false;
     xSemaphoreGive(lvglMutex);
   }
+}
+
+void stopBLEPairingIconFlash() {
+  hideBLEStatusIcon();
 }
 
 // Update the climb rate indicator

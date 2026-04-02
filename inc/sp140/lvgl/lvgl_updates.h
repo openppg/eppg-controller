@@ -79,5 +79,7 @@ void stopCriticalBorderFlashDirect();
 // BLE pairing icon flash functions
 void startBLEPairingIconFlash();
 void stopBLEPairingIconFlash();
+void showBLEStatusIcon();
+void hideBLEStatusIcon();
 
 #endif  // INC_SP140_LVGL_LVGL_UPDATES_H_

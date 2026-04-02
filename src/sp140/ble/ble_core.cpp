@@ -22,19 +22,23 @@ namespace {
 constexpr size_t kAdvertisingNameCapacity = 32;
 constexpr TickType_t kConnTuneDelayTicks = pdMS_TO_TICKS(1200);
 constexpr TickType_t kPairingTimeoutTicks = pdMS_TO_TICKS(60000);
+constexpr TickType_t kReconnectWindowTicks = pdMS_TO_TICKS(300000);  // 5 min
 constexpr TickType_t kAdvertisingWatchdogTicks = pdMS_TO_TICKS(1000);
 TimerHandle_t gConnTuneTimer = nullptr;
 TimerHandle_t gPairingTimer = nullptr;
+TimerHandle_t gReconnectWindowTimer = nullptr;
 TimerHandle_t gAdvertisingWatchdogTimer = nullptr;
 char gAdvertisingName[kAdvertisingNameCapacity];
 bool pairingModeActive = false;
 bool pairingModeTransitionActive = false;
+bool reconnectWindowActive = false;
 
 // Store the active connection handle for conn param updates
 uint16_t activeConnHandle = 0;
 
 bool shouldAdvertiseWhilePowered();
 bool startAdvertising(NimBLEServer *server);
+void updateBLEStatusIcon();
 
 // Builds gAdvertisingName from the BT MAC and returns the full MAC address
 // as an uppercase string for use as a unique device ID. Must be called before
@@ -60,6 +64,41 @@ std::string initAdvertisingName() {
 void stopPairingModeTimer() {
   if (gPairingTimer != nullptr) {
     xTimerStop(gPairingTimer, 0);
+  }
+}
+
+void stopReconnectWindowTimer() {
+  if (gReconnectWindowTimer != nullptr) {
+    xTimerStop(gReconnectWindowTimer, 0);
+  }
+}
+
+void onReconnectWindowTimeout(TimerHandle_t timer) {
+  (void)timer;
+  reconnectWindowActive = false;
+  USBSerial.println("[BLE] Reconnect window expired; stopping advertising");
+  restartBLEAdvertising();
+}
+
+void startReconnectWindowTimer() {
+  reconnectWindowActive = true;
+  if (gReconnectWindowTimer == nullptr) {
+    gReconnectWindowTimer = xTimerCreate("bleReconn", kReconnectWindowTicks,
+                                         pdFALSE, nullptr,
+                                         onReconnectWindowTimeout);
+  }
+  if (gReconnectWindowTimer != nullptr) {
+    xTimerStop(gReconnectWindowTimer, 0);
+    xTimerStart(gReconnectWindowTimer, 0);
+  }
+}
+
+void initReconnectWindowFromBoot() {
+  if (NimBLEDevice::getNumBonds() > 0) {
+    startReconnectWindowTimer();
+    USBSerial.println("[BLE] Reconnect window active (5 min)");
+  } else {
+    reconnectWindowActive = false;
   }
 }
 
@@ -89,7 +128,6 @@ size_t syncWhiteListFromBonds() {
 void onPairingTimeout(TimerHandle_t timer) {
   (void)timer;
   pairingModeActive = false;
-  stopBLEPairingIconFlash();
   USBSerial.println("[BLE] Pairing mode expired, re-enabling whitelist");
   restartBLEAdvertising();
 }
@@ -112,11 +150,25 @@ void applyPreferredLinkParams(TimerHandle_t timer) {
 
 bool shouldAdvertiseWhilePowered() {
   return !pairingModeTransitionActive &&
-         (pairingModeActive || NimBLEDevice::getNumBonds() > 0);
+         (pairingModeActive || reconnectWindowActive);
+}
+
+void updateBLEStatusIcon() {
+  if (deviceConnected) {
+    showBLEStatusIcon();
+    return;
+  }
+
+  if (pairingModeActive) {
+    startBLEPairingIconFlash();
+  } else {
+    hideBLEStatusIcon();
+  }
 }
 
 bool startAdvertising(NimBLEServer *server) {
   if (server == nullptr || pairingModeTransitionActive) {
+    updateBLEStatusIcon();
     return false;
   }
 
@@ -133,6 +185,14 @@ bool startAdvertising(NimBLEServer *server) {
   if (!allowOpenAdvertising && bondCount == 0) {
     USBSerial.println(
         "[BLE] No bonds present and pairing mode inactive; advertising stopped");
+    updateBLEStatusIcon();
+    return false;
+  }
+
+  if (!allowOpenAdvertising && bondCount > 0 && !reconnectWindowActive) {
+    USBSerial.println(
+        "[BLE] Reconnect window inactive; whitelist advertising not started");
+    updateBLEStatusIcon();
     return false;
   }
 
@@ -161,28 +221,16 @@ bool startAdvertising(NimBLEServer *server) {
   // Flutter app's `startScan()` filters for CONFIG_SERVICE_UUID.
   adv.addServiceUUID(NimBLEUUID(CONFIG_SERVICE_UUID));
 
-  // Scan response: manufacturer data with pairing-mode flag so the Flutter app
-  // can hide non-pairable controllers from the connect list.
-  // Format: Espressif company ID (0x02E5 LE) + 1 flag byte.
-  NimBLEExtAdvertisement scanRsp(BLE_HCI_LE_PHY_1M, BLE_HCI_LE_PHY_1M);
-  scanRsp.setLegacyAdvertising(true);
-  scanRsp.setScannable(true);
-  const uint8_t mfrData[] = {0xE5, 0x02,
-                             static_cast<uint8_t>(allowOpenAdvertising ? 0x01 : 0x00)};
-  scanRsp.setManufacturerData(mfrData, sizeof(mfrData));
-
   advertising->removeAll();
   const bool configured = advertising->setInstanceData(kExtAdvInstance, adv);
-  const bool scanRspConfigured =
-      configured ? advertising->setScanResponseData(kExtAdvInstance, scanRsp)
-                 : false;
   const bool started =
-      configured && scanRspConfigured && advertising->start(kExtAdvInstance);
+      configured && advertising->start(kExtAdvInstance);
   USBSerial.printf(
-      "[BLE] Ext adv cfg=%d scanRsp=%d start=%d mode=%s bonds=%u wl=%u\n",
-      configured, scanRspConfigured, started,
+      "[BLE] Ext adv cfg=%d start=%d mode=%s bonds=%u wl=%u\n",
+      configured, started,
       allowOpenAdvertising ? "OPEN" : "BONDED",
       static_cast<unsigned>(bondCount), static_cast<unsigned>(whiteListCount));
+  updateBLEStatusIcon();
   return started;
 #else
   // Configure payload once — NimBLE accumulates addServiceUUID calls
@@ -206,18 +254,13 @@ bool startAdvertising(NimBLEServer *server) {
     advertising->setScanFilter(false, true);
   }
 
-  // Manufacturer data with pairing-mode flag (updated every restart).
-  // Espressif company ID (0x02E5 LE) + 1 flag byte.
-  const std::string mfrPayload = {'\xE5', '\x02',
-                                  static_cast<char>(allowOpenAdvertising ? 0x01 : 0x00)};
-  advertising->setManufacturerData(mfrPayload);
-
   const bool started = advertising->start();
   USBSerial.printf("[BLE] Legacy adv start=%s mode=%s bonds=%u whitelist=%u\n",
                    started ? "OK" : "FAIL",
                    allowOpenAdvertising ? "OPEN" : "BONDED",
                    static_cast<unsigned>(bondCount),
                    static_cast<unsigned>(whiteListCount));
+  updateBLEStatusIcon();
   return started;
 #endif
 }
@@ -249,6 +292,9 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
     deviceConnected = true;
     connectedHandle = connInfo.getConnHandle();
 
+    stopReconnectWindowTimer();
+    reconnectWindowActive = false;
+
     if (gConnTuneTimer != nullptr) {
       xTimerStop(gConnTuneTimer, 0);
       xTimerStart(gConnTuneTimer, 0);
@@ -258,6 +304,7 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
         connectedHandle, connInfo.getAddress().toString().c_str(),
         connInfo.isBonded() ? 1 : 0, connInfo.isEncrypted() ? 1 : 0,
         pairingModeActive ? 1 : 0);
+    updateBLEStatusIcon();
 
     // During pairing mode, proactively request fresh security negotiation.
     // This helps recover from stale iOS bonds where iOS tries to restore
@@ -287,8 +334,15 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
     // Suppress the immediate advertising restart during a pairing transition —
     // enterBLEPairingMode() issues its own startAdvertising after clearing bonds.
     if (!pairingModeTransitionActive) {
+      if (NimBLEDevice::getNumBonds() > 0) {
+        startReconnectWindowTimer();
+      } else {
+        reconnectWindowActive = false;
+        stopReconnectWindowTimer();
+      }
       startAdvertising(server);
     }
+    updateBLEStatusIcon();
   }
 
   void onAuthenticationComplete(NimBLEConnInfo &connInfo) override {
@@ -298,7 +352,6 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
       if (pairingModeActive) {
         pairingModeActive = false;
         stopPairingModeTimer();
-        stopBLEPairingIconFlash();
       }
     }
 
@@ -327,6 +380,7 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
         }
       }
     }
+    updateBLEStatusIcon();
   }
 
   void onIdentity(NimBLEConnInfo &connInfo) override {
@@ -388,8 +442,14 @@ void setupBLE() {
 #ifdef BLE_PAIR_ON_BOOT
   USBSerial.println("[BLE] BLE_PAIR_ON_BOOT: entering pairing mode automatically");
   enterBLEPairingMode();
-  startBLEPairingIconFlash();
 #endif
+  // After optional boot pairing: start reconnect window only if bonds remain.
+  initReconnectWindowFromBoot();
+  if (shouldAdvertiseWhilePowered()) {
+    restartBLEAdvertising();
+  } else {
+    updateBLEStatusIcon();
+  }
 }
 
 void requestFastConnParams() {
@@ -410,6 +470,7 @@ void requestNormalConnParams() {
 
 void restartBLEAdvertising() {
   if (pServer == nullptr) {
+    updateBLEStatusIcon();
     return;
   }
 
@@ -419,6 +480,8 @@ void restartBLEAdvertising() {
 void enterBLEPairingMode() {
   // Block advertising restarts (e.g. from onDisconnect) during this transition.
   pairingModeTransitionActive = true;
+  stopReconnectWindowTimer();
+  reconnectWindowActive = false;
 
   // Single-bond model: disconnect the current peer so we can safely clear bonds.
   if (deviceConnected && pServer != nullptr &&
