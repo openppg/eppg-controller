@@ -8,7 +8,6 @@
 #include <freertos/timers.h>
 
 #include "sp140/ble.h"
-#include "sp140/lvgl/lvgl_updates.h"
 #include "sp140/ble/ble_ids.h"
 #include "sp140/ble/config_service.h"
 #include "sp140/ble/fastlink_service.h"
@@ -38,7 +37,6 @@ uint16_t activeConnHandle = 0;
 
 bool shouldAdvertiseWhilePowered();
 bool startAdvertising(NimBLEServer *server);
-void updateBLEStatusIcon();
 
 // Builds gAdvertisingName from the BT MAC and returns the full MAC address
 // as an uppercase string for use as a unique device ID. Must be called before
@@ -153,22 +151,8 @@ bool shouldAdvertiseWhilePowered() {
          (pairingModeActive || reconnectWindowActive);
 }
 
-void updateBLEStatusIcon() {
-  if (deviceConnected) {
-    showBLEStatusIcon();
-    return;
-  }
-
-  if (pairingModeActive) {
-    startBLEPairingIconFlash();
-  } else {
-    hideBLEStatusIcon();
-  }
-}
-
 bool startAdvertising(NimBLEServer *server) {
   if (server == nullptr || pairingModeTransitionActive) {
-    updateBLEStatusIcon();
     return false;
   }
 
@@ -185,14 +169,12 @@ bool startAdvertising(NimBLEServer *server) {
   if (!allowOpenAdvertising && bondCount == 0) {
     USBSerial.println(
         "[BLE] No bonds present and pairing mode inactive; advertising stopped");
-    updateBLEStatusIcon();
     return false;
   }
 
   if (!allowOpenAdvertising && bondCount > 0 && !reconnectWindowActive) {
     USBSerial.println(
         "[BLE] Reconnect window inactive; whitelist advertising not started");
-    updateBLEStatusIcon();
     return false;
   }
 
@@ -230,7 +212,6 @@ bool startAdvertising(NimBLEServer *server) {
       configured, started,
       allowOpenAdvertising ? "OPEN" : "BONDED",
       static_cast<unsigned>(bondCount), static_cast<unsigned>(whiteListCount));
-  updateBLEStatusIcon();
   return started;
 #else
   // Configure payload once — NimBLE accumulates addServiceUUID calls
@@ -260,7 +241,6 @@ bool startAdvertising(NimBLEServer *server) {
                    allowOpenAdvertising ? "OPEN" : "BONDED",
                    static_cast<unsigned>(bondCount),
                    static_cast<unsigned>(whiteListCount));
-  updateBLEStatusIcon();
   return started;
 #endif
 }
@@ -304,7 +284,6 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
         connectedHandle, connInfo.getAddress().toString().c_str(),
         connInfo.isBonded() ? 1 : 0, connInfo.isEncrypted() ? 1 : 0,
         pairingModeActive ? 1 : 0);
-    updateBLEStatusIcon();
 
     // During pairing mode, proactively request fresh security negotiation.
     // This helps recover from stale iOS bonds where iOS tries to restore
@@ -342,7 +321,6 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
       }
       startAdvertising(server);
     }
-    updateBLEStatusIcon();
   }
 
   void onAuthenticationComplete(NimBLEConnInfo &connInfo) override {
@@ -380,7 +358,6 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
         }
       }
     }
-    updateBLEStatusIcon();
   }
 
   void onIdentity(NimBLEConnInfo &connInfo) override {
@@ -447,8 +424,6 @@ void setupBLE() {
   initReconnectWindowFromBoot();
   if (shouldAdvertiseWhilePowered()) {
     restartBLEAdvertising();
-  } else {
-    updateBLEStatusIcon();
   }
 }
 
@@ -470,7 +445,6 @@ void requestNormalConnParams() {
 
 void restartBLEAdvertising() {
   if (pServer == nullptr) {
-    updateBLEStatusIcon();
     return;
   }
 
@@ -531,3 +505,5 @@ void enterBLEPairingMode() {
   USBSerial.println("[BLE] Pairing mode active for 60s");
   restartBLEAdvertising();
 }
+
+bool isBLEPairingModeActive() { return pairingModeActive; }

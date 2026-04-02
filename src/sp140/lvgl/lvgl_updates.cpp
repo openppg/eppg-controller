@@ -4,6 +4,8 @@
 #include "../../../inc/sp140/globals.h"
 #include "../../../inc/sp140/vibration_pwm.h"
 #include "../../../inc/sp140/shared-config.h"
+#include "../../../inc/sp140/ble.h"
+#include "../../../inc/sp140/ble/ble_core.h"
 #include <math.h>
 
 // Flash timer globals - definitions
@@ -849,6 +851,36 @@ void updateLvglMainScreen(
     lv_obj_add_flag(arm_fail_warning_icon_img, LV_OBJ_FLAG_HIDDEN);
     // Ensure color is reset if flashing ended abruptly elsewhere (though cb should handle it)
     lv_obj_set_style_image_recolor(arm_fail_warning_icon_img, original_arm_fail_icon_color, LV_PART_MAIN);
+  }
+
+  // Keep the BLE icon synced from the UI task so missed callback updates recover.
+  if (ble_pairing_icon != NULL) {
+    if (deviceConnected) {
+      if (ble_pairing_flash_timer != NULL) {
+        lv_timer_del(ble_pairing_flash_timer);
+        ble_pairing_flash_timer = NULL;
+      }
+      lv_obj_remove_flag(ble_pairing_icon, LV_OBJ_FLAG_HIDDEN);
+      isFlashingBLEPairingIcon = false;
+    } else if (isBLEPairingModeActive()) {
+      if (!isFlashingBLEPairingIcon) {
+        isFlashingBLEPairingIcon = true;
+        lv_obj_remove_flag(ble_pairing_icon, LV_OBJ_FLAG_HIDDEN);
+        ble_pairing_flash_timer = lv_timer_create(ble_pairing_flash_timer_cb, 500, NULL);
+        if (ble_pairing_flash_timer == NULL) {
+          isFlashingBLEPairingIcon = false;
+          lv_obj_add_flag(ble_pairing_icon, LV_OBJ_FLAG_HIDDEN);
+          USBSerial.println("Error: Failed to create BLE pairing flash timer!");
+        }
+      }
+    } else {
+      if (ble_pairing_flash_timer != NULL) {
+        lv_timer_del(ble_pairing_flash_timer);
+        ble_pairing_flash_timer = NULL;
+      }
+      lv_obj_add_flag(ble_pairing_icon, LV_OBJ_FLAG_HIDDEN);
+      isFlashingBLEPairingIcon = false;
+    }
   }
 
   // Update climb rate indicator
