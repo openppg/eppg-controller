@@ -769,8 +769,10 @@ void setup() {
   setLEDColor(LED_GREEN);
 
   // Show splash screen (blocking)
+  lv_obj_t* splash_screen = NULL;
   if (xSemaphoreTake(lvglMutex, portMAX_DELAY) == pdTRUE) {
     displayLvglSplash(deviceData, 2000);
+    splash_screen = lv_screen_active();
     // Keep mutex held through main screen setup
   } else {
     USBSerial.println("Failed to acquire LVGL mutex for splash");
@@ -782,9 +784,14 @@ void setup() {
     setupMainScreen(deviceData.theme == 1);
   }
 
-  // Load main screen
+  // Force the first main-screen repaint before other tasks can contend for SPI.
   if (main_screen != NULL) {
-    lv_screen_load(main_screen);
+    lv_obj_invalidate(main_screen);
+    lv_refr_now(main_display);
+    if (splash_screen != NULL && splash_screen != main_screen) {
+      lv_obj_delete(splash_screen);
+      splash_screen = NULL;
+    }
     USBSerial.println("Main screen loaded");
   } else {
     USBSerial.println("Error: Main screen object is NULL after setup attempt");
@@ -932,7 +939,6 @@ void buttonHandlerTask(void *parameter) {
             currentHoldTime >= BLE_PAIRING_HOLD_MS && !pairingHoldHandled) {
           enterBLEPairingMode();
           pulseVibeMotor();
-          startBLEPairingIconFlash();
           USBSerial.println("[BLE] Pairing mode activated via button hold");
           pairingHoldHandled = true;
         }

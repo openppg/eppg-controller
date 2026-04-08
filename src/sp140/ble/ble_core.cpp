@@ -8,7 +8,6 @@
 #include <freertos/timers.h>
 
 #include "sp140/ble.h"
-#include "sp140/lvgl/lvgl_updates.h"
 #include "sp140/ble/ble_ids.h"
 #include "sp140/ble/config_service.h"
 #include "sp140/ble/fastlink_service.h"
@@ -63,6 +62,7 @@ void stopPairingModeTimer() {
   }
 }
 
+
 size_t syncWhiteListFromBonds() {
   // Reconcile the whitelist to the current bond store. Advertising must be
   // stopped before calling this — the BLE controller rejects whitelist changes
@@ -89,7 +89,6 @@ size_t syncWhiteListFromBonds() {
 void onPairingTimeout(TimerHandle_t timer) {
   (void)timer;
   pairingModeActive = false;
-  stopBLEPairingIconFlash();
   USBSerial.println("[BLE] Pairing mode expired, re-enabling whitelist");
   restartBLEAdvertising();
 }
@@ -112,7 +111,8 @@ void applyPreferredLinkParams(TimerHandle_t timer) {
 
 bool shouldAdvertiseWhilePowered() {
   return !pairingModeTransitionActive &&
-         (pairingModeActive || NimBLEDevice::getNumBonds() > 0);
+         (pairingModeActive ||
+          NimBLEDevice::getNumBonds() > 0);
 }
 
 bool startAdvertising(NimBLEServer *server) {
@@ -135,6 +135,10 @@ bool startAdvertising(NimBLEServer *server) {
         "[BLE] No bonds present and pairing mode inactive; advertising stopped");
     return false;
   }
+
+  // Bonded devices can always reconnect via whitelist advertising —
+  // no reconnect window gating.  Power draw is negligible for
+  // whitelist-only advertising.
 
 #if CONFIG_BT_NIMBLE_EXT_ADV
   // Legacy connectable undirected advertising via the extended API.
@@ -161,26 +165,13 @@ bool startAdvertising(NimBLEServer *server) {
   // Flutter app's `startScan()` filters for CONFIG_SERVICE_UUID.
   adv.addServiceUUID(NimBLEUUID(CONFIG_SERVICE_UUID));
 
-  // Scan response: manufacturer data with pairing-mode flag so the Flutter app
-  // can hide non-pairable controllers from the connect list.
-  // Format: Espressif company ID (0x02E5 LE) + 1 flag byte.
-  NimBLEExtAdvertisement scanRsp(BLE_HCI_LE_PHY_1M, BLE_HCI_LE_PHY_1M);
-  scanRsp.setLegacyAdvertising(true);
-  scanRsp.setScannable(true);
-  const uint8_t mfrData[] = {0xE5, 0x02,
-                             static_cast<uint8_t>(allowOpenAdvertising ? 0x01 : 0x00)};
-  scanRsp.setManufacturerData(mfrData, sizeof(mfrData));
-
   advertising->removeAll();
   const bool configured = advertising->setInstanceData(kExtAdvInstance, adv);
-  const bool scanRspConfigured =
-      configured ? advertising->setScanResponseData(kExtAdvInstance, scanRsp)
-                 : false;
   const bool started =
-      configured && scanRspConfigured && advertising->start(kExtAdvInstance);
+      configured && advertising->start(kExtAdvInstance);
   USBSerial.printf(
-      "[BLE] Ext adv cfg=%d scanRsp=%d start=%d mode=%s bonds=%u wl=%u\n",
-      configured, scanRspConfigured, started,
+      "[BLE] Ext adv cfg=%d start=%d mode=%s bonds=%u wl=%u\n",
+      configured, started,
       allowOpenAdvertising ? "OPEN" : "BONDED",
       static_cast<unsigned>(bondCount), static_cast<unsigned>(whiteListCount));
   return started;
@@ -205,12 +196,6 @@ bool startAdvertising(NimBLEServer *server) {
   } else {
     advertising->setScanFilter(false, true);
   }
-
-  // Manufacturer data with pairing-mode flag (updated every restart).
-  // Espressif company ID (0x02E5 LE) + 1 flag byte.
-  const std::string mfrPayload = {'\xE5', '\x02',
-                                  static_cast<char>(allowOpenAdvertising ? 0x01 : 0x00)};
-  advertising->setManufacturerData(mfrPayload);
 
   const bool started = advertising->start();
   USBSerial.printf("[BLE] Legacy adv start=%s mode=%s bonds=%u whitelist=%u\n",
@@ -298,7 +283,6 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
       if (pairingModeActive) {
         pairingModeActive = false;
         stopPairingModeTimer();
-        stopBLEPairingIconFlash();
       }
     }
 
@@ -388,8 +372,10 @@ void setupBLE() {
 #ifdef BLE_PAIR_ON_BOOT
   USBSerial.println("[BLE] BLE_PAIR_ON_BOOT: entering pairing mode automatically");
   enterBLEPairingMode();
-  startBLEPairingIconFlash();
 #endif
+  if (shouldAdvertiseWhilePowered()) {
+    restartBLEAdvertising();
+  }
 }
 
 void requestFastConnParams() {
@@ -468,3 +454,5 @@ void enterBLEPairingMode() {
   USBSerial.println("[BLE] Pairing mode active for 60s");
   restartBLEAdvertising();
 }
+
+bool isBLEPairingModeActive() { return pairingModeActive; }
