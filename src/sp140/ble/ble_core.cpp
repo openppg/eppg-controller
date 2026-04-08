@@ -21,16 +21,13 @@ namespace {
 constexpr size_t kAdvertisingNameCapacity = 32;
 constexpr TickType_t kConnTuneDelayTicks = pdMS_TO_TICKS(1200);
 constexpr TickType_t kPairingTimeoutTicks = pdMS_TO_TICKS(60000);
-constexpr TickType_t kReconnectWindowTicks = pdMS_TO_TICKS(300000);  // 5 min
 constexpr TickType_t kAdvertisingWatchdogTicks = pdMS_TO_TICKS(1000);
 TimerHandle_t gConnTuneTimer = nullptr;
 TimerHandle_t gPairingTimer = nullptr;
-TimerHandle_t gReconnectWindowTimer = nullptr;
 TimerHandle_t gAdvertisingWatchdogTimer = nullptr;
 char gAdvertisingName[kAdvertisingNameCapacity];
 bool pairingModeActive = false;
 bool pairingModeTransitionActive = false;
-bool reconnectWindowActive = false;
 
 // Store the active connection handle for conn param updates
 uint16_t activeConnHandle = 0;
@@ -65,40 +62,6 @@ void stopPairingModeTimer() {
   }
 }
 
-void stopReconnectWindowTimer() {
-  if (gReconnectWindowTimer != nullptr) {
-    xTimerStop(gReconnectWindowTimer, 0);
-  }
-}
-
-void onReconnectWindowTimeout(TimerHandle_t timer) {
-  (void)timer;
-  reconnectWindowActive = false;
-  USBSerial.println("[BLE] Reconnect window expired; stopping advertising");
-  restartBLEAdvertising();
-}
-
-void startReconnectWindowTimer() {
-  reconnectWindowActive = true;
-  if (gReconnectWindowTimer == nullptr) {
-    gReconnectWindowTimer = xTimerCreate("bleReconn", kReconnectWindowTicks,
-                                         pdFALSE, nullptr,
-                                         onReconnectWindowTimeout);
-  }
-  if (gReconnectWindowTimer != nullptr) {
-    xTimerStop(gReconnectWindowTimer, 0);
-    xTimerStart(gReconnectWindowTimer, 0);
-  }
-}
-
-void initReconnectWindowFromBoot() {
-  if (NimBLEDevice::getNumBonds() > 0) {
-    startReconnectWindowTimer();
-    USBSerial.println("[BLE] Reconnect window active (5 min)");
-  } else {
-    reconnectWindowActive = false;
-  }
-}
 
 size_t syncWhiteListFromBonds() {
   // Reconcile the whitelist to the current bond store. Advertising must be
@@ -148,7 +111,8 @@ void applyPreferredLinkParams(TimerHandle_t timer) {
 
 bool shouldAdvertiseWhilePowered() {
   return !pairingModeTransitionActive &&
-         (pairingModeActive || reconnectWindowActive);
+         (pairingModeActive ||
+          NimBLEDevice::getNumBonds() > 0);
 }
 
 bool startAdvertising(NimBLEServer *server) {
@@ -172,11 +136,9 @@ bool startAdvertising(NimBLEServer *server) {
     return false;
   }
 
-  if (!allowOpenAdvertising && bondCount > 0 && !reconnectWindowActive) {
-    USBSerial.println(
-        "[BLE] Reconnect window inactive; whitelist advertising not started");
-    return false;
-  }
+  // Bonded devices can always reconnect via whitelist advertising —
+  // no reconnect window gating.  Power draw is negligible for
+  // whitelist-only advertising.
 
 #if CONFIG_BT_NIMBLE_EXT_ADV
   // Legacy connectable undirected advertising via the extended API.
@@ -272,9 +234,6 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
     deviceConnected = true;
     connectedHandle = connInfo.getConnHandle();
 
-    stopReconnectWindowTimer();
-    reconnectWindowActive = false;
-
     if (gConnTuneTimer != nullptr) {
       xTimerStop(gConnTuneTimer, 0);
       xTimerStart(gConnTuneTimer, 0);
@@ -313,12 +272,6 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
     // Suppress the immediate advertising restart during a pairing transition —
     // enterBLEPairingMode() issues its own startAdvertising after clearing bonds.
     if (!pairingModeTransitionActive) {
-      if (NimBLEDevice::getNumBonds() > 0) {
-        startReconnectWindowTimer();
-      } else {
-        reconnectWindowActive = false;
-        stopReconnectWindowTimer();
-      }
       startAdvertising(server);
     }
   }
@@ -420,8 +373,6 @@ void setupBLE() {
   USBSerial.println("[BLE] BLE_PAIR_ON_BOOT: entering pairing mode automatically");
   enterBLEPairingMode();
 #endif
-  // After optional boot pairing: start reconnect window only if bonds remain.
-  initReconnectWindowFromBoot();
   if (shouldAdvertiseWhilePowered()) {
     restartBLEAdvertising();
   }
@@ -454,8 +405,6 @@ void restartBLEAdvertising() {
 void enterBLEPairingMode() {
   // Block advertising restarts (e.g. from onDisconnect) during this transition.
   pairingModeTransitionActive = true;
-  stopReconnectWindowTimer();
-  reconnectWindowActive = false;
 
   // Single-bond model: disconnect the current peer so we can safely clear bonds.
   if (deviceConnected && pServer != nullptr &&
