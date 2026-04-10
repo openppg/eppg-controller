@@ -15,6 +15,13 @@ inline bool isMotorTempValidC(float tempC) {
 #include <SineEsc.h>
 #include <CanardAdapter.h>
 
+enum class EscStatusLightMode : uint8_t {
+  OFF = 0,
+  READY,
+  FLIGHT,
+  CAUTION,
+};
+
 void initESC();
 void setESCThrottle(int throttlePWM);
 void readESCTelemetry();
@@ -57,6 +64,13 @@ bool hasMotorVDet2Error(uint16_t errorCode);
 bool hasMotorIDet2Error(uint16_t errorCode);
 bool hasSwHwIncompatError(uint16_t errorCode);
 bool hasBootloaderBadError(uint16_t errorCode);
+
+// ESC LED control
+void requestEscStatusLightMode(EscStatusLightMode mode);
+
+// ESC motor beep
+void queueEscMotorBeepArm();
+void queueEscMotorBeepDisarm();
 
 // for debugging
 void dumpThrottleResponse(const sine_esc_SetThrottleSettings2Response *res);
