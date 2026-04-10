@@ -40,16 +40,19 @@ static bool sEscFirstUpdate = true;
 
 namespace {
 
-constexpr uint8_t kEscToneVolumePct = 50;
+constexpr uint8_t kEscToneLow = 3;
+constexpr uint8_t kEscToneHigh = 6;
+constexpr uint8_t kEscToneVolumePct = 80;
 constexpr uint8_t kEscToneDuration10ms = 10;
 
+// Caller must pass ARM or DISARM (never NONE).
 void buildEscMotorTone(uint8_t* out, PendingEscTone tone) {
   if (tone == PendingEscTone::ARM) {
-    SineEsc::makeBeepEntry(&out[0], 3, kEscToneDuration10ms, kEscToneVolumePct);
-    SineEsc::makeBeepEntry(&out[3], 6, kEscToneDuration10ms, kEscToneVolumePct);
+    SineEsc::makeBeepEntry(&out[0], kEscToneLow, kEscToneDuration10ms, kEscToneVolumePct);
+    SineEsc::makeBeepEntry(&out[3], kEscToneHigh, kEscToneDuration10ms, kEscToneVolumePct);
   } else {
-    SineEsc::makeBeepEntry(&out[0], 6, kEscToneDuration10ms, kEscToneVolumePct);
-    SineEsc::makeBeepEntry(&out[3], 3, kEscToneDuration10ms, kEscToneVolumePct);
+    SineEsc::makeBeepEntry(&out[0], kEscToneHigh, kEscToneDuration10ms, kEscToneVolumePct);
+    SineEsc::makeBeepEntry(&out[3], kEscToneLow, kEscToneDuration10ms, kEscToneVolumePct);
   }
 }
 
@@ -87,7 +90,7 @@ void sendEscStatusLight(EscStatusLightMode mode) {
   }
   case EscStatusLightMode::CAUTION: {
     const uint16_t pattern[] = {
-      SineEsc::makeLedControlEntry(SineEsc::LED_YELLOW_BREATH, 14),
+      SineEsc::makeLedControlEntry(SineEsc::LED_YELLOW_BREATH, 20),
     };
     esc.setLedControl(pattern, 1);
     break;
