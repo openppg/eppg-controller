@@ -19,11 +19,128 @@ static unsigned long lastSuccessfulCommTimeMs = 0;  // Store millis() time of la
 // consumed safely inside readESCTelemetry() on the throttle task.
 static volatile bool s_hwInfoRequested = false;
 
+enum class PendingEscTone : uint8_t {
+  NONE = 0,
+  ARM,
+  DISARM,
+};
+
+static volatile EscStatusLightMode sRequestedStatusLightMode =
+    EscStatusLightMode::OFF;
+static EscStatusLightMode sLastSentStatusLightMode = EscStatusLightMode::OFF;
+static unsigned long sLastStatusLightSendMs = 0;
+static bool sHaveSentStatusLight = false;
+static volatile PendingEscTone sPendingEscTone = PendingEscTone::NONE;
+
 // ESC runtime accumulation — unwraps the uint16 time_10ms counter (~10.9 min period)
 // Unsigned subtraction naturally handles wrap: (uint16_t)(current - last) is correct even across rollover.
 static uint16_t sEscLastTime10ms = 0;
 static uint32_t sEscAccumulatedRuntimeMs = 0;
 static bool sEscFirstUpdate = true;
+
+namespace {
+
+constexpr uint8_t kEscToneVolumePct = 50;
+constexpr uint8_t kEscToneDuration10ms = 10;
+
+void buildEscMotorTone(uint8_t* out, PendingEscTone tone) {
+  if (tone == PendingEscTone::ARM) {
+    SineEsc::makeBeepEntry(&out[0], 3, kEscToneDuration10ms, kEscToneVolumePct);
+    SineEsc::makeBeepEntry(&out[3], 6, kEscToneDuration10ms, kEscToneVolumePct);
+  } else {
+    SineEsc::makeBeepEntry(&out[0], 6, kEscToneDuration10ms, kEscToneVolumePct);
+    SineEsc::makeBeepEntry(&out[3], 3, kEscToneDuration10ms, kEscToneVolumePct);
+  }
+}
+
+unsigned long escStatusLightRefreshMs(EscStatusLightMode mode) {
+  switch (mode) {
+  case EscStatusLightMode::FLIGHT:
+    return 1700;
+  case EscStatusLightMode::READY:
+  case EscStatusLightMode::CAUTION:
+    return 1000;
+  case EscStatusLightMode::OFF:
+  default:
+    return 0;
+  }
+}
+
+void sendEscStatusLight(EscStatusLightMode mode) {
+  switch (mode) {
+  case EscStatusLightMode::READY: {
+    const uint16_t pattern[] = {
+      SineEsc::makeLedControlEntry(SineEsc::LED_GREEN_BREATH, 20),
+    };
+    esc.setLedControl(pattern, 1);
+    break;
+  }
+  case EscStatusLightMode::FLIGHT: {
+    const uint16_t pattern[] = {
+      SineEsc::makeLedControlEntry(SineEsc::LED_GREEN, 1),
+      SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 2),
+      SineEsc::makeLedControlEntry(SineEsc::LED_GREEN, 1),
+      SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 30),
+    };
+    esc.setLedControl(pattern, 4);
+    break;
+  }
+  case EscStatusLightMode::CAUTION: {
+    const uint16_t pattern[] = {
+      SineEsc::makeLedControlEntry(SineEsc::LED_YELLOW_BREATH, 14),
+    };
+    esc.setLedControl(pattern, 1);
+    break;
+  }
+  case EscStatusLightMode::OFF:
+  default: {
+    const uint16_t pattern[] = {
+      SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 20),
+    };
+    esc.setLedControl(pattern, 1);
+    break;
+  }
+  }
+}
+
+void syncEscOutputs() {
+  const bool escConnected =
+      escTwaiInitialized &&
+      escTelemetryData.escState == TelemetryState::CONNECTED;
+
+  if (!escConnected) {
+    sPendingEscTone = PendingEscTone::NONE;
+    sHaveSentStatusLight = false;
+    sLastSentStatusLightMode = EscStatusLightMode::OFF;
+    sLastStatusLightSendMs = 0;
+    return;
+  }
+
+  const PendingEscTone pendingTone = sPendingEscTone;
+  if (pendingTone != PendingEscTone::NONE) {
+    uint8_t beepData[6];
+    buildEscMotorTone(beepData, pendingTone);
+    esc.setMotorSound(beepData, 2);
+    sPendingEscTone = PendingEscTone::NONE;
+  }
+
+  const EscStatusLightMode requestedMode = sRequestedStatusLightMode;
+  const unsigned long now = millis();
+  const bool needsRefresh =
+      sHaveSentStatusLight &&
+      escStatusLightRefreshMs(requestedMode) > 0 &&
+      (now - sLastStatusLightSendMs) >= escStatusLightRefreshMs(requestedMode);
+
+  if (!sHaveSentStatusLight || requestedMode != sLastSentStatusLightMode ||
+      needsRefresh) {
+    sendEscStatusLight(requestedMode);
+    sLastSentStatusLightMode = requestedMode;
+    sLastStatusLightSendMs = now;
+    sHaveSentStatusLight = true;
+  }
+}
+
+}  // namespace
 
 
 STR_ESC_TELEMETRY_140 escTelemetryData = {
@@ -182,6 +299,7 @@ void readESCTelemetry() {
     memcpy(escTelemetryData.sn_code, hw->sn_code, sizeof(escTelemetryData.sn_code));
   }
 
+  syncEscOutputs();
   adapter.processTxRxOnce();  // Process CAN messages
 }
 
@@ -268,81 +386,21 @@ void setESCLedControl(const uint16_t *ledData, uint8_t ledNum) {
   esc.setLedControl(ledData, ledNum);
 }
 
-/**
- * Send a motor beep sequence to the ESC
- * @param beepData Raw byte array of 3-byte entries (tone, duration_10ms, volume)
- * @param beepDataLen Length of beepData in bytes (entries * 3)
- * @param beepNum Number of beep entries
- */
-void setESCMotorSound(const uint8_t *beepData, uint8_t beepDataLen, uint8_t beepNum) {
+void requestEscStatusLightMode(EscStatusLightMode mode) {
+  sRequestedStatusLightMode = mode;
+}
+
+void setESCMotorSound(const uint8_t *beepData, uint8_t beepNum) {
   if (!escTwaiInitialized) return;
-  esc.setMotorSound(beepData, beepDataLen, beepNum);
+  esc.setMotorSound(beepData, beepNum);
 }
 
-// Helper to pack a beep entry into 3 bytes in a buffer
-// tone: 0-9, duration: in 10ms units, volume: 0-100
-static void packBeepEntry(uint8_t *buf, uint8_t tone, uint8_t duration10ms, uint8_t volume) {
-  buf[0] = tone;
-  buf[1] = duration10ms;
-  buf[2] = volume;
+void queueEscMotorBeepArm() {
+  sPendingEscTone = PendingEscTone::ARM;
 }
 
-/**
- * Play ascending arm beep on ESC motor (matches hand controller: C7 -> E7)
- * Uses two tones at 100ms each, ascending pitch
- */
-void escMotorBeepArm() {
-  uint8_t beepData[6];
-  packBeepEntry(&beepData[0], 3, 10, 50);  // lower tone, 100ms, 50% vol
-  packBeepEntry(&beepData[3], 6, 10, 50);  // higher tone, 100ms, 50% vol
-  setESCMotorSound(beepData, 6, 2);
-  USBSerial.println("ESC: arm beep sent");
-}
-
-/**
- * Play descending disarm beep on ESC motor (matches hand controller: E7 -> C7)
- * Uses two tones at 100ms each, descending pitch
- */
-void escMotorBeepDisarm() {
-  uint8_t beepData[6];
-  packBeepEntry(&beepData[0], 6, 10, 50);  // higher tone, 100ms, 50% vol
-  packBeepEntry(&beepData[3], 3, 10, 50);  // lower tone, 100ms, 50% vol
-  setESCMotorSound(beepData, 6, 2);
-  USBSerial.println("ESC: disarm beep sent");
-}
-
-// FreeRTOS task: aviation strobe pattern
-// Quick red pulse, quick green pulse, then off for ~1.5s, repeat
-static void escLedStrobeTask(void *pvParameters) {
-  // Wait for ESC connection before starting
-  vTaskDelay(pdMS_TO_TICKS(3000));
-
-  const uint16_t pattern[] = {
-    SineEsc::makeLedControlEntry(SineEsc::LED_RED, 1),    // red flash 50ms
-    SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 2),    // gap 100ms
-    SineEsc::makeLedControlEntry(SineEsc::LED_GREEN, 1),  // green flash 50ms
-    SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 30),   // off 1500ms
-  };
-
-  USBSerial.println("ESC LED aviation strobe started");
-
-  for (;;) {
-    setESCLedControl(pattern, 4);
-    USBSerial.println("ESC LED: sent aviation strobe");
-    // Wait for full cycle (50 + 100 + 50 + 1500 = 1700ms) before resending
-    vTaskDelay(pdMS_TO_TICKS(1700));
-  }
-}
-
-static TaskHandle_t escLedStrobeTaskHandle = NULL;
-
-/**
- * Start the ESC LED strobe test pattern
- * Creates a FreeRTOS task that repeatedly sends the strobe sequence
- */
-void startESCLedStrobeTest() {
-  if (escLedStrobeTaskHandle != NULL) return;  // already running
-  xTaskCreate(escLedStrobeTask, "ESCLedTest", 2048, NULL, 1, &escLedStrobeTaskHandle);
+void queueEscMotorBeepDisarm() {
+  sPendingEscTone = PendingEscTone::DISARM;
 }
 
 /**

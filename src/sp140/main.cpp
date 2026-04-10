@@ -107,7 +107,7 @@ UnifiedBatteryData unifiedBatteryData = {0.0f, 0.0f, 0.0f, 0.0f};  // volts, amp
 // Throttle PWM smoothing buffer is managed in throttle.cpp
 
 Adafruit_NeoPixel pixels(1, 21, NEO_GRB + NEO_KHZ800);
-uint32_t led_color = NEOPIXEL_RED;  // current LED color
+uint32_t led_color = STATUS_LED_RED;  // current LED color
 
 // Global variable for device state
 volatile DeviceState currentState = DISARMED;
@@ -735,7 +735,7 @@ void setup() {
     initVibeMotor();
   }
 
-  setLEDColor(NEOPIXEL_YELLOW);  // Indicate boot in progress
+  setLEDColor(STATUS_LED_YELLOW);  // Indicate boot in progress
 
   // SPI bus (shared between display and BMS CAN)
   setupSPI(board_config);
@@ -766,7 +766,7 @@ void setup() {
     perfModeSwitch();
   }
 
-  setLEDColor(NEOPIXEL_GREEN);
+  setLEDColor(STATUS_LED_GREEN);
 
   // Show splash screen (blocking)
   if (xSemaphoreTake(lvglMutex, portMAX_DELAY) == pdTRUE) {
@@ -814,9 +814,6 @@ void setup() {
   // Tasks can start immediately - all dependencies exist
   // =========================================================================
   setupTasks();
-
-  // Start ESC LED strobe test
-  startESCLedStrobeTest();
 
   // =========================================================================
   // PHASE 7: Start External Interfaces
@@ -971,7 +968,7 @@ void resumeLEDTask() {
 void runDisarmAlert() {
   u_int16_t disarm_melody[] = {2637, 2093};
   playMelody(disarm_melody, 2);
-  escMotorBeepDisarm();
+  queueEscMotorBeepDisarm();
   pulseVibeMotor();
 }
 
@@ -1187,6 +1184,27 @@ void syncESCTelemetry() {
     escTelemetryData.escState = TelemetryState::NOT_CONNECTED;
   }
 
+  EscStatusLightMode escStatusLightMode = EscStatusLightMode::OFF;
+  const bool escConnected =
+      escTelemetryData.escState == TelemetryState::CONNECTED;
+  const bool bmsConnected =
+      bmsTelemetryData.bmsState == TelemetryState::CONNECTED;
+  const bool batteryCaution =
+      bmsConnected &&
+      (bmsTelemetryData.low_soc_warning || !bmsTelemetryData.battery_ready ||
+       !bmsTelemetryData.is_discharge_mos);
+
+  if (escConnected) {
+    if (isOtaInProgress() || batteryCaution) {
+      escStatusLightMode = EscStatusLightMode::CAUTION;
+    } else if (currentState == DISARMED) {
+      escStatusLightMode = EscStatusLightMode::READY;
+    } else {
+      escStatusLightMode = EscStatusLightMode::FLIGHT;
+    }
+  }
+
+  requestEscStatusLightMode(escStatusLightMode);
   telemetryHubWriteEsc(escTelemetryData);
 }
 
@@ -1208,7 +1226,7 @@ bool armSystem() {
   vTaskSuspend(blinkLEDTaskHandle);
   setLEDs(HIGH);  // solid LED while armed
   playMelody(arm_melody, 2);
-  escMotorBeepArm();
+  queueEscMotorBeepArm();
   // runVibePattern(arm_vibes, 7);
   pulseVibeMotor();  // Ensure this is the active call
   return true;
