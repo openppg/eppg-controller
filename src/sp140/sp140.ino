@@ -85,7 +85,7 @@ UnifiedBatteryData unifiedBatteryData = {0.0f, 0.0f, 0.0f};
 // Throttle PWM smoothing buffer is managed in throttle.cpp
 
 Adafruit_NeoPixel pixels(1, 21, NEO_GRB + NEO_KHZ800);
-uint32_t led_color = LED_RED;  // current LED color
+uint32_t led_color = STATUS_LED_RED;  // current LED color
 
 // Global variable for device state
 volatile DeviceState currentState = DISARMED;
@@ -634,7 +634,7 @@ void setup() {
   setupWatchdog();
   setup140();
 
-  setLEDColor(LED_YELLOW);  // Booting up
+  setLEDColor(STATUS_LED_YELLOW);  // Booting up
 
   // First initialize the shared SPI bus
   setupSPI(board_config);
@@ -701,7 +701,7 @@ void setup() {
   if (digitalRead(board_config.button_top) == LOW) {  // LOW means pressed since it's INPUT_PULLUP
     perfModeSwitch();
   }
-  setLEDColor(LED_GREEN);
+  setLEDColor(STATUS_LED_GREEN);
 
   // Show LVGL splash screen
   if (xSemaphoreTake(lvglMutex, portMAX_DELAY) == pdTRUE) {
@@ -926,6 +926,7 @@ void resumeLEDTask() {
 void runDisarmAlert() {
   u_int16_t disarm_melody[] = { 2637, 2093 };
   playMelody(disarm_melody, 2);
+  queueEscMotorBeepDisarm();
   pulseVibeMotor();
 }
 
@@ -1121,6 +1122,16 @@ void syncESCTelemetry() {
     escTelemetryData.escState = TelemetryState::NOT_CONNECTED;
   }
 
+  EscStatusLightMode escStatusLightMode = EscStatusLightMode::OFF;
+  if (escTelemetryData.escState == TelemetryState::CONNECTED) {
+    if (currentState == DISARMED) {
+      escStatusLightMode = EscStatusLightMode::READY;
+    } else {
+      escStatusLightMode = EscStatusLightMode::FLIGHT;
+    }
+  }
+  requestEscStatusLightMode(escStatusLightMode);
+
   // Send ESC telemetry data to queue for BLE updates
   if (escTelemetryQueue != NULL) {
     xQueueOverwrite(escTelemetryQueue, &escTelemetryData);  // Always use latest data
@@ -1149,6 +1160,7 @@ bool armSystem() {
   vTaskSuspend(blinkLEDTaskHandle);
   setLEDs(HIGH);  // solid LED while armed
   playMelody(arm_melody, 2);
+  queueEscMotorBeepArm();
   // runVibePattern(arm_vibes, 7);
   pulseVibeMotor();  // Ensure this is the active call
   return true;
