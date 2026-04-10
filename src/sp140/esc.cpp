@@ -376,23 +376,8 @@ bool setupTWAI() {
   return true;
 }
 
-/**
- * Send an LED control sequence to the ESC
- * @param ledData Array of packed LED entries (use SineEsc::makeLedControlEntry)
- * @param ledNum Number of entries (max 10)
- */
-void setESCLedControl(const uint16_t *ledData, uint8_t ledNum) {
-  if (!escTwaiInitialized) return;
-  esc.setLedControl(ledData, ledNum);
-}
-
 void requestEscStatusLightMode(EscStatusLightMode mode) {
   sRequestedStatusLightMode = mode;
-}
-
-void setESCMotorSound(const uint8_t *beepData, uint8_t beepNum) {
-  if (!escTwaiInitialized) return;
-  esc.setMotorSound(beepData, beepNum);
 }
 
 void queueEscMotorBeepArm() {

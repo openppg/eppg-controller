@@ -66,11 +66,9 @@ bool hasSwHwIncompatError(uint16_t errorCode);
 bool hasBootloaderBadError(uint16_t errorCode);
 
 // ESC LED control
-void setESCLedControl(const uint16_t *ledData, uint8_t ledNum);
 void requestEscStatusLightMode(EscStatusLightMode mode);
 
 // ESC motor beep
-void setESCMotorSound(const uint8_t *beepData, uint8_t beepNum);
 void queueEscMotorBeepArm();
 void queueEscMotorBeepDisarm();
 
