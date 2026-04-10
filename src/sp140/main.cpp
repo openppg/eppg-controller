@@ -107,7 +107,7 @@ UnifiedBatteryData unifiedBatteryData = {0.0f, 0.0f, 0.0f, 0.0f};  // volts, amp
 // Throttle PWM smoothing buffer is managed in throttle.cpp
 
 Adafruit_NeoPixel pixels(1, 21, NEO_GRB + NEO_KHZ800);
-uint32_t led_color = LED_RED;  // current LED color
+uint32_t led_color = NEOPIXEL_RED;  // current LED color
 
 // Global variable for device state
 volatile DeviceState currentState = DISARMED;
@@ -735,7 +735,7 @@ void setup() {
     initVibeMotor();
   }
 
-  setLEDColor(LED_YELLOW);  // Indicate boot in progress
+  setLEDColor(NEOPIXEL_YELLOW);  // Indicate boot in progress
 
   // SPI bus (shared between display and BMS CAN)
   setupSPI(board_config);
@@ -766,7 +766,7 @@ void setup() {
     perfModeSwitch();
   }
 
-  setLEDColor(LED_GREEN);
+  setLEDColor(NEOPIXEL_GREEN);
 
   // Show splash screen (blocking)
   if (xSemaphoreTake(lvglMutex, portMAX_DELAY) == pdTRUE) {
@@ -814,6 +814,9 @@ void setup() {
   // Tasks can start immediately - all dependencies exist
   // =========================================================================
   setupTasks();
+
+  // Start ESC LED strobe test
+  startESCLedStrobeTest();
 
   // =========================================================================
   // PHASE 7: Start External Interfaces
@@ -968,6 +971,7 @@ void resumeLEDTask() {
 void runDisarmAlert() {
   u_int16_t disarm_melody[] = {2637, 2093};
   playMelody(disarm_melody, 2);
+  escMotorBeepDisarm();
   pulseVibeMotor();
 }
 
@@ -1204,6 +1208,7 @@ bool armSystem() {
   vTaskSuspend(blinkLEDTaskHandle);
   setLEDs(HIGH);  // solid LED while armed
   playMelody(arm_melody, 2);
+  escMotorBeepArm();
   // runVibePattern(arm_vibes, 7);
   pulseVibeMotor();  // Ensure this is the active call
   return true;

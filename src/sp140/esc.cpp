@@ -259,6 +259,93 @@ bool setupTWAI() {
 }
 
 /**
+ * Send an LED control sequence to the ESC
+ * @param ledData Array of packed LED entries (use SineEsc::makeLedControlEntry)
+ * @param ledNum Number of entries (max 10)
+ */
+void setESCLedControl(const uint16_t *ledData, uint8_t ledNum) {
+  if (!escTwaiInitialized) return;
+  esc.setLedControl(ledData, ledNum);
+}
+
+/**
+ * Send a motor beep sequence to the ESC
+ * @param beepData Raw byte array of 3-byte entries (tone, duration_10ms, volume)
+ * @param beepDataLen Length of beepData in bytes (entries * 3)
+ * @param beepNum Number of beep entries
+ */
+void setESCMotorSound(const uint8_t *beepData, uint8_t beepDataLen, uint8_t beepNum) {
+  if (!escTwaiInitialized) return;
+  esc.setMotorSound(beepData, beepDataLen, beepNum);
+}
+
+// Helper to pack a beep entry into 3 bytes in a buffer
+// tone: 0-9, duration: in 10ms units, volume: 0-100
+static void packBeepEntry(uint8_t *buf, uint8_t tone, uint8_t duration10ms, uint8_t volume) {
+  buf[0] = tone;
+  buf[1] = duration10ms;
+  buf[2] = volume;
+}
+
+/**
+ * Play ascending arm beep on ESC motor (matches hand controller: C7 -> E7)
+ * Uses two tones at 100ms each, ascending pitch
+ */
+void escMotorBeepArm() {
+  uint8_t beepData[6];
+  packBeepEntry(&beepData[0], 3, 10, 50);  // lower tone, 100ms, 50% vol
+  packBeepEntry(&beepData[3], 6, 10, 50);  // higher tone, 100ms, 50% vol
+  setESCMotorSound(beepData, 6, 2);
+  USBSerial.println("ESC: arm beep sent");
+}
+
+/**
+ * Play descending disarm beep on ESC motor (matches hand controller: E7 -> C7)
+ * Uses two tones at 100ms each, descending pitch
+ */
+void escMotorBeepDisarm() {
+  uint8_t beepData[6];
+  packBeepEntry(&beepData[0], 6, 10, 50);  // higher tone, 100ms, 50% vol
+  packBeepEntry(&beepData[3], 3, 10, 50);  // lower tone, 100ms, 50% vol
+  setESCMotorSound(beepData, 6, 2);
+  USBSerial.println("ESC: disarm beep sent");
+}
+
+// FreeRTOS task: aviation strobe pattern
+// Quick red pulse, quick green pulse, then off for ~1.5s, repeat
+static void escLedStrobeTask(void *pvParameters) {
+  // Wait for ESC connection before starting
+  vTaskDelay(pdMS_TO_TICKS(3000));
+
+  const uint16_t pattern[] = {
+    SineEsc::makeLedControlEntry(SineEsc::LED_RED, 1),    // red flash 50ms
+    SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 2),    // gap 100ms
+    SineEsc::makeLedControlEntry(SineEsc::LED_GREEN, 1),  // green flash 50ms
+    SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 30),   // off 1500ms
+  };
+
+  USBSerial.println("ESC LED aviation strobe started");
+
+  for (;;) {
+    setESCLedControl(pattern, 4);
+    USBSerial.println("ESC LED: sent aviation strobe");
+    // Wait for full cycle (50 + 100 + 50 + 1500 = 1700ms) before resending
+    vTaskDelay(pdMS_TO_TICKS(1700));
+  }
+}
+
+static TaskHandle_t escLedStrobeTaskHandle = NULL;
+
+/**
+ * Start the ESC LED strobe test pattern
+ * Creates a FreeRTOS task that repeatedly sends the strobe sequence
+ */
+void startESCLedStrobeTest() {
+  if (escLedStrobeTaskHandle != NULL) return;  // already running
+  xTaskCreate(escLedStrobeTask, "ESCLedTest", 2048, NULL, 1, &escLedStrobeTaskHandle);
+}
+
+/**
  * Debug function to dump ESC throttle response data to serial
  * @param res Pointer to the throttle response structure from ESC
  */

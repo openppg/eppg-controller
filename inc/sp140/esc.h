@@ -58,6 +58,15 @@ bool hasMotorIDet2Error(uint16_t errorCode);
 bool hasSwHwIncompatError(uint16_t errorCode);
 bool hasBootloaderBadError(uint16_t errorCode);
 
+// ESC LED control
+void setESCLedControl(const uint16_t *ledData, uint8_t ledNum);
+void startESCLedStrobeTest();
+
+// ESC motor beep
+void setESCMotorSound(const uint8_t *beepData, uint8_t beepDataLen, uint8_t beepNum);
+void escMotorBeepArm();
+void escMotorBeepDisarm();
+
 // for debugging
 void dumpThrottleResponse(const sine_esc_SetThrottleSettings2Response *res);
 void dumpESCMessages();  // dumps all messages to USBSerial

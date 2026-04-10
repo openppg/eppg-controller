@@ -2,12 +2,6 @@ import os
 import subprocess
 
 Import("env")
-folder = env.GetProjectOption("custom_src_folder")
-
-# Generic
-env.Replace(
-    PROJECT_SRC_DIR="$PROJECT_DIR/src/" + folder
-)
 
 def get_git_revision_short_hash():
     try:
