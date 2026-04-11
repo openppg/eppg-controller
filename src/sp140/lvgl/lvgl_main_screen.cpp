@@ -586,9 +586,9 @@ void setupMainScreen(bool darkMode) {
 
     lv_line_set_points(climb_rate_divider_lines[i], line_points[i], 2);
 
-    // Make the center line (line 6) special: 3 pixels wide and black
+    // Make the center line (line 6) special: 3 pixels wide; contrasts with screen bg
     if (i == 6) {
-      lv_obj_set_style_line_color(climb_rate_divider_lines[i], LVGL_BLACK, LV_PART_MAIN);
+      lv_obj_set_style_line_color(climb_rate_divider_lines[i], darkMode ? LVGL_WHITE : LVGL_BLACK, LV_PART_MAIN);
       lv_obj_set_style_line_width(climb_rate_divider_lines[i], 3, LV_PART_MAIN);
     } else {
       lv_obj_set_style_line_color(climb_rate_divider_lines[i], LVGL_GRAY, LV_PART_MAIN);
