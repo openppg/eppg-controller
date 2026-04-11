@@ -1122,12 +1122,25 @@ void syncESCTelemetry() {
     escTelemetryData.escState = TelemetryState::NOT_CONNECTED;
   }
 
+  const AlertCounts escBmsAlerts = getEscBmsAlertCounts();
+  const bool hasCriticalEscOrBmsAlert = escBmsAlerts.criticalCount > 0;
+  const bool hasWarningEscOrBmsAlert = escBmsAlerts.warningCount > 0;
   EscStatusLightMode escStatusLightMode = EscStatusLightMode::OFF;
   if (escTelemetryData.escState == TelemetryState::CONNECTED) {
     if (currentState == DISARMED) {
-      escStatusLightMode = EscStatusLightMode::READY;
+      if (hasCriticalEscOrBmsAlert) {
+        escStatusLightMode = EscStatusLightMode::DISARMED_CRITICAL;
+      } else if (hasWarningEscOrBmsAlert) {
+        escStatusLightMode = EscStatusLightMode::DISARMED_WARNING;
+      } else {
+        escStatusLightMode = EscStatusLightMode::DISARMED_NOMINAL;
+      }
+    } else if (hasCriticalEscOrBmsAlert) {
+      escStatusLightMode = EscStatusLightMode::FLIGHT_CRITICAL;
+    } else if (hasWarningEscOrBmsAlert) {
+      escStatusLightMode = EscStatusLightMode::FLIGHT_WARNING;
     } else {
-      escStatusLightMode = EscStatusLightMode::FLIGHT;
+      escStatusLightMode = EscStatusLightMode::FLIGHT_NOMINAL;
     }
   }
   requestEscStatusLightMode(escStatusLightMode);

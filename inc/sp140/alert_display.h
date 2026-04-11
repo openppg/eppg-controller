@@ -73,6 +73,9 @@ void updateAlertCounterDisplay(const AlertCounts& counts);
 // Helper for monitors/UI logger to push alert events
 void sendAlertEvent(SensorID id, AlertLevel level);
 
+// Current active alert counts limited to ESC and BMS categories.
+AlertCounts getEscBmsAlertCounts();
+
 // ILogger sink that pushes events to the alert queue (for UI)
 struct AlertUILogger : ILogger {
   void log(SensorID id, AlertLevel lvl, float v) override {
