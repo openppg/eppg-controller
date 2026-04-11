@@ -52,11 +52,11 @@ unsigned long escStatusLightRefreshMs(EscStatusLightMode mode) {
   case EscStatusLightMode::FLIGHT_NOMINAL:
   case EscStatusLightMode::FLIGHT_WARNING:
   case EscStatusLightMode::FLIGHT_CRITICAL:
-    return 1700;
+    return 0;
   case EscStatusLightMode::DISARMED_NOMINAL:
   case EscStatusLightMode::DISARMED_WARNING:
   case EscStatusLightMode::DISARMED_CRITICAL:
-    return 1000;
+    return 0;
   case EscStatusLightMode::OFF:
   default:
     return 0;
@@ -67,23 +67,26 @@ void sendEscStatusLight(EscStatusLightMode mode) {
   switch (mode) {
   case EscStatusLightMode::DISARMED_NOMINAL: {
     const uint16_t pattern[] = {
-      SineEsc::makeLedControlEntry(SineEsc::LED_GREEN_BREATH, 20),
+      SineEsc::makeLedControlEntry(SineEsc::LED_GREEN_BREATH, 60),
+      SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 20),
     };
-    esc.setLedControl(pattern, 1);
+    esc.setLedControl(pattern, 2);
     break;
   }
   case EscStatusLightMode::DISARMED_WARNING: {
     const uint16_t pattern[] = {
-      SineEsc::makeLedControlEntry(SineEsc::LED_YELLOW_BREATH, 20),
+      SineEsc::makeLedControlEntry(SineEsc::LED_YELLOW_BREATH, 60),
+      SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 20),
     };
-    esc.setLedControl(pattern, 1);
+    esc.setLedControl(pattern, 2);
     break;
   }
   case EscStatusLightMode::DISARMED_CRITICAL: {
     const uint16_t pattern[] = {
-      SineEsc::makeLedControlEntry(SineEsc::LED_RED_BREATH, 20),
+      SineEsc::makeLedControlEntry(SineEsc::LED_RED_BREATH, 60),
+      SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 20),
     };
-    esc.setLedControl(pattern, 1);
+    esc.setLedControl(pattern, 2);
     break;
   }
   case EscStatusLightMode::FLIGHT_NOMINAL: {
