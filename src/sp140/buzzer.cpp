@@ -79,7 +79,7 @@ bool playMelody(uint16_t melody[], int siz) {
   MelodyRequest request = {
     .notes = melodyBuffer,
     .size = (uint8_t)std::min(siz, 32),
-    .duration = 100  // Default duration
+    .duration = 200  // Default duration
   };
 
   // Send to queue with timeout

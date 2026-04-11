@@ -35,6 +35,7 @@
 #include "../../inc/sp140/ble/esc_service.h"
 
 #include "../../inc/sp140/buzzer.h"
+#include "../../inc/sp140/crash_log.h"
 #include "../../inc/sp140/device_state.h"
 #include "../../inc/sp140/mode.h"
 #include "../../inc/sp140/throttle.h"
@@ -247,6 +248,8 @@ void changeDeviceState(DeviceState newState) {
     if (deviceStateQueue != NULL) {
       xQueueOverwrite(deviceStateQueue, &state);  // Always use latest state
     }
+
+    crashLogUpdateArmedState(newState);
 
     USBSerial.print("Device State Changed to: ");
     switch (newState) {
@@ -492,11 +495,18 @@ void refreshDisplay() {
 
 void monitoringTask(void *pvParameters) {
   TelemetrySnapshot snap;
+  static uint32_t lastCrashHeartbeat = 0;
   for (;;) {
     if (xQueueReceive(telemetrySnapshotQueue, &snap, pdMS_TO_TICKS(100)) == pdTRUE) {
       // Run monitors using the fresh snapshot
       if (monitoringEnabled) {
         checkAllSensorsWithData(snap.esc, snap.bms);
+
+        // Periodic crash log heartbeat (every 30s)
+        if (millis() - lastCrashHeartbeat >= 30000) {
+          crashLogHeartbeat();
+          lastCrashHeartbeat = millis();
+        }
       }
     }
   }
@@ -611,6 +621,8 @@ void setup() {
   USBSerial.begin(115200);  // This is for debug output and WebSerial
   USBSerial.print("Build date/time: ");
   USBSerial.println(buildDate);
+
+  crashLogReadAndReport();
 
   // Pull CSB (pin 42) high to activate I2C mode
   // temporary fix TODO remove
@@ -911,7 +923,9 @@ void printTime(const char* label) {
 }
 
 void disarmESC() {
-  setESCThrottle(ESC_DISARMED_PWM);
+  // Throttle task sends ESC_DISARMED_PWM on its next 20ms cycle
+  // when it sees DISARMED state — no direct CAN write needed here
+  // to avoid race condition with throttle task's canard instance
 }
 
 // reset smoothing
@@ -924,7 +938,7 @@ void resumeLEDTask() {
 }
 
 void runDisarmAlert() {
-  u_int16_t disarm_melody[] = { 2637, 2093 };
+  u_int16_t disarm_melody[] = { 1568, 1047 };
   playMelody(disarm_melody, 2);
   queueEscMotorBeepDisarm();
   pulseVibeMotor();
@@ -1162,9 +1176,10 @@ bool throttleEngaged() {
 
 // get the PPG ready to fly
 bool armSystem() {
-  uint16_t arm_melody[] = { 2093, 2637 };
+  uint16_t arm_melody[] = { 1047, 1568 };
   // const unsigned int arm_vibes[] = { 1, 85, 1, 85, 1, 85, 1 };
-  setESCThrottle(ESC_DISARMED_PWM);  // initialize the signal to low
+  // Throttle task handles ESC commands exclusively to avoid
+  // race condition on the shared canard CAN bus instance
 
   armedAtMillis = millis();
   armedSecs = 0;  // Reset armed seconds for new session
@@ -1229,6 +1244,11 @@ void audioTask(void* parameter) {
         TickType_t delayTicks = pdMS_TO_TICKS(request.duration);
         if (delayTicks == 0) { delayTicks = 1; }  // Ensure non-zero delay
         vTaskDelayUntil(&nextWakeTime, delayTicks);
+        // Add silence gap between notes for distinct separation
+        if (i < request.size - 1) {
+          stopTone();
+          vTaskDelayUntil(&nextWakeTime, pdMS_TO_TICKS(80));
+        }
       }
       stopTone();
     }

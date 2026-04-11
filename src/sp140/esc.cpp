@@ -31,10 +31,10 @@ static volatile PendingEscTone sPendingEscTone = PendingEscTone::NONE;
 
 namespace {
 
-constexpr uint8_t kEscToneLow = 3;
-constexpr uint8_t kEscToneHigh = 6;
+constexpr uint8_t kEscToneLow = 2;
+constexpr uint8_t kEscToneHigh = 8;
 constexpr uint8_t kEscToneVolumePct = 80;
-constexpr uint8_t kEscToneDuration10ms = 10;
+constexpr uint8_t kEscToneDuration10ms = 20;
 
 // Caller must pass ARM or DISARM (never NONE).
 void buildEscMotorTone(uint8_t* out, PendingEscTone tone) {
