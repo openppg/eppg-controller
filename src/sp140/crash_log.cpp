@@ -9,20 +9,29 @@
 #include "sp140/device_state.h"
 
 #define DEBUG_SERIAL USBSerial
-
-// NVS keys (max 15 chars, all under namespace "openppg")
-static const char* RST_REASON = "rst_reason";
-static const char* RST_COUNT  = "rst_count";
-static const char* RST_ARMED  = "rst_armed";
-static const char* RST_UPTIME = "rst_uptime";
-static const char* RST_VER_MAJ = "rst_ver_maj";
-static const char* RST_VER_MIN = "rst_ver_min";
-static const char* RST_BOOTS  = "rst_boots";
+#define CRASH_NAMESPACE "crashlog"
+#define MAX_HISTORY 5
 
 extern DeviceState currentState;
 
-static const char* resetReasonToString(int reason) {
-  // ESP-IDF reset reasons (0-15)
+// Packed reset entry: 8 bytes per entry
+// Stored as raw bytes in NVS blob
+struct __attribute__((packed)) ResetEntry {
+  uint8_t espReason;    // esp_reset_reason_t
+  uint8_t rtcReason;    // RTC reset reason (raw)
+  uint8_t armedState;   // DeviceState at time of reset
+  uint8_t verMajor;     // Firmware major version
+  uint32_t uptimeMs;    // Uptime at last heartbeat
+};
+
+// NVS keys
+static const char* KEY_HISTORY = "rst_hist";     // Blob: array of ResetEntry
+static const char* KEY_COUNT   = "rst_count";    // uint16_t: total reset count
+static const char* KEY_BOOTS   = "rst_boots";    // uint8_t: rapid boot counter
+static const char* KEY_ARMED   = "rst_armed";    // uint8_t: current armed state (heartbeat)
+static const char* KEY_UPTIME  = "rst_uptime";   // uint32_t: current uptime (heartbeat)
+
+static const char* espReasonStr(int reason) {
   switch (reason) {
     case ESP_RST_POWERON:   return "POWERON";
     case ESP_RST_SW:        return "SW_RESET";
@@ -34,175 +43,221 @@ static const char* resetReasonToString(int reason) {
     case ESP_RST_BROWNOUT:  return "BROWNOUT";
     case ESP_RST_SDIO:      return "SDIO";
     case ESP_RST_EXT:       return "EXTERNAL";
-    default: break;
+    default:                return "UNKNOWN";
   }
-  // RTC reset reasons (stored as value + 100)
-  if (reason >= 100) {
-    switch (reason - 100) {
-      case 1:  return "RTC_POWERON";
-      case 3:  return "RTC_SW_RESET";
-      case 12: return "RTC_SW_CPU_RST";
-      case 15: return "RTC_BROWNOUT";
-      case 16: return "RTC_SDIO_RST";
-      case 9:  return "RTC_DEEPSLEEP";
-      case 7:  return "RTC_TG0WDT";
-      case 8:  return "RTC_TG1WDT";
-      case 11: return "RTC_INT_WDT";
-      default: return "RTC_OTHER";
-    }
+}
+
+static const char* rtcReasonStr(int reason) {
+  switch (reason) {
+    case 1:  return "POWERON";
+    case 3:  return "SW_SYS";
+    case 5:  return "DEEPSLEEP";
+    case 7:  return "TG0WDT";
+    case 8:  return "TG1WDT";
+    case 9:  return "RTCWDT";
+    case 11: return "INT_WDT";
+    case 12: return "SW_CPU";
+    case 14: return "EFUSE";
+    case 15: return "USB_UART";
+    case 16: return "USB_JTAG";
+    case 17: return "PWR_GLITCH";
+    case 18: return "JTAG";
+    default: return "OTHER";
   }
-  return "UNKNOWN";
 }
 
 static const char* stateToString(uint8_t state) {
   switch (state) {
     case DISARMED:       return "DISARMED";
     case ARMED:          return "ARMED";
-    case ARMED_CRUISING: return "ARMED_CRUISING";
-    default:             return "UNKNOWN";
+    case ARMED_CRUISING: return "CRUISING";
+    default:             return "?";
   }
 }
 
 void crashLogReadAndReport() {
-  esp_reset_reason_t currentReason = esp_reset_reason();
-  RESET_REASON rtcReason = rtc_get_reset_reason(0);  // Core 0
+  esp_reset_reason_t espReason = esp_reset_reason();
+  RESET_REASON rtcReason = rtc_get_reset_reason(0);
 
-  // Read previous crash data from NVS
+  // Read existing history from NVS
   Preferences prefs;
-  prefs.begin("crashlog", true);  // read-only
+  prefs.begin(CRASH_NAMESPACE, true);  // read-only
 
-  uint8_t prevReason   = prefs.getUChar(RST_REASON, 0);
-  uint16_t prevCount   = prefs.getUShort(RST_COUNT, 0);
-  uint8_t prevArmed    = prefs.getUChar(RST_ARMED, 0);
-  uint32_t prevUptime  = prefs.getULong(RST_UPTIME, 0);
-  uint8_t prevVerMaj   = prefs.getUChar(RST_VER_MAJ, 0);
-  uint8_t prevVerMin   = prefs.getUChar(RST_VER_MIN, 0);
-  uint8_t prevBoots    = prefs.getUChar(RST_BOOTS, 0);
+  ResetEntry history[MAX_HISTORY] = {};
+  size_t histLen = prefs.getBytesLength(KEY_HISTORY);
+  int entryCount = 0;
+  if (histLen > 0 && histLen <= sizeof(history)) {
+    prefs.getBytes(KEY_HISTORY, history, histLen);
+    entryCount = histLen / sizeof(ResetEntry);
+  }
+
+  uint16_t totalCount  = prefs.getUShort(KEY_COUNT, 0);
+  uint8_t rapidBoots   = prefs.getUChar(KEY_BOOTS, 0);
+  uint8_t lastArmed    = prefs.getUChar(KEY_ARMED, 0);
+  uint32_t lastUptime  = prefs.getULong(KEY_UPTIME, 0);
 
   prefs.end();
 
-  // Print previous reset info
-  DEBUG_SERIAL.println("=== Previous Reset Info ===");
+  // Print reset history
+  DEBUG_SERIAL.println("=== Reset History ===");
+  DEBUG_SERIAL.print("Total resets: ");
+  DEBUG_SERIAL.println(totalCount);
 
-  if (prevCount == 0 && prevReason == 0) {
-    DEBUG_SERIAL.println("No previous crash data stored.");
+  if (entryCount > 0) {
+    // Update the most recent entry with heartbeat data (armed state + uptime)
+    // since those are written separately from the history blob
+    history[0].armedState = lastArmed;
+    history[0].uptimeMs = lastUptime;
+
+    for (int i = 0; i < entryCount; i++) {
+      ResetEntry& e = history[i];
+      DEBUG_SERIAL.print(i == 0 ? " [PREV] " : "   [");
+      if (i > 0) { DEBUG_SERIAL.print(i); DEBUG_SERIAL.print("]   "); }
+      DEBUG_SERIAL.print("esp:");
+      DEBUG_SERIAL.print(espReasonStr(e.espReason));
+      DEBUG_SERIAL.print("(");
+      DEBUG_SERIAL.print(e.espReason);
+      DEBUG_SERIAL.print(") rtc:");
+      DEBUG_SERIAL.print(rtcReasonStr(e.rtcReason));
+      DEBUG_SERIAL.print("(");
+      DEBUG_SERIAL.print(e.rtcReason);
+      DEBUG_SERIAL.print(") state:");
+      DEBUG_SERIAL.print(stateToString(e.armedState));
+      DEBUG_SERIAL.print(" up:");
+      DEBUG_SERIAL.print(e.uptimeMs / 1000);
+      DEBUG_SERIAL.print("s fw:");
+      DEBUG_SERIAL.print(e.verMajor / 10);
+      DEBUG_SERIAL.print(".");
+      DEBUG_SERIAL.println(e.verMajor % 10);
+    }
   } else {
-    DEBUG_SERIAL.print("Reset reason: ");
-    DEBUG_SERIAL.print(resetReasonToString(prevReason));
-    DEBUG_SERIAL.print(" (");
-    DEBUG_SERIAL.print(prevReason);
-    DEBUG_SERIAL.println(")");
-
-    DEBUG_SERIAL.print("Crash count: ");
-    DEBUG_SERIAL.println(prevCount);
-
-    DEBUG_SERIAL.print("Last state: ");
-    DEBUG_SERIAL.println(stateToString(prevArmed));
-
-    DEBUG_SERIAL.print("Last uptime: ");
-    DEBUG_SERIAL.print(prevUptime);
-    DEBUG_SERIAL.print(" ms (");
-    DEBUG_SERIAL.print(prevUptime / 60000.0, 1);
-    DEBUG_SERIAL.println(" min)");
-
-    DEBUG_SERIAL.print("Last firmware: ");
-    DEBUG_SERIAL.print(prevVerMaj);
-    DEBUG_SERIAL.print(".");
-    DEBUG_SERIAL.println(prevVerMin);
+    DEBUG_SERIAL.println("No previous reset data.");
   }
 
   // Boot loop detection
   uint8_t newBoots = 0;
-  if (prevUptime > 0 && prevUptime < BOOT_LOOP_UPTIME_MS) {
-    newBoots = prevBoots + 1;
+  if (lastUptime > 0 && lastUptime < BOOT_LOOP_UPTIME_MS) {
+    newBoots = rapidBoots + 1;
   }
-
   if (newBoots >= BOOT_LOOP_THRESHOLD) {
     DEBUG_SERIAL.println("!!! BOOT LOOP DETECTED !!!");
-    DEBUG_SERIAL.print("Device has crashed ");
-    DEBUG_SERIAL.print(newBoots);
-    DEBUG_SERIAL.println(" times with <30s uptime each.");
-    DEBUG_SERIAL.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!");
   }
 
-  DEBUG_SERIAL.print("Current reset: ");
-  DEBUG_SERIAL.print(resetReasonToString(currentReason));
-  DEBUG_SERIAL.print(" (esp:");
-  DEBUG_SERIAL.print((int)currentReason);
-  DEBUG_SERIAL.print(" rtc:");
+  DEBUG_SERIAL.print("Current: esp:");
+  DEBUG_SERIAL.print(espReasonStr(espReason));
+  DEBUG_SERIAL.print("(");
+  DEBUG_SERIAL.print((int)espReason);
+  DEBUG_SERIAL.print(") rtc:");
+  DEBUG_SERIAL.print(rtcReasonStr(rtcReason));
+  DEBUG_SERIAL.print("(");
   DEBUG_SERIAL.print((int)rtcReason);
   DEBUG_SERIAL.println(")");
-  DEBUG_SERIAL.println("=== End Reset Info ===");
+  DEBUG_SERIAL.println("=== End Reset History ===");
 
-  // Increment crash count for non-poweron resets
-  uint16_t newCount = prevCount;
-  if (currentReason != ESP_RST_POWERON && rtcReason != POWERON_RESET) {
+  // Shift history down and insert new entry at position 0
+  ResetEntry newHistory[MAX_HISTORY] = {};
+  newHistory[0].espReason = (uint8_t)espReason;
+  newHistory[0].rtcReason = (uint8_t)rtcReason;
+  newHistory[0].armedState = (uint8_t)DISARMED;
+  // Pack version: major*10 + minor (fits in uint8_t for versions like 7.6 = 76)
+  newHistory[0].verMajor = VERSION_MAJOR * 10 + VERSION_MINOR;
+  newHistory[0].uptimeMs = 0;
+
+  // Copy previous entries, shifting by 1 (drop oldest if full)
+  int copyCount = (entryCount < MAX_HISTORY - 1) ? entryCount : MAX_HISTORY - 1;
+  for (int i = 0; i < copyCount; i++) {
+    newHistory[i + 1] = history[i];
+    // Patch the entry we're shifting: update its armed/uptime from heartbeat
+    if (i == 0) {
+      newHistory[1].armedState = lastArmed;
+      newHistory[1].uptimeMs = lastUptime;
+    }
+  }
+  int newEntryCount = copyCount + 1;
+
+  // Increment total count for non-poweron resets
+  uint16_t newCount = totalCount;
+  if (espReason != ESP_RST_POWERON) {
     newCount++;
   }
 
-  // Store RTC reason if esp_reset_reason returns UNKNOWN
-  uint8_t reasonToStore = (uint8_t)currentReason;
-  if (currentReason == ESP_RST_UNKNOWN && rtcReason != NO_MEAN) {
-    reasonToStore = (uint8_t)rtcReason + 100;  // Offset to distinguish from esp_reset_reason values
-  }
+  // Write updated history
+  prefs.begin(CRASH_NAMESPACE, false);  // read-write
 
-  // Write current boot info to NVS
-  prefs.begin("crashlog", false);  // read-write
-
-  prefs.putUChar(RST_REASON, reasonToStore);
-  prefs.putUShort(RST_COUNT, newCount);
-  prefs.putUChar(RST_ARMED, (uint8_t)DISARMED);
-  prefs.putULong(RST_UPTIME, 0);
-  prefs.putUChar(RST_VER_MAJ, VERSION_MAJOR);
-  prefs.putUChar(RST_VER_MIN, VERSION_MINOR);
-  prefs.putUChar(RST_BOOTS, newBoots);
+  prefs.putBytes(KEY_HISTORY, newHistory, newEntryCount * sizeof(ResetEntry));
+  prefs.putUShort(KEY_COUNT, newCount);
+  prefs.putUChar(KEY_BOOTS, newBoots);
+  prefs.putUChar(KEY_ARMED, (uint8_t)DISARMED);
+  prefs.putULong(KEY_UPTIME, 0);
 
   prefs.end();
 }
 
 void crashLogHeartbeat() {
   Preferences prefs;
-  prefs.begin("crashlog", false);  // read-write
+  prefs.begin(CRASH_NAMESPACE, false);
 
-  prefs.putULong(RST_UPTIME, millis());
-  prefs.putUChar(RST_ARMED, (uint8_t)currentState);
+  prefs.putULong(KEY_UPTIME, millis());
+  prefs.putUChar(KEY_ARMED, (uint8_t)currentState);
 
   prefs.end();
 }
 
 void crashLogUpdateArmedState(DeviceState state) {
   Preferences prefs;
-  prefs.begin("crashlog", false);  // read-write
+  prefs.begin(CRASH_NAMESPACE, false);
 
-  prefs.putUChar(RST_ARMED, (uint8_t)state);
+  prefs.putUChar(KEY_ARMED, (uint8_t)state);
 
   prefs.end();
 }
 
 void sendCrashLogData() {
   Preferences prefs;
-  prefs.begin("crashlog", true);  // read-only
+  prefs.begin(CRASH_NAMESPACE, true);
 
-  uint8_t reason    = prefs.getUChar(RST_REASON, 0);
-  uint16_t count    = prefs.getUShort(RST_COUNT, 0);
-  uint8_t armed     = prefs.getUChar(RST_ARMED, 0);
-  uint32_t uptime   = prefs.getULong(RST_UPTIME, 0);
-  uint8_t verMaj    = prefs.getUChar(RST_VER_MAJ, 0);
-  uint8_t verMin    = prefs.getUChar(RST_VER_MIN, 0);
-  uint8_t boots     = prefs.getUChar(RST_BOOTS, 0);
+  ResetEntry history[MAX_HISTORY] = {};
+  size_t histLen = prefs.getBytesLength(KEY_HISTORY);
+  int entryCount = 0;
+  if (histLen > 0 && histLen <= sizeof(history)) {
+    prefs.getBytes(KEY_HISTORY, history, histLen);
+    entryCount = histLen / sizeof(ResetEntry);
+  }
+
+  uint16_t totalCount = prefs.getUShort(KEY_COUNT, 0);
+  uint8_t rapidBoots  = prefs.getUChar(KEY_BOOTS, 0);
+  uint8_t lastArmed   = prefs.getUChar(KEY_ARMED, 0);
+  uint32_t lastUptime = prefs.getULong(KEY_UPTIME, 0);
 
   prefs.end();
 
-  // Manual JSON to avoid ArduinoJson stack usage on WebSerial task
-  char buf[256];
-  snprintf(buf, sizeof(buf),
-    "{\"crash_log\":{\"reason\":\"%s\",\"code\":%d,\"count\":%d,"
-    "\"state\":\"%s\",\"uptime_ms\":%lu,\"fw\":\"%d.%d\","
-    "\"rapid_boots\":%d,\"boot_loop\":%s}}",
-    resetReasonToString(reason),
-    reason, count, stateToString(armed),
-    (unsigned long)uptime, verMaj, verMin,
-    boots, boots >= BOOT_LOOP_THRESHOLD ? "true" : "false");
+  // Patch most recent entry with heartbeat data
+  if (entryCount > 0) {
+    history[0].armedState = lastArmed;
+    history[0].uptimeMs = lastUptime;
+  }
 
-  DEBUG_SERIAL.println(buf);
+  // Build JSON manually (stack-safe for WebSerial task)
+  DEBUG_SERIAL.print("{\"crash_log\":{\"total\":");
+  DEBUG_SERIAL.print(totalCount);
+  DEBUG_SERIAL.print(",\"rapid_boots\":");
+  DEBUG_SERIAL.print(rapidBoots);
+  DEBUG_SERIAL.print(",\"history\":[");
+
+  for (int i = 0; i < entryCount; i++) {
+    if (i > 0) DEBUG_SERIAL.print(",");
+    ResetEntry& e = history[i];
+    char buf[160];
+    snprintf(buf, sizeof(buf),
+      "{\"esp\":\"%s\",\"esp_code\":%d,\"rtc\":\"%s\",\"rtc_code\":%d,"
+      "\"state\":\"%s\",\"uptime_ms\":%lu,\"fw\":\"%d.%d\"}",
+      espReasonStr(e.espReason), e.espReason,
+      rtcReasonStr(e.rtcReason), e.rtcReason,
+      stateToString(e.armedState),
+      (unsigned long)e.uptimeMs,
+      e.verMajor / 10, e.verMajor % 10);
+    DEBUG_SERIAL.print(buf);
+  }
+
+  DEBUG_SERIAL.println("]}}");
 }
