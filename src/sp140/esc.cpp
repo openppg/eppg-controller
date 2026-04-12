@@ -101,7 +101,7 @@ void sendEscStatusLight(EscStatusLightMode mode) {
   }
   case EscStatusLightMode::FLIGHT_WARNING: {
     const uint16_t pattern[] = {
-      SineEsc::makeLedControlEntry(SineEsc::LED_GREEN, 1),
+      SineEsc::makeLedControlEntry(SineEsc::LED_YELLOW, 1),
       SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 2),
       SineEsc::makeLedControlEntry(SineEsc::LED_YELLOW, 1),
       SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 30),
@@ -111,7 +111,7 @@ void sendEscStatusLight(EscStatusLightMode mode) {
   }
   case EscStatusLightMode::FLIGHT_CRITICAL: {
     const uint16_t pattern[] = {
-      SineEsc::makeLedControlEntry(SineEsc::LED_YELLOW, 1),
+      SineEsc::makeLedControlEntry(SineEsc::LED_RED, 1),
       SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 2),
       SineEsc::makeLedControlEntry(SineEsc::LED_RED, 1),
       SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 30),
