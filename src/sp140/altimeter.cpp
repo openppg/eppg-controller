@@ -15,16 +15,58 @@ struct AltitudeReading {
 // Buffer to store altitude readings with timestamps
 CircularBuffer<AltitudeReading, VARIO_BUFFER_SIZE> altitudeBuffer;
 
+// Mutex to serialize I2C barometer access between tasks
+static SemaphoreHandle_t i2cBaroMutex = NULL;
+
+// Cached values — written by the designated reader (uiTask via getAltitude),
+// safe to read from any task (32-bit float reads are atomic on Xtensa)
+static float cachedAltitude = 0.0f;
+static float cachedBaroTemperature = __FLT_MIN__;
+static float cachedVerticalSpeed = 0.0f;
+
+void initAltimeterMutex() {
+  i2cBaroMutex = xSemaphoreCreateMutex();
+}
+
+// Compute vertical speed from the altitude buffer (must be called from same
+// task that pushes to altitudeBuffer to avoid data races on CircularBuffer)
+static float computeVerticalSpeed() {
+  if (altitudeBuffer.size() < 2) {
+    return 0.0f;
+  }
+
+  const AltitudeReading& oldest = altitudeBuffer.first();
+  const AltitudeReading& newest = altitudeBuffer.last();
+
+  float timeDiff = (newest.timestamp - oldest.timestamp) / 1000.0f;
+  if (timeDiff <= 0) {
+    return 0.0f;
+  }
+
+  float verticalSpeed = (newest.altitude - oldest.altitude) / timeDiff;
+  return constrain(verticalSpeed, -MAX_VERTICAL_SPEED, MAX_VERTICAL_SPEED);
+}
+
 float getAltitude(const STR_DEVICE_DATA_140_V1& deviceData) {
   if (bmpPresent) {
-    const float altitude = bmp.readAltitude(deviceData.sea_pressure);
-    float relativeAltitude = altitude - groundAltitude;
+    if (i2cBaroMutex == NULL || xSemaphoreTake(i2cBaroMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+      const float altitude = bmp.readAltitude(deviceData.sea_pressure);
+      if (i2cBaroMutex != NULL) xSemaphoreGive(i2cBaroMutex);
 
-    // Add new reading to buffer with timestamp
-    AltitudeReading reading = {relativeAltitude, millis()};
-    altitudeBuffer.push(reading);
+      float relativeAltitude = altitude - groundAltitude;
 
-    return relativeAltitude;
+      // Add new reading to buffer with timestamp
+      AltitudeReading reading = {relativeAltitude, millis()};
+      altitudeBuffer.push(reading);
+
+      // Update caches (atomic float writes on Xtensa)
+      cachedAltitude = relativeAltitude;
+      cachedVerticalSpeed = computeVerticalSpeed();
+
+      return relativeAltitude;
+    }
+    // Mutex busy — return cached value, skip this cycle
+    return cachedAltitude;
   }
   return __FLT_MIN__;
 }
@@ -54,26 +96,45 @@ float getVerticalSpeed() {
 // set the ground altitude to the current altitude
 void setGroundAltitude(const STR_DEVICE_DATA_140_V1& deviceData) {
   if (bmpPresent) {
-    groundAltitude = bmp.readAltitude(deviceData.sea_pressure);
-    altitudeBuffer.clear();  // Clear the buffer when resetting ground altitude
+    if (i2cBaroMutex == NULL || xSemaphoreTake(i2cBaroMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+      groundAltitude = bmp.readAltitude(deviceData.sea_pressure);
+      altitudeBuffer.clear();
+      if (i2cBaroMutex != NULL) xSemaphoreGive(i2cBaroMutex);
+    }
   }
 }
 
 // Get the temperature in degrees Celsius
 float getBaroTemperature() {
   if (bmpPresent) {
-    return bmp.readTemperature();
+    if (i2cBaroMutex == NULL || xSemaphoreTake(i2cBaroMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+      float temp = bmp.readTemperature();
+      if (i2cBaroMutex != NULL) xSemaphoreGive(i2cBaroMutex);
+      cachedBaroTemperature = temp;
+      return temp;
+    }
+    return cachedBaroTemperature;
   }
-  return __FLT_MIN__;  // Return a very small number if BMP is not present
+  return __FLT_MIN__;
 }
 
 // Get the pressure in hPa
 float getBaroPressure() {
   if (bmpPresent) {
-    return bmp.readPressure() / 100.0f;  // Convert Pa to hPa
+    if (i2cBaroMutex == NULL || xSemaphoreTake(i2cBaroMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+      float pressure = bmp.readPressure() / 100.0f;
+      if (i2cBaroMutex != NULL) xSemaphoreGive(i2cBaroMutex);
+      return pressure;
+    }
+    return __FLT_MIN__;
   }
-  return __FLT_MIN__;  // Return a very small number if BMP is not present
+  return __FLT_MIN__;
 }
+
+// Cached getters — safe to call from any task
+float getCachedAltitude() { return cachedAltitude; }
+float getCachedBaroTemperature() { return cachedBaroTemperature; }
+float getCachedVerticalSpeed() { return cachedVerticalSpeed; }
 
 // Start the bmp3XX sensor
 bool setupAltimeter() {

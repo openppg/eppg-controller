@@ -28,4 +28,12 @@ float getBaroTemperature();
 // Get the pressure in hPa
 float getBaroPressure();
 
+// Cached getters — safe to call from any task (atomic float reads on Xtensa)
+float getCachedAltitude();
+float getCachedBaroTemperature();
+float getCachedVerticalSpeed();
+
+// Must be called from setup() before any barometer access
+void initAltimeterMutex();
+
 #endif  // INC_SP140_ALTIMETER_H_

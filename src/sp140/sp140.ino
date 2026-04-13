@@ -36,6 +36,7 @@
 
 #include "../../inc/sp140/buzzer.h"
 #include "../../inc/sp140/crash_log.h"
+#include "../../inc/sp140/system_monitors.h"
 #include "../../inc/sp140/device_state.h"
 #include "../../inc/sp140/mode.h"
 #include "../../inc/sp140/throttle.h"
@@ -238,51 +239,57 @@ void deviceStateUpdateTask(void* parameter) {
 }
 
 void changeDeviceState(DeviceState newState) {
-  // State changes are safety-critical - must not timeout (especially DISARM)
+  DeviceState oldState;
+
+  // Fast critical section — update state and notify, then release immediately
   if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
-    DeviceState oldState = currentState;
+    oldState = currentState;
     currentState = newState;
 
-    // Send state update to queue
+    // Send state update to queue (non-blocking overwrite)
     uint8_t state = (uint8_t)newState;
     if (deviceStateQueue != NULL) {
       xQueueOverwrite(deviceStateQueue, &state);  // Always use latest state
     }
 
-    crashLogUpdateArmedState(newState);
-
-    USBSerial.print("Device State Changed to: ");
-    switch (newState) {
-      case DISARMED:
-        USBSerial.println("DISARMED");
-        break;
-      case ARMED:
-        USBSerial.println("ARMED");
-        break;
-      case ARMED_CRUISING:
-        USBSerial.println("ARMED_CRUISING");
-        break;
-    }
-
-    // Handle state transition actions
-    switch (newState) {
-      case DISARMED:
-        disarmSystem();
-        break;
-      case ARMED:
-        if (oldState == DISARMED) {
-          armSystem();
-        } else if (oldState == ARMED_CRUISING) {
-          afterCruiseEnd();
-        }
-        break;
-      case ARMED_CRUISING:
-        if (oldState == ARMED) {
-          afterCruiseStart();
-        }
-        break;
-    }
     xSemaphoreGive(stateMutex);
+  } else {
+    return;  // Should never happen with portMAX_DELAY
+  }
+
+  // Side effects outside mutex — NVS writes, melodies, I2C, queues are safe here
+  crashLogUpdateArmedState(newState);
+
+  USBSerial.print("Device State Changed to: ");
+  switch (newState) {
+    case DISARMED:
+      USBSerial.println("DISARMED");
+      break;
+    case ARMED:
+      USBSerial.println("ARMED");
+      break;
+    case ARMED_CRUISING:
+      USBSerial.println("ARMED_CRUISING");
+      break;
+  }
+
+  // Handle state transition actions
+  switch (newState) {
+    case DISARMED:
+      disarmSystem();
+      break;
+    case ARMED:
+      if (oldState == DISARMED) {
+        armSystem();
+      } else if (oldState == ARMED_CRUISING) {
+        afterCruiseEnd();
+      }
+      break;
+    case ARMED_CRUISING:
+      if (oldState == ARMED) {
+        afterCruiseStart();
+      }
+      break;
   }
 }
 
@@ -397,11 +404,11 @@ void updateBLETask(void *pvParameters) {
       updateBMSPackedTelemetry(newBmsTelemetry, 0);  // bms_id=0 for primary BMS
 
       // Update controller telemetry at same 10Hz rate as BMS
-      // Gather sensor data from barometer and ESP32
-      float altitude = getAltitude(deviceData);
-      float baro_temp = getBaroTemperature();
-      float vario = getVerticalSpeed();
-      float mcu_temp = temperatureRead();  // ESP32 internal temp sensor
+      // Use cached values — uiTask is the sole I2C barometer reader
+      float altitude = getCachedAltitude();
+      float baro_temp = getCachedBaroTemperature();
+      float vario = getCachedVerticalSpeed();
+      float mcu_temp = getCachedCpuTemperature();
       updateControllerPackedTelemetry(altitude, baro_temp, vario, mcu_temp);
     }
 
@@ -416,10 +423,10 @@ void refreshDisplay() {
     return;
   }
 
-  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(40)) == pdTRUE) {
-    // Get the current relative altitude (updates buffer for vario)
-    const float currentRelativeAltitude = getAltitude(deviceData);
+  // Read barometer OUTSIDE lvglMutex — this is the sole I2C reader task
+  const float currentRelativeAltitude = getAltitude(deviceData);
 
+  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(40)) == pdTRUE) {
     // Determine the altitude to show on the display
     float altitudeToShow = 0.0f;  // Default to 0
     if (currentState != DISARMED) {
@@ -808,6 +815,7 @@ void setup140() {
   const int SDA_PIN = 44;
   const int SCL_PIN = 41;
   Wire.setPins(SDA_PIN, SCL_PIN);
+  initAltimeterMutex();
   if (!setupAltimeter()) {
     USBSerial.println("Error initializing BMP3xx barometer");
   }
@@ -969,8 +977,7 @@ void disarmSystem() {
   updateArmedTime();
   writeDeviceData();
 
-  vTaskDelay(pdMS_TO_TICKS(500));  // TODO: just disable button thread to not allow immediate rearming
-  // Set the last disarm time
+  // DISARM_COOLDOWN (500ms) in toggleArm() prevents immediate re-arm
   lastDisarmTime = millis();
 }
 
@@ -1203,10 +1210,8 @@ void afterCruiseStart() {
   uint16_t initialCruisePWM = calculateCruisePwm(
       cruisedPotVal, deviceData.performance_mode, CRUISE_MAX_PERCENTAGE);
 
-  // Send the cruise PWM value to the throttle task via queue
-  if (xQueueSend(throttleUpdateQueue, &initialCruisePWM, pdMS_TO_TICKS(100)) != pdTRUE) {
-    USBSerial.println("Failed to queue initial cruise throttle PWM");
-  }
+  // Send the cruise PWM value to the throttle task via queue (non-blocking overwrite)
+  xQueueOverwrite(throttleUpdateQueue, &initialCruisePWM);
 
   //pulseVibeMotor();
 }
