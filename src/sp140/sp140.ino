@@ -35,7 +35,6 @@
 #include "../../inc/sp140/ble/esc_service.h"
 
 #include "../../inc/sp140/buzzer.h"
-#include "../../inc/sp140/crash_log.h"
 #include "../../inc/sp140/system_monitors.h"
 #include "../../inc/sp140/device_state.h"
 #include "../../inc/sp140/mode.h"
@@ -257,8 +256,7 @@ void changeDeviceState(DeviceState newState) {
     return;  // Should never happen with portMAX_DELAY
   }
 
-  // Side effects outside mutex — NVS writes, melodies, I2C, queues are safe here
-  crashLogUpdateArmedState(newState);
+  // Side effects outside mutex — melodies, I2C, queues are safe here
 
   USBSerial.print("Device State Changed to: ");
   switch (newState) {
@@ -502,18 +500,11 @@ void refreshDisplay() {
 
 void monitoringTask(void *pvParameters) {
   TelemetrySnapshot snap;
-  static uint32_t lastCrashHeartbeat = 0;
   for (;;) {
     if (xQueueReceive(telemetrySnapshotQueue, &snap, pdMS_TO_TICKS(100)) == pdTRUE) {
       // Run monitors using the fresh snapshot
       if (monitoringEnabled) {
         checkAllSensorsWithData(snap.esc, snap.bms);
-
-        // Periodic crash log heartbeat (every 30s)
-        if (millis() - lastCrashHeartbeat >= 30000) {
-          crashLogHeartbeat();
-          lastCrashHeartbeat = millis();
-        }
       }
     }
   }
@@ -628,8 +619,6 @@ void setup() {
   USBSerial.begin(115200);  // This is for debug output and WebSerial
   USBSerial.print("Build date/time: ");
   USBSerial.println(buildDate);
-
-  crashLogReadAndReport();
 
   // Pull CSB (pin 42) high to activate I2C mode
   // temporary fix TODO remove

@@ -3,7 +3,6 @@
 
 #include <Preferences.h>  // Add ESP32 Preferences library
 #include "../../inc/sp140/throttle.h"
-#include "../../inc/sp140/crash_log.h"
 
 /**
  * WebSerial Protocol Documentation
@@ -216,9 +215,6 @@ void parse_serial_commands() {
         return;
       } else if (command == "sync") {
         send_device_data();
-        return;
-      } else if (command == "crash") {
-        sendCrashLogData();
         return;
       }
     }
