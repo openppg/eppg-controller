@@ -25,6 +25,159 @@ static uint16_t sEscLastTime10ms = 0;
 static uint32_t sEscAccumulatedRuntimeMs = 0;
 static bool sEscFirstUpdate = true;
 
+enum class PendingEscTone : uint8_t {
+  NONE = 0,
+  ARM,
+  DISARM,
+};
+
+static volatile EscStatusLightMode sRequestedStatusLightMode =
+    EscStatusLightMode::OFF;
+static EscStatusLightMode sLastSentStatusLightMode = EscStatusLightMode::OFF;
+static unsigned long sLastStatusLightSendMs = 0;
+static bool sHaveSentStatusLight = false;
+static volatile PendingEscTone sPendingEscTone = PendingEscTone::NONE;
+
+namespace {
+
+constexpr uint8_t kEscToneLow = 2;
+constexpr uint8_t kEscToneHigh = 8;
+constexpr uint8_t kEscToneVolumePct = 80;
+constexpr uint8_t kEscToneDuration10ms = 20;
+
+// Caller must pass ARM or DISARM (never NONE).
+void buildEscMotorTone(uint8_t* out, PendingEscTone tone) {
+  if (tone == PendingEscTone::ARM) {
+    SineEsc::makeBeepEntry(&out[0], kEscToneLow, kEscToneDuration10ms, kEscToneVolumePct);
+    SineEsc::makeBeepEntry(&out[3], kEscToneHigh, kEscToneDuration10ms, kEscToneVolumePct);
+  } else {
+    SineEsc::makeBeepEntry(&out[0], kEscToneHigh, kEscToneDuration10ms, kEscToneVolumePct);
+    SineEsc::makeBeepEntry(&out[3], kEscToneLow, kEscToneDuration10ms, kEscToneVolumePct);
+  }
+}
+
+unsigned long escStatusLightRefreshMs(EscStatusLightMode mode) {
+  switch (mode) {
+  case EscStatusLightMode::FLIGHT_NOMINAL:
+  case EscStatusLightMode::FLIGHT_WARNING:
+  case EscStatusLightMode::FLIGHT_CRITICAL:
+    return 0;
+  case EscStatusLightMode::DISARMED_NOMINAL:
+  case EscStatusLightMode::DISARMED_WARNING:
+  case EscStatusLightMode::DISARMED_CRITICAL:
+    return 0;
+  case EscStatusLightMode::OFF:
+  default:
+    return 0;
+  }
+}
+
+void sendEscStatusLight(EscStatusLightMode mode) {
+  switch (mode) {
+  case EscStatusLightMode::DISARMED_NOMINAL: {
+    const uint16_t pattern[] = {
+      SineEsc::makeLedControlEntry(SineEsc::LED_GREEN_BREATH, 60),
+      SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 20),
+    };
+    esc.setLedControl(pattern, 2);
+    break;
+  }
+  case EscStatusLightMode::DISARMED_WARNING: {
+    const uint16_t pattern[] = {
+      SineEsc::makeLedControlEntry(SineEsc::LED_YELLOW_BREATH, 60),
+      SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 20),
+    };
+    esc.setLedControl(pattern, 2);
+    break;
+  }
+  case EscStatusLightMode::DISARMED_CRITICAL: {
+    const uint16_t pattern[] = {
+      SineEsc::makeLedControlEntry(SineEsc::LED_RED_BREATH, 60),
+      SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 20),
+    };
+    esc.setLedControl(pattern, 2);
+    break;
+  }
+  case EscStatusLightMode::FLIGHT_NOMINAL: {
+    const uint16_t pattern[] = {
+      SineEsc::makeLedControlEntry(SineEsc::LED_GREEN, 1),
+      SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 2),
+      SineEsc::makeLedControlEntry(SineEsc::LED_GREEN, 1),
+      SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 30),
+    };
+    esc.setLedControl(pattern, 4);
+    break;
+  }
+  case EscStatusLightMode::FLIGHT_WARNING: {
+    const uint16_t pattern[] = {
+      SineEsc::makeLedControlEntry(SineEsc::LED_YELLOW, 1),
+      SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 2),
+      SineEsc::makeLedControlEntry(SineEsc::LED_YELLOW, 1),
+      SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 30),
+    };
+    esc.setLedControl(pattern, 4);
+    break;
+  }
+  case EscStatusLightMode::FLIGHT_CRITICAL: {
+    const uint16_t pattern[] = {
+      SineEsc::makeLedControlEntry(SineEsc::LED_RED, 1),
+      SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 2),
+      SineEsc::makeLedControlEntry(SineEsc::LED_RED, 1),
+      SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 30),
+    };
+    esc.setLedControl(pattern, 4);
+    break;
+  }
+  case EscStatusLightMode::OFF:
+  default: {
+    const uint16_t pattern[] = {
+      SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 20),
+    };
+    esc.setLedControl(pattern, 1);
+    break;
+  }
+  }
+}
+
+void syncEscOutputs() {
+  const bool escConnected =
+      escTwaiInitialized &&
+      escTelemetryData.escState == TelemetryState::CONNECTED;
+
+  if (!escConnected) {
+    sPendingEscTone = PendingEscTone::NONE;
+    sHaveSentStatusLight = false;
+    sLastSentStatusLightMode = EscStatusLightMode::OFF;
+    sLastStatusLightSendMs = 0;
+    return;
+  }
+
+  const PendingEscTone pendingTone = sPendingEscTone;
+  if (pendingTone != PendingEscTone::NONE) {
+    uint8_t beepData[6];
+    buildEscMotorTone(beepData, pendingTone);
+    esc.setMotorSound(beepData, 2);
+    sPendingEscTone = PendingEscTone::NONE;
+  }
+
+  const EscStatusLightMode requestedMode = sRequestedStatusLightMode;
+  const unsigned long now = millis();
+  const bool needsRefresh =
+      sHaveSentStatusLight &&
+      escStatusLightRefreshMs(requestedMode) > 0 &&
+      (now - sLastStatusLightSendMs) >= escStatusLightRefreshMs(requestedMode);
+
+  if (!sHaveSentStatusLight || requestedMode != sLastSentStatusLightMode ||
+      needsRefresh) {
+    sendEscStatusLight(requestedMode);
+    sLastSentStatusLightMode = requestedMode;
+    sLastStatusLightSendMs = now;
+    sHaveSentStatusLight = true;
+  }
+}
+
+}  // namespace
+
 
 STR_ESC_TELEMETRY_140 escTelemetryData = {
   .escState = TelemetryState::NOT_CONNECTED,
@@ -182,6 +335,7 @@ void readESCTelemetry() {
     memcpy(escTelemetryData.sn_code, hw->sn_code, sizeof(escTelemetryData.sn_code));
   }
 
+  syncEscOutputs();
   adapter.processTxRxOnce();  // Process CAN messages
 }
 
@@ -193,6 +347,18 @@ void readESCTelemetry() {
  */
 void requestEscHardwareInfo() {
   s_hwInfoRequested = true;
+}
+
+void requestEscStatusLightMode(EscStatusLightMode mode) {
+  sRequestedStatusLightMode = mode;
+}
+
+void queueEscMotorBeepArm() {
+  sPendingEscTone = PendingEscTone::ARM;
+}
+
+void queueEscMotorBeepDisarm() {
+  sPendingEscTone = PendingEscTone::DISARM;
 }
 
 /**

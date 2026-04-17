@@ -18,6 +18,7 @@ static std::map<SensorID, AlertLevel> g_currentLevels;
 static AlertCounts g_currentCounts = {0, 0};
 static AlertCounts g_previousCounts = {0, 0};  // Track previous counts for transitions
 static uint32_t g_epoch = 0;
+static AlertCounts g_escBmsCounts = {0, 0};
 
 // Rotation state for display - separate lists for warnings and criticals
 static std::vector<SensorID> g_critList;
@@ -30,6 +31,12 @@ static unsigned long g_lastRotateMs = 0;
 static void alertAggregationTask(void* parameter);
 static void recalcCountsAndPublish();
 static void handleAlertVibration(const AlertCounts& newCounts, const AlertCounts& previousCounts);
+
+static bool isEscOrBmsSensor(SensorID id) {
+  return id >= SensorID::ESC_MOS_Temp && id <= SensorID::BMS_CAN_Init_Failure;
+}
+
+AlertCounts getEscBmsAlertCounts() { return g_escBmsCounts; }
 
 // ------------ Public helpers -------------
 void initAlertDisplay() {
@@ -131,6 +138,7 @@ static void alertAggregationTask(void* parameter) {
 static void recalcCountsAndPublish() {
   AlertCounts counts{0, 0};
   std::vector<SensorID> newCritList;
+  AlertCounts escBmsCounts{0, 0};
   std::vector<SensorID> newWarnList;
   for (const auto& kv : g_currentLevels) {
     switch (kv.second) {
@@ -138,11 +146,17 @@ static void recalcCountsAndPublish() {
       case AlertLevel::WARN_HIGH:
         newWarnList.push_back(kv.first);
         counts.warningCount++;
+        if (isEscOrBmsSensor(kv.first)) {
+          escBmsCounts.warningCount++;
+        }
         break;
       case AlertLevel::CRIT_LOW:
       case AlertLevel::CRIT_HIGH:
         newCritList.push_back(kv.first);
         counts.criticalCount++;
+        if (isEscOrBmsSensor(kv.first)) {
+          escBmsCounts.criticalCount++;
+        }
         break;
       default:
         break;
@@ -150,6 +164,7 @@ static void recalcCountsAndPublish() {
   }
 
   // Handle vibration alerts based on count changes
+  g_escBmsCounts = escBmsCounts;
   handleAlertVibration(counts, g_previousCounts);
   g_previousCounts = counts;
 

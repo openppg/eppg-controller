@@ -22,6 +22,7 @@
 
 #include "../../inc/sp140/alert_display.h"
 #include "../../inc/sp140/altimeter.h"
+#include "../../inc/sp140/system_monitors.h"
 #include "../../inc/sp140/ble.h"
 #include "../../inc/sp140/ble/ble_core.h"
 #include "../../inc/sp140/ble/config_service.h"
@@ -107,7 +108,7 @@ UnifiedBatteryData unifiedBatteryData = {0.0f, 0.0f, 0.0f, 0.0f};  // volts, amp
 // Throttle PWM smoothing buffer is managed in throttle.cpp
 
 Adafruit_NeoPixel pixels(1, 21, NEO_GRB + NEO_KHZ800);
-uint32_t led_color = LED_RED;  // current LED color
+uint32_t led_color = STATUS_LED_RED;  // current LED color
 
 // Global variable for device state
 volatile DeviceState currentState = DISARMED;
@@ -209,49 +210,57 @@ void deviceStateUpdateTask(void *parameter) {
 }
 
 void changeDeviceState(DeviceState newState) {
-  // State changes are safety-critical - must not timeout (especially DISARM)
+  DeviceState oldState;
+
+  // Fast critical section — update state and notify, then release immediately.
+  // Side effects (NVS writes, queue sends, melodies, I2C) run OUTSIDE the mutex
+  // to prevent blocking other tasks that need to read currentState.
   if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
-    DeviceState oldState = currentState;
+    oldState = currentState;
     currentState = newState;
 
-    // Send state update to queue
+    // Send state update to queue (non-blocking overwrite)
     uint8_t state = (uint8_t)newState;
     if (deviceStateQueue != NULL) {
       xQueueOverwrite(deviceStateQueue, &state);  // Always use latest state
     }
 
-    USBSerial.print("Device State Changed to: ");
-    switch (newState) {
-    case DISARMED:
-      USBSerial.println("DISARMED");
-      break;
-    case ARMED:
-      USBSerial.println("ARMED");
-      break;
-    case ARMED_CRUISING:
-      USBSerial.println("ARMED_CRUISING");
-      break;
-    }
-
-    // Handle state transition actions
-    switch (newState) {
-    case DISARMED:
-      disarmSystem();
-      break;
-    case ARMED:
-      if (oldState == DISARMED) {
-        armSystem();
-      } else if (oldState == ARMED_CRUISING) {
-        afterCruiseEnd();
-      }
-      break;
-    case ARMED_CRUISING:
-      if (oldState == ARMED) {
-        afterCruiseStart();
-      }
-      break;
-    }
     xSemaphoreGive(stateMutex);
+  } else {
+    return;  // Should never happen with portMAX_DELAY
+  }
+
+  // Side effects outside the mutex
+  USBSerial.print("Device State Changed to: ");
+  switch (newState) {
+  case DISARMED:
+    USBSerial.println("DISARMED");
+    break;
+  case ARMED:
+    USBSerial.println("ARMED");
+    break;
+  case ARMED_CRUISING:
+    USBSerial.println("ARMED_CRUISING");
+    break;
+  }
+
+  // Handle state transition actions
+  switch (newState) {
+  case DISARMED:
+    disarmSystem();
+    break;
+  case ARMED:
+    if (oldState == DISARMED) {
+      armSystem();
+    } else if (oldState == ARMED_CRUISING) {
+      afterCruiseEnd();
+    }
+    break;
+  case ARMED_CRUISING:
+    if (oldState == ARMED) {
+      afterCruiseStart();
+    }
+    break;
   }
 }
 
@@ -350,6 +359,10 @@ void throttleTask(void *pvParameters) {
 }
 
 // Lightweight task: reads controller sensors and writes to TelemetryHub at 10Hz.
+// Uses CACHED barometer/CPU values — uiTask is the sole I2C reader, and
+// getCachedCpuTemperature throttles tsens access. This avoids i2cMutex
+// contention and the "tsens: Do not configure..." error that arises when
+// multiple tasks call temperatureRead() concurrently.
 void ctrlSensorTask(void *pvParameters) {
   (void)pvParameters;
   TickType_t lastWake = xTaskGetTickCount();
@@ -357,11 +370,13 @@ void ctrlSensorTask(void *pvParameters) {
 
   for (;;) {
     const unsigned long now = millis();
-    float alt = getAltitude(deviceData);
+    float alt = getCachedAltitude();
+    // Direct read for baro temp (at 10Hz) — cheap I2C call, keeps the
+    // cached value fresh for the Baro_Temp monitor which reads the cache.
     float bt = getBaroTemperature();
     float bp = getBaroPressure();
-    float vs = getVerticalSpeed();
-    float mt = temperatureRead();
+    float vs = getCachedVerticalSpeed();
+    float mt = getCachedCpuTemperature();
     uint16_t pr = getLastThrottleRaw();
     telemetryHubWriteController(alt, bt, bp, vs, mt, pr, now);
     vTaskDelayUntil(&lastWake, sensorTicks);
@@ -393,22 +408,19 @@ void refreshDisplay() {
     return;
   }
 
-  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(40)) == pdTRUE) {
-    // Get the current relative altitude (updates buffer for vario)
-    // WORKAROUND: Cache last good altitude to avoid brief "ERR" flashes caused
-    // by I2C mutex contention between this task (20Hz) and ctrlSensorTask (10Hz).
-    // Both call getAltitude() which competes for i2cMutex with a 20ms timeout.
-    // TODO: Ideally the UI should read altitude from TelemetryHub (already
-    // populated by ctrlSensorTask) to eliminate the contention entirely, but
-    // that change needs careful integration testing with BLE FastLink telemetry.
-    static float lastGoodAltitude = 0.0f;
-    const float rawAltitude = getAltitude(deviceData);
-    if (rawAltitude != __FLT_MIN__) {
-      lastGoodAltitude = rawAltitude;
-    }
-    const float currentRelativeAltitude =
-        (rawAltitude != __FLT_MIN__) ? rawAltitude : lastGoodAltitude;
+  // Read barometer OUTSIDE lvglMutex. uiTask is the designated sole I2C
+  // barometer reader — this call populates the cached* globals in altimeter.cpp
+  // that other tasks read via getCachedAltitude()/etc. Taking i2cMutex inside
+  // lvglMutex was a nested-lock deadlock risk.
+  static float lastGoodAltitude = 0.0f;
+  const float rawAltitude = getAltitude(deviceData);
+  if (rawAltitude != __FLT_MIN__) {
+    lastGoodAltitude = rawAltitude;
+  }
+  const float currentRelativeAltitude =
+      (rawAltitude != __FLT_MIN__) ? rawAltitude : lastGoodAltitude;
 
+  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(40)) == pdTRUE) {
     // Determine the altitude to show on the display
     float altitudeToShow = 0.0f;  // Default to 0
     if (currentState != DISARMED) {
@@ -735,7 +747,7 @@ void setup() {
     initVibeMotor();
   }
 
-  setLEDColor(LED_YELLOW);  // Indicate boot in progress
+  setLEDColor(STATUS_LED_YELLOW);  // Indicate boot in progress
 
   // SPI bus (shared between display and BMS CAN)
   setupSPI(board_config);
@@ -766,7 +778,7 @@ void setup() {
     perfModeSwitch();
   }
 
-  setLEDColor(LED_GREEN);
+  setLEDColor(STATUS_LED_GREEN);
 
   // Show splash screen (blocking)
   lv_obj_t* splash_screen = NULL;
@@ -963,7 +975,11 @@ void printTime(const char *label) {
   USBSerial.println(millis());
 }
 
-void disarmESC() { setESCThrottle(ESC_DISARMED_PWM); }
+void disarmESC() {
+  // Throttle task sends ESC_DISARMED_PWM on its next 20ms cycle
+  // when it sees DISARMED state — no direct CAN write needed here
+  // to avoid race condition with throttle task's canard instance
+}
 
 // reset smoothing
 void resetSmoothing() { throttleFilterClear(); }
@@ -973,8 +989,9 @@ void resumeLEDTask() {
 }
 
 void runDisarmAlert() {
-  u_int16_t disarm_melody[] = {2637, 2093};
+  u_int16_t disarm_melody[] = {1568, 1047};
   playMelody(disarm_melody, 2);
+  queueEscMotorBeepDisarm();
   pulseVibeMotor();
 }
 
@@ -1004,9 +1021,8 @@ void disarmSystem() {
   updateArmedTime();
   writeDeviceData();
 
-  vTaskDelay(pdMS_TO_TICKS(
-      500));  // TODO: just disable button thread to not allow immediate rearming
-  // Set the last disarm time
+  // DISARM_COOLDOWN (500ms, checked in toggleArm) prevents immediate re-arm —
+  // no need to block this task for 500ms.
   lastDisarmTime = millis();
 }
 
@@ -1190,6 +1206,29 @@ void syncESCTelemetry() {
     escTelemetryData.escState = TelemetryState::NOT_CONNECTED;
   }
 
+  const AlertCounts escBmsAlerts = getEscBmsAlertCounts();
+  const bool hasCriticalEscOrBmsAlert = escBmsAlerts.criticalCount > 0;
+  const bool hasWarningEscOrBmsAlert = escBmsAlerts.warningCount > 0;
+  EscStatusLightMode escStatusLightMode = EscStatusLightMode::OFF;
+  if (escTelemetryData.escState == TelemetryState::CONNECTED) {
+    if (currentState == DISARMED) {
+      if (hasCriticalEscOrBmsAlert) {
+        escStatusLightMode = EscStatusLightMode::DISARMED_CRITICAL;
+      } else if (hasWarningEscOrBmsAlert) {
+        escStatusLightMode = EscStatusLightMode::DISARMED_WARNING;
+      } else {
+        escStatusLightMode = EscStatusLightMode::DISARMED_NOMINAL;
+      }
+    } else if (hasCriticalEscOrBmsAlert) {
+      escStatusLightMode = EscStatusLightMode::FLIGHT_CRITICAL;
+    } else if (hasWarningEscOrBmsAlert) {
+      escStatusLightMode = EscStatusLightMode::FLIGHT_WARNING;
+    } else {
+      escStatusLightMode = EscStatusLightMode::FLIGHT_NOMINAL;
+    }
+  }
+  requestEscStatusLightMode(escStatusLightMode);
+
   telemetryHubWriteEsc(escTelemetryData);
 }
 
@@ -1200,9 +1239,10 @@ bool throttleEngaged() { return !throttleSafe(); }
 
 // get the PPG ready to fly
 bool armSystem() {
-  uint16_t arm_melody[] = {2093, 2637};
+  uint16_t arm_melody[] = {1047, 1568};
   // const unsigned int arm_vibes[] = { 1, 85, 1, 85, 1, 85, 1 };
-  setESCThrottle(ESC_DISARMED_PWM);  // initialize the signal to low
+  // Throttle task handles ESC commands exclusively to avoid
+  // race condition on the shared canard CAN bus instance
 
   armedAtMillis = millis();
   armedSecs = 0;  // Reset armed seconds for new session
@@ -1211,6 +1251,7 @@ bool armSystem() {
   vTaskSuspend(blinkLEDTaskHandle);
   setLEDs(HIGH);  // solid LED while armed
   playMelody(arm_melody, 2);
+  queueEscMotorBeepArm();
   // runVibePattern(arm_vibes, 7);
   pulseVibeMotor();  // Ensure this is the active call
   return true;
@@ -1226,11 +1267,10 @@ void afterCruiseStart() {
   uint16_t initialCruisePWM = calculateCruisePwm(
       cruisedPotVal, deviceData.performance_mode, CRUISE_MAX_PERCENTAGE);
 
-  // Send the cruise PWM value to the throttle task via queue
-  if (xQueueSend(throttleUpdateQueue, &initialCruisePWM, pdMS_TO_TICKS(100)) !=
-      pdTRUE) {
-    USBSerial.println("Failed to queue initial cruise throttle PWM");
-  }
+  // Send the cruise PWM value to the throttle task via queue (non-blocking
+  // overwrite — blocking send inside changeDeviceState could trigger the
+  // xQueueGenericSend assert during cruise engagement).
+  xQueueOverwrite(throttleUpdateQueue, &initialCruisePWM);
 
   // pulseVibeMotor();
 }
@@ -1273,6 +1313,11 @@ void audioTask(void *parameter) {
           delayTicks = 1;
         }  // Ensure non-zero delay
         vTaskDelayUntil(&nextWakeTime, delayTicks);
+        // Add silence gap between notes for distinct separation
+        if (i < request.size - 1) {
+          stopTone();
+          vTaskDelayUntil(&nextWakeTime, pdMS_TO_TICKS(80));
+        }
       }
       stopTone();
     }
