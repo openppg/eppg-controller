@@ -17,5 +17,6 @@ void requestNormalConnParams();
 // Temporarily disable whitelist filtering so a new device can bond.
 // Advertising reopens for ~60 seconds then whitelisting is restored.
 void enterBLEPairingMode();
+bool isBLEPairingModeActive();
 
 #endif  // INC_SP140_BLE_BLE_CORE_H_
