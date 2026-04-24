@@ -244,13 +244,15 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
         connInfo.isBonded() ? 1 : 0, connInfo.isEncrypted() ? 1 : 0,
         pairingModeActive ? 1 : 0);
 
-    // During pairing mode, proactively request fresh security negotiation.
-    // This helps recover from stale iOS bonds where iOS tries to restore
-    // encryption with keys the controller no longer has (rc=19 failures).
-    if (pairingModeActive && !connInfo.isEncrypted()) {
-      USBSerial.println("[BLE] Pairing mode: requesting fresh security exchange");
-      ble_gap_security_initiate(connInfo.getConnHandle());
-    }
+    // Intentionally do NOT send a peripheral-initiated Security Request here.
+    // Previously this callback called ble_gap_security_initiate() whenever
+    // pairing mode was active and the link wasn't encrypted, to nudge iOS
+    // past stale-bond reconnects. On Samsung/Android that proactive SR
+    // causes a SPURIOUS second "Pair with …?" dialog (Android shows a prompt
+    // for our SR on top of the prompt for the user-driven pair flow). Letting
+    // the central drive pairing avoids the double dialog; the iOS stale-bond
+    // case is still handled by the recovery path in onAuthenticationComplete
+    // which deletes the stale bond and re-requests pairing after auth failure.
   }
 
   void onDisconnect(NimBLEServer *server, NimBLEConnInfo &connInfo,
@@ -294,9 +296,12 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
 
     if (!connInfo.isEncrypted() || !connInfo.isBonded()) {
       if (pairingModeActive) {
-        // During pairing mode, a failed auth likely means the phone has a stale
-        // bond (e.g. iOS cached old encryption keys).  Delete any peer data we
-        // have and request fresh pairing instead of rejecting outright.
+        // During pairing mode, a failed auth likely means the peer has a stale
+        // bond (e.g. iOS cached old encryption keys after we cleared ours).
+        // Delete any peer data we have and request fresh pairing instead of
+        // rejecting outright. This is the only place we still drive security
+        // from the peripheral side — it only runs after auth has already
+        // failed, so Samsung doesn't see a spurious SR here.
         const NimBLEAddress peerAddr = connInfo.getAddress();
         USBSerial.printf("[BLE] Pairing mode: auth failed for addr=%s id=%s, "
                          "requesting fresh pairing\n",
@@ -318,6 +323,11 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
     NimBLEDevice::whiteListAdd(identityAddress);
     USBSerial.printf("[BLE] Identity resolved addr=%s\n",
                      identityAddress.toString().c_str());
+  }
+
+  void onMTUChange(uint16_t MTU, NimBLEConnInfo &connInfo) override {
+    USBSerial.printf("[BLE] MTU change mtu=%u handle=%u\n",
+                     MTU, connInfo.getConnHandle());
   }
 };
 
