@@ -854,15 +854,12 @@ void updateLvglMainScreen(
   }
 
   // Keep the BLE icon synced from the UI task so missed callback updates recover.
+  // Pairing mode flash takes priority over the solid-connected state — the
+  // flashing Bluetooth symbol communicates "ready to pair" for the entire 60s
+  // window, even after the phone has connected. Once the window ends the icon
+  // settles solid (if still connected) or hides.
   if (ble_pairing_icon != NULL) {
-    if (deviceConnected) {
-      if (ble_pairing_flash_timer != NULL) {
-        lv_timer_del(ble_pairing_flash_timer);
-        ble_pairing_flash_timer = NULL;
-      }
-      lv_obj_remove_flag(ble_pairing_icon, LV_OBJ_FLAG_HIDDEN);
-      isFlashingBLEPairingIcon = false;
-    } else if (isBLEPairingModeActive()) {
+    if (isBLEPairingModeActive()) {
       if (!isFlashingBLEPairingIcon) {
         isFlashingBLEPairingIcon = true;
         lv_obj_remove_flag(ble_pairing_icon, LV_OBJ_FLAG_HIDDEN);
@@ -873,6 +870,13 @@ void updateLvglMainScreen(
           USBSerial.println("Error: Failed to create BLE pairing flash timer!");
         }
       }
+    } else if (deviceConnected) {
+      if (ble_pairing_flash_timer != NULL) {
+        lv_timer_del(ble_pairing_flash_timer);
+        ble_pairing_flash_timer = NULL;
+      }
+      lv_obj_remove_flag(ble_pairing_icon, LV_OBJ_FLAG_HIDDEN);
+      isFlashingBLEPairingIcon = false;
     } else {
       if (ble_pairing_flash_timer != NULL) {
         lv_timer_del(ble_pairing_flash_timer);

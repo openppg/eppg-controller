@@ -110,6 +110,11 @@ void applyPreferredLinkParams(TimerHandle_t timer) {
 }
 
 bool shouldAdvertiseWhilePowered() {
+  // Advertise during the 60s pairing window (OPEN, scannable by anyone) AND
+  // whenever a bond exists (BONDED, whitelist-filtered) so the previously-paired
+  // phone can silently reconnect when its app comes back into range. Initial
+  // pair is still manual (button-hold clears bonds and starts the OPEN window),
+  // but subsequent reconnects do NOT require user action.
   return !pairingModeTransitionActive &&
          (pairingModeActive ||
           NimBLEDevice::getNumBonds() > 0);
@@ -130,15 +135,14 @@ bool startAdvertising(NimBLEServer *server) {
 
   const size_t whiteListCount = syncWhiteListFromBonds();
 
+  // Advertise OPEN during the pairing window or BONDED (whitelist) when a bond
+  // exists. The bond-only branch is what gives the previously-paired phone a
+  // silent auto-reconnect after the 60s pairing window has closed.
   if (!allowOpenAdvertising && bondCount == 0) {
     USBSerial.println(
         "[BLE] No bonds present and pairing mode inactive; advertising stopped");
     return false;
   }
-
-  // Bonded devices can always reconnect via whitelist advertising —
-  // no reconnect window gating.  Power draw is negligible for
-  // whitelist-only advertising.
 
 #if CONFIG_BT_NIMBLE_EXT_ADV
   // Legacy connectable undirected advertising via the extended API.
