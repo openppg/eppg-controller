@@ -176,7 +176,13 @@ bool startAdvertising(NimBLEServer *server) {
       static_cast<unsigned>(bondCount), static_cast<unsigned>(whiteListCount));
   return started;
 #else
-  // Configure payload once — NimBLE accumulates addServiceUUID calls
+  // Configure payload once — NimBLE's NimBLEAdvertisementData::setName and
+  // addServiceUUID both APPEND to the payload (no remove-first). Calling
+  // setName on every advertising restart accumulates name AD entries until
+  // the 31-byte legacy adv/scan-response limit overflows, logging
+  // "E NimBLEAdvertisementData: Data length exceeded" twice (scan response
+  // overflow, then adv-data fallback overflow). gAdvertisingName is fixed
+  // at boot (built from the BT MAC), so set it once here too.
   static bool payloadConfigured = false;
   if (!payloadConfigured) {
     advertising->setDiscoverableMode(BLE_GAP_DISC_MODE_GEN);
@@ -185,9 +191,9 @@ bool startAdvertising(NimBLEServer *server) {
     advertising->enableScanResponse(true);
     advertising->setMinInterval(32);  // 20ms (32 * 0.625ms)
     advertising->setMaxInterval(48);  // 30ms (48 * 0.625ms)
+    advertising->setName(gAdvertisingName);
     payloadConfigured = true;
   }
-  advertising->setName(gAdvertisingName);
 
   // Open advertising only during the explicit pairing window. Normal runtime
   // advertising only accepts bonded devices from the controller whitelist.
