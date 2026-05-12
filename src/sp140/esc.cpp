@@ -40,10 +40,10 @@ static bool sEscFirstUpdate = true;
 
 namespace {
 
-constexpr uint8_t kEscToneLow = 3;
-constexpr uint8_t kEscToneHigh = 6;
+constexpr uint8_t kEscToneLow = 2;
+constexpr uint8_t kEscToneHigh = 8;
 constexpr uint8_t kEscToneVolumePct = 80;
-constexpr uint8_t kEscToneDuration10ms = 10;
+constexpr uint8_t kEscToneDuration10ms = 20;
 
 // Caller must pass ARM or DISARM (never NONE).
 void buildEscMotorTone(uint8_t* out, PendingEscTone tone) {
@@ -58,11 +58,14 @@ void buildEscMotorTone(uint8_t* out, PendingEscTone tone) {
 
 unsigned long escStatusLightRefreshMs(EscStatusLightMode mode) {
   switch (mode) {
-  case EscStatusLightMode::FLIGHT:
-    return 1700;
-  case EscStatusLightMode::READY:
-  case EscStatusLightMode::CAUTION:
-    return 1000;
+  case EscStatusLightMode::FLIGHT_NOMINAL:
+  case EscStatusLightMode::FLIGHT_WARNING:
+  case EscStatusLightMode::FLIGHT_CRITICAL:
+    return 0;
+  case EscStatusLightMode::DISARMED_NOMINAL:
+  case EscStatusLightMode::DISARMED_WARNING:
+  case EscStatusLightMode::DISARMED_CRITICAL:
+    return 0;
   case EscStatusLightMode::OFF:
   default:
     return 0;
@@ -71,14 +74,31 @@ unsigned long escStatusLightRefreshMs(EscStatusLightMode mode) {
 
 void sendEscStatusLight(EscStatusLightMode mode) {
   switch (mode) {
-  case EscStatusLightMode::READY: {
+  case EscStatusLightMode::DISARMED_NOMINAL: {
     const uint16_t pattern[] = {
-      SineEsc::makeLedControlEntry(SineEsc::LED_GREEN_BREATH, 20),
+      SineEsc::makeLedControlEntry(SineEsc::LED_GREEN_BREATH, 60),
+      SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 20),
     };
-    esc.setLedControl(pattern, 1);
+    esc.setLedControl(pattern, 2);
     break;
   }
-  case EscStatusLightMode::FLIGHT: {
+  case EscStatusLightMode::DISARMED_WARNING: {
+    const uint16_t pattern[] = {
+      SineEsc::makeLedControlEntry(SineEsc::LED_YELLOW_BREATH, 60),
+      SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 20),
+    };
+    esc.setLedControl(pattern, 2);
+    break;
+  }
+  case EscStatusLightMode::DISARMED_CRITICAL: {
+    const uint16_t pattern[] = {
+      SineEsc::makeLedControlEntry(SineEsc::LED_RED_BREATH, 60),
+      SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 20),
+    };
+    esc.setLedControl(pattern, 2);
+    break;
+  }
+  case EscStatusLightMode::FLIGHT_NOMINAL: {
     const uint16_t pattern[] = {
       SineEsc::makeLedControlEntry(SineEsc::LED_GREEN, 1),
       SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 2),
@@ -88,11 +108,24 @@ void sendEscStatusLight(EscStatusLightMode mode) {
     esc.setLedControl(pattern, 4);
     break;
   }
-  case EscStatusLightMode::CAUTION: {
+  case EscStatusLightMode::FLIGHT_WARNING: {
     const uint16_t pattern[] = {
-      SineEsc::makeLedControlEntry(SineEsc::LED_YELLOW_BREATH, 20),
+      SineEsc::makeLedControlEntry(SineEsc::LED_YELLOW, 1),
+      SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 2),
+      SineEsc::makeLedControlEntry(SineEsc::LED_YELLOW, 1),
+      SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 30),
     };
-    esc.setLedControl(pattern, 1);
+    esc.setLedControl(pattern, 4);
+    break;
+  }
+  case EscStatusLightMode::FLIGHT_CRITICAL: {
+    const uint16_t pattern[] = {
+      SineEsc::makeLedControlEntry(SineEsc::LED_RED, 1),
+      SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 2),
+      SineEsc::makeLedControlEntry(SineEsc::LED_RED, 1),
+      SineEsc::makeLedControlEntry(SineEsc::LED_OFF, 30),
+    };
+    esc.setLedControl(pattern, 4);
     break;
   }
   case EscStatusLightMode::OFF:
@@ -316,6 +349,18 @@ void requestEscHardwareInfo() {
   s_hwInfoRequested = true;
 }
 
+void requestEscStatusLightMode(EscStatusLightMode mode) {
+  sRequestedStatusLightMode = mode;
+}
+
+void queueEscMotorBeepArm() {
+  sPendingEscTone = PendingEscTone::ARM;
+}
+
+void queueEscMotorBeepDisarm() {
+  sPendingEscTone = PendingEscTone::DISARM;
+}
+
 /**
  * Setup the ESP32 TWAI (Two-Wire Automotive Interface) for CAN communication
  * Configures the CAN bus at 1Mbps for communication with the ESC
@@ -377,18 +422,6 @@ bool setupTWAI() {
   }
 
   return true;
-}
-
-void requestEscStatusLightMode(EscStatusLightMode mode) {
-  sRequestedStatusLightMode = mode;
-}
-
-void queueEscMotorBeepArm() {
-  sPendingEscTone = PendingEscTone::ARM;
-}
-
-void queueEscMotorBeepDisarm() {
-  sPendingEscTone = PendingEscTone::DISARM;
 }
 
 /**

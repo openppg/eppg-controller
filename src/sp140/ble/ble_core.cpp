@@ -21,16 +21,13 @@ namespace {
 constexpr size_t kAdvertisingNameCapacity = 32;
 constexpr TickType_t kConnTuneDelayTicks = pdMS_TO_TICKS(1200);
 constexpr TickType_t kPairingTimeoutTicks = pdMS_TO_TICKS(60000);
-constexpr TickType_t kReconnectWindowTicks = pdMS_TO_TICKS(300000);  // 5 min
 constexpr TickType_t kAdvertisingWatchdogTicks = pdMS_TO_TICKS(1000);
 TimerHandle_t gConnTuneTimer = nullptr;
 TimerHandle_t gPairingTimer = nullptr;
-TimerHandle_t gReconnectWindowTimer = nullptr;
 TimerHandle_t gAdvertisingWatchdogTimer = nullptr;
 char gAdvertisingName[kAdvertisingNameCapacity];
 bool pairingModeActive = false;
 bool pairingModeTransitionActive = false;
-bool reconnectWindowActive = false;
 
 // Store the active connection handle for conn param updates
 uint16_t activeConnHandle = 0;
@@ -65,40 +62,6 @@ void stopPairingModeTimer() {
   }
 }
 
-void stopReconnectWindowTimer() {
-  if (gReconnectWindowTimer != nullptr) {
-    xTimerStop(gReconnectWindowTimer, 0);
-  }
-}
-
-void onReconnectWindowTimeout(TimerHandle_t timer) {
-  (void)timer;
-  reconnectWindowActive = false;
-  USBSerial.println("[BLE] Reconnect window expired; stopping advertising");
-  restartBLEAdvertising();
-}
-
-void startReconnectWindowTimer() {
-  reconnectWindowActive = true;
-  if (gReconnectWindowTimer == nullptr) {
-    gReconnectWindowTimer = xTimerCreate("bleReconn", kReconnectWindowTicks,
-                                         pdFALSE, nullptr,
-                                         onReconnectWindowTimeout);
-  }
-  if (gReconnectWindowTimer != nullptr) {
-    xTimerStop(gReconnectWindowTimer, 0);
-    xTimerStart(gReconnectWindowTimer, 0);
-  }
-}
-
-void initReconnectWindowFromBoot() {
-  if (NimBLEDevice::getNumBonds() > 0) {
-    startReconnectWindowTimer();
-    USBSerial.println("[BLE] Reconnect window active (5 min)");
-  } else {
-    reconnectWindowActive = false;
-  }
-}
 
 size_t syncWhiteListFromBonds() {
   // Reconcile the whitelist to the current bond store. Advertising must be
@@ -147,8 +110,14 @@ void applyPreferredLinkParams(TimerHandle_t timer) {
 }
 
 bool shouldAdvertiseWhilePowered() {
+  // Advertise during the 60s pairing window (OPEN, scannable by anyone) AND
+  // whenever a bond exists (BONDED, whitelist-filtered) so the previously-paired
+  // phone can silently reconnect when its app comes back into range. Initial
+  // pair is still manual (button-hold clears bonds and starts the OPEN window),
+  // but subsequent reconnects do NOT require user action.
   return !pairingModeTransitionActive &&
-         (pairingModeActive || reconnectWindowActive);
+         (pairingModeActive ||
+          NimBLEDevice::getNumBonds() > 0);
 }
 
 bool startAdvertising(NimBLEServer *server) {
@@ -166,15 +135,12 @@ bool startAdvertising(NimBLEServer *server) {
 
   const size_t whiteListCount = syncWhiteListFromBonds();
 
+  // Advertise OPEN during the pairing window or BONDED (whitelist) when a bond
+  // exists. The bond-only branch is what gives the previously-paired phone a
+  // silent auto-reconnect after the 60s pairing window has closed.
   if (!allowOpenAdvertising && bondCount == 0) {
     USBSerial.println(
         "[BLE] No bonds present and pairing mode inactive; advertising stopped");
-    return false;
-  }
-
-  if (!allowOpenAdvertising && bondCount > 0 && !reconnectWindowActive) {
-    USBSerial.println(
-        "[BLE] Reconnect window inactive; whitelist advertising not started");
     return false;
   }
 
@@ -214,7 +180,13 @@ bool startAdvertising(NimBLEServer *server) {
       static_cast<unsigned>(bondCount), static_cast<unsigned>(whiteListCount));
   return started;
 #else
-  // Configure payload once — NimBLE accumulates addServiceUUID calls
+  // Configure payload once — NimBLE's NimBLEAdvertisementData::setName and
+  // addServiceUUID both APPEND to the payload (no remove-first). Calling
+  // setName on every advertising restart accumulates name AD entries until
+  // the 31-byte legacy adv/scan-response limit overflows, logging
+  // "E NimBLEAdvertisementData: Data length exceeded" twice (scan response
+  // overflow, then adv-data fallback overflow). gAdvertisingName is fixed
+  // at boot (built from the BT MAC), so set it once here too.
   static bool payloadConfigured = false;
   if (!payloadConfigured) {
     advertising->setDiscoverableMode(BLE_GAP_DISC_MODE_GEN);
@@ -223,9 +195,9 @@ bool startAdvertising(NimBLEServer *server) {
     advertising->enableScanResponse(true);
     advertising->setMinInterval(32);  // 20ms (32 * 0.625ms)
     advertising->setMaxInterval(48);  // 30ms (48 * 0.625ms)
+    advertising->setName(gAdvertisingName);
     payloadConfigured = true;
   }
-  advertising->setName(gAdvertisingName);
 
   // Open advertising only during the explicit pairing window. Normal runtime
   // advertising only accepts bonded devices from the controller whitelist.
@@ -272,9 +244,6 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
     deviceConnected = true;
     connectedHandle = connInfo.getConnHandle();
 
-    stopReconnectWindowTimer();
-    reconnectWindowActive = false;
-
     if (gConnTuneTimer != nullptr) {
       xTimerStop(gConnTuneTimer, 0);
       xTimerStart(gConnTuneTimer, 0);
@@ -285,13 +254,15 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
         connInfo.isBonded() ? 1 : 0, connInfo.isEncrypted() ? 1 : 0,
         pairingModeActive ? 1 : 0);
 
-    // During pairing mode, proactively request fresh security negotiation.
-    // This helps recover from stale iOS bonds where iOS tries to restore
-    // encryption with keys the controller no longer has (rc=19 failures).
-    if (pairingModeActive && !connInfo.isEncrypted()) {
-      USBSerial.println("[BLE] Pairing mode: requesting fresh security exchange");
-      ble_gap_security_initiate(connInfo.getConnHandle());
-    }
+    // Intentionally do NOT send a peripheral-initiated Security Request here.
+    // Previously this callback called ble_gap_security_initiate() whenever
+    // pairing mode was active and the link wasn't encrypted, to nudge iOS
+    // past stale-bond reconnects. On Samsung/Android that proactive SR
+    // causes a SPURIOUS second "Pair with …?" dialog (Android shows a prompt
+    // for our SR on top of the prompt for the user-driven pair flow). Letting
+    // the central drive pairing avoids the double dialog; the iOS stale-bond
+    // case is still handled by the recovery path in onAuthenticationComplete
+    // which deletes the stale bond and re-requests pairing after auth failure.
   }
 
   void onDisconnect(NimBLEServer *server, NimBLEConnInfo &connInfo,
@@ -313,12 +284,6 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
     // Suppress the immediate advertising restart during a pairing transition —
     // enterBLEPairingMode() issues its own startAdvertising after clearing bonds.
     if (!pairingModeTransitionActive) {
-      if (NimBLEDevice::getNumBonds() > 0) {
-        startReconnectWindowTimer();
-      } else {
-        reconnectWindowActive = false;
-        stopReconnectWindowTimer();
-      }
       startAdvertising(server);
     }
   }
@@ -341,9 +306,12 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
 
     if (!connInfo.isEncrypted() || !connInfo.isBonded()) {
       if (pairingModeActive) {
-        // During pairing mode, a failed auth likely means the phone has a stale
-        // bond (e.g. iOS cached old encryption keys).  Delete any peer data we
-        // have and request fresh pairing instead of rejecting outright.
+        // During pairing mode, a failed auth likely means the peer has a stale
+        // bond (e.g. iOS cached old encryption keys after we cleared ours).
+        // Delete any peer data we have and request fresh pairing instead of
+        // rejecting outright. This is the only place we still drive security
+        // from the peripheral side — it only runs after auth has already
+        // failed, so Samsung doesn't see a spurious SR here.
         const NimBLEAddress peerAddr = connInfo.getAddress();
         USBSerial.printf("[BLE] Pairing mode: auth failed for addr=%s id=%s, "
                          "requesting fresh pairing\n",
@@ -365,6 +333,11 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
     NimBLEDevice::whiteListAdd(identityAddress);
     USBSerial.printf("[BLE] Identity resolved addr=%s\n",
                      identityAddress.toString().c_str());
+  }
+
+  void onMTUChange(uint16_t MTU, NimBLEConnInfo &connInfo) override {
+    USBSerial.printf("[BLE] MTU change mtu=%u handle=%u\n",
+                     MTU, connInfo.getConnHandle());
   }
 };
 
@@ -420,8 +393,6 @@ void setupBLE() {
   USBSerial.println("[BLE] BLE_PAIR_ON_BOOT: entering pairing mode automatically");
   enterBLEPairingMode();
 #endif
-  // After optional boot pairing: start reconnect window only if bonds remain.
-  initReconnectWindowFromBoot();
   if (shouldAdvertiseWhilePowered()) {
     restartBLEAdvertising();
   }
@@ -454,8 +425,6 @@ void restartBLEAdvertising() {
 void enterBLEPairingMode() {
   // Block advertising restarts (e.g. from onDisconnect) during this transition.
   pairingModeTransitionActive = true;
-  stopReconnectWindowTimer();
-  reconnectWindowActive = false;
 
   // Single-bond model: disconnect the current peer so we can safely clear bonds.
   if (deviceConnected && pServer != nullptr &&

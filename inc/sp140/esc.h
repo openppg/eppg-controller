@@ -17,9 +17,12 @@ inline bool isMotorTempValidC(float tempC) {
 
 enum class EscStatusLightMode : uint8_t {
   OFF = 0,
-  READY,
-  FLIGHT,
-  CAUTION,
+  DISARMED_NOMINAL,
+  DISARMED_WARNING,
+  DISARMED_CRITICAL,
+  FLIGHT_NOMINAL,
+  FLIGHT_WARNING,
+  FLIGHT_CRITICAL,
 };
 
 void initESC();
