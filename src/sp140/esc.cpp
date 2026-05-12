@@ -19,12 +19,6 @@ static unsigned long lastSuccessfulCommTimeMs = 0;  // Store millis() time of la
 // consumed safely inside readESCTelemetry() on the throttle task.
 static volatile bool s_hwInfoRequested = false;
 
-// ESC runtime accumulation — unwraps the uint16 time_10ms counter (~10.9 min period)
-// Unsigned subtraction naturally handles wrap: (uint16_t)(current - last) is correct even across rollover.
-static uint16_t sEscLastTime10ms = 0;
-static uint32_t sEscAccumulatedRuntimeMs = 0;
-static bool sEscFirstUpdate = true;
-
 enum class PendingEscTone : uint8_t {
   NONE = 0,
   ARM,
@@ -37,6 +31,12 @@ static EscStatusLightMode sLastSentStatusLightMode = EscStatusLightMode::OFF;
 static unsigned long sLastStatusLightSendMs = 0;
 static bool sHaveSentStatusLight = false;
 static volatile PendingEscTone sPendingEscTone = PendingEscTone::NONE;
+
+// ESC runtime accumulation — unwraps the uint16 time_10ms counter (~10.9 min period)
+// Unsigned subtraction naturally handles wrap: (uint16_t)(current - last) is correct even across rollover.
+static uint16_t sEscLastTime10ms = 0;
+static uint32_t sEscAccumulatedRuntimeMs = 0;
+static bool sEscFirstUpdate = true;
 
 namespace {
 
