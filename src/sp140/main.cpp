@@ -349,11 +349,22 @@ void throttleTask(void *pvParameters) {
   (void)pvParameters;  // this is a standard idiom to avoid compiler warnings
                       // about unused parameters.
 
+#ifndef OPENPPG_DEBUG
+  // Subscribe the safety-critical control loop to the hardware Task Watchdog so
+  // a genuine stall of this 50 Hz loop reboots the device into a clean,
+  // motor-idle state. Deliberately ONLY this task (and the watchdog task) are
+  // watched — a stalled UI or BMS task must NOT reboot a flying device.
+  esp_task_wdt_add(NULL);
+#endif
+
   TickType_t lastWake = xTaskGetTickCount();
   const TickType_t throttleTicks = pdMS_TO_TICKS(20);  // 50 Hz
   for (;;) {
     handleThrottle();
     lastThrottleRunMs = millis();
+#ifndef OPENPPG_DEBUG
+    esp_task_wdt_reset();  // control loop ran this cycle — pet the watchdog
+#endif
     vTaskDelayUntil(&lastWake, throttleTicks);
   }
   vTaskDelete(NULL);  // should never reach this
@@ -421,6 +432,14 @@ void refreshDisplay() {
   const float currentRelativeAltitude =
       (rawAltitude != __FLT_MIN__) ? rawAltitude : lastGoodAltitude;
 
+  // Atomic snapshot of ESC/BMS telemetry from the hub. Reading the live globals
+  // here would race the throttle task, which writes escTelemetryData
+  // field-by-field on the other core (torn read). A function-static snapshot
+  // means a rare hub-mutex timeout simply reuses the previous frame's data —
+  // this never blocks the UI task and never shows a half-updated struct.
+  static TelemetryHub uiHub = {};
+  telemetryHubRead(&uiHub, pdMS_TO_TICKS(5));
+
   if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(40)) == pdTRUE) {
     // Determine the altitude to show on the display
     float altitudeToShow = 0.0f;  // Default to 0
@@ -434,7 +453,7 @@ void refreshDisplay() {
     // Select the appropriate screen update function based on the current page
     switch (currentScreenPage) {
     case MAIN_SCREEN:
-      updateLvglMainScreen(deviceData, escTelemetryData, bmsTelemetryData,
+      updateLvglMainScreen(deviceData, uiHub.esc, uiHub.bms,
                            unifiedBatteryData, altitudeToShow, isArmed,
                            isCruising, armedAtMillis);
       break;
@@ -588,12 +607,19 @@ void setupAnalogRead() {
   initThrottleInput();
 }
 
+// Hardware Task Watchdog timeout, in SECONDS. NOTE: esp_task_wdt_init() takes
+// seconds, not milliseconds — the previous value of 3000 was a ~50 minute
+// timeout that effectively disabled the watchdog. 5 s is long enough that
+// normal operation (boot splash, BLE/flash work) can never trip it, yet short
+// enough to recover a genuine firmware hang. By the time it fires, the ESC's
+// own ~300 ms throttle-loss failsafe has already idled the motor.
+#define WDT_TIMEOUT_SECONDS 5
+
 void setupWatchdog() {
 #ifndef OPENPPG_DEBUG
-  // Initialize Task Watchdog
-  ESP_ERROR_CHECK(
-      esp_task_wdt_init(3000, true));  // 3 second timeout, panic on timeout
-#endif                                // OPENPPG_DEBUG
+  // Initialize Task Watchdog (reboot on timeout)
+  ESP_ERROR_CHECK(esp_task_wdt_init(WDT_TIMEOUT_SECONDS, true));
+#endif  // OPENPPG_DEBUG
 }
 
 #define TAG "OpenPPG"

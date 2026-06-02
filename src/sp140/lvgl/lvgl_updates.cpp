@@ -434,7 +434,21 @@ void updateLvglMainScreen(
       hasValidBatteryTemp = true;
     }
   }
-  float escTemp = escTelemetry.cap_temp;
+  // Show whichever ESC temperature is hotter — capacitor or MOSFET — and color
+  // it against that sensor's own thresholds (cap and MOSFET have different
+  // limits). Skip a sensor that reads NaN (invalid); if both are invalid
+  // escTemp stays NaN and the tile shows "-".
+  const float capTemp = escTelemetry.cap_temp;
+  const float mosTemp = escTelemetry.mos_temp;
+  float escTemp;
+  const Thresholds* escTempThresholds;
+  if (!isnan(mosTemp) && (isnan(capTemp) || mosTemp >= capTemp)) {
+    escTemp = mosTemp;
+    escTempThresholds = &escMosTempThresholds;
+  } else {
+    escTemp = capTemp;  // may be NaN if both sensors are invalid
+    escTempThresholds = &escCapTempThresholds;
+  }
   float motorTemp = escTelemetry.motor_temp;
   // Check if BMS or ESC is connected
   bool bmsConnected = (bmsTelemetry.bmsState == TelemetryState::CONNECTED);
@@ -772,13 +786,13 @@ void updateLvglMainScreen(
     lv_obj_remove_style(esc_temp_bg, &style_warning, 0);
     lv_obj_remove_style(esc_temp_bg, &style_critical, 0);
 
-    if (escTelemetry.escState == TelemetryState::CONNECTED) {
+    if (escTelemetry.escState == TelemetryState::CONNECTED && !isnan(escTemp)) {
       lv_label_set_text_fmt(esc_temp_label, "%d", static_cast<int>(escTemp));
 
-      if (escTemp >= escMosTempThresholds.critHigh) {
+      if (escTemp >= escTempThresholds->critHigh) {
         lv_obj_add_style(esc_temp_bg, &style_critical, 0);
         lv_obj_remove_flag(esc_temp_bg, LV_OBJ_FLAG_HIDDEN);
-      } else if (escTemp >= escMosTempThresholds.warnHigh) {
+      } else if (escTemp >= escTempThresholds->warnHigh) {
         lv_obj_add_style(esc_temp_bg, &style_warning, 0);
         lv_obj_remove_flag(esc_temp_bg, LV_OBJ_FLAG_HIDDEN);
       } else {
