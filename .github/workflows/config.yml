@@ -101,6 +101,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -U platformio
       - name: Build ESP32S3
+        # TODO: switch to OpenPPG-CESP32S3-CAN-SP140-release once the
+        # "make the release build meaningful" project in platformio.ini
+        # is complete (logging layer + warning fixes + HIL -O2 validation).
         run: platformio run -e OpenPPG-CESP32S3-CAN-SP140
       - name: Install esptool
         run: pip install esptool
