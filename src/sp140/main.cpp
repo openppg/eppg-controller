@@ -14,7 +14,6 @@
 #include <ArduinoJson.h>
 #include <CircularBuffer.hpp>  // smooth out readings
 #include <SPI.h>
-#include <TimeLib.h>  // convert time to hours mins etc
 #include <Wire.h>
 
 // ESP32S3 (CAN) specific libraries here
