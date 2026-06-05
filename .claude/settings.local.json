@@ -6,7 +6,9 @@
       "Bash(cpplint:*)",
       "Bash(grep:*)",
       "Bash(pio test:*)",
-      "Bash(pio run:*)"
+      "Bash(pio run:*)",
+      "Bash(pio --version)",
+      "Bash(python -c \"import platformio; print\\(platformio.__file__\\)\")"
     ],
     "deny": []
   }

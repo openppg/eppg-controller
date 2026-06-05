@@ -11,6 +11,7 @@
 #include "sp140/vibration_pwm.h"
 #include "sp140/esp32s3-config.h"
 #include "sp140/ble.h"
+#include "sp140/ble/ble_core.h"
 
 // --- Hardware config ---
 HardwareConfig s3_config = {};
@@ -125,6 +126,13 @@ void addBMSMonitors() {}
 void addAltimeterMonitors() {}
 void addInternalMonitors() {}
 void enableMonitoring() {}
+
+// --- BLE core stubs ---
+void setupBLE() {}
+void requestFastConnParams() {}
+void requestNormalConnParams() {}
+void enterBLEPairingMode() {}
+bool isBLEPairingModeActive() { return false; }
 
 // --- BMS stubs ---
 BMS_CAN* bms_can = nullptr;

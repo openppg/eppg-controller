@@ -4,6 +4,8 @@
 #include "../../../inc/sp140/globals.h"
 #include "../../../inc/sp140/vibration_pwm.h"
 #include "../../../inc/sp140/shared-config.h"
+#include "../../../inc/sp140/ble.h"
+#include "../../../inc/sp140/ble/ble_core.h"
 #include <math.h>
 
 // Flash timer globals - definitions
@@ -308,7 +310,21 @@ void startBLEPairingIconFlash() {
   }
 }
 
-void stopBLEPairingIconFlash() {
+void showBLEStatusIcon() {
+  if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+    if (ble_pairing_flash_timer != NULL) {
+      lv_timer_del(ble_pairing_flash_timer);
+      ble_pairing_flash_timer = NULL;
+    }
+    if (ble_pairing_icon != NULL) {
+      lv_obj_remove_flag(ble_pairing_icon, LV_OBJ_FLAG_HIDDEN);
+    }
+    isFlashingBLEPairingIcon = false;
+    xSemaphoreGive(lvglMutex);
+  }
+}
+
+void hideBLEStatusIcon() {
   if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
     if (ble_pairing_flash_timer != NULL) {
       lv_timer_del(ble_pairing_flash_timer);
@@ -320,6 +336,10 @@ void stopBLEPairingIconFlash() {
     isFlashingBLEPairingIcon = false;
     xSemaphoreGive(lvglMutex);
   }
+}
+
+void stopBLEPairingIconFlash() {
+  hideBLEStatusIcon();
 }
 
 // Update the climb rate indicator
@@ -414,7 +434,21 @@ void updateLvglMainScreen(
       hasValidBatteryTemp = true;
     }
   }
-  float escTemp = escTelemetry.cap_temp;
+  // Show whichever ESC temperature is hotter — capacitor or MOSFET — and color
+  // it against that sensor's own thresholds (cap and MOSFET have different
+  // limits). Skip a sensor that reads NaN (invalid); if both are invalid
+  // escTemp stays NaN and the tile shows "-".
+  const float capTemp = escTelemetry.cap_temp;
+  const float mosTemp = escTelemetry.mos_temp;
+  float escTemp;
+  const Thresholds* escTempThresholds;
+  if (!isnan(mosTemp) && (isnan(capTemp) || mosTemp >= capTemp)) {
+    escTemp = mosTemp;
+    escTempThresholds = &escMosTempThresholds;
+  } else {
+    escTemp = capTemp;  // may be NaN if both sensors are invalid
+    escTempThresholds = &escCapTempThresholds;
+  }
   float motorTemp = escTelemetry.motor_temp;
   // Check if BMS or ESC is connected
   bool bmsConnected = (bmsTelemetry.bmsState == TelemetryState::CONNECTED);
@@ -752,13 +786,13 @@ void updateLvglMainScreen(
     lv_obj_remove_style(esc_temp_bg, &style_warning, 0);
     lv_obj_remove_style(esc_temp_bg, &style_critical, 0);
 
-    if (escTelemetry.escState == TelemetryState::CONNECTED) {
+    if (escTelemetry.escState == TelemetryState::CONNECTED && !isnan(escTemp)) {
       lv_label_set_text_fmt(esc_temp_label, "%d", static_cast<int>(escTemp));
 
-      if (escTemp >= escMosTempThresholds.critHigh) {
+      if (escTemp >= escTempThresholds->critHigh) {
         lv_obj_add_style(esc_temp_bg, &style_critical, 0);
         lv_obj_remove_flag(esc_temp_bg, LV_OBJ_FLAG_HIDDEN);
-      } else if (escTemp >= escMosTempThresholds.warnHigh) {
+      } else if (escTemp >= escTempThresholds->warnHigh) {
         lv_obj_add_style(esc_temp_bg, &style_warning, 0);
         lv_obj_remove_flag(esc_temp_bg, LV_OBJ_FLAG_HIDDEN);
       } else {
@@ -831,6 +865,40 @@ void updateLvglMainScreen(
     lv_obj_add_flag(arm_fail_warning_icon_img, LV_OBJ_FLAG_HIDDEN);
     // Ensure color is reset if flashing ended abruptly elsewhere (though cb should handle it)
     lv_obj_set_style_image_recolor(arm_fail_warning_icon_img, original_arm_fail_icon_color, LV_PART_MAIN);
+  }
+
+  // Keep the BLE icon synced from the UI task so missed callback updates recover.
+  // Pairing mode flash takes priority over the solid-connected state — the
+  // flashing Bluetooth symbol communicates "ready to pair" for the entire 60s
+  // window, even after the phone has connected. Once the window ends the icon
+  // settles solid (if still connected) or hides.
+  if (ble_pairing_icon != NULL) {
+    if (isBLEPairingModeActive()) {
+      if (!isFlashingBLEPairingIcon) {
+        isFlashingBLEPairingIcon = true;
+        lv_obj_remove_flag(ble_pairing_icon, LV_OBJ_FLAG_HIDDEN);
+        ble_pairing_flash_timer = lv_timer_create(ble_pairing_flash_timer_cb, 500, NULL);
+        if (ble_pairing_flash_timer == NULL) {
+          isFlashingBLEPairingIcon = false;
+          lv_obj_add_flag(ble_pairing_icon, LV_OBJ_FLAG_HIDDEN);
+          USBSerial.println("Error: Failed to create BLE pairing flash timer!");
+        }
+      }
+    } else if (deviceConnected) {
+      if (ble_pairing_flash_timer != NULL) {
+        lv_timer_del(ble_pairing_flash_timer);
+        ble_pairing_flash_timer = NULL;
+      }
+      lv_obj_remove_flag(ble_pairing_icon, LV_OBJ_FLAG_HIDDEN);
+      isFlashingBLEPairingIcon = false;
+    } else {
+      if (ble_pairing_flash_timer != NULL) {
+        lv_timer_del(ble_pairing_flash_timer);
+        ble_pairing_flash_timer = NULL;
+      }
+      lv_obj_add_flag(ble_pairing_icon, LV_OBJ_FLAG_HIDDEN);
+      isFlashingBLEPairingIcon = false;
+    }
   }
 
   // Update climb rate indicator

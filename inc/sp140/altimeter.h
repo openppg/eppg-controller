@@ -29,4 +29,10 @@ float getBaroTemperature();
 // Get the pressure in hPa
 float getBaroPressure();
 
+// Cached getters — safe to call from any task (atomic float reads on Xtensa).
+// Populated by the designated I2C reader (uiTask via getAltitude()).
+float getCachedAltitude();
+float getCachedBaroTemperature();
+float getCachedVerticalSpeed();
+
 #endif  // INC_SP140_ALTIMETER_H_

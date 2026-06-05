@@ -12,6 +12,19 @@ extern STR_BMS_TELEMETRY_140 monitoringBmsData;
 // External reference to BMS CAN initialization status
 extern bool bmsCanInitialized;
 
+// A freshly-connected BMS reports zero-initialized fields (soc=0, all voltages
+// 0, discharge-MOS=false) until its first data frames are parsed — which looks
+// exactly like a dead, critically-low pack and fired spurious CRIT_LOW / MOS-off
+// alarms on every connect. Treat readings as "no data" until the pack-voltage
+// frame proves real telemetry has arrived. A real pack (even deeply discharged)
+// sits far above this 5 V floor, so this never masks a genuine low condition.
+// SensorMonitor skips NaN; the discharge-MOS monitor reads its non-alerting
+// state (true) until data is valid.
+static constexpr float BMS_MIN_VALID_PACK_V = 5.0f;
+static inline bool bmsDataValid() {
+  return monitoringBmsData.battery_voltage > BMS_MIN_VALID_PACK_V;
+}
+
 void addBMSMonitors() {
   // BMS MOSFET Temperature (Warning: 50°C, Critical: 60°C) - with hysteresis
   static HysteresisSensorMonitor* bmsMosTemp = new HysteresisSensorMonitor(
@@ -69,7 +82,7 @@ void addBMSMonitors() {
     SensorID::BMS_High_Cell_Voltage,
     SensorCategory::BMS,
     bmsHighCellVoltageThresholds,
-    []() { return monitoringBmsData.highest_cell_voltage; },
+    []() { return bmsDataValid() ? monitoringBmsData.highest_cell_voltage : NAN; },
     &multiLogger);
   monitors.push_back(bmsHighCellVoltage);
 
@@ -78,7 +91,7 @@ void addBMSMonitors() {
     SensorID::BMS_Low_Cell_Voltage,
     SensorCategory::BMS,
     bmsLowCellVoltageThresholds,
-    []() { return monitoringBmsData.lowest_cell_voltage; },
+    []() { return bmsDataValid() ? monitoringBmsData.lowest_cell_voltage : NAN; },
     &multiLogger);
   monitors.push_back(bmsLowCellVoltage);
 
@@ -87,7 +100,7 @@ void addBMSMonitors() {
     SensorID::BMS_SOC,
     SensorCategory::BMS,
     bmsSOCThresholds,
-    []() { return monitoringBmsData.soc; },
+    []() { return bmsDataValid() ? monitoringBmsData.soc : NAN; },
     &multiLogger);
   monitors.push_back(bmsSoc);
 
@@ -96,7 +109,7 @@ void addBMSMonitors() {
     SensorID::BMS_Total_Voltage,
     SensorCategory::BMS,
     bmsTotalVoltageThresholds,
-    []() { return monitoringBmsData.battery_voltage; },
+    []() { return bmsDataValid() ? monitoringBmsData.battery_voltage : NAN; },
     &multiLogger);
   monitors.push_back(bmsTotalVoltage);
 
@@ -105,7 +118,7 @@ void addBMSMonitors() {
     SensorID::BMS_Voltage_Differential,
     SensorCategory::BMS,
     bmsVoltageDifferentialThresholds,
-    []() { return monitoringBmsData.voltage_differential; },
+    []() { return bmsDataValid() ? monitoringBmsData.voltage_differential : NAN; },
     &multiLogger);
   monitors.push_back(bmsVoltageDifferential);
 
@@ -123,7 +136,7 @@ void addBMSMonitors() {
   static BooleanMonitor* bmsDischargeMos = new BooleanMonitor(
     SensorID::BMS_Discharge_MOS,
     SensorCategory::BMS,
-    []() { return monitoringBmsData.is_discharge_mos; },
+    []() { return bmsDataValid() ? monitoringBmsData.is_discharge_mos : true; },
     false,  // Alert when false
     AlertLevel::CRIT_HIGH,
     &multiLogger);

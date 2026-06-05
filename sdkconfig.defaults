@@ -1,4 +1,7 @@
 CONFIG_FREERTOS_HZ=1000
+# Bump Tmr Svc task stack: BLE timer callbacks (advertising watchdog, pairing
+# timeout, conn-param tuner) call into NimBLE which can easily overrun 2 KB.
+CONFIG_FREERTOS_TIMER_TASK_STACK_DEPTH=4096
 CONFIG_AUTOSTART_ARDUINO=y
 CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
 CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
