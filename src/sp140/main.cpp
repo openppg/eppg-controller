@@ -24,6 +24,7 @@
 #include "../../inc/sp140/system_monitors.h"
 #include "../../inc/sp140/ble.h"
 #include "../../inc/sp140/ble/ble_core.h"
+#include "../../inc/sp140/ble/ble_utils.h"
 #include "../../inc/sp140/ble/config_service.h"
 #include "../../inc/sp140/ble/fastlink_service.h"
 #include "../../inc/sp140/bms.h"
@@ -115,18 +116,6 @@ volatile DeviceState currentState = DISARMED;
 SemaphoreHandle_t stateMutex;
 SemaphoreHandle_t lvglMutex;
 
-// BLE state propagation
-struct BLEStateUpdate {
-  uint8_t state;
-  bool needsNotify;
-};
-QueueHandle_t bleStateQueue = NULL;
-TaskHandle_t bleStateUpdateTaskHandle = NULL;
-
-// Device state broadcast
-QueueHandle_t deviceStateQueue = NULL;
-TaskHandle_t deviceStateUpdateTaskHandle = NULL;
-
 // WebSerial worker
 TaskHandle_t webSerialTaskHandle = NULL;
 
@@ -156,8 +145,6 @@ extern TaskHandle_t bmsTaskHandle;
 extern TaskHandle_t monitoringTaskHandle;
 extern TaskHandle_t audioTaskHandle;
 extern TaskHandle_t webSerialTaskHandle;
-extern TaskHandle_t bleStateUpdateTaskHandle;
-extern TaskHandle_t deviceStateUpdateTaskHandle;
 extern TaskHandle_t buttonTaskHandle;
 extern TaskHandle_t vibeTaskHandle;
 
@@ -165,65 +152,16 @@ extern TaskHandle_t vibeTaskHandle;
 extern void vibeTask(void *parameter);
 extern void buttonHandlerTask(void *parameter);
 
-// Add this function to handle BLE updates safely
-void bleStateUpdateTask(void *parameter) {
-  BLEStateUpdate update;
-
-  while (true) {
-    if (xQueueReceive(bleStateQueue, &update, portMAX_DELAY) == pdTRUE) {
-      if (pDeviceStateCharacteristic != nullptr) {
-        // Add delay to give BLE stack breathing room
-        vTaskDelay(pdMS_TO_TICKS(20));
-
-        // Set value first
-        pDeviceStateCharacteristic->setValue(&update.state,
-                                             sizeof(update.state));
-
-        // Only notify if requested and connected
-        if (update.needsNotify && deviceConnected && !isOtaInProgress()) {
-          vTaskDelay(pdMS_TO_TICKS(10));  // Additional delay before notify
-          pDeviceStateCharacteristic->notify();
-        }
-      }
-    }
-    // Small delay between updates
-    vTaskDelay(pdMS_TO_TICKS(20));
-  }
-}
-
-// Task to handle device state updates safely.
-void deviceStateUpdateTask(void *parameter) {
-  uint8_t state;
-
-  while (true) {
-    if (xQueueReceive(deviceStateQueue, &state, portMAX_DELAY) == pdTRUE) {
-      if (pDeviceStateCharacteristic != nullptr && deviceConnected) {
-        vTaskDelay(pdMS_TO_TICKS(20));  // Give BLE stack breathing room
-        pDeviceStateCharacteristic->setValue(&state, sizeof(state));
-        if (!isOtaInProgress()) {
-          pDeviceStateCharacteristic->notify();
-        }
-      }
-    }
-    vTaskDelay(pdMS_TO_TICKS(5));
-  }
-}
-
 void changeDeviceState(DeviceState newState) {
   DeviceState oldState;
 
-  // Fast critical section — update state and notify, then release immediately.
-  // Side effects (NVS writes, queue sends, melodies, I2C) run OUTSIDE the mutex
-  // to prevent blocking other tasks that need to read currentState.
+  // Fast critical section — update state, then release immediately. Side effects
+  // (NVS writes, queue sends, melodies, I2C) run OUTSIDE the mutex to prevent
+  // blocking other tasks that read currentState. BLE notify is handled in
+  // bleNotifyTask.
   if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
     oldState = currentState;
     currentState = newState;
-
-    // Send state update to queue (non-blocking overwrite)
-    uint8_t state = (uint8_t)newState;
-    if (deviceStateQueue != NULL) {
-      xQueueOverwrite(deviceStateQueue, &state);  // Always use latest state
-    }
 
     xSemaphoreGive(stateMutex);
   } else {
@@ -400,10 +338,19 @@ void bleNotifyTask(void *pvParameters) {
   TickType_t lastWake = xTaskGetTickCount();
   const TickType_t notifyTicks = pdMS_TO_TICKS(20);  // 50 Hz
 
+  // Mirror state changes to the dedicated device-state characteristic,
+  // edge-triggered (fires only on an actual arm/disarm/cruise change).
+  uint8_t lastNotifiedState = 0xFF;
+
   for (;;) {
     TelemetryHub hub = {};
     if (telemetryHubRead(&hub, pdMS_TO_TICKS(2))) {
       publishFastLinkTelemetry(hub, currentState);
+    }
+
+    if (!isOtaInProgress()) {
+      setAndNotifyOnChange(pDeviceStateCharacteristic,
+                           static_cast<uint8_t>(currentState), lastNotifiedState);
     }
 
     // Check for stalled OTA updates
@@ -648,18 +595,6 @@ void createAllSyncPrimitives() {
     USBSerial.println("Error creating throttle update queue");
   }
 
-  // BLE state queue
-  bleStateQueue = xQueueCreate(5, sizeof(BLEStateUpdate));
-  if (bleStateQueue == NULL) {
-    USBSerial.println("Error creating BLE state queue");
-  }
-
-  // Device state queue
-  deviceStateQueue = xQueueCreate(1, sizeof(uint8_t));
-  if (deviceStateQueue == NULL) {
-    USBSerial.println("Error creating device state queue");
-  }
-
   // Melody queue for audio task - MUST be created before audioTask
   melodyQueue = xQueueCreate(5, sizeof(MelodyRequest));
   if (melodyQueue == NULL) {
@@ -684,12 +619,10 @@ void setupTasks() {
   xTaskCreatePinnedToCore(bmsTask, "BMS", 2304, NULL, 2, &bmsTaskHandle, 1);
   xTaskCreate(ctrlSensorTask, "CtrlSensor", 4096, NULL, 2,
               &ctrlSensorTaskHandle);
+  // 8 KB stack: bleNotifyTask calls notify() (deep NimBLE GATT/ATT/L2CAP/HCI
+  // path) for telemetry and device-state; a smaller stack overflows on notify.
   xTaskCreatePinnedToCore(bleNotifyTask, "BLENotify", 8192, NULL, 1,
                           &bleNotifyTaskHandle, 1);
-  xTaskCreate(deviceStateUpdateTask, "State Update Task", 2048, NULL, 1,
-              &deviceStateUpdateTaskHandle);
-  xTaskCreatePinnedToCore(bleStateUpdateTask, "BLEStateUpdate", 8192, NULL, 1,
-                          &bleStateUpdateTaskHandle, 1);
   xTaskCreatePinnedToCore(buttonHandlerTask, "ButtonHandler", 4096, NULL, 2,
                           &buttonTaskHandle, 0);
   xTaskCreatePinnedToCore(audioTask, "Audio", 1536, NULL, 1, &audioTaskHandle,
