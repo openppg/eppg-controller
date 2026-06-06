@@ -201,6 +201,12 @@ void deviceStateUpdateTask(void *parameter) {
         vTaskDelay(pdMS_TO_TICKS(20));  // Give BLE stack breathing room
         pDeviceStateCharacteristic->setValue(&state, sizeof(state));
         if (!isOtaInProgress()) {
+          // notify() descends through the full NimBLE host stack
+          // (GATT/ATT/L2CAP/HCI) — it is the deepest call this task makes.
+          // This task's stack MUST stay large (>= 8192; see the xTaskCreate for
+          // "State Update Task"). A 2 KB stack here overflowed and rebooted the
+          // controller on arm whenever a BLE central was connected. Do not
+          // shrink the stack or move this notify() onto a smaller-stack task.
           pDeviceStateCharacteristic->notify();
         }
       }
@@ -686,7 +692,11 @@ void setupTasks() {
               &ctrlSensorTaskHandle);
   xTaskCreatePinnedToCore(bleNotifyTask, "BLENotify", 8192, NULL, 1,
                           &bleNotifyTaskHandle, 1);
-  xTaskCreate(deviceStateUpdateTask, "State Update Task", 2048, NULL, 1,
+  // 8192 (not 2048): this task calls pDeviceStateCharacteristic->notify() on
+  // arm. NimBLE's notify path (GATT/ATT/L2CAP/HCI) is deep enough to overflow a
+  // 2KB stack once a central is connected, causing a reboot-on-arm-while-paired.
+  // Matches the proven-safe stack of bleStateUpdateTask, which notifies the same way.
+  xTaskCreate(deviceStateUpdateTask, "State Update Task", 8192, NULL, 1,
               &deviceStateUpdateTaskHandle);
   xTaskCreatePinnedToCore(bleStateUpdateTask, "BLEStateUpdate", 8192, NULL, 1,
                           &bleStateUpdateTaskHandle, 1);
