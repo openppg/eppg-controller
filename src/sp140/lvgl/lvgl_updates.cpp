@@ -344,9 +344,11 @@ void stopBLEPairingIconFlash() {
 
 // Update the climb rate indicator
 void updateClimbRateIndicator(float climbRate) {
-  // Clamp climb rate to displayable range (-0.6 to +0.6 m/s)
-  if (climbRate > 0.6f) climbRate = 0.6f;
-  if (climbRate < -0.6f) climbRate = -0.6f;
+  // Vario display scale: 6 segments per direction cover a +/-3 m/s climb/descent
+  // envelope. The raw value is NOT clamped here - sectionsToFill is capped at 6
+  // below, so rates beyond +/-3 m/s simply pin the gauge to full deflection.
+  const float kVarioSegment = 3.0f / 6.0f;            // m/s per segment (0.5)
+  const float kVarioDeadzone = kVarioSegment / 2.0f;  // neutral zone near 0 (0.25 m/s)
 
   // Reset all sections to transparent
   for (int i = 0; i < 12; i++) {
@@ -375,9 +377,9 @@ void updateClimbRateIndicator(float climbRate) {
     lv_color_make(75, 0, 130)      // Dark purple (again)
   };
 
-  if (climbRate >= 0.15f) {
+  if (climbRate >= kVarioDeadzone) {
     // Positive climb rate - fill sections above center line
-    int sectionsToFill = (int)(climbRate / 0.3f);
+    int sectionsToFill = (int)(climbRate / kVarioSegment);
     if (sectionsToFill > 6) sectionsToFill = 6;
 
     for (int i = 0; i < sectionsToFill; i++) {
@@ -387,9 +389,9 @@ void updateClimbRateIndicator(float climbRate) {
         lv_obj_set_style_bg_color(climb_rate_fill_sections[sectionIndex], positive_colors[i], LV_PART_MAIN);
       }
     }
-  } else if (climbRate <= -0.15f) {
+  } else if (climbRate <= -kVarioDeadzone) {
     // Negative climb rate - fill sections below center line
-    int sectionsToFill = (int)(-climbRate / 0.3f);
+    int sectionsToFill = (int)(-climbRate / kVarioSegment);
     if (sectionsToFill > 6) sectionsToFill = 6;
 
     for (int i = 0; i < sectionsToFill; i++) {
@@ -400,7 +402,7 @@ void updateClimbRateIndicator(float climbRate) {
       }
     }
   }
-  // If climb rate is between -0.15 and +0.15, no sections are filled (neutral)
+  // If |climb rate| is within kVarioDeadzone, no sections are filled (neutral)
 }
 
 void updateLvglMainScreen(
