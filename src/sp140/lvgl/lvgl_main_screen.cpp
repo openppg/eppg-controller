@@ -1,5 +1,6 @@
 #include "../../../inc/sp140/lvgl/lvgl_main_screen.h"
 #include "../../../inc/sp140/lvgl/lvgl_alerts.h"
+#include "../../../inc/sp140/lvgl/lvgl_updates.h"
 #include "../../../inc/sp140/esp32s3-config.h"
 
 #include "../../assets/img/cruise-control-340255-30.c"  // Cruise control icon  // NOLINT(build/include)
@@ -105,6 +106,10 @@ void setupMainScreen(bool darkMode) {
   if (main_screen != NULL) {
     lv_obj_delete(main_screen);
   }
+
+  // Fresh widgets have no cached update state — forget the last-applied values
+  // so updateLvglMainScreen() re-applies styles/positions to the new objects.
+  resetLvglUpdateCache();
 
   // Create main screen
   main_screen = lv_obj_create(NULL);

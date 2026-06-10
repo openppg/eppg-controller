@@ -8,13 +8,20 @@ lv_display_t* main_display = nullptr;
 static uint8_t buf[LVGL_BUF_BYTES];
 static uint8_t buf2[LVGL_BUF_BYTES];
 Adafruit_ST7735* tft_driver = nullptr;
-uint32_t lvgl_last_update = 0;
 // Define the shared SPI bus mutex
 SemaphoreHandle_t spiBusMutex = NULL;
+// Set when a flush had to be skipped because the SPI bus was busy. LVGL is
+// told the flush succeeded (required to keep rendering), so the skipped area
+// would otherwise never be repainted — updateLvgl() checks this flag and
+// forces a full repaint to recover.
+static volatile bool flushSkipped = false;
 
 void setupLvglBuffer() {
   // Initialize LVGL library
   lv_init();
+  // Let LVGL read time directly so animation/refresh pacing stays accurate
+  // regardless of how often lv_timer_handler() gets called.
+  lv_tick_set_cb([]() -> uint32_t { return millis(); });
 }
 
 void setupLvglDisplay(
@@ -77,7 +84,10 @@ void lvgl_flush_cb(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map) {
     if (xSemaphoreTake(spiBusMutex, pdMS_TO_TICKS(200)) != pdTRUE) {
       // SPI bus timeout - BMS might be doing long operation, skip display flush
       USBSerial.println("[DISPLAY] SPI bus timeout - skipping display flush");
-      // Must still signal LVGL that flush is done to avoid deadlock
+      // Must still signal LVGL that flush is done to avoid deadlock. That
+      // marks the area clean without it ever reaching the panel, so flag it
+      // for a recovery repaint (handled in updateLvgl).
+      flushSkipped = true;
       lv_display_flush_ready(disp);
       return;
     }
@@ -103,26 +113,20 @@ void lvgl_flush_cb(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map) {
   lv_display_flush_ready(disp);
 }
 
-// LVGL tick handler - to be called from timer or in main loop
-void lv_tick_handler() {
-  static uint32_t last_tick = 0;
-  uint32_t current_ms = millis();
-
-  if (current_ms - last_tick > 5) {  // 5ms tick rate for LVGL
-    lv_tick_inc(current_ms - last_tick);
-    last_tick = current_ms;
-  }
-}
-
-// Update LVGL - call this regularly
+// Update LVGL - call this regularly with lvglMutex held. LVGL paces actual
+// redraws internally (LV_DEF_REFR_PERIOD), so no extra gating is needed here.
 void updateLvgl() {
-  uint32_t current_ms = millis();
+  lv_timer_handler();
 
-  // Update LVGL at the defined refresh rate
-  if (current_ms - lvgl_last_update > LVGL_REFRESH_TIME) {
-    lv_tick_handler();
-    lv_timer_handler();
-    lvgl_last_update = current_ms;
+  // A flush was dropped because the SPI bus was busy: LVGL believes those
+  // pixels reached the panel, so invalidate everything once to repaint any
+  // stale content on the next refresh cycle.
+  if (flushSkipped) {
+    flushSkipped = false;
+    lv_obj_t* screen = lv_screen_active();
+    if (screen != NULL) {
+      lv_obj_invalidate(screen);
+    }
   }
 }
 

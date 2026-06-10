@@ -469,10 +469,10 @@ void monitoringTask(void *pvParameters) {
   }
 }
 
-// UI task: fixed 20 Hz refresh and snapshot publish
+// UI task: fixed ~30 Hz refresh and snapshot publish
 void uiTask(void *pvParameters) {
   TickType_t lastWake = xTaskGetTickCount();
-  const TickType_t uiTicks = pdMS_TO_TICKS(50);  // 20 Hz
+  const TickType_t uiTicks = pdMS_TO_TICKS(33);  // ~30 Hz, matches LV_DEF_REFR_PERIOD
   for (;;) {
     refreshDisplay();
     lastUiRunMs = millis();
