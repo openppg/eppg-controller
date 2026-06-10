@@ -11,6 +11,8 @@ Adafruit_ST7735* tft_driver = nullptr;
 uint32_t lvgl_last_update = 0;
 // Define the shared SPI bus mutex
 SemaphoreHandle_t spiBusMutex = NULL;
+// Set after a skipped flush so updateLvgl() can repaint stale panel pixels.
+static bool flush_skipped = false;
 
 void setupLvglBuffer() {
   // Initialize LVGL library
@@ -77,6 +79,8 @@ void lvgl_flush_cb(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map) {
     if (xSemaphoreTake(spiBusMutex, pdMS_TO_TICKS(200)) != pdTRUE) {
       // SPI bus timeout - BMS might be doing long operation, skip display flush
       USBSerial.println("[DISPLAY] SPI bus timeout - skipping display flush");
+      // Repaint later; LVGL still thinks this stripe reached the panel.
+      flush_skipped = true;
       // Must still signal LVGL that flush is done to avoid deadlock
       lv_display_flush_ready(disp);
       return;
@@ -122,6 +126,11 @@ void updateLvgl() {
   if (current_ms - lvgl_last_update > LVGL_REFRESH_TIME) {
     lv_tick_handler();
     lv_timer_handler();
+    if (flush_skipped) {
+      // Re-sync the panel after a dropped partial flush.
+      flush_skipped = false;
+      lv_obj_invalidate(lv_screen_active());
+    }
     lvgl_last_update = current_ms;
   }
 }
