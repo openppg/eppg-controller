@@ -427,6 +427,7 @@ void updateClimbRateIndicator(float climbRate) {
     lv_color_make(75, 0, 130)      // Dark purple (again)
   };
 
+<<<<<<< HEAD
   // Compute the desired state for all 12 sections, then diff-apply so only
   // sections that actually changed are invalidated and redrawn.
   lv_opa_t section_opa[12];
@@ -436,6 +437,8 @@ void updateClimbRateIndicator(float climbRate) {
     section_color[i] = lv_color_black();  // unused while transparent
   }
 
+=======
+>>>>>>> origin/master
   if (climbRate >= kVarioDeadzone) {
     // Positive climb rate - fill sections above center line
     int sectionsToFill = (int)(climbRate / kVarioSegment);
@@ -458,6 +461,7 @@ void updateClimbRateIndicator(float climbRate) {
     }
   }
   // If |climb rate| is within kVarioDeadzone, no sections are filled (neutral)
+<<<<<<< HEAD
 
   for (int i = 0; i < 12; i++) {
     if (climb_rate_fill_sections[i] == NULL) continue;
@@ -467,6 +471,8 @@ void updateClimbRateIndicator(float climbRate) {
     }
     setBgOpa(climb_rate_fill_sections[i], section_opa[i]);
   }
+=======
+>>>>>>> origin/master
 }
 
 void updateLvglMainScreen(

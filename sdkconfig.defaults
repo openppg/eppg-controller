@@ -13,3 +13,12 @@ CONFIG_BT_BLUEDROID_ENABLED=y
 # CONFIG_BT_NIMBLE_ENABLED is not set
 CONFIG_COMPILER_CXX_EXCEPTIONS=y
 # CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE is not set
+# Reboot (not just warn) if the watchdog-fed control loop stalls. The firmware
+# already does this via a runtime esp_task_wdt_init(.., panic=true) call; setting
+# it here makes the safety baseline hold even if that runtime call is ever moved.
+CONFIG_ESP_TASK_WDT_PANIC=y
+# Capture an ELF core dump to the (already-reserved) coredump flash partition on
+# panic/WDT reset. diagnostics.cpp already has the reader; this populates it so a
+# field crash backtrace can be pulled over USB (espcoredump.py) during testing.
+CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
+CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF=y
