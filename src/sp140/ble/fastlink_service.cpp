@@ -19,6 +19,12 @@ uint32_t gFastLinkSkippedNoConnCount = 0;
 uint32_t gFastLinkSkippedOtaCount = 0;
 uint32_t gFastLinkLastStatsMs = 0;
 uint32_t gFastLinkPacketId = 0;
+// During OTA the normal ~50Hz telemetry stream is suppressed, but we still emit
+// a low-rate keepalive so the phone's connection-health watchdog sees the link
+// as alive (otherwise the central tears it down mid-flash -> HCI 0x13 /
+// reason=531, aborting OTA ~20% in).
+uint32_t gFastLinkLastOtaKeepaliveMs = 0;
+constexpr uint32_t kOtaKeepaliveIntervalMs = 1000;
 
 constexpr uint32_t kFastLinkTelemetryProperties =
 NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY |
@@ -140,7 +146,24 @@ void updateFastLinkTelemetry(const BLE_FastLink_Telemetry &data) {
     pFastLinkCharacteristic->setValue((uint8_t *)&data,
                                       sizeof(BLE_FastLink_Telemetry));
     if (isOtaInProgress()) {
-      ++gFastLinkSkippedOtaCount;
+      // Suppress the full ~50Hz stream during OTA to give the flash bandwidth,
+      // but emit a ~1Hz keepalive notify so the central keeps the link up. The
+      // keepalive ships the packet just setValue()'d above, whose advancing
+      // packet_id/uptime_ms the app counts as telemetry progress. Wrap-safe
+      // unsigned subtraction. At 1Hz vs the 15ms OTA interval it does not
+      // meaningfully slow the flash.
+      const uint32_t nowMs = millis();
+      if (deviceConnected &&
+          (nowMs - gFastLinkLastOtaKeepaliveMs >= kOtaKeepaliveIntervalMs)) {
+        gFastLinkLastOtaKeepaliveMs = nowMs;
+        if (pFastLinkCharacteristic->notify()) {
+          ++gFastLinkNotifyOkCount;
+        } else {
+          ++gFastLinkNotifyFailCount;
+        }
+      } else {
+        ++gFastLinkSkippedOtaCount;
+      }
     } else if (deviceConnected) {
       const bool sent = pFastLinkCharacteristic->notify();
       if (sent) {

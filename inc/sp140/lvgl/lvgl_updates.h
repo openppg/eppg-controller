@@ -28,6 +28,10 @@ extern bool isFlashingCriticalBorder;
 extern lv_timer_t* ble_pairing_flash_timer;
 extern bool isFlashingBLEPairingIcon;
 
+// Forget cached last-applied UI state (alignment modes, attached tile
+// styles). Must be called whenever the main screen widgets are (re)created.
+void resetLvglUpdateCache();
+
 // Main update function
 void updateLvglMainScreen(
   const STR_DEVICE_DATA_140_V1& deviceData,
