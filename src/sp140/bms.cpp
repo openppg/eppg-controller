@@ -50,9 +50,7 @@ void updateBMSData() {
   if (bms_can == nullptr || !bmsCanInitialized) return;
 
   // TODO track bms incrementing cycle count
-  // Ensure display CS is deselected and BMS CS is selected
-  digitalWrite(displayCS, HIGH);
-  // Take the shared SPI mutex to prevent contention with TFT flush
+  // Guard shared SPI; only the display flush owns displayCS.
   if (spiBusMutex != NULL) {
     if (xSemaphoreTake(spiBusMutex, pdMS_TO_TICKS(150)) != pdTRUE) {
       // SPI bus timeout - display might be doing long operation
@@ -65,6 +63,12 @@ void updateBMSData() {
   // USBSerial.println("Updating BMS Data");
   unsigned long tStart = millis();
   bms_can->update();
+
+  // Getters below read the BMS cache, so release SPI after update().
+  digitalWrite(bmsCS, HIGH);
+  if (spiBusMutex != NULL) {
+    xSemaphoreGive(spiBusMutex);
+  }
 
   // Basic measurements
   bmsTelemetryData.battery_voltage = bms_can->getBatteryVoltage();
@@ -139,12 +143,6 @@ void updateBMSData() {
     USBSerial.println("ms");
   }
   // printBMSData();
-
-  // Deselect BMS CS when done and release mutex
-  digitalWrite(bmsCS, HIGH);
-  if (spiBusMutex != NULL) {
-    xSemaphoreGive(spiBusMutex);
-  }
 }
 
 void printBMSData() {

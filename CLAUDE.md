@@ -30,9 +30,16 @@ esptool.py --chip esp32s3 merge_bin \
   0x10000 .pio/build/OpenPPG-CESP32S3-CAN-SP140/firmware.bin
 ```
 
+**Toolchain quirks (read before building):**
+- Always use `.venv-pio313/bin/pio` (PlatformIO Core 6.1.19); the bare `pio` asdf shim fails.
+- Building the firmware rewrites the tracked `sdkconfig.OpenPPG-CESP32S3-CAN-SP140` to LF line endings (content unchanged). After any firmware build, run `git checkout -- sdkconfig.OpenPPG-CESP32S3-CAN-SP140` so diffs stay clean.
+- NEVER delete the committed sdkconfig to "regenerate it from sdkconfig.defaults" — it holds non-default values (log level, mbedtls options, ISR stack size, partition-table selection) that the defaults file does not capture; a regeneration silently reverts them. Make targeted edits to the committed sdkconfig and mirror the intent in `sdkconfig.defaults`.
+- Do NOT run the screenshot suite via `pio test -e native-screenshot` — that env intentionally compiles no `src/` files and fails at link. Use `./test/test_screenshots/build_and_run.sh` (what CI runs; pass `--update-references` to regenerate the baseline BMPs).
+
 **Testing:**
-- Basic test files exist in `/test/` directory
-- No automated test framework configured - testing is primarily hardware-in-the-loop
+- Host unit tests (googletest): `.venv-pio313/bin/pio test -e native-test` — suites in `/test/`: `test_throttle`, `test_hysteresis`, `test_multilogger`, `test_simplemonitor`, `test_diagnostics`, `test_esc_errors` (placeholder). CI runs these on every push.
+- Screenshot regression tests: `./test/test_screenshots/build_and_run.sh` — renders the LVGL screens in a host emulator and compares against reference BMPs (also in CI).
+- Hardware-in-the-loop testing remains the final validation layer for anything touching CAN, BLE, the display, or motor behavior.
 
 ## Code Architecture
 
@@ -40,12 +47,12 @@ esptool.py --chip esp32s3 merge_bin \
 - `/src/sp140/` - Main application source code
 - `/inc/sp140/` - Header files and configuration
 - `/src/assets/` - Fonts, images, and UI resources
-- `/lib/` - Custom libraries
+- `/libraries/` - Custom/vendored libraries (set by `lib_dir` in platformio.ini)
 - `platformio.ini` - Build configuration
 
 **Core Components:**
 
-**Main Controller (`sp140.ino`):**
+**Main Controller (`src/sp140/main.cpp`):**
 The entry point that coordinates all subsystems. Handles:
 - Hardware initialization and SPI bus management
 - Main control loop and state management  
@@ -58,7 +65,7 @@ The entry point that coordinates all subsystems. Handles:
 - **Throttle Processing** (`throttle.h/cpp`) - Input filtering and response curves
 - **Display/LVGL** (`lvgl/`) - LCD graphics and user interface
 - **Altimeter** (`altimeter.h/cpp`) - Barometric altitude sensing
-- **Device State** (`device_state.h/cpp`) - System state machine management
+- **Device State** (`device_state.h`) - DeviceState enum; the arm/disarm/cruise state machine itself lives in `main.cpp`
 - **Mode Control** (`mode.h/cpp`) - Flight modes (manual, cruise, etc.)
 
 **Hardware Platform:**
