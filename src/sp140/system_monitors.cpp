@@ -10,18 +10,33 @@ extern MultiLogger multiLogger;
 // External reference to BMP sensor status
 extern bool bmpPresent;
 
-// Cached CPU temperature to avoid "tsens: Do not configure the temp sensor when it's running!" error
-static float cachedCpuTemp = 0.0f;
+// CPU temperature cache. SINGLE-WRITER: only refreshCpuTemperature() (and the
+// one-time prime below) may call temperatureRead() — concurrent tsens access
+// from two tasks triggers "tsens: Do not configure the temp sensor when it's
+// running!". Refresh is owned by ctrlSensorTask (10 Hz); every other consumer
+// reads the cache via getCachedCpuTemperature(). The cache is primed once in
+// setup (single-threaded, before tasks exist) so readers never observe the
+// 0.0f initial value — warnLow in cpuTempThresholds is 0.
+static volatile float cachedCpuTemp = 0.0f;
 static unsigned long lastCpuTempRead = 0;
 static const unsigned long CPU_TEMP_READ_INTERVAL = 1000;  // Read every 1 second
 
-float getCachedCpuTemperature() {
+void primeCpuTemperatureCache() {
+  cachedCpuTemp = temperatureRead();
+  lastCpuTempRead = millis();
+}
+
+float refreshCpuTemperature() {
   unsigned long now = millis();
   if (now - lastCpuTempRead >= CPU_TEMP_READ_INTERVAL) {
     cachedCpuTemp = temperatureRead();
     lastCpuTempRead = now;
   }
   return cachedCpuTemp;
+}
+
+float getCachedCpuTemperature() {
+  return cachedCpuTemp;  // pure read; aligned 32-bit float load is atomic on Xtensa
 }
 
 void addInternalMonitors() {

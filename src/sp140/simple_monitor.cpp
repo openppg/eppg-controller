@@ -295,6 +295,10 @@ void initSimpleMonitor() {
   addESCMonitors();
   addBMSMonitors();
   addAltimeterMonitors();
+  // Prime the CPU temp cache while still single-threaded (PHASE 5, before
+  // setupTasks) — readers must never observe the 0.0f initial value because
+  // cpuTempThresholds.warnLow is 0.
+  primeCpuTemperatureCache();
   addInternalMonitors();
   USBSerial.printf("Monitoring %d sensors\n", monitors.size());
 }
