@@ -18,6 +18,7 @@
 #include "sp140/throttle.h"
 #include "version.h"
 #include "sp140/ble/ota_service.h"
+#include "sp140/esc_config_relay.h"
 
 extern void writeDeviceData();
 extern QueueHandle_t throttleUpdateQueue;
@@ -260,6 +261,60 @@ class MetricTempCallbacks : public NimBLECharacteristicCallbacks {
   }
 };
 
+// ESC config relay command characteristic. The app writes an opcode-multiplexed
+// payload; we parse it and hand a single-parameter request to the relay module,
+// which runs the write/save/restart/verify on the throttle task (CAN owner).
+//   0x10 SET_PARAM / 0x1F SET_AND_COMMIT : [op][config_id u16 LE][len u8][data...]
+// The DISARMED gate is enforced inside the relay (status reports REJECTED_ARMED).
+class EscRelayCmdCallbacks : public NimBLECharacteristicCallbacks {
+  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
+    std::string value = characteristic->getValue();
+    if (value.size() < 1) return;
+    const uint8_t op = static_cast<uint8_t>(value[0]);
+    switch (op) {
+      case 0x10:   // SET_PARAM   (single param, write + commit + verify)
+      case 0x1F: {  // SET_AND_COMMIT
+        if (value.size() < 4) return;  // op + config_id(2) + len(1)
+        uint16_t configId = static_cast<uint8_t>(value[1]) |
+                            (static_cast<uint16_t>(static_cast<uint8_t>(value[2])) << 8);
+        uint8_t len = static_cast<uint8_t>(value[3]);
+        if (len > 48 || value.size() < static_cast<size_t>(4 + len)) return;
+        bool accepted = escConfigRelayRequestSetParam(
+            configId, reinterpret_cast<const uint8_t*>(value.data()) + 4, len);
+        USBSerial.printf("ESC relay cmd op=0x%02X id=0x%04X len=%d accepted=%d\n",
+                         op, configId, len, accepted);
+        break;
+      }
+      default:
+        USBSerial.printf("ESC relay: unknown opcode 0x%02X\n", op);
+        break;
+    }
+  }
+};
+
+// ESC config relay status characteristic (read + notify). Returns the latched
+// session status so the app can poll until a terminal result (the design's
+// poll-until-terminal contract, which also survives a BLE drop + reconnect).
+//   [code][config_id u16 LE][phase][detail][progress u16 LE][readback...]
+class EscRelayStatusCallbacks : public NimBLECharacteristicCallbacks {
+  void onRead(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
+    EscRelayStatus s = escConfigRelayGetStatus();
+    uint8_t buf[16];
+    buf[0] = static_cast<uint8_t>(s.code);
+    buf[1] = s.config_id & 0xFF;
+    buf[2] = (s.config_id >> 8) & 0xFF;
+    buf[3] = static_cast<uint8_t>(s.phase);
+    buf[4] = s.detail;
+    buf[5] = 0;  // progress permille LSB (config = 0)
+    buf[6] = 0;  // progress permille MSB
+    uint8_t n = (s.readback_len > 8) ? 8 : s.readback_len;
+    for (uint8_t i = 0; i < n; i++) buf[7 + i] = s.readback[i];
+    characteristic->setValue(buf, 7 + n);
+  }
+};
+
 }  // namespace
 
 void initConfigBleService(NimBLEServer* server, const std::string& uniqueId) {
@@ -360,6 +415,17 @@ void initConfigBleService(NimBLEServer* server, const std::string& uniqueId) {
       kReadWriteNotifyIndicateSecure);
   static ThrottleValueCallbacks throttleValueCallbacks;
   pThrottleCharacteristic->setCallbacks(&throttleValueCallbacks);
+
+  // ESC config relay: command (write) + status (read/notify).
+  NimBLECharacteristic* escRelayCmd = configService->createCharacteristic(
+      NimBLEUUID(ESC_RELAY_CMD_UUID), kReadWriteSecure);
+  static EscRelayCmdCallbacks escRelayCmdCallbacks;
+  escRelayCmd->setCallbacks(&escRelayCmdCallbacks);
+
+  NimBLECharacteristic* escRelayStatus = configService->createCharacteristic(
+      NimBLEUUID(ESC_RELAY_STATUS_UUID), kNotifyReadSecure);
+  static EscRelayStatusCallbacks escRelayStatusCallbacks;
+  escRelayStatus->setCallbacks(&escRelayStatusCallbacks);
 
   NimBLEService* deviceInfoService = server->createService(NimBLEUUID(DEVICE_INFO_SERVICE_UUID));
   NimBLECharacteristic* manufacturer = deviceInfoService->createCharacteristic(

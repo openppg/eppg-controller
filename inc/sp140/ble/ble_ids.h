@@ -19,6 +19,12 @@
 #define THROTTLE_VALUE_UUID "50AB3859-9FBF-4D30-BF97-2516EE632FAD"
 #define DEVICE_STATE_UUID "8F80BCF5-B58F-4908-B079-E8AD6F5EE257"
 
+// ESC config relay (phone -> controller -> ESC over CAN). CMD is written by the
+// app (opcode-multiplexed); STATUS is read/notify for the async result.
+// See: powerpack-flash-qc/configs/ESC-Config-Relay-Design.md
+#define ESC_RELAY_CMD_UUID "E5C0C0DE-0001-4A5C-9B21-7E5C0F1A2B30"
+#define ESC_RELAY_STATUS_UUID "E5C0C0DE-0002-4A5C-9B21-7E5C0F1A2B30"
+
 // Device info service
 #define DEVICE_INFO_SERVICE_UUID "180A"
 #define MANUFACTURER_NAME_UUID "2A29"

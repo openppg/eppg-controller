@@ -1,5 +1,6 @@
 #include "sp140/esc.h"
 #include "sp140/globals.h"
+#include "sp140/esc_config_relay.h"
 #include <CircularBuffer.hpp>
 
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
@@ -14,6 +15,9 @@
 static CanardAdapter adapter;
 static uint8_t memory_pool[1024] __attribute__((aligned(8)));
 static SineEsc esc(adapter);
+
+// Expose the single shared adapter to the ESC config relay module.
+CanardAdapter& escAdapter() { return adapter; }
 static unsigned long lastSuccessfulCommTimeMs = 0;  // Store millis() time of last successful ESC comm
 // Flag set by requestEscHardwareInfo() (may be called from BLE task),
 // consumed safely inside readESCTelemetry() on the throttle task.
@@ -206,6 +210,9 @@ void initESC() {
   esc.setThrottleSettings2(IdleThrottle_us);
   adapter.processTxRxOnce();
   vTaskDelay(pdMS_TO_TICKS(20));  // Wait for ESC to process the command
+
+  // Register the ESC config-relay node on the shared adapter (no-op if already).
+  escConfigRelayInit();
 }
 
 /**
@@ -337,6 +344,10 @@ void readESCTelemetry() {
 
   syncEscOutputs();
   adapter.processTxRxOnce();  // Process CAN messages
+
+  // Drive any in-flight ESC config-relay session. Runs on the throttle task so
+  // all CAN traffic stays single-owner. Non-blocking; only acts when DISARMED.
+  escConfigRelayServiceTick();
 }
 
 /**

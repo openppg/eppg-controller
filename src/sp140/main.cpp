@@ -29,6 +29,7 @@
 #include "../../inc/sp140/ble/fastlink_service.h"
 #include "../../inc/sp140/bms.h"
 #include "../../inc/sp140/esc.h"
+#include "../../inc/sp140/esc_config_relay.h"
 #include "../../inc/sp140/globals.h"  // device config
 #include "../../inc/sp140/lvgl/lvgl_alerts.h"
 #include "../../inc/sp140/lvgl/lvgl_core.h"
@@ -995,6 +996,13 @@ void toggleArm() {
   if (currentState == DISARMED) {
     if (isOtaInProgress()) {
       USBSerial.println("Arm blocked: OTA update in progress");
+      return;
+    }
+
+    // Block arming while an ESC config-relay session is in flight (the ESC may
+    // be mid-reboot). Mirrors the OTA interlock above.
+    if (escConfigRelayIsActive()) {
+      USBSerial.println("Arm blocked: ESC config relay in progress");
       return;
     }
 
