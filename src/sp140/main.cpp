@@ -30,6 +30,7 @@
 #include "../../inc/sp140/bms.h"
 #include "../../inc/sp140/esc.h"
 #include "../../inc/sp140/esc_config_relay.h"
+#include "../../inc/sp140/esc_flasher_relay.h"
 #include "../../inc/sp140/globals.h"  // device config
 #include "../../inc/sp140/lvgl/lvgl_alerts.h"
 #include "../../inc/sp140/lvgl/lvgl_core.h"
@@ -348,6 +349,10 @@ void bleNotifyTask(void *pvParameters) {
     if (telemetryHubRead(&hub, pdMS_TO_TICKS(2))) {
       publishFastLinkTelemetry(hub, currentState);
     }
+
+    // Push ESC config-relay status + result blob over notify (config-service
+    // GATT reads return null on this stack; notify is reliable).
+    pumpEscRelayNotify();
 
     if (!isOtaInProgress()) {
       setAndNotifyOnChange(pDeviceStateCharacteristic,
@@ -999,10 +1004,11 @@ void toggleArm() {
       return;
     }
 
-    // Block arming while an ESC config-relay session is in flight (the ESC may
-    // be mid-reboot). Mirrors the OTA interlock above.
-    if (escConfigRelayIsActive()) {
-      USBSerial.println("Arm blocked: ESC config relay in progress");
+    // Block arming while an ESC config-relay or firmware-relay session is in
+    // flight (the ESC may be mid-reboot / in the bootloader). Mirrors the OTA
+    // interlock above.
+    if (escConfigRelayIsActive() || escFlasherRelayIsActive()) {
+      USBSerial.println("Arm blocked: ESC config/firmware relay in progress");
       return;
     }
 
@@ -1155,7 +1161,16 @@ void handleThrottle() {
     break;
   }
 
-  setESCThrottle(finalPwm);
+  // Suppress the ESC control/telemetry command during a config/firmware relay
+  // session. setESCThrottle() pings the ESC every cycle and the ESC answers with
+  // a burst of high-rate telemetry; that flood overruns the CAN RX buffer and the
+  // SaveConfig reply gets dropped, so the write times out. flash-qc works because
+  // its bus is quiet. The device is always DISARMED during a session, so there is
+  // no throttle to send anyway. readESCTelemetry() still runs — it pumps the bus
+  // and drives the relay state machine.
+  if (!escConfigRelayIsActive() && !escFlasherRelayIsActive()) {
+    setESCThrottle(finalPwm);
+  }
 
   // Read/Sync ESC Telemetry (runs in all armed states)
   readESCTelemetry();

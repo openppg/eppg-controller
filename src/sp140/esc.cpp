@@ -1,6 +1,7 @@
 #include "sp140/esc.h"
 #include "sp140/globals.h"
 #include "sp140/esc_config_relay.h"
+#include "sp140/esc_flasher_relay.h"
 #include <CircularBuffer.hpp>
 
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
@@ -211,8 +212,9 @@ void initESC() {
   adapter.processTxRxOnce();
   vTaskDelay(pdMS_TO_TICKS(20));  // Wait for ESC to process the command
 
-  // Register the ESC config-relay node on the shared adapter (no-op if already).
+  // Register the ESC config-relay + firmware-relay nodes on the shared adapter.
   escConfigRelayInit();
+  escFlasherRelayInit();
 }
 
 /**
@@ -345,9 +347,11 @@ void readESCTelemetry() {
   syncEscOutputs();
   adapter.processTxRxOnce();  // Process CAN messages
 
-  // Drive any in-flight ESC config-relay session. Runs on the throttle task so
-  // all CAN traffic stays single-owner. Non-blocking; only acts when DISARMED.
+  // Drive any in-flight ESC config-relay / firmware-relay session. Both run on
+  // the throttle task so all CAN traffic stays single-owner. Non-blocking; only
+  // one can be active at a time (mutually gated) and only when DISARMED.
   escConfigRelayServiceTick();
+  escFlasherRelayServiceTick();
 }
 
 /**

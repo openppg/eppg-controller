@@ -38,6 +38,7 @@ enum class EscRelayPhase : uint8_t {
   RESTART,
   WAIT_REBOOT,
   VERIFY,
+  READING,    // read-all: iterating GetConfig over every param
   DONE_OK,
   DONE_FAIL,
 };
@@ -50,6 +51,8 @@ enum class EscRelayStatusCode : uint8_t {
   RUNNING         = 0x02,
   REBOOTING       = 0x03,
   VERIFIED_OK     = 0x04,
+  READING         = 0x06,  // read-all in progress (detail = percent)
+  READ_DONE       = 0x07,  // read-all complete (config_id field = result blob length)
   FAILED          = 0x80,
   REJECTED_ARMED  = 0x81,
   TIMEOUT         = 0x82,
@@ -86,12 +89,33 @@ bool escConfigRelayRequestSetParam(uint16_t config_id,
 // Convenience for the canonical reverse-direction toggle.
 bool escConfigRelayRequestReverseDirection(bool reversed);
 
+// Start a "read all parameters" session: switch to host node 0x40, unlock, then
+// GetConfig every id in ESC_PARAM_IDS into a result blob, then restore node 0x01.
+// On completion the status code is READ_DONE and config_id holds the blob length.
+// Returns false if a session is already in progress.
+bool escConfigRelayRequestReadAll();
+
+// Length of the last completed read-all result blob (0 until READ_DONE).
+uint16_t escConfigRelayResultLen();
+
+// Copy up to maxLen bytes of the result blob starting at offset into out.
+// Returns the number of bytes copied. Blob format is a sequence of tuples:
+//   [config_id u16 LE][flag u8][len u8][data[len]]
+// (flag 0xFF = the controller timed out reading that param.)
+uint16_t escConfigRelayReadResult(uint32_t offset, uint8_t* out, uint16_t maxLen);
+
 // Latched status snapshot for the BLE status characteristic / UI.
 EscRelayStatus escConfigRelayGetStatus();
 
 // True while a session is in progress OR a request is pending (for the arm
 // interlock — block arming while this is true).
 bool escConfigRelayIsActive();
+
+// True while a session is active OR within a short settle window after it ends.
+// Used to keep the high-rate telemetry notify throttled so the phone's status
+// poll and result-blob reads aren't starved by the notify flood. See
+// fastlink_service.cpp / ESC-Config-Relay-Design.md.
+bool escConfigRelayResultPending();
 
 // Require PasswordUnlock (SINE service 225) before writing, and re-unlock after
 // the ESC reboots. Default false. The reverse-direction param does NOT need it;

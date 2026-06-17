@@ -7,6 +7,8 @@
 #include "sp140/ble/ble_ids.h"
 #include "sp140/ble/ota_service.h"
 #include "sp140/esc.h"  // For requestEscHardwareInfo()
+#include "sp140/esc_config_relay.h"   // throttle telemetry during config relay
+#include "sp140/esc_flasher_relay.h"  // ... and firmware relay
 #include <Arduino.h>
 #include <NimBLECharacteristic.h>
 #include <NimBLEDevice.h>
@@ -145,7 +147,11 @@ void updateFastLinkTelemetry(const BLE_FastLink_Telemetry &data) {
   if (pFastLinkCharacteristic != nullptr) {
     pFastLinkCharacteristic->setValue((uint8_t *)&data,
                                       sizeof(BLE_FastLink_Telemetry));
-    if (isOtaInProgress()) {
+    // Throttle the ~50Hz stream during OTA AND during an ESC config/firmware
+    // relay session (plus its short read-back settle window): at ~66Hz the
+    // notify flood saturates every connection event and starves the phone's
+    // config-service reads (status poll + result blob), so they never complete.
+    if (isOtaInProgress() || escConfigRelayResultPending() || escFlasherRelayIsActive()) {
       // Suppress the full ~50Hz stream during OTA to give the flash bandwidth,
       // but emit a ~1Hz keepalive notify so the central keeps the link up. The
       // keepalive ships the packet just setValue()'d above, whose advancing
