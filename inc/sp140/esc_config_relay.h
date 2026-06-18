@@ -38,7 +38,9 @@ enum class EscRelayPhase : uint8_t {
   RESTART,
   WAIT_REBOOT,
   VERIFY,
-  READING,    // read-all: iterating GetConfig over every param
+  READING,      // read-all: iterating GetConfig over every param
+  BATCH_WRITE,  // batch: iterating SetConfig over every queued param
+  BATCH_VERIFY, // batch: iterating GetConfig to confirm each queued param persisted
   DONE_OK,
   DONE_FAIL,
 };
@@ -94,6 +96,23 @@ bool escConfigRelayRequestReverseDirection(bool reversed);
 // On completion the status code is READ_DONE and config_id holds the blob length.
 // Returns false if a session is already in progress.
 bool escConfigRelayRequestReadAll();
+
+// ---- Batch write (apply many params with a SINGLE save + restart) -----------
+// Mirrors the flash-qc sequence: unlock -> SetConfig every queued param ->
+// SaveConfig once -> RestartNode once -> verify each param persisted across the
+// reboot. The phone streams the batch first (Begin, then Add per param) and then
+// Commit triggers the session. Safe to call Begin/Add from the BLE task — they
+// only touch the staging buffer, which the throttle task does not read until a
+// Commit starts the session.
+//
+// Begin: clear the staging buffer. Returns false if a session is in progress.
+bool escConfigRelayBatchBegin();
+// Add one param to the staging buffer ([config_id u16][len u8][data[len]]).
+// Returns false if the buffer is full or a session is in progress.
+bool escConfigRelayBatchAdd(uint16_t config_id, const uint8_t* data, uint8_t len);
+// Commit: run the batch session over the staged params. Returns false if nothing
+// is staged or a session is already in progress.
+bool escConfigRelayRequestBatchCommit();
 
 // Length of the last completed read-all result blob (0 until READ_DONE).
 uint16_t escConfigRelayResultLen();

@@ -300,6 +300,26 @@ class EscRelayCmdCallbacks : public NimBLECharacteristicCallbacks {
         USBSerial.printf("ESC relay READ_ALL accepted=%d\n", accepted);
         break;
       }
+      case 0x40: {  // BATCH_BEGIN — clear the staging buffer
+        bool accepted = escConfigRelayBatchBegin();
+        USBSerial.printf("ESC relay BATCH_BEGIN accepted=%d\n", accepted);
+        break;
+      }
+      case 0x41: {  // BATCH_ADD — [op][config_id u16][len u8][data...]
+        if (value.size() < 4) return;
+        uint16_t configId = static_cast<uint8_t>(value[1]) |
+                            (static_cast<uint16_t>(static_cast<uint8_t>(value[2])) << 8);
+        uint8_t len = static_cast<uint8_t>(value[3]);
+        if (len > 48 || value.size() < static_cast<size_t>(4 + len)) return;
+        escConfigRelayBatchAdd(configId,
+                               reinterpret_cast<const uint8_t*>(value.data()) + 4, len);
+        break;
+      }
+      case 0x42: {  // BATCH_COMMIT — run write-all + save + restart + verify
+        bool accepted = escConfigRelayRequestBatchCommit();
+        USBSerial.printf("ESC relay BATCH_COMMIT accepted=%d\n", accepted);
+        break;
+      }
       default:
         USBSerial.printf("ESC relay: unknown opcode 0x%02X\n", op);
         break;

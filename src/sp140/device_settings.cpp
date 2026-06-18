@@ -9,7 +9,6 @@
 #include <Preferences.h>  // Add ESP32 Preferences library
 #include "../../inc/sp140/throttle.h"
 #include "../../inc/sp140/diagnostics.h"
-#include "../../inc/sp140/esc_config_relay.h"  // TEMP: serial-driven ESC write/read test
 
 /**
  * WebSerial Protocol Documentation
@@ -240,27 +239,6 @@ void parse_serial_command_line(const char* json_line) {
       diagnosticsClearPersistentData();
       diagnosticsSendJson(USBSerial);
       USBSerial.println();
-      return;
-    } else if (command == "esc_read") {  // TEMP: trigger a read-all over CAN
-      bool ok = escConfigRelayRequestReadAll();
-      USBSerial.printf("[ESCTEST] esc_read accepted=%d\n", (int)ok);
-      return;
-    } else if (command == "esc_dir") {  // TEMP: {"command":"esc_dir","val":0|1}
-      int v = doc["val"] | 1;
-      uint8_t d[2] = { (uint8_t)(v & 0xFF), 0 };
-      bool ok = escConfigRelayRequestSetParam(0x0080, d, 2);
-      USBSerial.printf("[ESCTEST] esc_dir val=%d accepted=%d\n", v, (int)ok);
-      return;
-    } else if (command == "esc_set") {  // TEMP: {"command":"esc_set","id":146,"val":2200,"len":2}
-      uint16_t id = (uint16_t)(doc["id"] | 0);
-      int32_t val = (int32_t)(doc["val"] | 0);
-      int len = doc["len"] | 2;
-      uint8_t d[4] = {
-        (uint8_t)(val & 0xFF), (uint8_t)((val >> 8) & 0xFF),
-        (uint8_t)((val >> 16) & 0xFF), (uint8_t)((val >> 24) & 0xFF) };
-      bool ok = escConfigRelayRequestSetParam(id, d, (uint8_t)len);
-      USBSerial.printf("[ESCTEST] esc_set id=0x%04X val=%ld len=%d accepted=%d\n",
-                       id, (long)val, len, (int)ok);
       return;
     }
   }

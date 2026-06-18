@@ -280,6 +280,33 @@ static uint16_t s_readIndex = 0;
 static uint8_t  s_resultBlob[3072];   // tuples: [config_id u16][flag u8][len u8][data]
 static uint16_t s_resultLen = 0;
 
+// Batch session state. Staging buffer holds [config_id u16][len u8][data[len]]
+// tuples; the batch session writes them all, saves once, restarts once, verifies.
+static volatile bool s_batchReqPending = false;
+static bool     s_batchMode = false;
+static uint8_t  s_batchBuf[2560];
+static uint16_t s_batchLen = 0;       // bytes used in s_batchBuf
+static uint16_t s_batchCount = 0;     // number of staged params
+static uint16_t s_batchOffset = 0;    // walk cursor during write/verify iteration
+static uint16_t s_batchIndex = 0;     // staged-param index during iteration
+static uint16_t s_batchMismatch = 0;  // verify mismatches
+
+// Read the staged tuple at s_batchOffset. Returns false at end of buffer.
+static bool batchCurrentTuple(uint16_t* id, const uint8_t** data, uint8_t* len) {
+  if (s_batchOffset + 3 > s_batchLen) return false;
+  uint16_t off = s_batchOffset;
+  *id = s_batchBuf[off] | (uint16_t)(s_batchBuf[off + 1] << 8);
+  *len = s_batchBuf[off + 2];
+  *data = &s_batchBuf[off + 3];
+  if (off + 3 + *len > s_batchLen) return false;
+  return true;
+}
+
+static void batchAdvanceCursor(uint8_t len) {
+  s_batchOffset += 3 + len;
+  s_batchIndex++;
+}
+
 // Telemetry-throttle settle window: after a session ends, keep telemetry notify
 // suppressed for this long so the app can poll the final status and fetch the
 // result blob over a quiet link (telemetry at ~66 Hz otherwise starves reads).
@@ -297,8 +324,6 @@ static void setStatus(EscRelayStatusCode code, EscRelayPhase phase, uint8_t deta
 }
 
 static void finishOk(const uint8_t* readback, uint8_t len) {
-  USBSerial.printf("[ESCWR] VERIFIED_OK target=0x%04X readbackLen=%d\n",
-                   s_targetId, (int)len);  // TEMP diag
   portENTER_CRITICAL(&s_mux);
   s_status.code = EscRelayStatusCode::VERIFIED_OK;
   s_status.phase = EscRelayPhase::DONE_OK;
@@ -314,8 +339,6 @@ static void finishOk(const uint8_t* readback, uint8_t len) {
 }
 
 static void finishFail(EscRelayStatusCode code, uint8_t detail) {
-  USBSerial.printf("[ESCWR] FAIL code=0x%02X atPhase=%d target=0x%04X reUnlocked=%d\n",
-                   (int)code, (int)s_phase, s_targetId, (int)s_reUnlocked);  // TEMP diag
   setStatus(code, EscRelayPhase::DONE_FAIL, detail);
   escAdapter().setLocalNodeId(CTRL_NORMAL_NODE_ID);  // restore normal CAN identity
   s_terminalAtMs = millis();
@@ -366,6 +389,7 @@ static void readAdvance(unsigned long now) {
 static void beginReadSession() {
   escAdapter().setLocalNodeId(CONFIG_HOST_NODE_ID);
   s_readMode = true;
+  s_batchMode = false;
   s_readIndex = 0;
   s_resultLen = 0;
   s_retries = 0;
@@ -390,6 +414,7 @@ static void beginSession(uint16_t id, const uint8_t* data, uint8_t len) {
   escAdapter().setLocalNodeId(CONFIG_HOST_NODE_ID);
 
   s_readMode = false;
+  s_batchMode = false;
   s_targetId = id;
   s_expLen = (len > 48) ? 48 : len;
   memcpy(s_expData, data, s_expLen);
@@ -405,6 +430,37 @@ static void beginSession(uint16_t id, const uint8_t* data, uint8_t len) {
     s_phase = EscRelayPhase::WRITE;
     setStatus(EscRelayStatusCode::RUNNING, EscRelayPhase::WRITE, 0);
     sendSetConfig(s_targetId, s_expData, s_expLen);
+  }
+  s_lastSendMs = millis();
+}
+
+// Start a batch session over the staged params: unlock -> SetConfig each ->
+// SaveConfig once -> RestartNode -> verify each across the reboot.
+static void beginBatchSession() {
+  escAdapter().setLocalNodeId(CONFIG_HOST_NODE_ID);
+  s_readMode = false;
+  s_batchMode = true;
+  s_batchOffset = 0;
+  s_batchIndex = 0;
+  s_batchMismatch = 0;
+  s_retries = 0;
+  s_reUnlocked = false;
+  s_gotSet = s_gotGet = s_gotSave = s_gotUnlock = false;
+
+  // First staged tuple is the working target (used as the post-reboot probe id).
+  uint16_t id = 0; const uint8_t* d = nullptr; uint8_t len = 0;
+  if (batchCurrentTuple(&id, &d, &len)) {
+    s_targetId = id; s_expLen = len; memcpy(s_expData, d, len);
+  }
+
+  if (s_requireUnlock) {
+    s_phase = EscRelayPhase::UNLOCK;
+    setStatus(EscRelayStatusCode::RUNNING, EscRelayPhase::UNLOCK, 0);
+    sendPasswordUnlock();
+  } else {
+    s_phase = EscRelayPhase::BATCH_WRITE;
+    setStatus(EscRelayStatusCode::RUNNING, EscRelayPhase::BATCH_WRITE, 0);
+    if (d) sendSetConfig(id, d, len);
   }
   s_lastSendMs = millis();
 }
@@ -426,7 +482,7 @@ void escConfigRelayInit() {
 void escConfigRelaySetRequireUnlock(bool require) { s_requireUnlock = require; }
 
 bool escConfigRelayIsActive() {
-  if (s_reqPending || s_readReqPending) return true;
+  if (s_reqPending || s_readReqPending || s_batchReqPending) return true;
   return s_phase != EscRelayPhase::IDLE &&
          s_phase != EscRelayPhase::DONE_OK &&
          s_phase != EscRelayPhase::DONE_FAIL;
@@ -469,6 +525,40 @@ bool escConfigRelayRequestReadAll() {
   return true;
 }
 
+bool escConfigRelayBatchBegin() {
+  if (escConfigRelayIsActive() || escFlasherRelayIsActive()) return false;
+  portENTER_CRITICAL(&s_mux);
+  s_batchLen = 0;
+  s_batchCount = 0;
+  portEXIT_CRITICAL(&s_mux);
+  return true;
+}
+
+bool escConfigRelayBatchAdd(uint16_t config_id, const uint8_t* data, uint8_t len) {
+  if (escConfigRelayIsActive() || escFlasherRelayIsActive()) return false;
+  if (data == nullptr || len == 0 || len > 48) return false;
+  if ((uint32_t)s_batchLen + 3 + len > sizeof(s_batchBuf)) return false;  // full
+  portENTER_CRITICAL(&s_mux);
+  s_batchBuf[s_batchLen++] = config_id & 0xFF;
+  s_batchBuf[s_batchLen++] = (config_id >> 8) & 0xFF;
+  s_batchBuf[s_batchLen++] = len;
+  memcpy(&s_batchBuf[s_batchLen], data, len);
+  s_batchLen += len;
+  s_batchCount++;
+  portEXIT_CRITICAL(&s_mux);
+  return true;
+}
+
+bool escConfigRelayRequestBatchCommit() {
+  if (!s_node || s_batchCount == 0) return false;
+  if (escConfigRelayIsActive() || escFlasherRelayIsActive()) return false;
+  portENTER_CRITICAL(&s_mux);
+  s_batchReqPending = true;
+  s_status.code = EscRelayStatusCode::ACCEPTED;
+  portEXIT_CRITICAL(&s_mux);
+  return true;
+}
+
 uint16_t escConfigRelayResultLen() { return s_resultLen; }
 
 uint16_t escConfigRelayReadResult(uint32_t offset, uint8_t* out, uint16_t maxLen) {
@@ -498,14 +588,14 @@ void escConfigRelayServiceTick() {
                          s_phase == EscRelayPhase::DONE_FAIL);
   // Nothing to do: don't touch the CAN bus when fully idle (keeps the existing
   // telemetry cadence undisturbed).
-  if (terminal && !s_reqPending && !s_readReqPending) return;
+  if (terminal && !s_reqPending && !s_readReqPending && !s_batchReqPending) return;
 
   // Pump CAN so responses to our requests are captured between ticks.
   for (int i = 0; i < 6; i++) escAdapter().processTxRxOnce();
 
   // --- pick up a new request only when idle/terminal -----------------------
   if (terminal) {
-    bool pending = false, readPending = false;
+    bool pending = false, readPending = false, batchPending = false;
     uint16_t id = 0; uint8_t data[48]; uint8_t len = 0;
     portENTER_CRITICAL(&s_mux);
     if (s_reqPending) {
@@ -515,9 +605,12 @@ void escConfigRelayServiceTick() {
     } else if (s_readReqPending) {
       readPending = true;
       s_readReqPending = false;
+    } else if (s_batchReqPending) {
+      batchPending = true;
+      s_batchReqPending = false;
     }
     portEXIT_CRITICAL(&s_mux);
-    if (!pending && !readPending) return;
+    if (!pending && !readPending && !batchPending) return;
 
     // Safety gate (defense in depth — the BLE handler also checks).
     if (currentState != DISARMED) {
@@ -526,7 +619,8 @@ void escConfigRelayServiceTick() {
       return;
     }
     if (pending) beginSession(id, data, len);
-    else beginReadSession();
+    else if (readPending) beginReadSession();
+    else beginBatchSession();
     return;
   }
 
@@ -558,6 +652,12 @@ void escConfigRelayServiceTick() {
           setStatus(EscRelayStatusCode::READING, EscRelayPhase::READING, 0);
           s_gotGet = false;
           sendGetConfig(ESC_PARAM_IDS[0]);
+        } else if (s_batchMode) {
+          s_phase = EscRelayPhase::BATCH_WRITE;
+          setStatus(EscRelayStatusCode::RUNNING, EscRelayPhase::BATCH_WRITE, 0);
+          s_gotSet = false;
+          uint16_t id; const uint8_t* d; uint8_t len;
+          if (batchCurrentTuple(&id, &d, &len)) sendSetConfig(id, d, len);
         } else {
           s_phase = EscRelayPhase::WRITE;
           setStatus(EscRelayStatusCode::RUNNING, EscRelayPhase::WRITE, 0);
@@ -606,12 +706,74 @@ void escConfigRelayServiceTick() {
     }
 
     // ---------------------------------------------------------------------
+    // BATCH_WRITE: SetConfig every staged param, then SaveConfig once.
+    case EscRelayPhase::BATCH_WRITE: {
+      uint16_t id; const uint8_t* d; uint8_t len;
+      if (!batchCurrentTuple(&id, &d, &len)) {
+        // All params written — persist once.
+        s_phase = EscRelayPhase::SAVE;
+        setStatus(EscRelayStatusCode::RUNNING, EscRelayPhase::SAVE, 0);
+        s_retries = 0; s_gotSave = false; sendSaveConfig(); s_lastSendMs = now;
+        break;
+      }
+      if (s_gotSet) {
+        int8_t flag = s_setResp.flag;
+        bool ok = (s_setResp.recv_config_id == id) && (flag == 0 || flag == 6 || flag == 7);
+        if (ok) {
+          batchAdvanceCursor(len); s_retries = 0; s_gotSet = false;
+          uint8_t pct = (uint8_t)((uint32_t)s_batchIndex * 100 / (s_batchCount ? s_batchCount : 1));
+          setStatus(EscRelayStatusCode::RUNNING, EscRelayPhase::BATCH_WRITE, pct);
+          uint16_t nid; const uint8_t* nd; uint8_t nlen;
+          if (batchCurrentTuple(&nid, &nd, &nlen)) { sendSetConfig(nid, nd, nlen); s_lastSendMs = now; }
+        } else if (s_retries++ < RELAY_MAX_RETRIES) {
+          s_gotSet = false; sendSetConfig(id, d, len); s_lastSendMs = now;
+        } else {
+          finishFail(EscRelayStatusCode::ESC_FLAG_ERROR, (uint8_t)flag);
+        }
+      } else if (timedOut) {
+        if (s_retries++ < RELAY_MAX_RETRIES) { s_gotSet = false; sendSetConfig(id, d, len); s_lastSendMs = now; }
+        else finishFail(EscRelayStatusCode::TIMEOUT, 0);
+      }
+      break;
+    }
+
+    // ---------------------------------------------------------------------
+    // BATCH_VERIFY: after the reboot, GetConfig every staged param and confirm
+    // it persisted (byte-match). Mismatches are counted, not fatal per-param.
+    case EscRelayPhase::BATCH_VERIFY: {
+      uint16_t id; const uint8_t* d; uint8_t len;
+      if (!batchCurrentTuple(&id, &d, &len)) {
+        if (s_batchMismatch == 0) finishOk(nullptr, 0);
+        else finishFail(EscRelayStatusCode::VERIFY_MISMATCH,
+                        (uint8_t)(s_batchMismatch > 255 ? 255 : s_batchMismatch));
+        break;
+      }
+      if (s_gotGet) {
+        bool match = (s_getResp.recv_config_id == id) && (s_getResp.flag == 0) &&
+                     dataMatches(s_getResp.data, s_getResp.data_len, d, len);
+        if (!match) s_batchMismatch++;
+        batchAdvanceCursor(len); s_retries = 0; s_gotGet = false;
+        uint8_t pct = (uint8_t)((uint32_t)s_batchIndex * 100 / (s_batchCount ? s_batchCount : 1));
+        setStatus(EscRelayStatusCode::RUNNING, EscRelayPhase::BATCH_VERIFY, pct);
+        uint16_t nid; const uint8_t* nd; uint8_t nlen;
+        if (batchCurrentTuple(&nid, &nd, &nlen)) { sendGetConfig(nid); s_lastSendMs = now; }
+      } else if (timedOut) {
+        if (s_retries++ < RELAY_MAX_RETRIES) { s_gotGet = false; sendGetConfig(id); s_lastSendMs = now; }
+        else {
+          s_batchMismatch++;  // gave up reading this one
+          batchAdvanceCursor(len); s_retries = 0; s_gotGet = false;
+          uint16_t nid; const uint8_t* nd; uint8_t nlen;
+          if (batchCurrentTuple(&nid, &nd, &nlen)) { sendGetConfig(nid); s_lastSendMs = now; }
+        }
+      }
+      break;
+    }
+
+    // ---------------------------------------------------------------------
     case EscRelayPhase::WRITE:
       if (s_gotSet) {
         int8_t flag = s_setResp.flag;
         bool ok = (s_setResp.recv_config_id == s_targetId) && (flag == 0 || flag == 6 || flag == 7);
-        USBSerial.printf("[ESCWR] SET recv=0x%04X flag=%d ok=%d\n",
-                         s_setResp.recv_config_id, (int)flag, (int)ok);  // TEMP diag
         if (ok) {
           s_phase = EscRelayPhase::SAVE;
           setStatus(EscRelayStatusCode::RUNNING, EscRelayPhase::SAVE, 0);
@@ -633,7 +795,6 @@ void escConfigRelayServiceTick() {
     // ---------------------------------------------------------------------
     case EscRelayPhase::SAVE:
       if (s_gotSave) {
-        USBSerial.printf("[ESCWR] SAVE success=%d -> restart\n", s_saveResp.save_success);  // TEMP diag
         if (s_saveResp.save_success == 0) {
           s_phase = EscRelayPhase::RESTART;
           // fall through to RESTART on the next tick after sending below
@@ -670,12 +831,22 @@ void escConfigRelayServiceTick() {
       if (s_requireUnlock && !s_reUnlocked) {
         if (now - s_lastSendMs > 500) {
           s_gotUnlock = false; sendPasswordUnlock(); s_lastSendMs = now;
-          USBSerial.printf("[ESCWR] reboot+%lums: re-unlock sent\n", elapsed);  // TEMP diag
         }
-        if (s_gotUnlock) { s_reUnlocked = true; USBSerial.println("[ESCWR] re-unlock OK"); }  // TEMP diag
+        if (s_gotUnlock) { s_reUnlocked = true; }
         if (elapsed > REBOOT_WAIT_MS + REUNLOCK_WINDOW_MS) {
           finishFail(EscRelayStatusCode::TIMEOUT, 0);  // post-reboot unlock failed
         }
+        break;
+      }
+
+      // Phase C (batch): the re-unlock above already proves the ESC is back, so
+      // go straight to verifying every staged param via GetConfig.
+      if (s_batchMode) {
+        s_batchOffset = 0; s_batchIndex = 0; s_batchMismatch = 0;
+        s_phase = EscRelayPhase::BATCH_VERIFY;
+        setStatus(EscRelayStatusCode::RUNNING, EscRelayPhase::BATCH_VERIFY, 0);
+        uint16_t id; const uint8_t* d; uint8_t len;
+        if (batchCurrentTuple(&id, &d, &len)) { s_gotGet = false; sendGetConfig(id); s_lastSendMs = now; }
         break;
       }
 
@@ -685,11 +856,6 @@ void escConfigRelayServiceTick() {
         s_gotGet = false;
         sendGetConfig(s_targetId);
         s_lastProbeMs = now;
-        USBSerial.printf("[ESCWR] reboot+%lums: verify probe sent\n", elapsed);  // TEMP diag
-      }
-      if (s_gotGet) {  // TEMP diag
-        USBSerial.printf("[ESCWR] verify resp recv=0x%04X flag=%d len=%d\n",
-                         s_getResp.recv_config_id, (int)s_getResp.flag, s_getResp.data_len);
       }
       if (s_gotGet && s_getResp.recv_config_id == s_targetId && s_getResp.flag == 0) {
         if (dataMatches(s_getResp.data, s_getResp.data_len, s_expData, s_expLen)) {
