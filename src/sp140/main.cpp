@@ -569,7 +569,12 @@ void setupAnalogRead() {
 
 void setupWatchdog() {
 #ifndef OPENPPG_DEBUG
-  // Initialize Task Watchdog (reboot on timeout)
+  // Initialize Task Watchdog (reboot on timeout). The idle-task checks on both
+  // cores are deliberately DISABLED in sdkconfig
+  // (CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0/CPU1=n) so the watchdog scope is
+  // exactly the tasks that explicitly subscribe (throttleTask + watchdogTask).
+  // Otherwise any non-safety task (UI/BMS/BLE) monopolizing a core for >5 s
+  // would panic-reboot a flying device — the opposite of the intent.
   ESP_ERROR_CHECK(esp_task_wdt_init(WDT_TIMEOUT_SECONDS, true));
 #endif  // OPENPPG_DEBUG
 }
