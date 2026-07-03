@@ -36,7 +36,7 @@ static STR_DEVICE_DATA_140_V1 make_default_device_data(bool darkMode = false) {
   dd.metric_alt = true;
   dd.performance_mode = 1;
   dd.theme = darkMode ? 1 : 0;
-  dd.revision = 3;
+  dd.revision = 0;
   dd.timezone_offset = 0;
   return dd;
 }

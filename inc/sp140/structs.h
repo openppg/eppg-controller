@@ -51,7 +51,7 @@ typedef struct {
   bool metric_alt;          // false
   uint8_t performance_mode;  // 0,1,2
   uint8_t theme;             // 0,1 for light/dark
-  uint8_t revision;  // 2040 board revision (1=original, 2=rev1, 3=esp32s3)
+  uint8_t revision;  // Controller hardware revision (0=ESP32-S3)
   int32_t timezone_offset;  // Timezone offset in seconds from UTC
 } STR_DEVICE_DATA_140_V1;
 
