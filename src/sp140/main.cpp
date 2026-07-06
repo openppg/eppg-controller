@@ -42,6 +42,7 @@
 #include "../../inc/sp140/buzzer.h"
 #include "../../inc/sp140/device_state.h"
 #include "../../inc/sp140/diagnostics.h"
+#include "../../inc/sp140/first_boot_qc.h"
 #include "../../inc/sp140/led.h"
 #include "../../inc/sp140/mode.h"
 #include "../../inc/sp140/throttle.h"
@@ -666,6 +667,11 @@ void setup() {
   USBSerial.println(buildDate);
   diagnosticsInit();
 
+  // Capture QC boot context BEFORE refreshDeviceData(): on a fresh unit
+  // refreshDeviceData() writes defaults into the "openppg" namespace, which
+  // would make a brand-new factory board look like an existing fleet unit.
+  qcCaptureBootContext();
+
   // Load device config from EEPROM first - may contain pin mappings
   refreshDeviceData();
   printBootMessage();
@@ -782,6 +788,15 @@ void setup() {
   // Release LVGL mutex
   if (lvglMutex != NULL && xSemaphoreGetMutexHolder(lvglMutex) == xTaskGetCurrentTaskHandle()) {
     xSemaphoreGive(lvglMutex);
+  }
+
+  // =========================================================================
+  // PHASE 4.5: Factory QC (fresh factory units / serial-requested rerun ONLY;
+  // the installed fleet is back-filled and never enters this flow). Blocking
+  // guided flow — display + hardware are up, no app tasks are running yet.
+  // =========================================================================
+  if (qcShouldRun()) {
+    runFirstBootQc();
   }
 
   // =========================================================================
