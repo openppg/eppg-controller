@@ -23,6 +23,8 @@
 #include "sp140/esc.h"
 #include "sp140/bms.h"
 #include "sp140/shared-config.h"
+#include "sp140/buzzer.h"
+#include "sp140/vibration_pwm.h"
 #include "sp140/lvgl/lvgl_qc_screen.h"
 #include "sp140/lvgl/lvgl_main_screen.h"
 #include "../../inc/version.h"
@@ -372,6 +374,74 @@ static QcCheckStatus postCheckThrottleAdc() {
 }
 
 // ---------------------------------------------------------------------------
+// Interactive checks — pot-confirm pattern. The freshly calibrated throttle
+// is the confirmation input: squeeze past 50% of span = "yes, I observed the
+// cue". The pot must return to idle between checks so one long squeeze can't
+// blanket-confirm consecutive cues. All instructions on the TFT.
+// ---------------------------------------------------------------------------
+
+typedef void (*QcCueFn)();
+
+static void qcCueBuzzerOn() { startTone(2093); }  // C7 — loud + distinct
+static void qcCueBuzzerOff() { stopTone(); }
+static void qcCueVibeOn() { vibeDirectSet(220); }
+static void qcCueVibeOff() { vibeDirectSet(0); }
+
+static QcCheckStatus qcPotConfirm(const char* instruction, QcCueFn cueOn,
+                                  QcCueFn cueOff, uint16_t potMin,
+                                  uint16_t potMax) {
+  viewPrompt(instruction, "squeeze throttle to confirm");
+  const uint16_t span = (potMax > potMin) ? (potMax - potMin) : 4095;
+  const uint16_t confirmLevel = potMin + span / 2;
+  const uint16_t releaseLevel = potMin + span / 10;
+
+  const uint32_t start = millis();
+  bool cueState = false;
+  uint32_t lastToggle = 0;
+  QcCheckStatus result = QcCheckStatus::FAIL;
+
+  while (millis() - start < QC_CONFIRM_TIMEOUT_MS) {
+    // Pulse the cue 300 ms on / 700 ms off so it's clearly intermittent.
+    const uint32_t now = millis();
+    if (!cueState && now - lastToggle >= 700) {
+      cueOn();
+      cueState = true;
+      lastToggle = now;
+    } else if (cueState && now - lastToggle >= 300) {
+      cueOff();
+      cueState = false;
+      lastToggle = now;
+    }
+
+    const uint16_t raw = readThrottleRaw();
+    char valText[16];
+    snprintf(valText, sizeof(valText), "%u", raw);
+    qcScreenPromptValue(valText);
+    const uint32_t elapsed = now - start;
+    qcScreenPromptProgress(
+        static_cast<uint8_t>(100 - (elapsed * 100) / QC_CONFIRM_TIMEOUT_MS));
+
+    if (raw >= confirmLevel) {
+      result = QcCheckStatus::PASS;
+      break;
+    }
+    viewPump();
+  }
+  cueOff();
+
+  // Release gate: require the pot back at idle before the next check arms.
+  viewPrompt("RELEASE THROTTLE", "let go to continue");
+  const uint32_t relStart = millis();
+  while (millis() - relStart < QC_CONFIRM_TIMEOUT_MS) {
+    if (readThrottleRaw() <= releaseLevel) {
+      break;
+    }
+    viewPump();
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // The flow
 // ---------------------------------------------------------------------------
 
@@ -434,9 +504,19 @@ void runFirstBootQc() {
   rec.cal = qcRunThrottleCalibration(&rec);
   viewStepResult("cal", rec.cal);
 
-  // --- Interactive checks (next commit) ---
-  // NOT_RUN counts as failure, so a partially-implemented flow can never
-  // stamp qc_passed.
+  // --- Interactive checks (pot-confirm; button used only for its own test) ---
+  rec.buzzer = qcPotConfirm("TONE PLAYING - hear it?", qcCueBuzzerOn,
+                            qcCueBuzzerOff, rec.potMin, rec.potMax);
+  viewStepResult("buzzer", rec.buzzer);
+
+  rec.vibe = qcPotConfirm("VIBRATING - feel it?", qcCueVibeOn, qcCueVibeOff,
+                          rec.potMin, rec.potMax);
+  viewStepResult("vibe", rec.vibe);
+
+  viewPrompt("PRESS BUTTON", "press the top button");
+  rec.button = qcWaitButtonPress(QC_CONFIRM_TIMEOUT_MS) ? QcCheckStatus::PASS
+                                                        : QcCheckStatus::FAIL;
+  viewStepResult("button", rec.button);
 
   // --- Persist + report ---
   const bool passed = qcRecordAllPassed(rec);
