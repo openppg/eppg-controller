@@ -33,6 +33,7 @@
 #define QC_SKIP_CONFIRM_TIMEOUT_MS  15000  // button window to confirm an absent device
 #define QC_CAN_POLL_ITERATIONS      10     // POST CAN polls (x interval = ~2 s)
 #define QC_CAN_POLL_INTERVAL_MS     200
+#define QC_CAL_STEP_TIMEOUT_MS      60000  // per calibration step (operator paced)
 #define QC_RECORD_JSON_MAX          512    // QC record JSON buffer size
 
 #endif  // INC_SP140_SHARED_CONFIG_H_

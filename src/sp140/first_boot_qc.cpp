@@ -178,6 +178,102 @@ static QcCheckStatus qcSkipConfirm(const char* deviceName) {
                                                        : QcCheckStatus::FAIL;
 }
 
+// Show a brief step result on the prompt view (cal + interactive checks live
+// outside the 8-row POST checklist).
+static void viewStepResult(const char* name, QcCheckStatus status) {
+  USBSerial.printf("QC: %-10s %s\n", name, qcCheckStatusStr(status));
+  char line[48];
+  snprintf(line, sizeof(line), "%s: %s", name, qcCheckStatusStr(status));
+  qcScreenPrompt(line, "");
+  const uint32_t start = millis();
+  while (millis() - start < 900) {
+    viewPump();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Guided throttle calibration (CAPTURE ONLY — the live mapping stays on the
+// fixed 0..4095 curve in v8.1; the switch to calibrated endpoints is v8.2,
+// gated on the data these captures produce.)
+// ---------------------------------------------------------------------------
+
+// Screen-guided, auto-advancing capture: sample the pot at ~50 Hz into a
+// stability window; capture the median once the full window sits within
+// epsilon. No button involved. Returns false on step timeout.
+static bool qcCaptureStableRaw(const char* instruction, const char* subtext,
+                               uint16_t* outValue) {
+  viewPrompt(instruction, subtext);
+  QcStabilityWindow window(QC_STABLE_EPSILON, QC_STABLE_WINDOW_SAMPLES);
+  const uint32_t start = millis();
+  uint32_t lastSample = 0;
+  uint32_t sampleCount = 0;
+
+  while (millis() - start < QC_CAL_STEP_TIMEOUT_MS) {
+    const uint32_t now = millis();
+    if (now - lastSample >= 20) {  // ~50 Hz sampling
+      lastSample = now;
+      const uint16_t raw = readThrottleRaw();
+      window.push(raw);
+      sampleCount++;
+
+      char valText[16];
+      snprintf(valText, sizeof(valText), "%u", raw);
+      qcScreenPromptValue(valText);
+      // Progress = window fill; holds at 100 while waiting for stability.
+      const uint8_t pct = window.isFull()
+          ? 100
+          : static_cast<uint8_t>(
+                (sampleCount * 100) / QC_STABLE_WINDOW_SAMPLES);
+      qcScreenPromptProgress(pct);
+
+      if (window.isFull() && window.isStable()) {
+        *outValue = window.median();
+        return true;
+      }
+    }
+    viewPump();
+  }
+  return false;
+}
+
+// Full calibration sequence: release -> squeeze -> release recheck, then the
+// sanity gates. Saves to the factory namespace only when everything passes.
+static QcCheckStatus qcRunThrottleCalibration(QcRecord* rec) {
+  uint16_t rawMin = 0;
+  uint16_t rawMax = 0;
+  uint16_t rawRecheck = 0;
+
+  if (!qcCaptureStableRaw("RELEASE THROTTLE", "let go fully and hold still",
+                          &rawMin) ||
+      !qcCaptureStableRaw("SQUEEZE FULL", "hold full throttle steady",
+                          &rawMax) ||
+      !qcCaptureStableRaw("RELEASE AGAIN", "let go fully and hold still",
+                          &rawRecheck)) {
+    USBSerial.println(F("QC: calibration step timed out"));
+    return QcCheckStatus::FAIL;
+  }
+
+  rec->potMin = rawMin;
+  rec->potMax = rawMax;
+
+  const QcCalGates gates = {QC_MIN_SPAN, QC_MAX_IDLE, QC_MIN_FULL,
+                            QC_RELEASE_TOLERANCE};
+  const QcCalResult result =
+      qcValidateCalibration(rawMin, rawMax, rawRecheck, gates);
+
+  USBSerial.printf("QC: cal raw_min=%u raw_max=%u recheck=%u result=%d\n",
+                   rawMin, rawMax, rawRecheck, static_cast<int>(result));
+
+  if (result != QcCalResult::OK) {
+    // Do NOT save — the unit keeps the safe 0..4095 defaults.
+    return QcCheckStatus::FAIL;
+  }
+
+  factoryWriteCal(rawMin, rawMax);
+  rec->calSaved = true;
+  return QcCheckStatus::PASS;
+}
+
 // ---------------------------------------------------------------------------
 // POST checks (bus-communication focus: I2C / SPI / CAN)
 // ---------------------------------------------------------------------------
@@ -334,7 +430,11 @@ void runFirstBootQc() {
   rec.throttle = postCheckThrottleAdc();
   viewCheckResult("throttle", rec.throttle);
 
-  // --- Guided calibration + interactive checks (later commits) ---
+  // --- Guided throttle calibration (capture only; mapping unchanged) ---
+  rec.cal = qcRunThrottleCalibration(&rec);
+  viewStepResult("cal", rec.cal);
+
+  // --- Interactive checks (next commit) ---
   // NOT_RUN counts as failure, so a partially-implemented flow can never
   // stamp qc_passed.
 
