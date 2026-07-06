@@ -11,6 +11,8 @@
 
 #include "Arduino.h"
 #include <Preferences.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 #include "sp140/qc_logic.h"
 #include "sp140/factory_settings.h"
@@ -21,11 +23,14 @@
 #include "sp140/esc.h"
 #include "sp140/bms.h"
 #include "sp140/shared-config.h"
+#include "sp140/lvgl/lvgl_qc_screen.h"
+#include "sp140/lvgl/lvgl_main_screen.h"
 #include "../../inc/version.h"
 #include "../../inc/sp140/esp32s3-config.h"
 
 extern const char* buildDate;
 extern HardwareConfig board_config;
+extern SemaphoreHandle_t lvglMutex;
 
 // ---------------------------------------------------------------------------
 // Boot context (captured before refreshDeviceData() writes defaults)
@@ -92,13 +97,23 @@ bool qcShouldRun() {
 // bench log either way).
 // ---------------------------------------------------------------------------
 
+static uint8_t s_checkRow = 0;
+
 static void viewPump() {
-  // Keep the system responsive / yield to IDLE so the task WDT stays fed.
+  // Render + keep the system responsive / yield to IDLE so the task WDT
+  // stays fed. Single-threaded: no other task contends for LVGL or SPI.
+  lv_timer_handler();
   vTaskDelay(pdMS_TO_TICKS(5));
 }
 
 static void viewCheckResult(const char* name, QcCheckStatus status) {
   USBSerial.printf("QC: %-10s %s\n", name, qcCheckStatusStr(status));
+  qcScreenShowChecklist();
+  if (s_checkRow < QC_SCREEN_MAX_ROWS) {
+    qcScreenSetCheck(s_checkRow, name, status, nullptr);
+    s_checkRow++;
+  }
+  viewPump();
 }
 
 static void viewPrompt(const char* line1, const char* line2) {
@@ -109,6 +124,8 @@ static void viewPrompt(const char* line1, const char* line2) {
     USBSerial.print(line2);
   }
   USBSerial.println();
+  qcScreenPrompt(line1, line2);
+  viewPump();
 }
 
 // ---------------------------------------------------------------------------
@@ -116,11 +133,20 @@ static void viewPrompt(const char* line1, const char* line2) {
 // ---------------------------------------------------------------------------
 
 // Poll the top button (INPUT_PULLUP — LOW = pressed) with debounce. Returns
-// true if a debounced press is seen within timeoutMs.
+// true if a debounced press is seen within timeoutMs. Shows a live countdown
+// on the prompt view.
 static bool qcWaitButtonPress(uint32_t timeoutMs) {
   const uint32_t start = millis();
   uint32_t lowSince = 0;
   while (millis() - start < timeoutMs) {
+    const uint32_t elapsed = millis() - start;
+    char countdown[16];
+    snprintf(countdown, sizeof(countdown), "%us",
+             (unsigned int)((timeoutMs - elapsed) / 1000 + 1));
+    qcScreenPromptValue(countdown);
+    qcScreenPromptProgress(
+        static_cast<uint8_t>(100 - (elapsed * 100) / timeoutMs));
+
     if (digitalRead(board_config.button_top) == LOW) {
       if (lowSince == 0) {
         lowSince = millis();
@@ -253,8 +279,29 @@ static QcCheckStatus postCheckThrottleAdc() {
 // The flow
 // ---------------------------------------------------------------------------
 
+// Append a failed/skipped check name to the banner detail line.
+static void appendCheckNote(char* buf, size_t bufLen, const char* name,
+                            QcCheckStatus status) {
+  if (status != QcCheckStatus::FAIL && status != QcCheckStatus::SKIP) {
+    return;
+  }
+  const size_t used = strlen(buf);
+  snprintf(buf + used, bufLen - used, "%s%s%s",
+           used > 0 ? " " : "", name,
+           status == QcCheckStatus::SKIP ? "(skip)" : "");
+}
+
 void runFirstBootQc() {
   USBSerial.println(F("QC: ===== FACTORY QC START ====="));
+
+  // Single-threaded here, but take the LVGL mutex to keep the same invariant
+  // the splash/main-screen setup path uses.
+  if (lvglMutex != NULL) {
+    xSemaphoreTake(lvglMutex, portMAX_DELAY);
+  }
+  s_checkRow = 0;
+  setupQcScreen(deviceData.theme == 1);
+  viewPump();
 
   QcRecord rec = {};
   snprintf(rec.fw, sizeof(rec.fw), "%d.%d", VERSION_MAJOR, VERSION_MINOR);
@@ -301,6 +348,31 @@ void runFirstBootQc() {
   if (qcRecordToJson(rec, json, sizeof(json)) > 0) {
     factoryWriteQcRecordBlob(json, strlen(json) + 1);  // include NUL
     USBSerial.println(json);
+  }
+
+  // --- Final banner (hold ~5 s), then hand the display back ---
+  char detail[128] = "";
+  appendCheckNote(detail, sizeof(detail), "baro", rec.i2cBaro);
+  appendCheckNote(detail, sizeof(detail), "spi", rec.spiBms);
+  appendCheckNote(detail, sizeof(detail), "esc", rec.canEsc);
+  appendCheckNote(detail, sizeof(detail), "bms", rec.canBms);
+  appendCheckNote(detail, sizeof(detail), "cpu", rec.cpu);
+  appendCheckNote(detail, sizeof(detail), "nvs", rec.nvs);
+  appendCheckNote(detail, sizeof(detail), "throttle", rec.throttle);
+  appendCheckNote(detail, sizeof(detail), "cal", rec.cal);
+  appendCheckNote(detail, sizeof(detail), "buzzer", rec.buzzer);
+  appendCheckNote(detail, sizeof(detail), "vibe", rec.vibe);
+  appendCheckNote(detail, sizeof(detail), "button", rec.button);
+  qcScreenBanner(passed, detail);
+  const uint32_t bannerStart = millis();
+  while (millis() - bannerStart < 5000) {
+    viewPump();
+  }
+  teardownQcScreen(main_screen);
+  viewPump();
+  if (lvglMutex != NULL &&
+      xSemaphoreGetMutexHolder(lvglMutex) == xTaskGetCurrentTaskHandle()) {
+    xSemaphoreGive(lvglMutex);
   }
 
   USBSerial.printf("QC: ===== FACTORY QC %s =====\n",

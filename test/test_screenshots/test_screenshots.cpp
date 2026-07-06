@@ -704,3 +704,76 @@ TEST_F(ScreenshotTest, SplashScreen_Dark) {
   emulator_init_display(true);
   render_splash("splash_dark", true);
 }
+
+// ============================================================
+// FIRST_BOOT_QC screen states
+// ============================================================
+
+#include "sp140/lvgl/lvgl_qc_screen.h"
+
+// Render the current QC screen state, save + compare like render_and_save.
+static void qc_render_and_save(const char* name) {
+  emulator_render_frame();
+
+  char out_path[256];
+  snprintf(out_path, sizeof(out_path), "%s/%s.bmp", OUTPUT_DIR, name);
+  ASSERT_TRUE(emulator_save_bmp(out_path)) << "Failed to save " << out_path;
+
+  char ref_path[256];
+  snprintf(ref_path, sizeof(ref_path), "%s/%s.bmp", REFERENCE_DIR, name);
+  if (file_exists(ref_path)) {
+    int diff = emulator_compare_bmp(ref_path, out_path);
+    if (diff > 0) {
+      char diff_path[256];
+      snprintf(diff_path, sizeof(diff_path), "%s/%s_diff.bmp", OUTPUT_DIR, name);
+      emulator_save_diff_bmp(ref_path, out_path, diff_path);
+      EXPECT_EQ(0, diff)
+        << "Screenshot regression: " << name << " has " << diff << " differing pixels";
+    }
+  } else {
+    printf("  [INFO] No reference for '%s' - generating initial reference\n", name);
+    FILE* src = fopen(out_path, "rb");
+    FILE* dst = fopen(ref_path, "wb");
+    if (src && dst) { char buf[4096]; size_t n; while ((n = fread(buf, 1, sizeof(buf), src)) > 0) fwrite(buf, 1, n, dst); }
+    if (src) fclose(src);
+    if (dst) fclose(dst);
+  }
+
+  teardownQcScreen(NULL);
+}
+
+TEST_F(ScreenshotTest, QcScreen_ChecklistInProgress) {
+  emulator_init_display(false);
+  setupQcScreen(false);
+  qcScreenSetCheck(0, "display", QcCheckStatus::PASS, nullptr);
+  qcScreenSetCheck(1, "i2c baro", QcCheckStatus::PASS, "1002");
+  qcScreenSetCheck(2, "spi bms", QcCheckStatus::PASS, nullptr);
+  qcScreenSetCheck(3, "can esc", QcCheckStatus::SKIP, nullptr);
+  qcScreenSetCheck(4, "can bms", QcCheckStatus::FAIL, nullptr);
+  qcScreenSetCheck(5, "cpu", QcCheckStatus::PASS, "41C");
+  qcScreenSetCheck(6, "nvs", QcCheckStatus::NOT_RUN, nullptr);
+  qc_render_and_save("qc_checklist_progress");
+}
+
+TEST_F(ScreenshotTest, QcScreen_CalSqueezePrompt) {
+  emulator_init_display(false);
+  setupQcScreen(false);
+  qcScreenPrompt("SQUEEZE FULL", "hold steady until captured");
+  qcScreenPromptValue("3987");
+  qcScreenPromptProgress(64);
+  qc_render_and_save("qc_prompt_squeeze");
+}
+
+TEST_F(ScreenshotTest, QcScreen_BannerPassed) {
+  emulator_init_display(false);
+  setupQcScreen(false);
+  qcScreenBanner(true, "");
+  qc_render_and_save("qc_banner_passed");
+}
+
+TEST_F(ScreenshotTest, QcScreen_BannerFailed) {
+  emulator_init_display(false);
+  setupQcScreen(false);
+  qcScreenBanner(false, "esc(skip) cal buzzer");
+  qc_render_and_save("qc_banner_failed");
+}
