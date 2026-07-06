@@ -20,6 +20,8 @@
 #include "sp140/ble/ota_service.h"
 #include "sp140/esc_config_relay.h"
 #include "sp140/esc_flasher_relay.h"
+#include "sp140/factory_settings.h"
+#include "sp140/shared-config.h"
 
 extern void writeDeviceData();
 extern QueueHandle_t throttleUpdateQueue;
@@ -350,6 +352,38 @@ class EscParamDataCallbacks : public NimBLECharacteristicCallbacks {
   }
 };
 
+// Factory QC record fetch — same paged-fetch pattern as EscParamDataCallbacks:
+// the app writes a 4-byte LE offset cursor, then reads back up to 240 bytes of
+// the stored QC JSON record from that offset. Empty read = no record stored or
+// cursor past end. Synced silently by the app on connect (fleet QC/cal data).
+class QcRecordDataCallbacks : public NimBLECharacteristicCallbacks {
+  uint32_t offset_ = 0;
+
+  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
+    std::string value = characteristic->getValue();
+    if (value.size() < 4) return;
+    offset_ = static_cast<uint32_t>(static_cast<uint8_t>(value[0])) |
+              (static_cast<uint32_t>(static_cast<uint8_t>(value[1])) << 8) |
+              (static_cast<uint32_t>(static_cast<uint8_t>(value[2])) << 16) |
+              (static_cast<uint32_t>(static_cast<uint8_t>(value[3])) << 24);
+  }
+
+  void onRead(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+    (void)connInfo;
+    char record[QC_RECORD_JSON_MAX];
+    const size_t total = factoryReadQcRecordBlob(record, sizeof(record));
+    if (total == 0 || offset_ >= total) {
+      characteristic->setValue(reinterpret_cast<const uint8_t*>(""), 0);
+      return;
+    }
+    size_t n = total - offset_;
+    if (n > 240) n = 240;
+    characteristic->setValue(
+        reinterpret_cast<uint8_t*>(record + offset_), n);
+  }
+};
+
 // ESC config relay status characteristic (read + notify). Returns the latched
 // session status so the app can poll until a terminal result (the design's
 // poll-until-terminal contract, which also survives a BLE drop + reconnect).
@@ -572,6 +606,12 @@ void initConfigBleService(NimBLEServer* server, const std::string& uniqueId) {
   pEscRelayNotifyCharacteristic = configService->createCharacteristic(
       NimBLEUUID(ESC_RELAY_NOTIFY_UUID), kNotifyReadSecure);
 #endif  // ESC_RELAY_BLE_CHARS
+
+  // Factory QC record (paged fetch: write offset, read chunk).
+  NimBLECharacteristic* qcRecordData = configService->createCharacteristic(
+      NimBLEUUID(QC_RECORD_UUID), kReadWriteSecure);
+  static QcRecordDataCallbacks qcRecordDataCallbacks;
+  qcRecordData->setCallbacks(&qcRecordDataCallbacks);
 
   NimBLEService* deviceInfoService = server->createService(NimBLEUUID(DEVICE_INFO_SERVICE_UUID));
   NimBLECharacteristic* manufacturer = deviceInfoService->createCharacteristic(
