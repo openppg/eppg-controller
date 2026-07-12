@@ -74,6 +74,8 @@ jobs:
           path: test/test_screenshots/output/
 
   pio-build:
+    # Dependabot PRs cannot access private library repos; push CI still validates the full build.
+    if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'dependabot/') }}
     name: PlatformIO Build
     runs-on: ubuntu-latest
     steps:
