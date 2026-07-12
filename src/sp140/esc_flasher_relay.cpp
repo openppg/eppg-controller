@@ -21,7 +21,7 @@ static const uint16_t FW_CHUNK_SIZE   = 256;     // SendFwData payload (matches 
 static const unsigned long FW_TIMEOUT_MS = 150;  // per-request response wait
 static const uint8_t  FW_MAX_RETRIES  = 10;
 static const unsigned long REBOOT_WAIT_MS = 700;   // ESC reboot before bootloader answers
-static const unsigned long RX_TIMEOUT_MS  = 15000; // abort if the app stalls mid-transfer
+static const unsigned long RX_TIMEOUT_MS  = 15000;  // abort if the app stalls mid-transfer
 static const uint32_t MAX_IMAGE_SIZE  = 256u * 1024u;  // sanity cap
 static const uint32_t HEADER_SIZE     = 32;            // firmware data starts at byte 32
 

@@ -348,7 +348,9 @@ static void finishFail(EscRelayStatusCode code, uint8_t detail) {
 
 static bool dataMatches(const uint8_t* got, uint8_t gotLen, const uint8_t* exp, uint8_t expLen) {
   if (gotLen < expLen) return false;
-  for (uint8_t i = 0; i < expLen; i++) if (got[i] != exp[i]) return false;
+  for (uint8_t i = 0; i < expLen; i++) {
+    if (got[i] != exp[i]) return false;
+  }
   return true;
 }
 
@@ -666,8 +668,11 @@ void escConfigRelayServiceTick() {
         }
         s_lastSendMs = now;
       } else if (timedOut) {
-        if (s_retries++ < RELAY_MAX_RETRIES) { s_gotUnlock = false; sendPasswordUnlock(); s_lastSendMs = now; }
-        else { finishFail(EscRelayStatusCode::TIMEOUT, 0); }
+        if (s_retries++ < RELAY_MAX_RETRIES) {
+          s_gotUnlock = false; sendPasswordUnlock(); s_lastSendMs = now;
+        } else {
+          finishFail(EscRelayStatusCode::TIMEOUT, 0);
+        }
       }
       break;
 
@@ -758,8 +763,9 @@ void escConfigRelayServiceTick() {
         uint16_t nid; const uint8_t* nd; uint8_t nlen;
         if (batchCurrentTuple(&nid, &nd, &nlen)) { sendGetConfig(nid); s_lastSendMs = now; }
       } else if (timedOut) {
-        if (s_retries++ < RELAY_MAX_RETRIES) { s_gotGet = false; sendGetConfig(id); s_lastSendMs = now; }
-        else {
+        if (s_retries++ < RELAY_MAX_RETRIES) {
+          s_gotGet = false; sendGetConfig(id); s_lastSendMs = now;
+        } else {
           s_batchMismatch++;  // gave up reading this one
           batchAdvanceCursor(len); s_retries = 0; s_gotGet = false;
           uint16_t nid; const uint8_t* nd; uint8_t nlen;

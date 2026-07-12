@@ -40,7 +40,7 @@ enum class EscRelayPhase : uint8_t {
   VERIFY,
   READING,      // read-all: iterating GetConfig over every param
   BATCH_WRITE,  // batch: iterating SetConfig over every queued param
-  BATCH_VERIFY, // batch: iterating GetConfig to confirm each queued param persisted
+  BATCH_VERIFY,  // batch: iterating GetConfig to confirm each queued param persisted
   DONE_OK,
   DONE_FAIL,
 };
