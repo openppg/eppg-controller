@@ -565,7 +565,7 @@ TEST_F(ScreenshotTest, MainScreen_CriticalAlerts_Light) {
   lv_showAlertTextWithLevel(SensorID::ESC_MOS_Temp, AlertLevel::WARN_HIGH, false);
 
   if (critical_border != NULL) {
-    lv_obj_set_style_border_opa(critical_border, LV_OPA_100, LV_PART_MAIN);
+    setCriticalBorderOpacity(LV_OPA_100);
   }
 
   emulator_render_frame();
@@ -592,7 +592,7 @@ TEST_F(ScreenshotTest, MainScreen_CriticalAlerts_Dark) {
   lv_showAlertTextWithLevel(SensorID::ESC_MOS_Temp, AlertLevel::WARN_HIGH, false);
 
   if (critical_border != NULL) {
-    lv_obj_set_style_border_opa(critical_border, LV_OPA_100, LV_PART_MAIN);
+    setCriticalBorderOpacity(LV_OPA_100);
   }
 
   emulator_render_frame();

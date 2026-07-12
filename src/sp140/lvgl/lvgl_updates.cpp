@@ -245,25 +245,19 @@ static void critical_border_flash_timer_cb(lv_timer_t* timer) {
   // This callback runs within the LVGL task handler, so no mutex needed here.
   if (critical_border != NULL) {
     // Toggle opacity: 300ms on (opaque), 700ms off (transparent)
-    uint8_t current_opa = lv_obj_get_style_border_opa(critical_border, LV_PART_MAIN);
+    const lv_opa_t current_opa = getCriticalBorderOpacity();
     if (current_opa == LV_OPA_100) {
-      lv_obj_set_style_border_opa(critical_border, LV_OPA_0, LV_PART_MAIN);
+      setCriticalBorderOpacity(LV_OPA_0);
       lv_timer_set_period(timer, 700);  // Off duration
-      // Invalidate entire screen when hiding to ensure clean removal of border pixels
-      lv_obj_invalidate(lv_screen_active());
     } else {
-      lv_obj_set_style_border_opa(critical_border, LV_OPA_100, LV_PART_MAIN);
+      setCriticalBorderOpacity(LV_OPA_100);
       lv_timer_set_period(timer, 300);  // On duration
 
       // Trigger vibration pulse in sync with border "on"
       if (ENABLE_VIBE) {
         pulseVibration(300, 200);  // 300ms pulse, intensity 200
       }
-      // Invalidate the border area when showing
-      lv_obj_invalidate(critical_border);
     }
-    // Force immediate refresh to minimize tearing
-    lv_refr_now(lv_display_get_default());
   }
 }
 
@@ -271,7 +265,7 @@ void startCriticalBorderFlash() {
   if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
     if (critical_border != NULL && !isFlashingCriticalBorder) {
       isFlashingCriticalBorder = true;
-      lv_obj_set_style_border_opa(critical_border, LV_OPA_100, LV_PART_MAIN);  // Start visible
+      setCriticalBorderOpacity(LV_OPA_100);
       critical_border_flash_timer = lv_timer_create(critical_border_flash_timer_cb, 300, NULL);
     }
     xSemaphoreGive(lvglMutex);
@@ -285,9 +279,7 @@ void stopCriticalBorderFlash() {
       critical_border_flash_timer = NULL;
     }
     if (critical_border != NULL) {
-      lv_obj_set_style_border_opa(critical_border, LV_OPA_0, LV_PART_MAIN);
-      // Invalidate entire screen to ensure clean removal
-      lv_obj_invalidate(lv_screen_active());
+      setCriticalBorderOpacity(LV_OPA_0);
     }
     isFlashingCriticalBorder = false;
     xSemaphoreGive(lvglMutex);
@@ -302,11 +294,8 @@ bool isCriticalBorderFlashing() {
 void startCriticalBorderFlashDirect() {
   if (critical_border != NULL && !isFlashingCriticalBorder) {
     isFlashingCriticalBorder = true;
-    lv_obj_set_style_border_opa(critical_border, LV_OPA_100, LV_PART_MAIN);  // Start visible
-    lv_obj_invalidate(critical_border);  // Ensure clean initial draw
+    setCriticalBorderOpacity(LV_OPA_100);
     critical_border_flash_timer = lv_timer_create(critical_border_flash_timer_cb, 300, NULL);
-    // Force immediate refresh for clean start
-    lv_refr_now(lv_display_get_default());
   }
 }
 
@@ -316,10 +305,7 @@ void stopCriticalBorderFlashDirect() {
     critical_border_flash_timer = NULL;
   }
   if (critical_border != NULL) {
-    lv_obj_set_style_border_opa(critical_border, LV_OPA_0, LV_PART_MAIN);
-    lv_obj_invalidate(lv_screen_active());  // Ensure clean removal of border
-    // Force immediate refresh for clean stop
-    lv_refr_now(lv_display_get_default());
+    setCriticalBorderOpacity(LV_OPA_0);
   }
   isFlashingCriticalBorder = false;
 }

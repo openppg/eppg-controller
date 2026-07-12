@@ -53,6 +53,26 @@ lv_obj_t* climb_rate_fill_sections[12] = {NULL};
 // Critical border (used by flash animations)
 lv_obj_t* critical_border = NULL;
 
+// The critical border is a transparent parent containing four narrow red
+// strips. Changing a strip only invalidates its edge instead of the complete
+// 160x128 display.
+void setCriticalBorderOpacity(lv_opa_t opacity) {
+  if (critical_border == NULL) return;
+  const uint32_t childCount = lv_obj_get_child_count(critical_border);
+  for (uint32_t i = 0; i < childCount; ++i) {
+    lv_obj_set_style_bg_opa(lv_obj_get_child(critical_border, i), opacity,
+                            LV_PART_MAIN);
+  }
+}
+
+lv_opa_t getCriticalBorderOpacity() {
+  if (critical_border == NULL || lv_obj_get_child_count(critical_border) == 0) {
+    return LV_OPA_0;
+  }
+  return lv_obj_get_style_bg_opa(lv_obj_get_child(critical_border, 0),
+                                  LV_PART_MAIN);
+}
+
 // Helper function to hide/show all altitude character labels
 void setAltitudeVisibility(bool visible) {
   for (int i = 0; i < 7; i++) {
@@ -104,6 +124,9 @@ void init_temp_styles(bool darkMode) {
 // Setup the main screen layout once
 void setupMainScreen(bool darkMode) {
   if (main_screen != NULL) {
+    // critical_border is owned by main_screen and becomes invalid when its
+    // parent is deleted. Clear the non-owning handle before rebuilding.
+    critical_border = NULL;
     lv_obj_delete(main_screen);
   }
 
@@ -590,19 +613,35 @@ void setupMainScreen(bool darkMode) {
     lv_obj_move_background(climb_rate_fill_sections[i]);
   }
 
-  // Create critical alert border (initially hidden) - moved from updates file
-  if (critical_border == NULL) {
-    critical_border = lv_obj_create(main_screen);
-    lv_obj_set_size(critical_border, SCREEN_WIDTH, SCREEN_HEIGHT);
-    lv_obj_set_pos(critical_border, 0, 0);
-    lv_obj_set_style_border_width(critical_border, 4, LV_PART_MAIN);
-    lv_obj_set_style_border_color(critical_border, LVGL_RED, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(critical_border, LV_OPA_0, LV_PART_MAIN);  // Transparent background
-    lv_obj_set_style_radius(critical_border, 0, LV_PART_MAIN);  // Sharp corners
-    lv_obj_set_style_border_opa(critical_border, LV_OPA_0, LV_PART_MAIN);  // Initially invisible border
-    // Move border to front so it's visible over all other elements
-    lv_obj_move_foreground(critical_border);
+  // Create the critical alert border as four narrow edge strips. A full-screen
+  // bordered object causes LVGL to invalidate and flush the full display on
+  // every flash, even though only the outer four pixels change.
+  critical_border = lv_obj_create(main_screen);
+  lv_obj_set_size(critical_border, SCREEN_WIDTH, SCREEN_HEIGHT);
+  lv_obj_set_pos(critical_border, 0, 0);
+  lv_obj_remove_flag(critical_border, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_bg_opa(critical_border, LV_OPA_0, LV_PART_MAIN);
+  lv_obj_set_style_border_width(critical_border, 0, LV_PART_MAIN);
+  lv_obj_set_style_pad_all(critical_border, 0, LV_PART_MAIN);
+
+  static const int16_t edgeGeometry[4][4] = {
+    {0, 0, SCREEN_WIDTH, 4},
+    {0, SCREEN_HEIGHT - 4, SCREEN_WIDTH, 4},
+    {0, 4, 4, SCREEN_HEIGHT - 8},
+    {SCREEN_WIDTH - 4, 4, 4, SCREEN_HEIGHT - 8},
+  };
+  for (const auto& edge : edgeGeometry) {
+    lv_obj_t* strip = lv_obj_create(critical_border);
+    lv_obj_set_pos(strip, edge[0], edge[1]);
+    lv_obj_set_size(strip, edge[2], edge[3]);
+    lv_obj_remove_flag(strip, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_color(strip, LVGL_RED, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(strip, LV_OPA_0, LV_PART_MAIN);
+    lv_obj_set_style_border_width(strip, 0, LV_PART_MAIN);
+    lv_obj_set_style_radius(strip, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(strip, 0, LV_PART_MAIN);
   }
+  lv_obj_move_foreground(critical_border);
 
   // Setup alert counter UI elements (circles, labels, and alert text display)
   setupAlertCounterUI(darkMode);

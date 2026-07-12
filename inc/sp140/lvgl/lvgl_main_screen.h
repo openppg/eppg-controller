@@ -71,6 +71,8 @@ extern lv_obj_t* climb_rate_fill_sections[12];
 
 // Critical border (used by flash animations)
 extern lv_obj_t* critical_border;
+void setCriticalBorderOpacity(lv_opa_t opacity);
+lv_opa_t getCriticalBorderOpacity();
 
 // Helper functions
 void setAltitudeVisibility(bool visible);
