@@ -43,7 +43,7 @@ void updateLvglMainScreen(
 );
 
 // Helper update functions
-void updateClimbRateIndicator(float climbRate);
+void updateClimbRateIndicator(float climbRate, bool darkMode);
 
 // Test function
 void updateLvglMainScreenWithTestData(const STR_DEVICE_DATA_140_V1& deviceData);

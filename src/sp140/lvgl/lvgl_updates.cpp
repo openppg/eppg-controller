@@ -400,7 +400,7 @@ void stopBLEPairingIconFlash() {
 }
 
 // Update the climb rate indicator
-void updateClimbRateIndicator(float climbRate) {
+void updateClimbRateIndicator(float climbRate, bool darkMode) {
   // Vario display scale: 6 segments per direction cover a +/-3 m/s climb/descent
   // envelope. The raw value is NOT clamped here - sectionsToFill is capped at 6
   // below, so rates beyond +/-3 m/s simply pin the gauge to full deflection.
@@ -421,10 +421,10 @@ void updateClimbRateIndicator(float climbRate) {
   lv_color_t negative_colors[6] = {
     lv_color_make(173, 216, 230),  // Light blue
     lv_color_make(173, 216, 230),  // Light blue (again)
-    lv_color_make(70, 130, 180),   // Darker blue
-    lv_color_make(70, 130, 180),   // Darker blue (again)
-    lv_color_make(75, 0, 130),     // Dark purple
-    lv_color_make(75, 0, 130)      // Dark purple (again)
+    darkMode ? LVGL_DARK_DESCENT_BLUE : lv_color_make(70, 130, 180),
+    darkMode ? LVGL_DARK_DESCENT_BLUE : lv_color_make(70, 130, 180),
+    darkMode ? LVGL_DARK_DESCENT_PURPLE : lv_color_make(75, 0, 130),
+    darkMode ? LVGL_DARK_DESCENT_PURPLE : lv_color_make(75, 0, 130)
   };
 
   // Compute the desired state for all 12 sections, then diff-apply so only
@@ -525,11 +525,11 @@ void updateLvglMainScreen(
     lv_bar_set_value(battery_bar, (int)batteryPercent, LV_ANIM_OFF);
 
     // Set color based on percentage
-    lv_color_t batteryColor = LVGL_RED;
+    lv_color_t batteryColor = darkMode ? LVGL_DARK_RED : LVGL_RED;
     if (batteryPercent > bmsSOCThresholds.warnLow) {
-      batteryColor = LVGL_GREEN;
+      batteryColor = darkMode ? LVGL_DARK_GREEN : LVGL_GREEN;
     } else if (batteryPercent >= bmsSOCThresholds.critLow) {
-      batteryColor = LVGL_YELLOW;
+      batteryColor = darkMode ? LVGL_DARK_YELLOW : LVGL_YELLOW;
     }
 
     setBgColor(battery_bar, batteryColor, LV_PART_INDICATOR);
@@ -538,7 +538,7 @@ void updateLvglMainScreen(
     char buffer[10];
     snprintf(buffer, sizeof(buffer), "%d%%", (int)batteryPercent);
     setLabelText(battery_label, buffer);
-    setLabelTextColor(battery_label, LVGL_BLACK);
+    setLabelTextColor(battery_label, darkMode ? LVGL_WHITE : LVGL_BLACK);
   } else if (escConnected) {
     // clear the battery bar, we handle voltage later
     lv_bar_set_value(battery_bar, 0, LV_ANIM_OFF);
@@ -557,15 +557,16 @@ void updateLvglMainScreen(
         snprintf(buffer, sizeof(buffer), "%2.2fv", lowestCellV);
         setLabelText(voltage_left_label, buffer);
 
-        // Always use black text for better readability
-        setLabelTextColor(voltage_left_label, LVGL_BLACK);
+        setLabelTextColor(voltage_left_label,
+                          darkMode ? LVGL_WHITE : LVGL_BLACK);
         if (lastVoltLeftMode != 0) {
           // Restore default position when BMS is connected
           lv_obj_align(voltage_left_label, LV_ALIGN_TOP_LEFT, 3, 12);
           lastVoltLeftMode = 0;
         }
     } else if (escConnected) {
-        setLabelTextColor(voltage_left_label, LVGL_BLACK);
+        setLabelTextColor(voltage_left_label,
+                          darkMode ? LVGL_WHITE : LVGL_BLACK);
         setLabelText(voltage_left_label, "NO\nBMS");
         if (lastVoltLeftMode != 1) {
           // Move up by 10 pixels when showing NO BMS
@@ -590,7 +591,8 @@ void updateLvglMainScreen(
            char batt_buffer[10];
            snprintf(batt_buffer, sizeof(batt_buffer), "%d%%", (int)batteryPercent);
            setLabelText(battery_label, batt_buffer);
-           setLabelTextColor(battery_label, LVGL_BLACK);
+           setLabelTextColor(battery_label,
+                             darkMode ? LVGL_WHITE : LVGL_BLACK);
         }
 
     } else if (escConnected) {
@@ -599,7 +601,8 @@ void updateLvglMainScreen(
         char buffer[10];
         snprintf(buffer, sizeof(buffer), "%2.1fv", totalVolts);
         setLabelText(battery_label, buffer);
-        setLabelTextColor(battery_label, LVGL_BLACK);
+        setLabelTextColor(battery_label,
+                          darkMode ? LVGL_WHITE : LVGL_BLACK);
     } else {
         setLabelText(voltage_right_label, "");
     }
@@ -926,8 +929,10 @@ void updateLvglMainScreen(
 
   // Update armed indicator
   if (armed) {
-    // Set background to CYAN when armed, regardless of cruise state
-    setBgColor(arm_indicator, LVGL_CYAN, LV_PART_MAIN);
+    // Keep the armed tile bright in light mode and glare/contrast safe in dark.
+    setBgColor(arm_indicator,
+               darkMode ? LVGL_DARK_CYAN : LVGL_CYAN,
+               LV_PART_MAIN);
     lv_obj_remove_flag(arm_indicator, LV_OBJ_FLAG_HIDDEN);
   } else {
     lv_obj_add_flag(arm_indicator, LV_OBJ_FLAG_HIDDEN);
@@ -1011,7 +1016,7 @@ void updateLvglMainScreen(
         climbRate = altitudeChange / timeChange;  // m/s
       }
     }
-    updateClimbRateIndicator(climbRate);
+    updateClimbRateIndicator(climbRate, darkMode);
     lastAltitude = altitude;
     lastAltitudeTime = currentTime;
   }

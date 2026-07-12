@@ -138,7 +138,8 @@ void setupMainScreen(bool darkMode) {
   battery_label = lv_label_create(main_screen);
   lv_obj_align(battery_label, LV_ALIGN_TOP_MID, 0, 3);  // Move up for better vertical centering in battery bar
   lv_obj_set_style_text_font(battery_label, &lv_font_montserrat_28, 0);  // Large font for prominent percentage display
-  lv_obj_set_style_text_color(battery_label, LVGL_BLACK, 0);
+  lv_obj_set_style_text_color(battery_label,
+                             darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   // Center-align battery percentage since it's in the middle
   lv_obj_set_style_text_align(battery_label, LV_TEXT_ALIGN_CENTER, 0);
 
@@ -534,7 +535,8 @@ void setupMainScreen(bool darkMode) {
   ble_pairing_icon = lv_label_create(main_screen);
   lv_label_set_text(ble_pairing_icon, LV_SYMBOL_BLUETOOTH);
   lv_obj_set_style_text_font(ble_pairing_icon, &lv_font_montserrat_14, 0);
-  lv_obj_set_style_text_color(ble_pairing_icon, LVGL_BLUE, 0);
+  lv_obj_set_style_text_color(
+      ble_pairing_icon, darkMode ? LVGL_DARK_BLE_BLUE : LVGL_BLUE, 0);
   lv_obj_set_pos(ble_pairing_icon, 103, 72);
   lv_obj_add_flag(ble_pairing_icon, LV_OBJ_FLAG_HIDDEN);  // Hide initially
 
@@ -556,9 +558,11 @@ void setupMainScreen(bool darkMode) {
 
     lv_line_set_points(climb_rate_divider_lines[i], line_points[i], 2);
 
-    // Make the center line (line 6) special: 3 pixels wide and black
+    // Make the center line (line 6) thicker and theme-visible.
     if (i == 6) {
-      lv_obj_set_style_line_color(climb_rate_divider_lines[i], LVGL_BLACK, LV_PART_MAIN);
+      lv_obj_set_style_line_color(
+          climb_rate_divider_lines[i], darkMode ? LVGL_WHITE : LVGL_BLACK,
+          LV_PART_MAIN);
       lv_obj_set_style_line_width(climb_rate_divider_lines[i], 3, LV_PART_MAIN);
     } else {
       lv_obj_set_style_line_color(climb_rate_divider_lines[i], LVGL_GRAY, LV_PART_MAIN);
