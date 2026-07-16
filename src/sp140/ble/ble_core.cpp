@@ -32,6 +32,13 @@ bool pairingModeTransitionActive = false;
 // Store the active connection handle for conn param updates
 uint16_t activeConnHandle = 0;
 
+// Negotiated ATT MTU for the active connection. Starts at the BLE default (23)
+// on connect and is updated by onMTUChange; 0 while disconnected. iOS offers
+// no app-side MTU control, so this is the only place either side can see
+// whether the link carries full 198-byte telemetry notifies (needs >= 201).
+constexpr uint16_t kDefaultAttMtu = 23;
+volatile uint16_t gNegotiatedMtu = 0;
+
 bool shouldAdvertiseWhilePowered();
 bool startAdvertising(NimBLEServer *server);
 
@@ -241,6 +248,7 @@ void onAdvertisingWatchdog(TimerHandle_t timer) {
 class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
   void onConnect(NimBLEServer *server, NimBLEConnInfo &connInfo) override {
     activeConnHandle = connInfo.getConnHandle();
+    gNegotiatedMtu = kDefaultAttMtu;
     deviceConnected = true;
     connectedHandle = connInfo.getConnHandle();
 
@@ -273,6 +281,7 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
     }
     deviceConnected = false;
     connectedHandle = BLE_HS_CONN_HANDLE_NONE;
+    gNegotiatedMtu = 0;
 
     if (isOtaInProgress()) {
       abortOta();
@@ -336,6 +345,7 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
   }
 
   void onMTUChange(uint16_t MTU, NimBLEConnInfo &connInfo) override {
+    gNegotiatedMtu = MTU;
     USBSerial.printf("[BLE] MTU change mtu=%u handle=%u\n",
                      MTU, connInfo.getConnHandle());
   }
@@ -402,12 +412,16 @@ void requestFastConnParams() {
   if (pServer == nullptr || !deviceConnected) {
     return;
   }
-  // Tighten to 15ms interval for OTA throughput, but lengthen the supervision
-  // timeout to 8s (was 2s). A multi-second flash-erase stall or a sluggish phone
-  // must not drop the link at the link-layer level mid-flash. Slower recovery of
-  // a genuinely dead link is acceptable (OTA_TIMEOUT_MS=30s is the backstop);
-  // reliability of the flash matters more than fast dead-link detection.
-  pServer->updateConnParams(activeConnHandle, 12, 12, 0, 800);
+  // Tighten to 15-30ms interval for OTA throughput, with the supervision
+  // timeout lengthened to 6s (from the 2s post-connect value) so a multi-second
+  // flash-erase stall or a sluggish phone doesn't drop the link at the
+  // link-layer level mid-flash. Slower recovery of a genuinely dead link is
+  // acceptable (OTA_TIMEOUT_MS=30s is the backstop). 6s is Apple's accessory
+  // ceiling and 12/24 satisfies its "intervalMin + 15ms <= intervalMax" rule —
+  // iOS rejects peripheral update requests outside those bounds (a fixed 12/12
+  // interval or an 8s timeout loses both the tight interval and the stall
+  // protection on iOS).
+  pServer->updateConnParams(activeConnHandle, 12, 24, 0, 600);
 }
 
 void requestNormalConnParams() {
@@ -480,3 +494,5 @@ void enterBLEPairingMode() {
 }
 
 bool isBLEPairingModeActive() { return pairingModeActive; }
+
+uint16_t getNegotiatedBLEMtu() { return gNegotiatedMtu; }

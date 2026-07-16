@@ -4,6 +4,7 @@
 #include <limits>
 
 #include "sp140/ble.h"  // For deviceConnected
+#include "sp140/ble/ble_core.h"  // For getNegotiatedBLEMtu()
 #include "sp140/ble/ble_ids.h"
 #include "sp140/ble/ota_service.h"
 #include "sp140/esc.h"  // For requestEscHardwareInfo()
@@ -19,6 +20,8 @@ uint32_t gFastLinkNotifyOkCount = 0;
 uint32_t gFastLinkNotifyFailCount = 0;
 uint32_t gFastLinkSkippedNoConnCount = 0;
 uint32_t gFastLinkSkippedOtaCount = 0;
+uint32_t gFastLinkTruncatedNotifyCount = 0;
+bool gFastLinkTruncationWarned = false;
 uint32_t gFastLinkLastStatsMs = 0;
 uint32_t gFastLinkPacketId = 0;
 // During OTA the normal ~50Hz telemetry stream is suppressed, but we still emit
@@ -143,6 +146,30 @@ BLE_FastLink_Telemetry buildFastLinkTelemetry(const TelemetryHub &hub,
   return fastLink;
 }
 
+// Sends the queued telemetry value, accounting for silent ATT truncation:
+// NimBLE clips a notify to ATT_MTU - 3 bytes, so on links negotiated below
+// sizeof(BLE_FastLink_Telemetry) + 3 the BMS cell-voltage/temp tail never
+// arrives and neither side sees an error. iOS gives apps no MTU control or
+// visibility, so this counter is the only truncation signal on either side.
+bool notifyFastLinkTelemetry() {
+  const bool sent = pFastLinkCharacteristic->notify();
+  if (sent) {
+    const uint16_t mtu = getNegotiatedBLEMtu();
+    if (mtu != 0 && sizeof(BLE_FastLink_Telemetry) + 3 > mtu) {
+      ++gFastLinkTruncatedNotifyCount;
+      if (!gFastLinkTruncationWarned) {
+        gFastLinkTruncationWarned = true;
+        USBSerial.printf(
+            "[FASTLINK] WARNING: ATT MTU %u truncates %u-byte telemetry to %u "
+            "bytes (BMS cell arrays dropped)\n",
+            mtu, static_cast<unsigned>(sizeof(BLE_FastLink_Telemetry)),
+            mtu - 3);
+      }
+    }
+  }
+  return sent;
+}
+
 void updateFastLinkTelemetry(const BLE_FastLink_Telemetry &data) {
   if (pFastLinkCharacteristic != nullptr) {
     pFastLinkCharacteristic->setValue((uint8_t *)&data,
@@ -162,7 +189,7 @@ void updateFastLinkTelemetry(const BLE_FastLink_Telemetry &data) {
       if (deviceConnected &&
           (nowMs - gFastLinkLastOtaKeepaliveMs >= kOtaKeepaliveIntervalMs)) {
         gFastLinkLastOtaKeepaliveMs = nowMs;
-        if (pFastLinkCharacteristic->notify()) {
+        if (notifyFastLinkTelemetry()) {
           ++gFastLinkNotifyOkCount;
         } else {
           ++gFastLinkNotifyFailCount;
@@ -171,23 +198,26 @@ void updateFastLinkTelemetry(const BLE_FastLink_Telemetry &data) {
         ++gFastLinkSkippedOtaCount;
       }
     } else if (deviceConnected) {
-      const bool sent = pFastLinkCharacteristic->notify();
-      if (sent) {
+      if (notifyFastLinkTelemetry()) {
         ++gFastLinkNotifyOkCount;
       } else {
         ++gFastLinkNotifyFailCount;
       }
     } else {
       ++gFastLinkSkippedNoConnCount;
+      gFastLinkTruncationWarned = false;  // re-warn on the next connection
     }
 
     const uint32_t nowMs = millis();
     if (nowMs - gFastLinkLastStatsMs >= 2000) {
       gFastLinkLastStatsMs = nowMs;
       USBSerial.printf(
-          "[FASTLINK] stats ok=%lu fail=%lu skippedNoConn=%lu skippedOta=%lu v=%u packet=%lu uptime=%lu connected=%d ota=%d\n",
+          "[FASTLINK] stats ok=%lu fail=%lu trunc=%lu mtu=%u skippedNoConn=%lu "
+          "skippedOta=%lu v=%u packet=%lu uptime=%lu connected=%d ota=%d\n",
           static_cast<unsigned long>(gFastLinkNotifyOkCount),
           static_cast<unsigned long>(gFastLinkNotifyFailCount),
+          static_cast<unsigned long>(gFastLinkTruncatedNotifyCount),
+          getNegotiatedBLEMtu(),
           static_cast<unsigned long>(gFastLinkSkippedNoConnCount),
           static_cast<unsigned long>(gFastLinkSkippedOtaCount),
           static_cast<unsigned>(data.version),
