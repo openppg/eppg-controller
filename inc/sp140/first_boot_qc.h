@@ -5,9 +5,9 @@
 // Runs as a blocking guided flow inside setup() at the Phase 4/5 boundary
 // (display + hardware up, no app tasks running). See FIRST_BOOT_QC.md.
 //
-// Entry has exactly two paths: truly fresh NVS (new factory unit) or the
-// serial "run_qc" command flag. The installed fleet is back-filled as passed
-// at first boot on this firmware and never sees the flow.
+// Entry paths: truly fresh NVS, prior failed/aborted attempt (qc_attempted),
+// or the serial "run_qc" command flag. The installed fleet (user settings,
+// never attempted) is back-filled as passed and never sees the flow.
 
 #ifndef INC_SP140_FIRST_BOOT_QC_H_
 #define INC_SP140_FIRST_BOOT_QC_H_

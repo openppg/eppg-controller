@@ -20,6 +20,7 @@ static const char* FACTORY_NAMESPACE = "openppg-factory";
 
 // Factory keys
 static const char* KEY_QC_PASSED = "qc_passed";        // u8
+static const char* KEY_QC_ATTEMPTED = "qc_attempted";  // u8 (fail/abort retry)
 static const char* KEY_QC_FW = "qc_fw";                // u16 (major<<8 | minor)
 static const char* KEY_POT_CALIBRATED = "pot_cal";     // u8
 static const char* KEY_POT_MIN = "pot_min";            // u16
@@ -62,29 +63,21 @@ static Preferences& factoryPrefs() {
   return prefs;
 }
 
-bool factoryQcPassed() {
+static bool factoryGetFlag(const char* key) {
   factoryLock();
+  bool value = false;
   Preferences& p = factoryPrefs();
-  bool passed = false;
   if (p.begin(FACTORY_NAMESPACE, true)) {
-    passed = p.getUChar(KEY_QC_PASSED, 0) == 1;
+    value = p.getUChar(key, 0) == 1;
     p.end();
   }
   factoryUnlock();
-  return passed;
+  return value;
 }
 
-bool factoryRerunRequested() {
-  factoryLock();
-  Preferences& p = factoryPrefs();
-  bool rerun = false;
-  if (p.begin(FACTORY_NAMESPACE, true)) {
-    rerun = p.getUChar(KEY_QC_RERUN, 0) == 1;
-    p.end();
-  }
-  factoryUnlock();
-  return rerun;
-}
+bool factoryQcPassed() { return factoryGetFlag(KEY_QC_PASSED); }
+bool factoryQcAttempted() { return factoryGetFlag(KEY_QC_ATTEMPTED); }
+bool factoryRerunRequested() { return factoryGetFlag(KEY_QC_RERUN); }
 
 FactoryCal factoryGetCal() {
   FactoryCal cal = {false, 0, 4095};
@@ -123,7 +116,14 @@ static bool factoryBatchedWrite(Fn fn) {
   return success;
 }
 
+void factoryMarkQcAttempted() {
+  factoryBatchedWrite([](nvs_handle_t h) {
+    return nvs_set_u8(h, KEY_QC_ATTEMPTED, 1) == ESP_OK;
+  });
+}
+
 void factoryWriteQcResult(bool passed, uint16_t fwEncoded) {
+  // qc_attempted is already sticky from factoryMarkQcAttempted() at gate entry.
   factoryBatchedWrite([&](nvs_handle_t h) {
     bool ok = (nvs_set_u8(h, KEY_QC_PASSED, passed ? 1 : 0) == ESP_OK);
     ok &= (nvs_set_u16(h, KEY_QC_FW, fwEncoded) == ESP_OK);

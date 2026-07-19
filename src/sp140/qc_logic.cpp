@@ -13,24 +13,20 @@
 // Boot gate decision
 // ---------------------------------------------------------------------------
 
-QcGateAction qcGateDecision(bool factoryQcPassed,
-                            bool factoryRerunRequested,
-                            bool userSettingsPresent) {
-  // A deliberate serial-command rerun overrides everything (bench/service).
-  if (factoryRerunRequested) {
-    return QcGateAction::RUN_QC_RERUN;
-  }
-  // Already QC'd — normal boot.
-  if (factoryQcPassed) {
-    return QcGateAction::SKIP_NORMAL_BOOT;
-  }
-  // Existing unit (settings written by v8.0-or-prior firmware): back-fill the
-  // pass flag and never auto-calibrate. The installed fleet must never see QC.
-  if (userSettingsPresent) {
-    return QcGateAction::MARK_LEGACY_AND_SKIP;
-  }
-  // Truly fresh NVS: brand-new factory controller.
-  return QcGateAction::RUN_QC;
+QcGateAction qcGateDecision(bool passed, bool rerun, bool userSettings,
+                            bool attempted) {
+  if (rerun) return QcGateAction::RUN;
+  if (passed) return QcGateAction::SKIP;
+  // attempted → retry (user defaults may already exist from refreshDeviceData)
+  if (attempted || !userSettings) return QcGateAction::RUN;
+  return QcGateAction::MARK_LEGACY;  // fleet: user NVS, never attempted
+}
+
+QcPotConfirmLevels qcPotConfirmLevels(uint16_t potMin, uint16_t potMax) {
+  const bool ok = potMax > potMin;
+  const uint16_t min = ok ? potMin : 0;
+  const uint16_t span = ok ? (uint16_t)(potMax - potMin) : 4095;
+  return {(uint16_t)(min + span / 2), (uint16_t)(min + span / 10)};
 }
 
 // ---------------------------------------------------------------------------

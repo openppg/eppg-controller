@@ -16,20 +16,26 @@
 // Boot gate decision
 // ---------------------------------------------------------------------------
 
-// QC entry has exactly two paths: fresh factory NVS, or the serial-command
-// rerun flag. Existing units (any pre-QC firmware data in the "openppg"
-// namespace) are back-filled as passed and NEVER auto-calibrated — the QC
-// target is factory PCB/IC defects on new boards, not the installed fleet.
+// SKIP = already passed. MARK_LEGACY = fleet unit, never attempted.
+// RUN = fresh / retry after fail / serial run_qc (caller clears rerun flag).
 enum class QcGateAction : uint8_t {
-  SKIP_NORMAL_BOOT = 0,   // QC already passed — boot normally
-  MARK_LEGACY_AND_SKIP,   // existing unit: back-fill qc_passed, no calibration
-  RUN_QC,                 // fresh factory unit — run the full flow
-  RUN_QC_RERUN,           // deliberate bench/field re-entry via serial command
+  SKIP = 0,
+  MARK_LEGACY,
+  RUN,
 };
 
-QcGateAction qcGateDecision(bool factoryQcPassed,
-                            bool factoryRerunRequested,
-                            bool userSettingsPresent);
+// `attempted` separates fleet (user NVS, never QC'd) from a factory board that
+// already got user defaults written then failed/aborted mid-QC.
+QcGateAction qcGateDecision(bool passed, bool rerun, bool userSettings,
+                            bool attempted);
+
+// Pot-confirm thresholds from cal endpoints (or 0..4095 if cal unsaved).
+struct QcPotConfirmLevels {
+  uint16_t confirm;  // squeeze past = observed cue (~50% span)
+  uint16_t release;  // must be at/below between checks (~10% span)
+};
+
+QcPotConfirmLevels qcPotConfirmLevels(uint16_t potMin, uint16_t potMax);
 
 // ---------------------------------------------------------------------------
 // Throttle calibration sanity gates

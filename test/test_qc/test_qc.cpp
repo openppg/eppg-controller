@@ -16,45 +16,44 @@
 // ---------------------------------------------------------------------------
 
 TEST(QcGate, FreshFactoryUnitRunsQc) {
-  // No factory state, no rerun flag, no user settings => brand-new unit.
-  EXPECT_EQ(qcGateDecision(false, false, false), QcGateAction::RUN_QC);
+  EXPECT_EQ(qcGateDecision(false, false, false, false), QcGateAction::RUN);
 }
 
 TEST(QcGate, ExistingFleetUnitNeverSeesQc) {
-  // Settings from v8.0-or-prior exist but factory namespace is empty:
-  // this is an OTA'd customer device. Must back-fill and skip — never QC.
-  EXPECT_EQ(qcGateDecision(false, false, true),
-            QcGateAction::MARK_LEGACY_AND_SKIP);
+  // User NVS from ≤v8.0, never attempted → back-fill, never QC.
+  EXPECT_EQ(qcGateDecision(false, false, true, false), QcGateAction::MARK_LEGACY);
+}
+
+TEST(QcGate, FailedOrAbortedFactoryAttemptRetries) {
+  // User defaults may exist, but attempted ⇒ retry, not legacy.
+  EXPECT_EQ(qcGateDecision(false, false, true, true), QcGateAction::RUN);
+  EXPECT_EQ(qcGateDecision(false, false, false, true), QcGateAction::RUN);
 }
 
 TEST(QcGate, PassedUnitBootsNormally) {
-  EXPECT_EQ(qcGateDecision(true, false, false), QcGateAction::SKIP_NORMAL_BOOT);
-  EXPECT_EQ(qcGateDecision(true, false, true), QcGateAction::SKIP_NORMAL_BOOT);
+  EXPECT_EQ(qcGateDecision(true, false, false, false), QcGateAction::SKIP);
+  EXPECT_EQ(qcGateDecision(true, false, true, true), QcGateAction::SKIP);
 }
 
 TEST(QcGate, SerialRerunOverridesEverything) {
-  EXPECT_EQ(qcGateDecision(true, true, true), QcGateAction::RUN_QC_RERUN);
-  EXPECT_EQ(qcGateDecision(false, true, true), QcGateAction::RUN_QC_RERUN);
-  EXPECT_EQ(qcGateDecision(true, true, false), QcGateAction::RUN_QC_RERUN);
+  EXPECT_EQ(qcGateDecision(true, true, true, true), QcGateAction::RUN);
+  EXPECT_EQ(qcGateDecision(false, true, true, false), QcGateAction::RUN);
+  EXPECT_EQ(qcGateDecision(true, true, false, false), QcGateAction::RUN);
 }
 
-// There is deliberately NO input that maps a button state to QC entry — the
-// gate takes only {factory passed, rerun flag, user settings present}. This
-// test documents that contract at compile time by exhaustively covering the
-// full input space.
 TEST(QcGate, ExhaustiveInputSpace) {
   for (int passed = 0; passed <= 1; passed++) {
     for (int rerun = 0; rerun <= 1; rerun++) {
       for (int user = 0; user <= 1; user++) {
-        const QcGateAction a = qcGateDecision(passed, rerun, user);
-        if (rerun) {
-          EXPECT_EQ(a, QcGateAction::RUN_QC_RERUN);
-        } else if (passed) {
-          EXPECT_EQ(a, QcGateAction::SKIP_NORMAL_BOOT);
-        } else if (user) {
-          EXPECT_EQ(a, QcGateAction::MARK_LEGACY_AND_SKIP);
-        } else {
-          EXPECT_EQ(a, QcGateAction::RUN_QC);
+        for (int attempted = 0; attempted <= 1; attempted++) {
+          const QcGateAction a = qcGateDecision(passed, rerun, user, attempted);
+          if (rerun || (!passed && (attempted || !user))) {
+            EXPECT_EQ(a, QcGateAction::RUN);
+          } else if (passed) {
+            EXPECT_EQ(a, QcGateAction::SKIP);
+          } else {
+            EXPECT_EQ(a, QcGateAction::MARK_LEGACY);
+          }
         }
       }
     }
@@ -110,6 +109,23 @@ TEST(QcCalGatesTest, BoundaryValues) {
   EXPECT_EQ(qcValidateCalibration(800, 3200, 800 + kGates.releaseTolerance,
                                   QcCalGates{2400, 800, 3200, 100}),
             QcCalResult::OK);
+}
+
+// ---------------------------------------------------------------------------
+// Pot-confirm thresholds (interactive checks use calibrated endpoints)
+// ---------------------------------------------------------------------------
+
+TEST(QcPotConfirmLevelsTest, UsesCalibratedSpan) {
+  const QcPotConfirmLevels levels = qcPotConfirmLevels(142, 3987);
+  EXPECT_EQ(levels.confirm, static_cast<uint16_t>(142 + (3987 - 142) / 2));
+  EXPECT_EQ(levels.release, static_cast<uint16_t>(142 + (3987 - 142) / 10));
+  EXPECT_LT(levels.release, levels.confirm);
+}
+
+TEST(QcPotConfirmLevelsTest, DegenerateFallsBackToFullAdcRange) {
+  const QcPotConfirmLevels levels = qcPotConfirmLevels(3000, 1000);
+  EXPECT_EQ(levels.confirm, 2047);
+  EXPECT_EQ(levels.release, 409);
 }
 
 // ---------------------------------------------------------------------------
@@ -284,7 +300,7 @@ TEST(QcRecordTest, NotRunCountsAsFailure) {
 TEST(QcRecordTest, JsonGolden) {
   QcRecord r = makePassingRecord();
   r.canEsc = QcCheckStatus::SKIP;
-  char buf[512];
+  char buf[768];
   const size_t n = qcRecordToJson(r, buf, sizeof(buf));
   ASSERT_GT(n, 0u);
 
@@ -308,7 +324,7 @@ TEST(QcRecordTest, JsonNullIds) {
   r.escHwId[0] = '\0';
   r.escSn[0] = '\0';
   r.bmsId[0] = '\0';
-  char buf[512];
+  char buf[768];
   ASSERT_GT(qcRecordToJson(r, buf, sizeof(buf)), 0u);
   const std::string json(buf);
   EXPECT_NE(json.find("\"esc_hw_id\":null"), std::string::npos);

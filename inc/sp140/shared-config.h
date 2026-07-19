@@ -34,6 +34,6 @@
 #define QC_CAN_POLL_ITERATIONS      10     // POST CAN polls (x interval = ~2 s)
 #define QC_CAN_POLL_INTERVAL_MS     200
 #define QC_CAL_STEP_TIMEOUT_MS      60000  // per calibration step (operator paced)
-#define QC_RECORD_JSON_MAX          512    // QC record JSON buffer size
+#define QC_RECORD_JSON_MAX          768    // QC record JSON buffer (IDs + checks)
 
 #endif  // INC_SP140_SHARED_CONFIG_H_

@@ -24,12 +24,15 @@ void factorySettingsInit();
 
 // --- QC gate state ---
 bool factoryQcPassed();
+bool factoryQcAttempted();        // set when QC flow starts; survives fail/abort
+void factoryMarkQcAttempted();    // call as soon as the gate decides to run QC
 bool factoryRerunRequested();     // qc_rerun flag (set by the run_qc command)
 void factorySetRerunFlag();       // called by the "run_qc" serial command
 void factoryClearRerunFlag();     // consumed at boot by the QC gate
 
 // --- Results ---
-// qc_passed + qc_fw in one commit.
+// qc_passed + qc_fw in one commit. Write false on FAIL so the next boot
+// retries (combined with qc_attempted) instead of legacy-backfilling.
 void factoryWriteQcResult(bool passed, uint16_t fwEncoded);
 // pot_min/pot_max + pot_calibrated=1 in one commit.
 void factoryWriteCal(uint16_t potMin, uint16_t potMax);

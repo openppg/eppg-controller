@@ -40,6 +40,7 @@ extern SemaphoreHandle_t lvglMutex;
 
 static bool s_userSettingsPresentAtBoot = false;
 static bool s_factoryQcPassedAtBoot = false;
+static bool s_factoryQcAttemptedAtBoot = false;
 static bool s_rerunRequestedAtBoot = false;
 static bool s_contextCaptured = false;
 
@@ -58,39 +59,40 @@ void qcCaptureBootContext() {
   }
 
   s_factoryQcPassedAtBoot = factoryQcPassed();
+  s_factoryQcAttemptedAtBoot = factoryQcAttempted();
   s_rerunRequestedAtBoot = factoryRerunRequested();
   s_contextCaptured = true;
 }
 
 bool qcShouldRun() {
   if (!s_contextCaptured) {
-    // Defensive: without a captured context, never run QC (fail safe for the
-    // fleet; a factory unit can always be re-triggered via run_qc).
-    return false;
+    return false;  // fail-safe for fleet; factory can always use run_qc
   }
 
   const QcGateAction action = qcGateDecision(
       s_factoryQcPassedAtBoot, s_rerunRequestedAtBoot,
-      s_userSettingsPresentAtBoot);
+      s_userSettingsPresentAtBoot, s_factoryQcAttemptedAtBoot);
 
-  switch (action) {
-    case QcGateAction::RUN_QC:
-      USBSerial.println(F("QC: fresh factory unit - entering QC flow"));
-      return true;
-    case QcGateAction::RUN_QC_RERUN:
-      USBSerial.println(F("QC: rerun requested via serial command"));
-      factoryClearRerunFlag();  // consume so the next boot is normal
-      return true;
-    case QcGateAction::MARK_LEGACY_AND_SKIP:
-      // Existing unit (settings from v8.0-or-prior): back-fill and never
-      // calibrate. The installed fleet must never see this flow.
-      USBSerial.println(F("QC: existing unit detected - back-filling qc_passed"));
-      factoryMarkLegacyUnit(factoryEncodeFw(VERSION_MAJOR, VERSION_MINOR));
-      return false;
-    case QcGateAction::SKIP_NORMAL_BOOT:
-    default:
-      return false;
+  if (action == QcGateAction::MARK_LEGACY) {
+    USBSerial.println(F("QC: existing unit detected - back-filling qc_passed"));
+    factoryMarkLegacyUnit(factoryEncodeFw(VERSION_MAJOR, VERSION_MINOR));
+    return false;
   }
+  if (action != QcGateAction::RUN) {
+    return false;  // SKIP
+  }
+
+  // Sticky before UI/HW work so a mid-flow power-cut retries next boot.
+  factoryMarkQcAttempted();
+  if (s_rerunRequestedAtBoot) {
+    USBSerial.println(F("QC: rerun requested via serial command"));
+    factoryClearRerunFlag();
+  } else if (s_factoryQcAttemptedAtBoot) {
+    USBSerial.println(F("QC: prior attempt incomplete - re-entering QC"));
+  } else {
+    USBSerial.println(F("QC: fresh factory unit - entering QC flow"));
+  }
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -240,6 +242,8 @@ static bool qcCaptureStableRaw(const char* instruction, const char* subtext,
 
 // Full calibration sequence: release -> squeeze -> release recheck, then the
 // sanity gates. Saves to the factory namespace only when everything passes.
+// On fail/timeout, leave rec->potMin/Max at the safe 0..4095 defaults so
+// later pot-confirm checks do not use a rejected capture for thresholds.
 static QcCheckStatus qcRunThrottleCalibration(QcRecord* rec) {
   uint16_t rawMin = 0;
   uint16_t rawMax = 0;
@@ -255,9 +259,6 @@ static QcCheckStatus qcRunThrottleCalibration(QcRecord* rec) {
     return QcCheckStatus::FAIL;
   }
 
-  rec->potMin = rawMin;
-  rec->potMax = rawMax;
-
   const QcCalGates gates = {QC_MIN_SPAN, QC_MAX_IDLE, QC_MIN_FULL,
                             QC_RELEASE_TOLERANCE};
   const QcCalResult result =
@@ -267,10 +268,12 @@ static QcCheckStatus qcRunThrottleCalibration(QcRecord* rec) {
                    rawMin, rawMax, rawRecheck, static_cast<int>(result));
 
   if (result != QcCalResult::OK) {
-    // Do NOT save — the unit keeps the safe 0..4095 defaults.
+    // Do NOT save — keep safe 0..4095 defaults on the record for pot-confirm.
     return QcCheckStatus::FAIL;
   }
 
+  rec->potMin = rawMin;
+  rec->potMax = rawMax;
   factoryWriteCal(rawMin, rawMax);
   rec->calSaved = true;
   return QcCheckStatus::PASS;
@@ -373,72 +376,70 @@ static QcCheckStatus postCheckThrottleAdc() {
   return (raw <= QC_MAX_IDLE) ? QcCheckStatus::PASS : QcCheckStatus::FAIL;
 }
 
-// ---------------------------------------------------------------------------
-// Interactive checks — pot-confirm pattern. The freshly calibrated throttle
-// is the confirmation input: squeeze past 50% of span = "yes, I observed the
-// cue". The pot must return to idle between checks so one long squeeze can't
-// blanket-confirm consecutive cues. All instructions on the TFT.
-// ---------------------------------------------------------------------------
-
+// Interactive pot-confirm: squeeze ~50% span = observed cue; release gated.
 typedef void (*QcCueFn)();
-
-static void qcCueBuzzerOn() { startTone(2093); }  // C7 — loud + distinct
+static void qcCueBuzzerOn() { startTone(2093); }
 static void qcCueBuzzerOff() { stopTone(); }
 static void qcCueVibeOn() { vibeDirectSet(220); }
 static void qcCueVibeOff() { vibeDirectSet(0); }
 
+static void showPotProgress(uint16_t raw, uint32_t elapsed, uint32_t timeoutMs) {
+  char valText[16];
+  snprintf(valText, sizeof(valText), "%u", raw);
+  qcScreenPromptValue(valText);
+  qcScreenPromptProgress(
+      static_cast<uint8_t>(100 - (elapsed * 100) / timeoutMs));
+}
+
+// Wait until pot <= releaseLevel. False on timeout.
+static bool qcWaitPotRelease(uint16_t releaseLevel) {
+  viewPrompt("RELEASE THROTTLE", "let go to continue");
+  const uint32_t start = millis();
+  while (millis() - start < QC_CONFIRM_TIMEOUT_MS) {
+    const uint16_t raw = readThrottleRaw();
+    showPotProgress(raw, millis() - start, QC_CONFIRM_TIMEOUT_MS);
+    if (raw <= releaseLevel) return true;
+    viewPump();
+  }
+  return false;
+}
+
 static QcCheckStatus qcPotConfirm(const char* instruction, QcCueFn cueOn,
                                   QcCueFn cueOff, uint16_t potMin,
                                   uint16_t potMax) {
-  viewPrompt(instruction, "squeeze throttle to confirm");
-  const uint16_t span = (potMax > potMin) ? (potMax - potMin) : 4095;
-  const uint16_t confirmLevel = potMin + span / 2;
-  const uint16_t releaseLevel = potMin + span / 10;
+  const QcPotConfirmLevels lvl = qcPotConfirmLevels(potMin, potMax);
 
+  // Release before + after: one held squeeze cannot blanket-pass checks.
+  if (!qcWaitPotRelease(lvl.release)) return QcCheckStatus::FAIL;
+
+  viewPrompt(instruction, "squeeze throttle to confirm");
   const uint32_t start = millis();
-  bool cueState = false;
-  uint32_t lastToggle = 0;
-  QcCheckStatus result = QcCheckStatus::FAIL;
+  bool cueOnState = false;
+  uint32_t lastToggle = start;  // 700 ms quiet, then 300 ms on, repeat
+  bool squeezed = false;
 
   while (millis() - start < QC_CONFIRM_TIMEOUT_MS) {
-    // Pulse the cue 300 ms on / 700 ms off so it's clearly intermittent.
     const uint32_t now = millis();
-    if (!cueState && now - lastToggle >= 700) {
-      cueOn();
-      cueState = true;
+    if (now - lastToggle >= (cueOnState ? 300u : 700u)) {
+      cueOnState = !cueOnState;
       lastToggle = now;
-    } else if (cueState && now - lastToggle >= 300) {
-      cueOff();
-      cueState = false;
-      lastToggle = now;
+      if (cueOnState) cueOn();
+      else cueOff();
     }
 
     const uint16_t raw = readThrottleRaw();
-    char valText[16];
-    snprintf(valText, sizeof(valText), "%u", raw);
-    qcScreenPromptValue(valText);
-    const uint32_t elapsed = now - start;
-    qcScreenPromptProgress(
-        static_cast<uint8_t>(100 - (elapsed * 100) / QC_CONFIRM_TIMEOUT_MS));
-
-    if (raw >= confirmLevel) {
-      result = QcCheckStatus::PASS;
+    showPotProgress(raw, now - start, QC_CONFIRM_TIMEOUT_MS);
+    if (raw >= lvl.confirm) {
+      squeezed = true;
       break;
     }
     viewPump();
   }
   cueOff();
 
-  // Release gate: require the pot back at idle before the next check arms.
-  viewPrompt("RELEASE THROTTLE", "let go to continue");
-  const uint32_t relStart = millis();
-  while (millis() - relStart < QC_CONFIRM_TIMEOUT_MS) {
-    if (readThrottleRaw() <= releaseLevel) {
-      break;
-    }
-    viewPump();
-  }
-  return result;
+  if (!squeezed) return QcCheckStatus::FAIL;
+  return qcWaitPotRelease(lvl.release) ? QcCheckStatus::PASS
+                                       : QcCheckStatus::FAIL;
 }
 
 // ---------------------------------------------------------------------------
@@ -519,10 +520,10 @@ void runFirstBootQc() {
   viewStepResult("button", rec.button);
 
   // --- Persist + report ---
+  // Always write the result: pass stamps qc_passed=1; fail stamps 0 so the
+  // next boot retries (qc_attempted stays set) instead of legacy-backfilling.
   const bool passed = qcRecordAllPassed(rec);
-  if (passed) {
-    factoryWriteQcResult(true, factoryEncodeFw(VERSION_MAJOR, VERSION_MINOR));
-  }
+  factoryWriteQcResult(passed, factoryEncodeFw(VERSION_MAJOR, VERSION_MINOR));
 
   char json[QC_RECORD_JSON_MAX];
   if (qcRecordToJson(rec, json, sizeof(json)) > 0) {
