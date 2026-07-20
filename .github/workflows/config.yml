@@ -18,7 +18,7 @@ jobs:
           token: ${{ github.token }}
           show-progress: false
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: 3.x
       - run: pip install cpplint
@@ -38,7 +38,7 @@ jobs:
           git config --global credential.helper store
           echo "https://oauth2:${{ secrets.GH_TOKEN || github.token }}@github.com" > ~/.git-credentials
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.13"
       - name: Cache PlatformIO
@@ -89,7 +89,7 @@ jobs:
           git config --global credential.helper store
           echo "https://oauth2:${{ secrets.GH_TOKEN || github.token }}@github.com" > ~/.git-credentials
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.13"
       - name: Cache PlatformIO
