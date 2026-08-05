@@ -128,15 +128,36 @@ void updateBMSData() {
     bms_can->getTemperature(4),
     bms_can->getTemperature(5)
   };
+  // Latched: once a temperature frame has ever been parsed, keep applying the
+  // disconnect policy. Re-testing the live readings every cycle would mean a
+  // later all-NaN frame (BMS temperature subsystem failed, or the BMS rebooting
+  // and broadcasting zeros) silently disables the too-many-probes-disconnected
+  // critical — total loss of the temperature path must not be silent.
+  static bool tempFrameSeen = false;
+  if (!tempFrameSeen &&
+      bmsTempFrameSeen(bmsTelemetryData.mos_temperature,
+                       bmsTelemetryData.balance_temperature, cellTemps)) {
+    tempFrameSeen = true;
+  }
+
   float sanitizedCellTemps[BMS_CELL_PROBE_COUNT];
-  sanitizeCellProbeTemps(cellTemps, sanitizedCellTemps);
+  if (tempFrameSeen) {
+    sanitizeCellProbeTemps(cellTemps, sanitizedCellTemps);
+    // Emit transition logs to help field-debug intermittent probe wiring
+    // issues. Only once real temp data exists — otherwise every boot would
+    // log a spurious "reconnected" burst when the first frame arrives.
+    logBmsCellProbeConnectionTransitions(sanitizedCellTemps);
+  } else {
+    // No temperature frame parsed yet: pass NaN through so temp monitors
+    // stay silent instead of firing the -40 disconnect sentinel.
+    for (uint8_t i = 0; i < BMS_CELL_PROBE_COUNT; i++) {
+      sanitizedCellTemps[i] = cellTemps[i];
+    }
+  }
   bmsTelemetryData.t1_temperature = sanitizedCellTemps[0];
   bmsTelemetryData.t2_temperature = sanitizedCellTemps[1];
   bmsTelemetryData.t3_temperature = sanitizedCellTemps[2];
   bmsTelemetryData.t4_temperature = sanitizedCellTemps[3];
-
-  // Emit transition logs to help field-debug intermittent probe wiring issues.
-  logBmsCellProbeConnectionTransitions(sanitizedCellTemps);
 
   // Library already excludes disconnected probes from high/low temps
   bmsTelemetryData.highest_temperature = bms_can->getHighestTemperature();

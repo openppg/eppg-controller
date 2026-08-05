@@ -57,12 +57,14 @@ static int8_t lastVoltLeftMode = -1;       // 0 = BMS, 1 = "NO BMS", 2 = none
 static uint8_t lastBattTempLevel = 0xFF;   // 0 = normal, 1 = warning, 2 = critical
 static uint8_t lastEscTempLevel = 0xFF;
 static uint8_t lastMotorTempLevel = 0xFF;
+static int32_t lastChargingIconBattW = -1;  // battery_label width the icon was aligned to
 
 void resetLvglUpdateCache() {
   lastVoltLeftMode = -1;
   lastBattTempLevel = 0xFF;
   lastEscTempLevel = 0xFF;
   lastMotorTempLevel = 0xFF;
+  lastChargingIconBattW = -1;
 }
 
 // Flash timer globals - definitions
@@ -938,6 +940,19 @@ void updateLvglMainScreen(
 
   // Update Charging Icon Visibility - only when BMS is connected and reports charging
   if (charging_icon_img != NULL) {  // Check object exists
+    // Re-align to the live battery label. lv_obj_align_to() stamps an absolute
+    // position once and keeps no binding to the base object, but battery_label
+    // is centre-aligned and re-centres itself every time its text changes - so
+    // a position stamped at setup (when the label is still empty) leaves the
+    // icon sitting on top of the percentage digits. Only re-align when the
+    // width actually changed; the call invalidates the icon.
+    if (battery_label != NULL) {
+      const int32_t battW = lv_obj_get_width(battery_label);
+      if (battW != lastChargingIconBattW) {
+        lv_obj_align_to(charging_icon_img, battery_label, LV_ALIGN_OUT_RIGHT_MID, 3, 0);
+        lastChargingIconBattW = battW;
+      }
+    }
     bool showChargingIcon = (bmsTelemetry.bmsState == TelemetryState::CONNECTED) && bmsTelemetry.is_charging;
     if (showChargingIcon) {
       lv_obj_remove_flag(charging_icon_img, LV_OBJ_FLAG_HIDDEN);

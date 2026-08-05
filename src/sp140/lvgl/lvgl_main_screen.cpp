@@ -165,6 +165,9 @@ void setupMainScreen(bool darkMode) {
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   // Center-align battery percentage since it's in the middle
   lv_obj_set_style_text_align(battery_label, LV_TEXT_ALIGN_CENTER, 0);
+  // Blank until the first update writes real content — a label with no text
+  // set renders LVGL's default "Text", which flashed on-screen at boot.
+  lv_label_set_text(battery_label, "");
 
   // Left voltage label
   voltage_left_label = lv_label_create(main_screen);
@@ -172,6 +175,7 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_style_text_font(voltage_left_label, &lv_font_montserrat_12, 0);  // Much smaller font for voltage
   lv_obj_set_style_text_color(voltage_left_label,
                             darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
+  lv_label_set_text(voltage_left_label, "");  // Blank until first update
 
   // Right voltage label
   voltage_right_label = lv_label_create(main_screen);
@@ -181,6 +185,7 @@ void setupMainScreen(bool darkMode) {
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   // Right-align right voltage so numbers grow from right to left
   lv_obj_set_style_text_align(voltage_right_label, LV_TEXT_ALIGN_RIGHT, 0);
+  lv_label_set_text(voltage_right_label, "");  // Blank until first update
 
   // Middle section - power display with individual character positions
   // Layout: [tens][ones][.][tenths] kW  (4 positions for numbers + decimal)
@@ -232,6 +237,7 @@ void setupMainScreen(bool darkMode) {
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   // Ensure text within the label is centered
   lv_obj_set_style_text_align(perf_mode_label, LV_TEXT_ALIGN_CENTER, 0);
+  lv_label_set_text(perf_mode_label, "");  // Blank until first update
 
   // Armed time label - adjust position now that there's no bluetooth icon
   armed_time_label = lv_label_create(main_screen);
@@ -241,6 +247,7 @@ void setupMainScreen(bool darkMode) {
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   // Right-align time so numbers grow from right to left
   lv_obj_set_style_text_align(armed_time_label, LV_TEXT_ALIGN_RIGHT, 0);
+  lv_label_set_text(armed_time_label, "");  // Blank until first update
 
   // Bottom section - altitude and temperatures
   // Create individual character position labels for fixed positioning
@@ -340,6 +347,7 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_style_pad_top(batt_temp_label, 1, 0);
   lv_obj_set_style_pad_bottom(batt_temp_label, 1, 0);
   lv_obj_set_style_text_align(batt_temp_label, LV_TEXT_ALIGN_RIGHT, 0);  // Right align temperature values
+  lv_label_set_text(batt_temp_label, "-");  // "No data" placeholder until first update
 
   // Create letter label for B
   batt_letter_label = lv_label_create(main_screen);
@@ -372,6 +380,7 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_style_pad_top(esc_temp_label, 1, 0);
   lv_obj_set_style_pad_bottom(esc_temp_label, 1, 0);
   lv_obj_set_style_text_align(esc_temp_label, LV_TEXT_ALIGN_RIGHT, 0);  // Right align temperature values
+  lv_label_set_text(esc_temp_label, "-");  // "No data" placeholder until first update
 
   // Create letter label for E
   esc_letter_label = lv_label_create(main_screen);
@@ -411,6 +420,7 @@ void setupMainScreen(bool darkMode) {
   lv_obj_set_style_pad_top(motor_temp_label, 1, 0);
   lv_obj_set_style_pad_bottom(motor_temp_label, 1, 0);
   lv_obj_set_style_text_align(motor_temp_label, LV_TEXT_ALIGN_RIGHT, 0);  // Right align temperature values
+  lv_label_set_text(motor_temp_label, "-");  // "No data" placeholder until first update
 
   // Create letter label for M
   motor_letter_label = lv_label_create(main_screen);

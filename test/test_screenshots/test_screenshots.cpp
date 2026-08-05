@@ -22,7 +22,11 @@ static bool file_exists(const char* path) {
 }
 
 static void ensure_output_dir() {
+#ifdef _WIN32
+  mkdir(OUTPUT_DIR);  // MinGW mkdir has no mode argument
+#else
   mkdir(OUTPUT_DIR, 0755);
+#endif
 }
 
 // Create default device data for testing

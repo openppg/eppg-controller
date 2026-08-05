@@ -493,8 +493,23 @@ void bmsTask(void *pvParameters) {
   for (;;) {
     if (bmsCanInitialized) {
       updateBMSData();
-      if (bms_can->isConnected()) {
-        bmsTelemetryData.bmsState = TelemetryState::CONNECTED;
+      // Coherent-snapshot gate: report CONNECTED only after the pack-voltage
+      // and cell-voltage frames have both arrived, so monitors and the UI
+      // never see the half-populated data a fresh link starts with.
+      //
+      // Latched on purpose. This orders the first few frames at link-up and
+      // has no legitimate work to do afterwards — re-evaluating it every cycle
+      // would let a live-but-faulted pack (one collapsed cell) read as "no
+      // data" and silently drop the BMS out of the alert system entirely.
+      // Genuine link loss is still caught by isConnected() below.
+      static bool bmsSnapshotEverCoherent = false;
+      if (bms_can->isConnected(BMS_LINK_TIMEOUT_MS)) {
+        if (!bmsSnapshotEverCoherent && bmsSnapshotCoherent(bmsTelemetryData)) {
+          bmsSnapshotEverCoherent = true;
+        }
+        bmsTelemetryData.bmsState = bmsSnapshotEverCoherent
+            ? TelemetryState::CONNECTED
+            : TelemetryState::NOT_CONNECTED;
       } else {
         bmsTelemetryData.bmsState = TelemetryState::NOT_CONNECTED;
       }
