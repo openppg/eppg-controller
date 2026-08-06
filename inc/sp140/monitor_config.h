@@ -14,11 +14,21 @@ static const Thresholds motorTempThresholds = {.warnLow = -20, .warnHigh = 105, 
 // -- BMS Thresholds --
 static const Thresholds bmsTempThresholds = {.warnLow = -10, .warnHigh = 50, .critLow = -15, .critHigh = 60, .hysteresis = 1.0f};
 static const Thresholds bmsCellTempThresholds = {.warnLow = -10, .warnHigh = 50, .critLow = -15, .critHigh = 56, .hysteresis = 1.0f};
-static const Thresholds bmsHighCellVoltageThresholds = {.warnLow = 0.0, .warnHigh = 4.19, .critLow = 0.0, .critHigh = 4.20};
+// High-cell monitor is high-side only: SensorMonitor fires at v <= critLow, so
+// the old critLow of 0.0 turned a zero-initialized (pre-data) reading into a
+// critical that displayed as "BC-CV-H". Low readings belong to the low monitor.
+static const Thresholds bmsHighCellVoltageThresholds = {.warnLow = -1.0, .warnHigh = 4.19, .critLow = -1.0, .critHigh = 4.20};
 static const Thresholds bmsLowCellVoltageThresholds = {.warnLow = 3.2, .warnHigh = 4.5, .critLow = 3.0, .critHigh = 4.8};
 static const Thresholds bmsSOCThresholds = {.warnLow = 15.0, .warnHigh = 101.0, .critLow = 5.0, .critHigh = 110.0};
 static const Thresholds bmsTotalVoltageThresholds = {.warnLow = 79.2, .warnHigh = 100.4, .critLow = 69.6, .critHigh = 100.8};
 static const Thresholds bmsVoltageDifferentialThresholds = {.warnLow = -1.0, .warnHigh = 0.2, .critLow = -2.0, .critHigh = 0.4};
+
+// Hold BMS monitors off for this long after the FIRST NOT_CONNECTED ->
+// CONNECTED transition: a BMS that is itself still booting can emit
+// sentinel/garbage readings in its first frames, and alarming on those caused
+// spurious criticals at power-on and on hot-plug. Applied once per power-on —
+// see checkAllSensorsWithData for why re-arming it per reconnect is unsafe.
+static const uint32_t BMS_ALERT_GRACE_MS = 2000;
 
 // -- Altimeter Thresholds --
 static const Thresholds baroTempThresholds = {.warnLow = 0, .warnHigh = 50, .critLow = -10, .critHigh = 80, .hysteresis = 1.0f};

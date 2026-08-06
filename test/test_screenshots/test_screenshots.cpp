@@ -8,6 +8,7 @@
 #include "sp140/lvgl/lvgl_main_screen.h"
 #include "sp140/lvgl/lvgl_updates.h"
 #include "sp140/lvgl/lvgl_alerts.h"
+#include "sp140/lvgl/lvgl_splash.h"
 #include "sp140/structs.h"
 #include "version.h"
 
@@ -21,7 +22,11 @@ static bool file_exists(const char* path) {
 }
 
 static void ensure_output_dir() {
+#ifdef _WIN32
+  mkdir(OUTPUT_DIR);  // MinGW mkdir has no mode argument
+#else
   mkdir(OUTPUT_DIR, 0755);
+#endif
 }
 
 // Create default device data for testing
@@ -112,12 +117,16 @@ class ScreenshotTest : public ::testing::Test {
                        const STR_BMS_TELEMETRY_140& bms,
                        const UnifiedBatteryData& ubd,
                        float altitude, bool armed, bool cruising,
-                       unsigned int armedStartMillis = 0) {
+                       unsigned int armedStartMillis = 0,
+                       float climbRate = NAN) {
     emulator_init_display(darkMode);
     setupMainScreen(darkMode);
 
     // Apply data
     updateLvglMainScreen(dd, esc, bms, ubd, altitude, armed, cruising, armedStartMillis);
+    if (!std::isnan(climbRate)) {
+      updateClimbRateIndicator(climbRate, darkMode);
+    }
 
     // Render
     emulator_render_frame();
@@ -269,6 +278,46 @@ TEST_F(ScreenshotTest, MainScreen_HighAltitude_Dark) {
 
   render_and_save("main_high_altitude_dark", true, dd, esc, bms, ubd,
                   2456.8f, true, false, millis() - 900000);
+}
+
+TEST_F(ScreenshotTest, MainScreen_MaxClimb_Light) {
+  auto dd = make_default_device_data(false);
+  auto esc = make_esc_connected();
+  auto bms = make_bms_connected();
+  auto ubd = make_unified_battery(65.0f, 86.0f, 8.5f);
+
+  render_and_save("main_max_climb_light", false, dd, esc, bms, ubd,
+                  450.3f, true, false, millis() - 180000, 3.0f);
+}
+
+TEST_F(ScreenshotTest, MainScreen_MaxClimb_Dark) {
+  auto dd = make_default_device_data(true);
+  auto esc = make_esc_connected();
+  auto bms = make_bms_connected();
+  auto ubd = make_unified_battery(65.0f, 86.0f, 8.5f);
+
+  render_and_save("main_max_climb_dark", true, dd, esc, bms, ubd,
+                  450.3f, true, false, millis() - 180000, 3.0f);
+}
+
+TEST_F(ScreenshotTest, MainScreen_MaxDescent_Light) {
+  auto dd = make_default_device_data(false);
+  auto esc = make_esc_connected();
+  auto bms = make_bms_connected();
+  auto ubd = make_unified_battery(65.0f, 86.0f, 8.5f);
+
+  render_and_save("main_max_descent_light", false, dd, esc, bms, ubd,
+                  450.3f, true, false, millis() - 180000, -3.0f);
+}
+
+TEST_F(ScreenshotTest, MainScreen_MaxDescent_Dark) {
+  auto dd = make_default_device_data(true);
+  auto esc = make_esc_connected();
+  auto bms = make_bms_connected();
+  auto ubd = make_unified_battery(65.0f, 86.0f, 8.5f);
+
+  render_and_save("main_max_descent_dark", true, dd, esc, bms, ubd,
+                  450.3f, true, false, millis() - 180000, -3.0f);
 }
 
 TEST_F(ScreenshotTest, MainScreen_HighPower_Light) {
@@ -520,7 +569,7 @@ TEST_F(ScreenshotTest, MainScreen_CriticalAlerts_Light) {
   lv_showAlertTextWithLevel(SensorID::ESC_MOS_Temp, AlertLevel::WARN_HIGH, false);
 
   if (critical_border != NULL) {
-    lv_obj_set_style_border_opa(critical_border, LV_OPA_100, LV_PART_MAIN);
+    setCriticalBorderOpacity(LV_OPA_100);
   }
 
   emulator_render_frame();
@@ -547,7 +596,7 @@ TEST_F(ScreenshotTest, MainScreen_CriticalAlerts_Dark) {
   lv_showAlertTextWithLevel(SensorID::ESC_MOS_Temp, AlertLevel::WARN_HIGH, false);
 
   if (critical_border != NULL) {
-    lv_obj_set_style_border_opa(critical_border, LV_OPA_100, LV_PART_MAIN);
+    setCriticalBorderOpacity(LV_OPA_100);
   }
 
   emulator_render_frame();
@@ -597,43 +646,31 @@ TEST_F(ScreenshotTest, MainScreen_BLEPairing_Dark) {
 }
 
 // ============================================================
-// Splash screen tests (recreated from lvgl_core.cpp displayLvglSplash)
-// Uses VERSION_MAJOR/VERSION_MINOR from version.h so references
-// auto-update on rebuild after a version bump — just run
-// build_and_run.sh --update-references after changing the version.
+// Splash screen tests use the production builder. The compiled version text is
+// asserted separately, then replaced with the stable v8.1 fixture value before
+// pixel comparison so a version bump does not invalidate an otherwise-identical
+// golden image.
 // ============================================================
 
 // Helper to render a splash screen and save/compare
 static void render_splash(const char* name, bool darkMode) {
-  lv_obj_t* splash_screen = lv_obj_create(NULL);
-  lv_screen_load(splash_screen);
-  lv_obj_remove_flag(splash_screen, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_set_style_bg_color(splash_screen,
-                            darkMode ? lv_color_black() : lv_color_white(),
-                            LV_PART_MAIN);
+  auto dd = make_default_device_data(darkMode);
+  lv_obj_t* splash_screen = createLvglSplashScreen(dd);
 
-  lv_obj_t* title_label = lv_label_create(splash_screen);
-  lv_label_set_text(title_label, "OpenPPG");
-  lv_obj_set_style_text_font(title_label, &lv_font_montserrat_28, 0);
-  lv_obj_set_style_text_color(title_label,
-                              darkMode ? lv_color_white() : lv_color_black(), 0);
-  lv_obj_align(title_label, LV_ALIGN_TOP_MID, 0, 15);
+  ASSERT_EQ(3u, lv_obj_get_child_count(splash_screen));
+  lv_obj_t* version_label = lv_obj_get_child(splash_screen, 1);
+  char expected_version[10];
+  snprintf(expected_version, sizeof(expected_version), "v%d.%d", VERSION_MAJOR,
+           VERSION_MINOR);
+  EXPECT_STREQ(expected_version, lv_label_get_text(version_label));
 
-  lv_obj_t* version_label = lv_label_create(splash_screen);
-  char version_str[10];
-  snprintf(version_str, sizeof(version_str), "v%d.%d", VERSION_MAJOR, VERSION_MINOR);
-  lv_label_set_text(version_label, version_str);
-  lv_obj_set_style_text_font(version_label, &lv_font_montserrat_16, 0);
-  lv_obj_set_style_text_color(version_label,
-                              darkMode ? lv_color_white() : lv_color_black(), 0);
-  lv_obj_align(version_label, LV_ALIGN_CENTER, 0, 0);
+  // Preserve visual coverage for the version label's position, font, color,
+  // and representative glyphs without coupling the golden to release metadata.
+  lv_label_set_text(version_label, "v8.1");
 
-  lv_obj_t* time_label = lv_label_create(splash_screen);
-  lv_label_set_text(time_label, "02:05");
-  lv_obj_set_style_text_font(time_label, &lv_font_montserrat_16, 0);
-  lv_obj_set_style_text_color(time_label,
-                              darkMode ? lv_color_white() : lv_color_black(), 0);
-  lv_obj_align(time_label, LV_ALIGN_BOTTOM_MID, 0, -20);
+  // Compare the stable, fully-visible splash state after the production title
+  // fade has completed.
+  lv_tick_inc(500);
 
   emulator_render_frame();
 

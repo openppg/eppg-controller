@@ -20,7 +20,6 @@ static uint8_t lvgl_buf1[SCREEN_WIDTH * SCREEN_HEIGHT * 2] __attribute__((aligne
 lv_display_t* main_display = nullptr;
 int8_t displayCS = -1;
 Adafruit_ST7735* tft_driver = nullptr;
-uint32_t lvgl_last_update = 0;
 SemaphoreHandle_t spiBusMutex = nullptr;
 
 // Define lvglMutex from lvgl_updates.h

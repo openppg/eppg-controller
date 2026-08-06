@@ -29,6 +29,8 @@
 #include "../../inc/sp140/ble/fastlink_service.h"
 #include "../../inc/sp140/bms.h"
 #include "../../inc/sp140/esc.h"
+#include "../../inc/sp140/esc_config_relay.h"
+#include "../../inc/sp140/esc_flasher_relay.h"
 #include "../../inc/sp140/globals.h"  // device config
 #include "../../inc/sp140/lvgl/lvgl_alerts.h"
 #include "../../inc/sp140/lvgl/lvgl_core.h"
@@ -348,6 +350,10 @@ void bleNotifyTask(void *pvParameters) {
       publishFastLinkTelemetry(hub, currentState);
     }
 
+    // Push ESC config-relay status + result blob over notify (config-service
+    // GATT reads return null on this stack; notify is reliable).
+    pumpEscRelayNotify();
+
     if (!isOtaInProgress()) {
       setAndNotifyOnChange(pDeviceStateCharacteristic,
                            static_cast<uint8_t>(currentState), lastNotifiedState);
@@ -469,10 +475,10 @@ void monitoringTask(void *pvParameters) {
   }
 }
 
-// UI task: fixed 20 Hz refresh and snapshot publish
+// UI task: fixed ~30 Hz refresh and snapshot publish
 void uiTask(void *pvParameters) {
   TickType_t lastWake = xTaskGetTickCount();
-  const TickType_t uiTicks = pdMS_TO_TICKS(50);  // 20 Hz
+  const TickType_t uiTicks = pdMS_TO_TICKS(33);  // ~30 Hz, matches LV_DEF_REFR_PERIOD
   for (;;) {
     refreshDisplay();
     lastUiRunMs = millis();
@@ -487,8 +493,23 @@ void bmsTask(void *pvParameters) {
   for (;;) {
     if (bmsCanInitialized) {
       updateBMSData();
-      if (bms_can->isConnected()) {
-        bmsTelemetryData.bmsState = TelemetryState::CONNECTED;
+      // Coherent-snapshot gate: report CONNECTED only after the pack-voltage
+      // and cell-voltage frames have both arrived, so monitors and the UI
+      // never see the half-populated data a fresh link starts with.
+      //
+      // Latched on purpose. This orders the first few frames at link-up and
+      // has no legitimate work to do afterwards — re-evaluating it every cycle
+      // would let a live-but-faulted pack (one collapsed cell) read as "no
+      // data" and silently drop the BMS out of the alert system entirely.
+      // Genuine link loss is still caught by isConnected() below.
+      static bool bmsSnapshotEverCoherent = false;
+      if (bms_can->isConnected(BMS_LINK_TIMEOUT_MS)) {
+        if (!bmsSnapshotEverCoherent && bmsSnapshotCoherent(bmsTelemetryData)) {
+          bmsSnapshotEverCoherent = true;
+        }
+        bmsTelemetryData.bmsState = bmsSnapshotEverCoherent
+            ? TelemetryState::CONNECTED
+            : TelemetryState::NOT_CONNECTED;
       } else {
         bmsTelemetryData.bmsState = TelemetryState::NOT_CONNECTED;
       }
@@ -563,7 +584,12 @@ void setupAnalogRead() {
 
 void setupWatchdog() {
 #ifndef OPENPPG_DEBUG
-  // Initialize Task Watchdog (reboot on timeout)
+  // Initialize Task Watchdog (reboot on timeout). The idle-task checks on both
+  // cores are deliberately DISABLED in sdkconfig
+  // (CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0/CPU1=n) so the watchdog scope is
+  // exactly the tasks that explicitly subscribe (throttleTask + watchdogTask).
+  // Otherwise any non-safety task (UI/BMS/BLE) monopolizing a core for >5 s
+  // would panic-reboot a flying device — the opposite of the intent.
   ESP_ERROR_CHECK(esp_task_wdt_init(WDT_TIMEOUT_SECONDS, true));
 #endif  // OPENPPG_DEBUG
 }
@@ -998,6 +1024,14 @@ void toggleArm() {
       return;
     }
 
+    // Block arming while an ESC config-relay or firmware-relay session is in
+    // flight (the ESC may be mid-reboot / in the bootloader). Mirrors the OTA
+    // interlock above.
+    if (escConfigRelayIsActive() || escFlasherRelayIsActive()) {
+      USBSerial.println("Arm blocked: ESC config/firmware relay in progress");
+      return;
+    }
+
     // Check if enough time has passed since last disarm
     if (millis() - lastDisarmTime >= DISARM_COOLDOWN) {
       if (!throttleEngaged()) {
@@ -1147,7 +1181,16 @@ void handleThrottle() {
     break;
   }
 
-  setESCThrottle(finalPwm);
+  // Suppress the ESC control/telemetry command during a config/firmware relay
+  // session. setESCThrottle() pings the ESC every cycle and the ESC answers with
+  // a burst of high-rate telemetry; that flood overruns the CAN RX buffer and the
+  // SaveConfig reply gets dropped, so the write times out. flash-qc works because
+  // its bus is quiet. The device is always DISARMED during a session, so there is
+  // no throttle to send anyway. readESCTelemetry() still runs — it pumps the bus
+  // and drives the relay state machine.
+  if (!escConfigRelayIsActive() && !escFlasherRelayIsActive()) {
+    setESCThrottle(finalPwm);
+  }
 
   // Read/Sync ESC Telemetry (runs in all armed states)
   readESCTelemetry();

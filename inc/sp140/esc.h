@@ -30,6 +30,11 @@ void setESCThrottle(int throttlePWM);
 void readESCTelemetry();
 bool setupTWAI();
 
+// Accessor to the single shared CanardAdapter (the controller's sole CAN owner).
+// Used by the ESC config relay so its requests go out on the same adapter the
+// throttle task drives — keeping all CAN traffic on one task, no mutex needed.
+CanardAdapter& escAdapter();
+
 // Request ESC hardware info (HW ID, FW version, bootloader, serial number).
 // Thread-safe: sets a flag consumed by readESCTelemetry() on its next tick.
 // Also called automatically the first time the ESC connects.

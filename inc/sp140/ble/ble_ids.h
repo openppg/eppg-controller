@@ -19,6 +19,28 @@
 #define THROTTLE_VALUE_UUID "50AB3859-9FBF-4D30-BF97-2516EE632FAD"
 #define DEVICE_STATE_UUID "8F80BCF5-B58F-4908-B079-E8AD6F5EE257"
 
+// ESC config relay (phone -> controller -> ESC over CAN). CMD is written by the
+// app (opcode-multiplexed); STATUS is read/notify for the async result.
+// See: powerpack-flash-qc/configs/ESC-Config-Relay-Design.md
+#define ESC_RELAY_CMD_UUID "E5C0C0DE-0001-4A5C-9B21-7E5C0F1A2B30"
+#define ESC_RELAY_STATUS_UUID "E5C0C0DE-0002-4A5C-9B21-7E5C0F1A2B30"
+
+// ESC firmware relay: CTRL is written with FW_START/FW_END/ABORT opcodes and
+// read/notify for flasher status; DATA receives offset-addressed image chunks
+// (write-without-response for throughput). See ESC-Config-Relay-Design.md §4.
+#define ESC_FW_CTRL_UUID "E5C0C0DE-0003-4A5C-9B21-7E5C0F1A2B30"
+#define ESC_FW_DATA_UUID "E5C0C0DE-0004-4A5C-9B21-7E5C0F1A2B30"
+
+// ESC parameter read-all result blob: app writes [offset u32 LE] then reads back
+// up to ~240 bytes of the result blob from that offset (paged fetch).
+#define ESC_PARAM_DATA_UUID "E5C0C0DE-0005-4A5C-9B21-7E5C0F1A2B30"
+
+// ESC relay NOTIFY: the controller pushes status + streams the result blob here,
+// because GATT reads of the config service return null on this stack while
+// notify is reliable. Frames: [0x01]=STATUS[code][phase][detail][len u16],
+// [0x02]=DATA[offset u16][bytes]. See ESC-Config-Relay-Design.md.
+#define ESC_RELAY_NOTIFY_UUID "E5C0C0DE-0006-4A5C-9B21-7E5C0F1A2B30"
+
 // Device info service
 #define DEVICE_INFO_SERVICE_UUID "180A"
 #define MANUFACTURER_NAME_UUID "2A29"

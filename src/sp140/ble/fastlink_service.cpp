@@ -7,6 +7,8 @@
 #include "sp140/ble/ble_ids.h"
 #include "sp140/ble/ota_service.h"
 #include "sp140/esc.h"  // For requestEscHardwareInfo()
+#include "sp140/esc_config_relay.h"   // throttle telemetry during config relay
+#include "sp140/esc_flasher_relay.h"  // ... and firmware relay
 #include <Arduino.h>
 #include <NimBLECharacteristic.h>
 #include <NimBLEDevice.h>
@@ -19,6 +21,12 @@ uint32_t gFastLinkSkippedNoConnCount = 0;
 uint32_t gFastLinkSkippedOtaCount = 0;
 uint32_t gFastLinkLastStatsMs = 0;
 uint32_t gFastLinkPacketId = 0;
+// During OTA the normal ~50Hz telemetry stream is suppressed, but we still emit
+// a low-rate keepalive so the phone's connection-health watchdog sees the link
+// as alive (otherwise the central tears it down mid-flash -> HCI 0x13 /
+// reason=531, aborting OTA ~20% in).
+uint32_t gFastLinkLastOtaKeepaliveMs = 0;
+constexpr uint32_t kOtaKeepaliveIntervalMs = 1000;
 
 constexpr uint32_t kFastLinkTelemetryProperties =
 NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY |
@@ -139,8 +147,29 @@ void updateFastLinkTelemetry(const BLE_FastLink_Telemetry &data) {
   if (pFastLinkCharacteristic != nullptr) {
     pFastLinkCharacteristic->setValue((uint8_t *)&data,
                                       sizeof(BLE_FastLink_Telemetry));
-    if (isOtaInProgress()) {
-      ++gFastLinkSkippedOtaCount;
+    // Throttle the ~50Hz stream during OTA AND during an ESC config/firmware
+    // relay session (plus its short read-back settle window): at ~66Hz the
+    // notify flood saturates every connection event and starves the phone's
+    // config-service reads (status poll + result blob), so they never complete.
+    if (isOtaInProgress() || escConfigRelayResultPending() || escFlasherRelayIsActive()) {
+      // Suppress the full ~50Hz stream during OTA to give the flash bandwidth,
+      // but emit a ~1Hz keepalive notify so the central keeps the link up. The
+      // keepalive ships the packet just setValue()'d above, whose advancing
+      // packet_id/uptime_ms the app counts as telemetry progress. Wrap-safe
+      // unsigned subtraction. At 1Hz vs the 15ms OTA interval it does not
+      // meaningfully slow the flash.
+      const uint32_t nowMs = millis();
+      if (deviceConnected &&
+          (nowMs - gFastLinkLastOtaKeepaliveMs >= kOtaKeepaliveIntervalMs)) {
+        gFastLinkLastOtaKeepaliveMs = nowMs;
+        if (pFastLinkCharacteristic->notify()) {
+          ++gFastLinkNotifyOkCount;
+        } else {
+          ++gFastLinkNotifyFailCount;
+        }
+      } else {
+        ++gFastLinkSkippedOtaCount;
+      }
     } else if (deviceConnected) {
       const bool sent = pFastLinkCharacteristic->notify();
       if (sent) {

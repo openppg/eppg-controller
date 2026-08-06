@@ -433,7 +433,8 @@ CoreDumpSummary diagReadCoreDumpSummary(DiagResetReason reason) {
   esp_core_dump_summary_t core_dump = {};
   if (esp_core_dump_get_summary(&core_dump) == ESP_OK) {
     summary.valid = 1;
-    strncpy(summary.task, core_dump.exc_task, sizeof(summary.task) - 1);
+    memcpy(summary.task, core_dump.exc_task, sizeof(summary.task) - 1);
+    summary.task[sizeof(summary.task) - 1] = '\0';
     summary.pc = core_dump.exc_pc;
     summary.exc_cause = core_dump.ex_info.exc_cause;
     summary.exc_vaddr = core_dump.ex_info.exc_vaddr;
