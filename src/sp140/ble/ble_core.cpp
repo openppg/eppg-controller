@@ -402,8 +402,12 @@ void requestFastConnParams() {
   if (pServer == nullptr || !deviceConnected) {
     return;
   }
-  // Tighten to 15ms interval for OTA throughput
-  pServer->updateConnParams(activeConnHandle, 12, 12, 0, 200);
+  // Tighten to 15ms interval for OTA throughput, but lengthen the supervision
+  // timeout to 8s (was 2s). A multi-second flash-erase stall or a sluggish phone
+  // must not drop the link at the link-layer level mid-flash. Slower recovery of
+  // a genuinely dead link is acceptable (OTA_TIMEOUT_MS=30s is the backstop);
+  // reliability of the flash matters more than fast dead-link detection.
+  pServer->updateConnParams(activeConnHandle, 12, 12, 0, 800);
 }
 
 void requestNormalConnParams() {

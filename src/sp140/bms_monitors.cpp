@@ -15,11 +15,15 @@ extern bool bmsCanInitialized;
 // A freshly-connected BMS reports zero-initialized fields (soc=0, all voltages
 // 0, discharge-MOS=false) until its first data frames are parsed — which looks
 // exactly like a dead, critically-low pack and fired spurious CRIT_LOW / MOS-off
-// alarms on every connect. Treat readings as "no data" until the pack-voltage
-// frame proves real telemetry has arrived. A real pack (even deeply discharged)
-// sits far above this 5 V floor, so this never masks a genuine low condition.
-// SensorMonitor skips NaN; the discharge-MOS monitor reads its non-alerting
-// state (true) until data is valid.
+// alarms on every connect. bmsTask now holds bmsState at NOT_CONNECTED until
+// the snapshot is coherent (see bmsSnapshotCoherent), so this guard is
+// defense-in-depth against future changes to that gating. SensorMonitor skips
+// NaN; the discharge-MOS monitor reads its non-alerting state (true) until data
+// is valid.
+//
+// Deliberately checks pack voltage only. A per-cell floor here would NaN out
+// every voltage reader on a pack with one collapsed cell — exactly the fault
+// the low-cell and voltage-differential monitors exist to report.
 static constexpr float BMS_MIN_VALID_PACK_V = 5.0f;
 static inline bool bmsDataValid() {
   return monitoringBmsData.battery_voltage > BMS_MIN_VALID_PACK_V;

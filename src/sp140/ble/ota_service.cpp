@@ -3,6 +3,8 @@
 #include <Arduino.h>
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "sp140/ble/ble_core.h"
 #include "sp140/ble/ble_ids.h"
 #include "sp140/device_state.h"
@@ -12,6 +14,33 @@
 extern volatile DeviceState currentState;
 
 namespace {
+
+// Serializes every OTA state mutation. The command/data write callbacks run on
+// the NimBLE host task while checkOtaTimeout() runs on bleNotifyTask. Without
+// this, a timeout-driven abort on bleNotifyTask could call esp_ota_abort() and
+// resetOtaState() while a data callback is mid esp_ota_write() on the host task
+// — a use-after-abort on updateHandle/sectorBuffer that corrupts flash/heap.
+// abortOtaImpl() assumes the lock is already held; the public entry points
+// (callbacks, checkOtaTimeout, abortOta) acquire it.
+SemaphoreHandle_t otaStateMutex = nullptr;
+
+class OtaStateLock {
+ public:
+  explicit OtaStateLock(TickType_t timeout) {
+    if (otaStateMutex != nullptr) {
+      held_ = (xSemaphoreTake(otaStateMutex, timeout) == pdTRUE);
+    }
+  }
+  ~OtaStateLock() {
+    if (held_ && otaStateMutex != nullptr) {
+      xSemaphoreGive(otaStateMutex);
+    }
+  }
+  bool held() const { return held_; }
+
+ private:
+  bool held_ = false;
+};
 
 // Protocol Constants
 const uint16_t CMD_START = 0x0001;
@@ -122,6 +151,15 @@ void abortOtaImpl();
 void handleCmdStart(const uint8_t* data) {
     USBSerial.println("OTA: CMD_START");
 
+    // A duplicate CMD_START (app restarted the transfer) would orphan the live
+    // esp_ota handle, because resetOtaState() below only zeroes updateHandle
+    // without esp_ota_abort(). Abort the previous session cleanly first. Runs
+    // under the OtaStateLock already held by OtaCommandCallback::onWrite.
+    if (otaInProgress) {
+        USBSerial.println("OTA: CMD_START during active update - aborting previous session");
+        abortOtaImpl();
+    }
+
     if (currentState == ARMED || currentState == ARMED_CRUISING) {
         USBSerial.println("OTA Blocked: Device ARMED");
         sendCommandResponse(CMD_START, 0x0001);
@@ -164,6 +202,7 @@ void handleCmdStart(const uint8_t* data) {
 
 class OtaCommandCallback : public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic* pChar, NimBLEConnInfo& connInfo) override {
+        OtaStateLock lock(portMAX_DELAY);  // serialize vs checkOtaTimeout (other task)
         std::string value = pChar->getValue();
         // Command Packet: ID(2) + Payload(16) + CRC(2) = 20 bytes
         if (value.length() < 20) {
@@ -222,6 +261,7 @@ class OtaCommandCallback : public NimBLECharacteristicCallbacks {
 
 class OtaDataCallback : public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic* pChar, NimBLEConnInfo& connInfo) override {
+        OtaStateLock lock(portMAX_DELAY);  // serialize vs checkOtaTimeout (other task)
         if (!otaInProgress) return;
 
         std::string valStr = pChar->getValue();
@@ -323,9 +363,17 @@ static OtaDataCallback dataCallback;
 
 }  // namespace
 
-void abortOta() { abortOtaImpl(); }
+void abortOta() {
+    // Called from the BLE disconnect callback (host task); lock vs checkOtaTimeout.
+    OtaStateLock lock(portMAX_DELAY);
+    abortOtaImpl();
+}
 
 void checkOtaTimeout() {
+    // Take the lock without waiting: if a host-task callback is mid-write the
+    // device is clearly not idle, so skip this tick rather than block or race.
+    OtaStateLock lock(0);
+    if (!lock.held()) return;
     if (otaInProgress && (millis() - lastOtaActivityMs > OTA_TIMEOUT_MS)) {
         USBSerial.println("OTA: Idle timeout, aborting.");
         abortOtaImpl();
@@ -337,6 +385,10 @@ bool isOtaInProgress() {
 }
 
 void initOtaBleService(NimBLEServer* pServer) {
+    if (otaStateMutex == nullptr) {
+        otaStateMutex = xSemaphoreCreateMutex();
+    }
+
     NimBLEService* pService = pServer->createService(OTA_SERVICE_UUID);
 
     // Firmware data (Write No Response + Indicate for ACKs)

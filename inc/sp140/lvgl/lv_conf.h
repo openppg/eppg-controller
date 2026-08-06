@@ -136,15 +136,17 @@
 
 #define LV_USE_ANIMIMG      0
 
-#define LV_USE_ARC        1
+#define LV_USE_ARC        0
 
 #define LV_USE_BAR        1
 
-#define LV_USE_BUTTON     1
+#define LV_USE_BUTTON     0
 
-#define LV_USE_BUTTONMATRIX  1  /* Required by other components */
+#define LV_USE_BUTTONMATRIX  0
 
 #define LV_USE_CANVAS     0  /* Don't need canvas */
+
+#define LV_USE_CHART      0
 
 #define LV_USE_CALENDAR   0 /* Explicitly disable calendar widget */
 
@@ -154,6 +156,8 @@
 
 #define LV_USE_IMAGE      1   /*Requires: lv_label*/
 
+#define LV_USE_IMAGEBUTTON 0
+
 #define LV_USE_LABEL      1
 #if LV_USE_LABEL
     #define LV_LABEL_TEXT_SELECTION 1 /*Enable selecting text of the label*/
@@ -162,21 +166,39 @@
 
 #define LV_USE_LINE       1
 
+#define LV_USE_LIST       0
+
+#define LV_USE_MENU       0
+
+#define LV_USE_MSGBOX     0
+
 #define LV_USE_ROLLER     0  /* Don't need roller */
+
+#define LV_USE_SCALE      0
 
 #define LV_USE_SLIDER     0  /* Don't need slider */
 
-#define LV_USE_SPAN       1
+#define LV_USE_SPAN       0
 #if LV_USE_SPAN
     /*A line text can contain maximum num of span descriptor */
     #define LV_SPAN_SNIPPET_STACK_SIZE 64
 #endif
 
+#define LV_USE_SPINBOX    0
+
 #define LV_USE_SWITCH     0  /* Don't need switch */
 
-#define LV_USE_TEXTAREA   1  /* Required by other components */
+#define LV_USE_TABLE      0
 
-#define LV_USE_SPINNER    1
+#define LV_USE_TABVIEW    0
+
+#define LV_USE_TEXTAREA   0
+
+#define LV_USE_TILEVIEW   0
+
+#define LV_USE_WIN        0
+
+#define LV_USE_SPINNER    0
 
 /* keyboard widget (set to 0 since we don't use it) */
 #define LV_USE_KEYBOARD   0
@@ -207,10 +229,10 @@
 *==================*/
 
 /*A layout similar to Flexbox in CSS.*/
-#define LV_USE_FLEX 1
+#define LV_USE_FLEX 0
 
 /*A layout similar to Grid in CSS.*/
-#define LV_USE_GRID 1
+#define LV_USE_GRID 0
 
 /*====================
  * 3RD PARTS LIBRARIES

@@ -282,6 +282,18 @@ const char* sensorIDToAbbreviationWithLevel(SensorID id, AlertLevel level) {
       }
       return "BC-T4";  // Default
 
+    // Cell voltage monitors: suffix reflects the fired direction, not the
+    // monitor's name. A low-side fire on the high monitor used to display
+    // "BC-CV-H" for a 0 V (no data) reading.
+    case SensorID::BMS_High_Cell_Voltage:
+    case SensorID::BMS_Low_Cell_Voltage:
+      if (level == AlertLevel::WARN_HIGH || level == AlertLevel::CRIT_HIGH) {
+        return "BC-CV-H";  // Cell voltage high
+      } else if (level == AlertLevel::WARN_LOW || level == AlertLevel::CRIT_LOW) {
+        return "BC-CV-L";  // Cell voltage low
+      }
+      return "BC-CV";  // Default
+
     // For all other sensors, use the standard abbreviation
     default:
       return sensorIDToAbbreviation(id);
@@ -354,14 +366,37 @@ void checkAllSensorsWithData(const STR_ESC_TELEMETRY_140& escData,
     }
   }
 
+  // Grace period: a BMS that is itself still booting can emit sentinel/garbage
+  // readings in its first frames. Hold BMS monitors off briefly after the FIRST
+  // connect so half-baked data can never fire alerts.
+  //
+  // One-shot by design. Re-arming on every reconnect edge would mean each
+  // transient link drop — a chattering connector, or the SPI-mutex bail in
+  // updateBMSData() — blanks all BMS monitoring for another 2 s, right after
+  // the disconnect edge above already force-cleared every BMS alert. A real
+  // in-flight critical would vanish from the screen and could not be re-raised;
+  // flaps recurring faster than the grace would suppress it indefinitely. The
+  // booting-BMS garbage this protects against only happens once per power-on.
+  static uint32_t bmsGraceStartMs = 0;
+  static bool bmsGraceStarted = false;
+  static bool bmsGraceExpired = false;
   if (!prevBmsConnected && bmsConnected) {
     USBSerial.println("[MONITOR] BMS reconnected - resetting BMS monitor states");
+    if (!bmsGraceStarted) {
+      bmsGraceStartMs = millis();
+      bmsGraceStarted = true;
+    }
     for (auto* monitor : monitors) {
       if (monitor && monitor->getCategory() == SensorCategory::BMS) {
         monitor->resetState();
       }
     }
   }
+  if (bmsGraceStarted && !bmsGraceExpired &&
+      (millis() - bmsGraceStartMs >= BMS_ALERT_GRACE_MS)) {
+    bmsGraceExpired = true;
+  }
+  const bool bmsMonitorsArmed = bmsConnected && bmsGraceExpired;
 
   // Update previous connection states
   prevEscConnected = escConnected;
@@ -383,7 +418,7 @@ void checkAllSensorsWithData(const STR_ESC_TELEMETRY_140& escData,
           shouldRun = escConnected;
           break;
         case SensorCategory::BMS:
-          shouldRun = bmsConnected;
+          shouldRun = bmsMonitorsArmed;
           break;
         case SensorCategory::ALTIMETER:
         case SensorCategory::INTERNAL:

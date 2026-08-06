@@ -7,6 +7,9 @@
 #include "sp140/globals.h"
 #include "../../inc/sp140/esp32s3-config.h"
 #include <Preferences.h>  // Add ESP32 Preferences library
+#include <nvs.h>           // Raw NVS API for the batched (single-commit) write
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "../../inc/sp140/throttle.h"
 #include "../../inc/sp140/diagnostics.h"
 
@@ -75,6 +78,20 @@ const char* KEY_TIMEZONE_OFFSET = "tz_offset";
 // Create a Preferences instance
 Preferences preferences;
 
+// Serializes all NVS settings access. writeDeviceData() is reachable
+// concurrently from the BLE host task (config-service onWrite callbacks), the
+// button task (disarmSystem) and the serial task (parse_serial_command_line);
+// the single shared NVS namespace was previously written with no lock, so two
+// writers could interleave and silently lose/corrupt a settings write. Created
+// once in refreshDeviceData() while still single-threaded in setup().
+static SemaphoreHandle_t s_prefsMutex = nullptr;
+
+static void prefsEnsureMutex() {
+  if (s_prefsMutex == nullptr) {
+    s_prefsMutex = xSemaphoreCreateMutex();
+  }
+}
+
 namespace {
 
 constexpr size_t kWebSerialCommandBufferSize = 256;
@@ -86,6 +103,10 @@ bool gWebSerialCommandOverflow = false;
 
 // Read saved data from Preferences
 void refreshDeviceData() {
+  // Create the NVS mutex now, while still single-threaded in setup(), so every
+  // later (multi-task) writeDeviceData() call takes an already-existing lock.
+  prefsEnsureMutex();
+
   // Try to initialize preferences, with corruption recovery
   if (!preferences.begin(PREFS_NAMESPACE, false)) {
     USBSerial.println(F("Failed to initialize Preferences - may be corrupted"));
@@ -147,32 +168,54 @@ void refreshDeviceData() {
   USBSerial.println(F("Device data loaded from Preferences"));
 }
 
-// Write to Preferences
+// Write to NVS. Uses the raw NVS API (not the Preferences wrapper) so all 11
+// keys share ONE nvs_commit() instead of committing per key — a single flash
+// transaction that, together with s_prefsMutex, removes any window in which a
+// concurrent writer could observe or produce a torn/partial save. The key names
+// and NVS value types here MATCH exactly what the Preferences getters in
+// refreshDeviceData() expect (u8/u16/i32, and a 4-byte blob for the float), so
+// data written by older firmware remains fully readable.
 void writeDeviceData() {
-  if (!preferences.begin(PREFS_NAMESPACE, false)) {
-    USBSerial.println(F("Failed to initialize Preferences for writing"));
+  prefsEnsureMutex();
+  if (s_prefsMutex != nullptr) {
+    xSemaphoreTake(s_prefsMutex, portMAX_DELAY);
+  }
+
+  nvs_handle_t handle = 0;
+  esp_err_t err = nvs_open(PREFS_NAMESPACE, NVS_READWRITE, &handle);
+  if (err != ESP_OK) {
+    USBSerial.println(F("Failed to open NVS for writing"));
+    if (s_prefsMutex != nullptr) {
+      xSemaphoreGive(s_prefsMutex);
+    }
     return;
   }
 
-  // Save all values to preferences with error checking
   bool success = true;
-  success &= (preferences.putUChar(KEY_VERSION_MAJOR, deviceData.version_major) > 0);
-  success &= (preferences.putUChar(KEY_VERSION_MINOR, deviceData.version_minor) > 0);
-  success &= (preferences.putUChar(KEY_SCREEN_ROTATION, deviceData.screen_rotation) > 0);
-  success &= (preferences.putFloat(KEY_SEA_PRESSURE, deviceData.sea_pressure) > 0);
-  success &= (preferences.putBool(KEY_METRIC_TEMP, deviceData.metric_temp) > 0);
-  success &= (preferences.putBool(KEY_METRIC_ALT, deviceData.metric_alt) > 0);
-  success &= (preferences.putUChar(KEY_PERFORMANCE_MODE, deviceData.performance_mode) > 0);
-  success &= (preferences.putUChar(KEY_THEME, deviceData.theme) > 0);
-  success &= (preferences.putUShort(KEY_ARMED_TIME, deviceData.armed_time) > 0);
-  success &= (preferences.putUChar(KEY_REVISION, deviceData.revision) > 0);
-  success &= (preferences.putInt(KEY_TIMEZONE_OFFSET, deviceData.timezone_offset) > 0);
+  success &= (nvs_set_u8(handle, KEY_VERSION_MAJOR, deviceData.version_major) == ESP_OK);
+  success &= (nvs_set_u8(handle, KEY_VERSION_MINOR, deviceData.version_minor) == ESP_OK);
+  success &= (nvs_set_u8(handle, KEY_SCREEN_ROTATION, deviceData.screen_rotation) == ESP_OK);
+  success &= (nvs_set_blob(handle, KEY_SEA_PRESSURE, &deviceData.sea_pressure,
+                           sizeof(deviceData.sea_pressure)) == ESP_OK);
+  success &= (nvs_set_u8(handle, KEY_METRIC_TEMP, deviceData.metric_temp ? 1 : 0) == ESP_OK);
+  success &= (nvs_set_u8(handle, KEY_METRIC_ALT, deviceData.metric_alt ? 1 : 0) == ESP_OK);
+  success &= (nvs_set_u8(handle, KEY_PERFORMANCE_MODE, deviceData.performance_mode) == ESP_OK);
+  success &= (nvs_set_u8(handle, KEY_THEME, deviceData.theme) == ESP_OK);
+  success &= (nvs_set_u16(handle, KEY_ARMED_TIME, deviceData.armed_time) == ESP_OK);
+  success &= (nvs_set_u8(handle, KEY_REVISION, deviceData.revision) == ESP_OK);
+  success &= (nvs_set_i32(handle, KEY_TIMEZONE_OFFSET, deviceData.timezone_offset) == ESP_OK);
+
+  // One commit for the whole settings blob.
+  success &= (nvs_commit(handle) == ESP_OK);
+  nvs_close(handle);
+
+  if (s_prefsMutex != nullptr) {
+    xSemaphoreGive(s_prefsMutex);
+  }
 
   if (success) {
-    preferences.end();
     USBSerial.println(F("Device data saved to Preferences"));
   } else {
-    preferences.end();
     USBSerial.println(F("Warning: Some preferences may not have been saved correctly"));
   }
 }

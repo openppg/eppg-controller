@@ -21,6 +21,16 @@ enum ScreenPage {
 #define LVGL_PURPLE lv_color_make(128, 0, 128)
 #define LVGL_GRAY lv_color_make(128, 128, 128)
 
+// Dark-theme accents are intentionally subdued so white foreground text stays
+// readable whether it falls over a filled indicator or the black background.
+#define LVGL_DARK_GREEN lv_color_make(0, 112, 48)
+#define LVGL_DARK_YELLOW lv_color_make(128, 96, 0)
+#define LVGL_DARK_RED lv_color_make(176, 0, 32)
+#define LVGL_DARK_CYAN lv_color_make(0, 96, 104)
+#define LVGL_DARK_BLE_BLUE lv_color_make(64, 160, 255)
+#define LVGL_DARK_DESCENT_BLUE lv_color_make(74, 144, 226)
+#define LVGL_DARK_DESCENT_PURPLE lv_color_make(192, 128, 255)
+
 
 // LVGL styles for temperature warnings and critical states
 extern lv_style_t style_warning;
@@ -61,6 +71,8 @@ extern lv_obj_t* climb_rate_fill_sections[12];
 
 // Critical border (used by flash animations)
 extern lv_obj_t* critical_border;
+void setCriticalBorderOpacity(lv_opa_t opacity);
+lv_opa_t getCriticalBorderOpacity();
 
 // Helper functions
 void setAltitudeVisibility(bool visible);

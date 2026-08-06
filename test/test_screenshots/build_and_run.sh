@@ -85,6 +85,11 @@ fi
 
 mkdir -p "$BUILD_DIR"
 
+# --local uses RelWithDebInfo: optimized binary (5-10x faster renderer) with
+# debug symbols. CI keeps Debug for faithful failure diagnostics.
+BUILD_TYPE="Debug"
+[ "$LOCAL_BUILD" = 1 ] && BUILD_TYPE="RelWithDebInfo"
+
 # If the cached generator or build type no longer matches, clear the build dir once.
 if [ -f "$BUILD_DIR/CMakeCache.txt" ]; then
   cached_gen=$(grep '^CMAKE_GENERATOR:INTERNAL=' "$BUILD_DIR/CMakeCache.txt" 2>/dev/null | cut -d= -f2)
@@ -102,10 +107,6 @@ cd "$BUILD_DIR"
 
 echo ""
 echo "--- Configuring CMake ---"
-# --local uses RelWithDebInfo: optimized binary (5-10x faster renderer) with debug symbols.
-# CI keeps Debug for faithful failure diagnostics.
-BUILD_TYPE="Debug"
-[ "$LOCAL_BUILD" = 1 ] && BUILD_TYPE="RelWithDebInfo"
 # shellcheck disable=SC2086
 cmake "$SCRIPT_DIR" \
   -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \

@@ -342,6 +342,100 @@ TEST(SimpleMonitor, BMSCellProbeSanitizerPassesThroughValidTemps) {
   EXPECT_FLOAT_EQ(out[3], 40.0f);
 }
 
+// Regression: SensorMonitor fires at v <= critLow, and the high-cell monitor's
+// critLow used to be 0.0 — so a zero-initialized (pre-data) reading fired a
+// critical that displayed as "BC-CV-H" at every boot with a BMS connected.
+TEST(SimpleMonitor, BMSHighCellVoltageZeroReadingDoesNotAlert) {
+  FakeLogger logger;
+  float fakeVoltage = 0.0f;
+
+  SensorMonitor highCellMon(
+    SensorID::BMS_High_Cell_Voltage,
+    SensorCategory::BMS,
+    bmsHighCellVoltageThresholds,
+    [&]() { return fakeVoltage; },
+    &logger);
+
+  highCellMon.check();
+  EXPECT_TRUE(logger.entries.empty());
+
+  // Genuine high readings still alert.
+  fakeVoltage = 4.21f;
+  highCellMon.check();
+  ASSERT_EQ(logger.entries.size(), 1u);
+  EXPECT_EQ(logger.entries.back().lvl, AlertLevel::CRIT_HIGH);
+}
+
+// A fresh BMS link populates its snapshot from several CAN frames; the state
+// must not report CONNECTED until both basic frames have arrived.
+TEST(SimpleMonitor, BmsSnapshotCoherentRequiresBothBasicFrames) {
+  STR_BMS_TELEMETRY_140 t = {};
+  EXPECT_FALSE(bmsSnapshotCoherent(t));  // nothing received
+
+  t.battery_voltage = 96.0f;  // basic info 1 only
+  EXPECT_FALSE(bmsSnapshotCoherent(t));
+
+  t.battery_voltage = 0.0f;  // basic info 2 only
+  t.highest_cell_voltage = 4.0f;
+  EXPECT_FALSE(bmsSnapshotCoherent(t));
+
+  t.battery_voltage = 96.0f;  // both received
+  EXPECT_TRUE(bmsSnapshotCoherent(t));
+}
+
+// Regression: keying coherence on the LOWEST cell voltage made a shorted cell
+// or broken sense lead (lowest -> 0.000 V on a healthy, still-transmitting
+// pack) read as "no data", dropping the whole BMS to NOT_CONNECTED and
+// silencing the low-cell and voltage-differential alerts that exist to catch
+// exactly that fault.
+TEST(SimpleMonitor, BmsSnapshotCoherentSurvivesCollapsedCell) {
+  STR_BMS_TELEMETRY_140 t = {};
+  t.battery_voltage = 88.0f;
+  t.highest_cell_voltage = 3.95f;
+
+  t.lowest_cell_voltage = 0.0f;  // cell shorted / sense lead open
+  EXPECT_TRUE(bmsSnapshotCoherent(t));
+
+  t.lowest_cell_voltage = 0.30f;  // collapsing cell
+  EXPECT_TRUE(bmsSnapshotCoherent(t));
+}
+
+// The low-cell monitor must still fire for a collapsed cell once the snapshot
+// is considered coherent — this is the alert the gate must never suppress.
+TEST(SimpleMonitor, BMSLowCellVoltageAlertsOnCollapsedCell) {
+  FakeLogger logger;
+  float lowestCell = 3.9f;
+
+  SensorMonitor lowCellMon(
+    SensorID::BMS_Low_Cell_Voltage,
+    SensorCategory::BMS,
+    bmsLowCellVoltageThresholds,
+    [&]() { return lowestCell; },
+    &logger);
+
+  lowCellMon.check();  // healthy
+  EXPECT_TRUE(logger.entries.empty());
+
+  lowestCell = 0.30f;  // collapsed cell
+  lowCellMon.check();
+  ASSERT_EQ(logger.entries.size(), 1u);
+  EXPECT_EQ(logger.entries.back().lvl, AlertLevel::CRIT_LOW);
+}
+
+// Before the first temperature frame, every probe reads NaN — that must be
+// treated as "no data yet", not "all probes disconnected".
+TEST(SimpleMonitor, BmsTempFrameSeenDetection) {
+  const float allNaN[BMS_CELL_PROBE_COUNT] = {NAN, NAN, NAN, NAN};
+  EXPECT_FALSE(bmsTempFrameSeen(NAN, NAN, allNaN));
+
+  // Internal BMS sensors prove the frame arrived even with all probes out.
+  EXPECT_TRUE(bmsTempFrameSeen(32.0f, NAN, allNaN));
+  EXPECT_TRUE(bmsTempFrameSeen(NAN, 30.0f, allNaN));
+
+  const float oneProbe[BMS_CELL_PROBE_COUNT] = {NAN, 27.0f, NAN, NAN};
+  EXPECT_TRUE(bmsTempFrameSeen(NAN, NAN, oneProbe));
+}
+
 TEST(SimpleMonitor, BMSCellProbeDisconnectTransitionTriggersAndClearsAlert) {
   FakeLogger logger;
   float sanitizedTemps[BMS_CELL_PROBE_COUNT] = {NAN, NAN, NAN, NAN};

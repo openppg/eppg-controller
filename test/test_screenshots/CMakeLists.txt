@@ -59,6 +59,7 @@ target_compile_options(lvgl PRIVATE -w)
 
 # Project UI source files (the actual code under test)
 set(UI_SOURCES
+  ${PROJECT_ROOT}/src/sp140/lvgl/lvgl_splash.cpp
   ${PROJECT_ROOT}/src/sp140/lvgl/lvgl_main_screen.cpp
   ${PROJECT_ROOT}/src/sp140/lvgl/lvgl_updates.cpp
   ${PROJECT_ROOT}/src/sp140/lvgl/lvgl_alerts.cpp
