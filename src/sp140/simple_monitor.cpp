@@ -307,6 +307,9 @@ void initSimpleMonitor() {
   addESCMonitors();
   addBMSMonitors();
   addAltimeterMonitors();
+  // Prime while setup is still single-threaded so monitor readers never see
+  // the zero-initialized cache and no runtime task races tsens initialization.
+  primeCpuTemperatureCache();
   addInternalMonitors();
   USBSerial.printf("Monitoring %d sensors\n", monitors.size());
 }
