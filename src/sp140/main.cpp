@@ -1120,13 +1120,9 @@ bool shouldDisengageCruise(int potVal) {
 
 /**
  * Handles throttle control when in ARMED_CRUISING state
- * @param currentCruiseThrottlePWM Reference to the cruise PWM value
  * @param potVal Current raw potentiometer value
  */
-void handleCruisingThrottle(uint16_t &currentCruiseThrottlePWM, int potVal) {
-  // Set the ESC throttle to the determined (and potentially capped) cruise PWM
-  setESCThrottle(currentCruiseThrottlePWM);
-
+void handleCruisingThrottle(int potVal) {
   // Check for cruise disengagement via potentiometer override
   if (shouldDisengageCruise(potVal)) {
     changeDeviceState(ARMED);  // Transition back to normal ARMED state
@@ -1170,7 +1166,7 @@ void handleThrottle() {
     break;
 
   case ARMED_CRUISING:
-    handleCruisingThrottle(currentCruiseThrottlePWM, readThrottleRaw());
+    handleCruisingThrottle(readThrottleRaw());
     finalPwm = currentCruiseThrottlePWM;  // Use cruise PWM
     break;
 
