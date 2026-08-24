@@ -12,6 +12,7 @@
 #include "freertos/semphr.h"
 #include "../../inc/sp140/throttle.h"
 #include "../../inc/sp140/diagnostics.h"
+#include "../../inc/sp140/factory_settings.h"
 
 /**
  * WebSerial Protocol Documentation
@@ -273,6 +274,16 @@ void parse_serial_command_line(const char* json_line) {
       return;
     } else if (command == "sync") {
       send_device_data();
+      return;
+    } else if (command == "run_qc") {
+      // Deliberate bench/field-service action: set the factory rerun flag and
+      // reboot. The QC gate consumes the flag on the next boot — this is one
+      // of exactly two QC entry paths (the other is truly fresh NVS).
+      USBSerial.println(F("QC rerun requested - rebooting into factory QC"));
+      factorySetRerunFlag();
+      diagnosticsMarkPlannedRestart(
+          PlannedRestartReason::USB_COMMAND_REBOOT);
+      ESP.restart();
       return;
     } else if (command == "diag_sync") {
       diagnosticsSendJson(USBSerial);

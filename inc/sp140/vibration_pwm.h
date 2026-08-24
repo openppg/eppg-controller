@@ -74,4 +74,14 @@ void pulseVibration(uint16_t duration_ms, uint8_t intensity);
  */
 void stopVibration();
 
+/**
+ * @brief Directly sets motor PWM intensity, bypassing the queue/task.
+ *
+ * For pre-task contexts only (factory QC runs before vibeTask exists, so a
+ * queued request would sit unserviced). Pass 0 to stop.
+ *
+ * @param intensity The vibration intensity (0-255).
+ */
+void vibeDirectSet(uint8_t intensity);
+
 #endif  // INC_SP140_VIBRATION_PWM_H_
