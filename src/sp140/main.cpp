@@ -310,10 +310,9 @@ void throttleTask(void *pvParameters) {
 }
 
 // Lightweight task: reads controller sensors and writes to TelemetryHub at 10Hz.
-// Uses CACHED barometer/CPU values — uiTask is the sole I2C reader, and
-// getCachedCpuTemperature throttles tsens access. This avoids i2cMutex
-// contention and the "tsens: Do not configure..." error that arises when
-// multiple tasks call temperatureRead() concurrently.
+// Uses CACHED barometer/CPU values — uiTask is the sole I2C reader, and this
+// task is the sole runtime owner of tsens refresh. Other tasks only consume the
+// atomically published CPU temperature.
 void ctrlSensorTask(void *pvParameters) {
   (void)pvParameters;
   TickType_t lastWake = xTaskGetTickCount();
@@ -327,7 +326,7 @@ void ctrlSensorTask(void *pvParameters) {
     float bt = getBaroTemperature();
     float bp = getBaroPressure();
     float vs = getCachedVerticalSpeed();
-    float mt = getCachedCpuTemperature();
+    float mt = refreshCpuTemperature();
     uint16_t pr = getLastThrottleRaw();
     telemetryHubWriteController(alt, bt, bp, vs, mt, pr, now);
     vTaskDelayUntil(&lastWake, sensorTicks);
