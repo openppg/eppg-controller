@@ -120,7 +120,7 @@ int throttleFilterAverage() {
  * Read throttle input and return smoothed PWM value.
  * This is the core throttle processing pipeline without any state logic.
  * Uses mode-aware mapping so the full physical range covers the mode's
- * PWM output range (chill: 1035-1600, sport: 1035-1950).
+ * PWM output range (chill: 1035-1721, sport: 1035-1950).
  *
  * @param performance_mode 0 = CHILL, 1 = SPORT
  * @return Smoothed PWM value from throttle input

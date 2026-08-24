@@ -151,7 +151,7 @@ TEST(ThrottleTest, ApplyModeRampClamp) {
     // Test CHILL mode max PWM clamping
     prevPwm = 1840;
     result = applyModeRampClamp(1900, prevPwm, 0);
-    EXPECT_EQ(result, 1600);     // Should clamp to CHILL_MODE_MAX_PWM
+    EXPECT_EQ(result, 1721);     // Should clamp to CHILL_MODE_MAX_PWM
 
     // Test SPORT mode allows higher PWM
     prevPwm = 1840;
@@ -242,7 +242,7 @@ TEST(ThrottleTest, GetSmoothedThrottlePwmModeAwareAndSmoothing) {
     // CHILL full-stick should map to chill max
     throttleFilterClear();
     setTestAnalogReadValue(4095);
-    EXPECT_EQ(getSmoothedThrottlePwm(0), 1600);
+    EXPECT_EQ(getSmoothedThrottlePwm(0), 1721);
 
     // SPORT full-stick should map to full ESC max
     throttleFilterClear();
@@ -266,13 +266,13 @@ TEST(ThrottleTest, PotRawToModePwmMapping) {
     EXPECT_EQ(potRawToModePwm(1024, 1), 1263);
     EXPECT_EQ(potRawToModePwm(3072, 1), 1721);
 
-    // CHILL mode (mode 0) maps full physical range to 1035-1600
-    // Range: 1600 - 1035 = 565
+    // CHILL mode (mode 0) maps full physical range to 1035-1721
+    // Range: 1721 - 1035 = 686 (75% of sport's 915-us usable range, rounded)
     EXPECT_EQ(potRawToModePwm(0, 0), 1035);        // Min ADC -> Min PWM
-    EXPECT_EQ(potRawToModePwm(4095, 0), 1600);     // Max ADC -> CHILL max
-    EXPECT_EQ(potRawToModePwm(2048, 0), 1317);     // 50% -> mid chill range
-    EXPECT_EQ(potRawToModePwm(1024, 0), 1176);     // 25% -> 25% of chill range
-    EXPECT_EQ(potRawToModePwm(3072, 0), 1458);     // 75% -> 75% of chill range
+    EXPECT_EQ(potRawToModePwm(4095, 0), 1721);     // Max ADC -> CHILL max
+    EXPECT_EQ(potRawToModePwm(2048, 0), 1378);     // 50% -> mid chill range
+    EXPECT_EQ(potRawToModePwm(1024, 0), 1206);     // 25% -> 25% of chill range
+    EXPECT_EQ(potRawToModePwm(3072, 0), 1549);     // 75% -> 75% of chill range
 }
 
 // Test calculateCruisePwm function - ensures cruise uses same mode-aware mapping
@@ -283,17 +283,17 @@ TEST(ThrottleTest, CalculateCruisePwmBasic) {
     EXPECT_EQ(result, 1492);  // Below cruise cap
 
     // 50% pot in CHILL mode (mode 0) - uses chill range mapping
-    // potRawToModePwm(2048, 0) = 1317, cruise cap at 60% = 1584
+    // potRawToModePwm(2048, 0) = 1378, cruise cap at 60% = 1584
     result = calculateCruisePwm(2048, 0, 0.60);
-    EXPECT_EQ(result, 1317);  // Chill mode maps full physical range to 1035-1600
+    EXPECT_EQ(result, 1378);  // Chill mode maps full physical range to 1035-1721
 }
 
 // Test that cruise in chill mode uses the same mapping as normal throttle
 TEST(ThrottleTest, CalculateCruisePwmChillModeConsistency) {
     // Cruise should use the same mode-aware mapping as normal throttle.
-    // In chill mode, full physical range maps to 1035-1600.
-    int normalThrottle = potRawToModePwm(2048, 0);  // 1317
-    EXPECT_EQ(normalThrottle, 1317);
+    // In chill mode, full physical range maps to 1035-1721.
+    int normalThrottle = potRawToModePwm(2048, 0);  // 1378
+    EXPECT_EQ(normalThrottle, 1378);
 
     // Cruise in chill mode should match the normal throttle mapping
     uint16_t cruiseThrottle = calculateCruisePwm(2048, 0, 0.60);
@@ -302,15 +302,15 @@ TEST(ThrottleTest, CalculateCruisePwmChillModeConsistency) {
 
 // Test chill mode at full physical range
 TEST(ThrottleTest, CalculateCruisePwmChillModeFullRange) {
-    // 100% pot in CHILL mode - maps to exactly CHILL_MODE_MAX_PWM (1600)
-    // potRawToModePwm(4095, 0) = 1600, cruise cap at 70% = 1675
-    uint16_t result = calculateCruisePwm(4095, 0, 0.70);
-    EXPECT_EQ(result, 1600);  // Full physical range -> CHILL_MODE_MAX_PWM
+    // 100% pot in CHILL mode maps to exactly CHILL_MODE_MAX_PWM without a
+    // lower cruise cap.
+    uint16_t result = calculateCruisePwm(4095, 0, 1.00);
+    EXPECT_EQ(result, 1721);  // Full physical range -> CHILL_MODE_MAX_PWM
 
-    // 80% pot in CHILL mode - potRawToModePwm(3276, 0) = 1487
-    // Cruise cap at 70% = 1675, so 1487 is below cap
+    // 80% pot in CHILL mode - potRawToModePwm(3276, 0) = 1583
+    // Cruise cap at 70% = 1675, so 1583 is below cap
     result = calculateCruisePwm(3276, 0, 0.70);
-    EXPECT_EQ(result, 1487);  // Full granular control, no clamping
+    EXPECT_EQ(result, 1583);  // Full granular control, no clamping
 }
 
 // Test cruise max percentage capping
@@ -326,10 +326,10 @@ TEST(ThrottleTest, CalculateCruisePwmCruiseMaxCap) {
     result = calculateCruisePwm(4095, 1, 0.70);
     EXPECT_EQ(result, 1675);  // Higher cruise cap
 
-    // In chill mode at full throttle, chill max (1600) < cruise cap (1675)
-    // potRawToModePwm(4095, 0) = 1600
+    // In chill mode at full throttle, chill max (1721) exceeds cruise cap (1675)
+    // potRawToModePwm(4095, 0) = 1721
     result = calculateCruisePwm(4095, 0, 0.70);
-    EXPECT_EQ(result, 1600);  // Chill mode max is the limiter
+    EXPECT_EQ(result, 1675);  // Cruise max is the limiter
 }
 
 // Test edge cases
@@ -342,9 +342,9 @@ TEST(ThrottleTest, CalculateCruisePwmEdgeCases) {
     EXPECT_EQ(result, 1035);  // ESC_MIN_PWM
 
     // Low throttle (25%) in chill mode - uses chill mapping
-    // potRawToModePwm(1024, 0) = 1176
+    // potRawToModePwm(1024, 0) = 1206
     result = calculateCruisePwm(1024, 0, 0.60);
-    EXPECT_EQ(result, 1176);  // Chill mode maps to reduced range
+    EXPECT_EQ(result, 1206);  // Chill mode maps to reduced range
 
     // Low throttle (25%) in sport mode - uses full mapping
     // potRawToModePwm(1024, 1) = 1263
