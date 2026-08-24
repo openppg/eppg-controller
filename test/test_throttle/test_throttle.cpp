@@ -278,13 +278,11 @@ TEST(ThrottleTest, PotRawToModePwmMapping) {
 // Test calculateCruisePwm function - ensures cruise uses same mode-aware mapping
 TEST(ThrottleTest, CalculateCruisePwmBasic) {
     // 50% pot in SPORT mode (mode 1) - should match potRawToModePwm exactly
-    // potRawToModePwm(2048, 1) = 1492, cruise cap at 60% = 1584
-    uint16_t result = calculateCruisePwm(2048, 1, 0.60);
-    EXPECT_EQ(result, 1492);  // Below cruise cap
+    uint16_t result = calculateCruisePwm(2048, 1);
+    EXPECT_EQ(result, 1492);
 
     // 50% pot in CHILL mode (mode 0) - uses chill range mapping
-    // potRawToModePwm(2048, 0) = 1378, cruise cap at 60% = 1584
-    result = calculateCruisePwm(2048, 0, 0.60);
+    result = calculateCruisePwm(2048, 0);
     EXPECT_EQ(result, 1378);  // Chill mode maps full physical range to 1035-1721
 }
 
@@ -296,59 +294,45 @@ TEST(ThrottleTest, CalculateCruisePwmChillModeConsistency) {
     EXPECT_EQ(normalThrottle, 1378);
 
     // Cruise in chill mode should match the normal throttle mapping
-    uint16_t cruiseThrottle = calculateCruisePwm(2048, 0, 0.60);
+    uint16_t cruiseThrottle = calculateCruisePwm(2048, 0);
     EXPECT_EQ(cruiseThrottle, (uint16_t)normalThrottle);  // Both use same mapping
 }
 
 // Test chill mode at full physical range
 TEST(ThrottleTest, CalculateCruisePwmChillModeFullRange) {
-    // 100% pot in CHILL mode maps to exactly CHILL_MODE_MAX_PWM without a
-    // lower cruise cap.
-    uint16_t result = calculateCruisePwm(4095, 0, 1.00);
+    // 100% pot in CHILL mode maps to exactly CHILL_MODE_MAX_PWM.
+    uint16_t result = calculateCruisePwm(4095, 0);
     EXPECT_EQ(result, 1721);  // Full physical range -> CHILL_MODE_MAX_PWM
 
-    // 80% pot in CHILL mode - potRawToModePwm(3276, 0) = 1583
-    // Cruise cap at 70% = 1675, so 1583 is below cap
-    result = calculateCruisePwm(3276, 0, 0.70);
-    EXPECT_EQ(result, 1583);  // Full granular control, no clamping
+    // 80% pot in CHILL mode retains full granular mode-aware control.
+    result = calculateCruisePwm(3276, 0);
+    EXPECT_EQ(result, 1583);
 }
 
-// Test cruise max percentage capping
-TEST(ThrottleTest, CalculateCruisePwmCruiseMaxCap) {
-    // Cruise max cap at 60%: 1035 + (1950-1035)*0.6 = 1035 + 549 = 1584
-
-    // In SPORT mode at full throttle, cruise cap should apply
-    // potRawToModePwm(4095, 1) = 1950, cruise cap at 60% = 1584
-    uint16_t result = calculateCruisePwm(4095, 1, 0.60);
-    EXPECT_EQ(result, 1584);  // Capped by cruise max
-
-    // At 70% cruise cap: 1035 + 915*0.7 = 1675
-    result = calculateCruisePwm(4095, 1, 0.70);
-    EXPECT_EQ(result, 1675);  // Higher cruise cap
-
-    // In chill mode at full throttle, chill max (1721) exceeds cruise cap (1675)
-    // potRawToModePwm(4095, 0) = 1721
-    result = calculateCruisePwm(4095, 0, 0.70);
-    EXPECT_EQ(result, 1675);  // Cruise max is the limiter
+// Cruise output is derived only from physical position and selected mode.
+TEST(ThrottleTest, CalculateCruisePwmAtMaxPhysicalSetpoint) {
+    // 70% physical pot position (2866 raw) maps directly in each mode.
+    EXPECT_EQ(calculateCruisePwm(2866, 1), 1675);  // 70% Sport output
+    EXPECT_EQ(calculateCruisePwm(2866, 0), 1515);  // 70% of Chill's 75% range
 }
 
 // Test edge cases
 TEST(ThrottleTest, CalculateCruisePwmEdgeCases) {
     // Minimum pot value - same in both modes
-    uint16_t result = calculateCruisePwm(0, 0, 0.60);
+    uint16_t result = calculateCruisePwm(0, 0);
     EXPECT_EQ(result, 1035);  // ESC_MIN_PWM
 
-    result = calculateCruisePwm(0, 1, 0.60);
+    result = calculateCruisePwm(0, 1);
     EXPECT_EQ(result, 1035);  // ESC_MIN_PWM
 
     // Low throttle (25%) in chill mode - uses chill mapping
     // potRawToModePwm(1024, 0) = 1206
-    result = calculateCruisePwm(1024, 0, 0.60);
+    result = calculateCruisePwm(1024, 0);
     EXPECT_EQ(result, 1206);  // Chill mode maps to reduced range
 
     // Low throttle (25%) in sport mode - uses full mapping
     // potRawToModePwm(1024, 1) = 1263
-    result = calculateCruisePwm(1024, 1, 0.60);
+    result = calculateCruisePwm(1024, 1);
     EXPECT_EQ(result, 1263);
 }
 
@@ -380,42 +364,49 @@ TEST(ThrottleTest, IsPotInCruiseActivationRange) {
 
 // Test cruise disengagement threshold
 TEST(ThrottleTest, ShouldPotDisengageCruise) {
-    // Using 80% threshold
-    const float thresholdPct = 0.80;
+    const float overrideMarginPct = 0.20;
 
     // Cruise activated at 50% pot (2048)
-    // Disengage threshold = 2048 * 0.80 = 1638
+    // Override threshold = 2048 + (4095 * 0.20) = 2867 (~70%)
+    EXPECT_EQ(cruiseOverridePotThreshold(2048, overrideMarginPct), 2867);
 
     // Below threshold - should NOT disengage
-    EXPECT_FALSE(shouldPotDisengageCruise(0, 2048, thresholdPct));
-    EXPECT_FALSE(shouldPotDisengageCruise(1000, 2048, thresholdPct));
-    EXPECT_FALSE(shouldPotDisengageCruise(1637, 2048, thresholdPct));
+    EXPECT_FALSE(shouldPotDisengageCruise(0, 2048, overrideMarginPct));
+    EXPECT_FALSE(shouldPotDisengageCruise(2048, 2048, overrideMarginPct));
+    EXPECT_FALSE(shouldPotDisengageCruise(2866, 2048, overrideMarginPct));
 
     // At or above threshold - should disengage
-    EXPECT_TRUE(shouldPotDisengageCruise(1638, 2048, thresholdPct));
-    EXPECT_TRUE(shouldPotDisengageCruise(2000, 2048, thresholdPct));
-    EXPECT_TRUE(shouldPotDisengageCruise(2048, 2048, thresholdPct));  // At activation point
-    EXPECT_TRUE(shouldPotDisengageCruise(3000, 2048, thresholdPct));  // Above activation
-    EXPECT_TRUE(shouldPotDisengageCruise(4095, 2048, thresholdPct));  // Full throttle
+    EXPECT_TRUE(shouldPotDisengageCruise(2867, 2048, overrideMarginPct));
+    EXPECT_TRUE(shouldPotDisengageCruise(3000, 2048, overrideMarginPct));
+    EXPECT_TRUE(shouldPotDisengageCruise(4095, 2048, overrideMarginPct));
 }
 
 // Test disengagement at different activation points
 TEST(ThrottleTest, ShouldPotDisengageCruiseVariousActivations) {
-    const float thresholdPct = 0.80;
+    const float overrideMarginPct = 0.20;
 
-    // Low cruise (25% pot = 1024), threshold = 819
-    EXPECT_FALSE(shouldPotDisengageCruise(818, 1024, thresholdPct));
-    EXPECT_TRUE(shouldPotDisengageCruise(819, 1024, thresholdPct));
-    EXPECT_TRUE(shouldPotDisengageCruise(1024, 1024, thresholdPct));
+    // Low cruise (25% pot = 1024), override at 45% (1843 raw)
+    EXPECT_EQ(cruiseOverridePotThreshold(1024, overrideMarginPct), 1843);
+    EXPECT_FALSE(shouldPotDisengageCruise(1842, 1024, overrideMarginPct));
+    EXPECT_TRUE(shouldPotDisengageCruise(1843, 1024, overrideMarginPct));
 
-    // High cruise (60% pot = 2457), threshold = 1965
-    EXPECT_FALSE(shouldPotDisengageCruise(1964, 2457, thresholdPct));
-    EXPECT_TRUE(shouldPotDisengageCruise(1965, 2457, thresholdPct));
-    EXPECT_TRUE(shouldPotDisengageCruise(2457, 2457, thresholdPct));
+    // High cruise (60% pot = 2457), override at 80% (3276 raw)
+    EXPECT_EQ(cruiseOverridePotThreshold(2457, overrideMarginPct), 3276);
+    EXPECT_FALSE(shouldPotDisengageCruise(3275, 2457, overrideMarginPct));
+    EXPECT_TRUE(shouldPotDisengageCruise(3276, 2457, overrideMarginPct));
 
-    // Very low cruise (10% pot = 409), threshold = 327
-    EXPECT_FALSE(shouldPotDisengageCruise(326, 409, thresholdPct));
-    EXPECT_TRUE(shouldPotDisengageCruise(327, 409, thresholdPct));
+    // Maximum cruise setpoint (70% pot = 2866), override at 90% (3685 raw)
+    EXPECT_EQ(cruiseOverridePotThreshold(2866, overrideMarginPct), 3685);
+    EXPECT_FALSE(shouldPotDisengageCruise(3684, 2866, overrideMarginPct));
+    EXPECT_TRUE(shouldPotDisengageCruise(3685, 2866, overrideMarginPct));
+}
+
+TEST(ThrottleTest, CruiseOverrideThresholdClampsToPhysicalMaximum) {
+    const float overrideMarginPct = 0.20;
+
+    EXPECT_EQ(cruiseOverridePotThreshold(3686, overrideMarginPct), 4095);
+    EXPECT_FALSE(shouldPotDisengageCruise(4094, 3686, overrideMarginPct));
+    EXPECT_TRUE(shouldPotDisengageCruise(4095, 3686, overrideMarginPct));
 }
 
 // Test edge case: cruise at minimum engagement

@@ -146,19 +146,12 @@ void resetThrottleState(int& prevPwm) {
 
 /**
  * Calculate the cruise control PWM value from a raw pot reading.
- * Uses the same mode-aware mapping as normal throttle so the full
- * physical range maps to the mode's output range, then applies the
- * absolute cruise max cap.
+ * Uses the same mode-aware mapping as normal throttle so the saved physical
+ * position holds the same output when cruise engages. Physical setpoint and
+ * override limits are enforced separately from PWM mapping.
  */
-uint16_t calculateCruisePwm(uint16_t potVal, uint8_t performance_mode, float cruiseMaxPct) {
-  // Step 1: Map to mode-specific PWM range (same mapping as normal throttle)
-  uint16_t pwm = potRawToModePwm(potVal, performance_mode);
-
-  // Step 2: Apply absolute cruise max cap
-  uint16_t absoluteMaxCruisePwm = ESC_MIN_PWM + (uint16_t)((ESC_MAX_PWM - ESC_MIN_PWM) * cruiseMaxPct);
-  pwm = min(pwm, absoluteMaxCruisePwm);
-
-  return pwm;
+uint16_t calculateCruisePwm(uint16_t potVal, uint8_t performance_mode) {
+  return potRawToModePwm(potVal, performance_mode);
 }
 
 /**
@@ -171,10 +164,19 @@ bool isPotInCruiseActivationRange(uint16_t potVal, uint16_t engagementLevel, flo
 }
 
 /**
- * Check if pot value should trigger cruise disengagement.
- * Returns true when current pot >= threshold percentage of activation value.
+ * Calculate the override threshold by adding a fraction of the pot's full
+ * physical travel to the saved cruise position.
  */
-bool shouldPotDisengageCruise(uint16_t currentPotVal, uint16_t activationPotVal, float thresholdPct) {
-  uint16_t disengageThreshold = (uint16_t)(activationPotVal * thresholdPct);
-  return currentPotVal >= disengageThreshold;
+uint16_t cruiseOverridePotThreshold(uint16_t activationPotVal, float overrideMarginPct) {
+  const float clampedMarginPct = constrain(overrideMarginPct, 0.0f, 1.0f);
+  const uint32_t marginCounts =
+      static_cast<uint32_t>(POT_MAX_VALUE * clampedMarginPct);
+  const uint32_t threshold = static_cast<uint32_t>(activationPotVal) + marginCounts;
+  return static_cast<uint16_t>(threshold > POT_MAX_VALUE ? POT_MAX_VALUE : threshold);
+}
+
+bool shouldPotDisengageCruise(uint16_t currentPotVal, uint16_t activationPotVal,
+                             float overrideMarginPct) {
+  return currentPotVal >=
+         cruiseOverridePotThreshold(activationPotVal, overrideMarginPct);
 }

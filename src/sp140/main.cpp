@@ -81,15 +81,12 @@ int8_t bmsCS = MCP_CS;
 #define BLE_PAIRING_HOLD_MS 10000      // Hold duration to enter BLE pairing mode
 
 // Throttle control constants moved to inc/sp140/throttle.h
-#define CRUISE_MAX_PERCENTAGE                                                  \
-  0.60  // Maximum cruise throttle as a percentage of the total ESC range (e.g.,
-       // 0.60 = 60%)
-#define CRUISE_DISENGAGE_POT_THRESHOLD_PERCENTAGE                              \
-  0.80  // Current pot must be >= this % of activation value to disengage
+#define CRUISE_OVERRIDE_MARGIN_POT_PERCENTAGE                                  \
+  0.20  // Squeeze 20 percentage points beyond the saved physical pot position
 #define CRUISE_DISENGAGE_GRACE_PERIOD_MS                                       \
   2000  // Delay before checking pot disengagement after cruise activation
-#define CRUISE_ACTIVATION_MAX_POT_PERCENTAGE                                   \
-  0.70  // Prevent cruise activation if pot is above this percentage
+#define CRUISE_MAX_SETPOINT_POT_PERCENTAGE                                     \
+  0.70  // Leave physical lever travel available for deliberate cruise override
 
 // Button state tracking
 volatile bool buttonPressed = false;
@@ -1059,14 +1056,16 @@ void toggleCruise() {
       // Check if throttle is too high to activate cruise
       int currentPotVal = readThrottleRaw();
       const int activationThreshold =
-          (int)(4095 * CRUISE_ACTIVATION_MAX_POT_PERCENTAGE);  // Calculate 70%
-                                                              // threshold
+          (int)(POT_MAX_VALUE * CRUISE_MAX_SETPOINT_POT_PERCENTAGE);
 
       if (currentPotVal > activationThreshold) {
         // Throttle is engaged and too high, flash the icon
         startCruiseIconFlash();
       } else {
-        // Throttle is engaged and not too high, activate cruise
+        // Store the exact position that passed the physical setpoint gate. The
+        // state-transition callback must not take a second, potentially higher
+        // reading after validation.
+        cruisedPotVal = currentPotVal;
         changeDeviceState(ARMED_CRUISING);
         pulseVibeMotor();
       }
@@ -1100,10 +1099,11 @@ bool shouldDisengageCruise(int potVal) {
 
   // Only check for disengagement *after* the grace period has passed
   if (timeSinceCruiseStart > CRUISE_DISENGAGE_GRACE_PERIOD_MS) {
-    // Calculate the disengagement threshold based on the *raw potentiometer
-    // value* when cruise was engaged
+    // Keep cruise/override behavior in the physical potentiometer domain.
+    // The pilot must squeeze beyond the saved position by the override margin.
     int disengageThresholdPotVal =
-        (int)(cruisedPotVal * CRUISE_DISENGAGE_POT_THRESHOLD_PERCENTAGE);
+        cruiseOverridePotThreshold(cruisedPotVal,
+                                   CRUISE_OVERRIDE_MARGIN_POT_PERCENTAGE);
 
     // If the *current raw potentiometer value* is greater than or equal to the
     // threshold
@@ -1256,14 +1256,12 @@ bool armSystem() {
 }
 
 void afterCruiseStart() {
-  cruisedPotVal =
-      readThrottleRaw();  // Store the raw pot value (0-4095) at activation
   cruisedAtMillis = millis();
 
   // Calculate cruise PWM using the same mapping as normal throttle
   // (prevents throttle drop when activating cruise in chill mode)
-  uint16_t initialCruisePWM = calculateCruisePwm(
-      cruisedPotVal, deviceData.performance_mode, CRUISE_MAX_PERCENTAGE);
+  uint16_t initialCruisePWM =
+      calculateCruisePwm(cruisedPotVal, deviceData.performance_mode);
 
   // Send the cruise PWM value to the throttle task via queue (non-blocking
   // overwrite — blocking send inside changeDeviceState could trigger the
