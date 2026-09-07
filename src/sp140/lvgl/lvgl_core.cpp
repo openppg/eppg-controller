@@ -2,6 +2,7 @@
 #include "../../../inc/sp140/lvgl/lvgl_core.h"
 #include "sp140/lvgl/lvgl_splash.h"
 #include "../../../inc/sp140/esp32s3-config.h"
+#include "../../../inc/sp140/time_utils.h"
 
 // Global variables for core LVGL functionality
 lv_display_t* main_display = nullptr;
@@ -20,7 +21,7 @@ void setupLvglBuffer() {
   lv_init();
   // Let LVGL read time directly so animation/refresh pacing stays accurate
   // regardless of how often lv_timer_handler() gets called.
-  lv_tick_set_cb([]() -> uint32_t { return millis(); });
+  lv_tick_set_cb([]() -> uint32_t { return timeMillis(); });
 }
 
 void setupLvglDisplay(
@@ -138,8 +139,8 @@ void displayLvglSplash(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
   createLvglSplashScreen(deviceData);
 
   // Process LVGL for the duration
-  uint32_t start_time = millis();
-  while (millis() - start_time < duration) {
+  uint32_t start_time = timeMillis();
+  while (timeMillis() - start_time < duration) {
     updateLvgl();
     vTaskDelay(pdMS_TO_TICKS(LVGL_REFRESH_TIME));
   }
