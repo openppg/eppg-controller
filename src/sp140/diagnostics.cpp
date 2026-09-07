@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "sp140/structs.h"
+#include "sp140/time_utils.h"
 
 #ifndef PIO_UNIT_TESTING
 #include "sp140/globals.h"
@@ -106,13 +107,13 @@ void diagWriteStreamChunked(Stream& stream, const uint8_t* data, size_t length) 
     const size_t written = stream.write(data + offset, chunk_len);
     if (written == 0) {
 #ifndef PIO_UNIT_TESTING
-      delay(1);
+      timeDelay(1);
 #endif
       continue;
     }
     offset += written;
 #ifndef PIO_UNIT_TESTING
-    delay(1);
+    timeDelay(1);
 #endif
   }
 }
@@ -347,7 +348,7 @@ void diagStoreRecordToPreferences(uint8_t slot, const BootDiagRecord& record) {
 
 void diagCaptureHeartbeatSnapshot(PlannedRestartReason override_reason,
                                   bool force) {
-  const unsigned long now = millis();
+  const unsigned long now = timeMillis();
   if (!force && (now - gLastHeartbeatRefreshMs) < kHeartbeatRefreshIntervalMs) {
     return;
   }

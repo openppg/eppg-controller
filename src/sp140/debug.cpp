@@ -1,4 +1,5 @@
 #include "sp140/debug.h"
+#include "sp140/time_utils.h"
 
 static unsigned long last_update = 0;
 static float fake_values[4] = {65.0, 0.0, 0.0, 0.0};  // Initialize first value to 65V
@@ -28,7 +29,7 @@ void generateFakeTelemetry(STR_ESC_TELEMETRY_140& escTelemetry,
                           STR_BMS_TELEMETRY_140& bmsTelemetry,
                           UnifiedBatteryData& unifiedBatteryData,
                           float& altitude) {
-    unsigned long now = millis();
+    unsigned long now = timeMillis();
     if (now - last_update < UPDATE_INTERVAL) return;
     last_update = now;
 

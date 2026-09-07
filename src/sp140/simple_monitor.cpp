@@ -1,6 +1,7 @@
 #include "sp140/simple_monitor.h"
 #include <vector>
 #include "sp140/monitor_config.h"
+#include "sp140/time_utils.h"
 #include "sp140/globals.h"
 #include "sp140/altimeter.h"
 #include "sp140/utilities.h"
@@ -34,7 +35,7 @@ static void setupLoggerSinks() {
 
 void SerialLogger::log(SensorID id, AlertLevel lvl, float v) {
   const char* levelNames[] = {"OK", "WARN_LOW", "WARN_HIGH", "CRIT_LOW", "CRIT_HIGH", "INFO"};
-  USBSerial.printf("[%lu] [%s] %s = %.2f\n", millis(), levelNames[(int)lvl], sensorIDToString(id), v);
+  USBSerial.printf("[%lu] [%s] %s = %.2f\n", timeMillis(), levelNames[(int)lvl], sensorIDToString(id), v);
 }
 
 void SerialLogger::log(SensorID id, AlertLevel lvl, bool v) {
@@ -46,12 +47,12 @@ void SerialLogger::log(SensorID id, AlertLevel lvl, bool v) {
       id == SensorID::ESC_VoltageDrop_Error || id == SensorID::ESC_ThrottleSat_Warning) {
     if (v) {
       USBSerial.printf("[%lu] [%s] %s = %s (0x%04X: %s)\n",
-                       millis(), levelNames[(int)lvl], sensorIDToString(id),
+                       timeMillis(), levelNames[(int)lvl], sensorIDToString(id),
                        v ? "ON" : "OFF", monitoringEscData.running_error,
                        decodeRunningError(monitoringEscData.running_error).c_str());
     } else {
       USBSerial.printf("[%lu] [%s] %s = %s (cleared)\n",
-                       millis(), levelNames[(int)lvl], sensorIDToString(id),
+                       timeMillis(), levelNames[(int)lvl], sensorIDToString(id),
                        v ? "ON" : "OFF");
     }
   // Enhanced logging for ESC self-check errors - show decoded error details
@@ -64,17 +65,17 @@ void SerialLogger::log(SensorID id, AlertLevel lvl, bool v) {
              id == SensorID::ESC_SwHwIncompat_Error || id == SensorID::ESC_BootloaderBad_Error) {
     if (v) {
       USBSerial.printf("[%lu] [%s] %s = %s (0x%04X: %s)\n",
-                       millis(), levelNames[(int)lvl], sensorIDToString(id),
+                       timeMillis(), levelNames[(int)lvl], sensorIDToString(id),
                        v ? "ON" : "OFF", monitoringEscData.selfcheck_error,
                        decodeSelfCheckError(monitoringEscData.selfcheck_error).c_str());
     } else {
       USBSerial.printf("[%lu] [%s] %s = %s (cleared)\n",
-                       millis(), levelNames[(int)lvl], sensorIDToString(id),
+                       timeMillis(), levelNames[(int)lvl], sensorIDToString(id),
                        v ? "ON" : "OFF");
     }
   } else {
     // Standard logging for all other sensors
-    USBSerial.printf("[%lu] [%s] %s = %s\n", millis(), levelNames[(int)lvl], sensorIDToString(id), v ? "ON" : "OFF");
+    USBSerial.printf("[%lu] [%s] %s = %s\n", timeMillis(), levelNames[(int)lvl], sensorIDToString(id), v ? "ON" : "OFF");
   }
 }
 
@@ -383,7 +384,7 @@ void checkAllSensorsWithData(const STR_ESC_TELEMETRY_140& escData,
   if (!prevBmsConnected && bmsConnected) {
     USBSerial.println("[MONITOR] BMS reconnected - resetting BMS monitor states");
     if (!bmsGraceStarted) {
-      bmsGraceStartMs = millis();
+      bmsGraceStartMs = timeMillis();
       bmsGraceStarted = true;
     }
     for (auto* monitor : monitors) {
@@ -393,7 +394,7 @@ void checkAllSensorsWithData(const STR_ESC_TELEMETRY_140& escData,
     }
   }
   if (bmsGraceStarted && !bmsGraceExpired &&
-      (millis() - bmsGraceStartMs >= BMS_ALERT_GRACE_MS)) {
+      (timeMillis() - bmsGraceStartMs >= BMS_ALERT_GRACE_MS)) {
     bmsGraceExpired = true;
   }
   const bool bmsMonitorsArmed = bmsConnected && bmsGraceExpired;

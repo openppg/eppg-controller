@@ -1,6 +1,7 @@
 #include "sp140/ble/ota_service.h"
 
 #include <Arduino.h>
+#include "sp140/time_utils.h"
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
 #include "freertos/FreeRTOS.h"
@@ -195,7 +196,7 @@ void handleCmdStart(const uint8_t* data) {
 
     otaInProgress = true;
     imageTotalLen = imageLen;
-    lastOtaActivityMs = millis();
+    lastOtaActivityMs = timeMillis();
     requestFastConnParams();
     sendCommandResponse(CMD_START, 0x0000);  // Accept
 }
@@ -241,7 +242,7 @@ class OtaCommandCallback : public NimBLECharacteristicCallbacks {
                     if (esp_ota_set_boot_partition(updatePartition) == ESP_OK) {
                         USBSerial.println("OTA Success. Restarting...");
                         sendCommandResponse(CMD_END, 0x0000);  // Success
-                        delay(1000);  // Allow BLE flush
+                        timeDelay(1000);  // Allow BLE flush
                         ESP.restart();
                         return;
                     } else {
@@ -270,7 +271,7 @@ class OtaDataCallback : public NimBLECharacteristicCallbacks {
 
         if (len < 3) return;  // Header: Sector(2) + Seq(1)
 
-        lastOtaActivityMs = millis();
+        lastOtaActivityMs = timeMillis();
         packetCount++;
         if (packetCount % 100 == 0) {
             USBSerial.printf("OTA: Received %lu packets (sector %u)\n",
@@ -374,7 +375,7 @@ void checkOtaTimeout() {
     // device is clearly not idle, so skip this tick rather than block or race.
     OtaStateLock lock(0);
     if (!lock.held()) return;
-    if (otaInProgress && (millis() - lastOtaActivityMs > OTA_TIMEOUT_MS)) {
+    if (otaInProgress && (timeMillis() - lastOtaActivityMs > OTA_TIMEOUT_MS)) {
         USBSerial.println("OTA: Idle timeout, aborting.");
         abortOtaImpl();
     }

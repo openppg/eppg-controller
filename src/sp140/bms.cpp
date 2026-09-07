@@ -2,6 +2,7 @@
 #include "sp140/structs.h"
 #include "sp140/globals.h"
 #include "sp140/lvgl/lvgl_core.h"  // for spiBusMutex
+#include "sp140/time_utils.h"
 
 namespace {
 
@@ -66,7 +67,7 @@ void updateBMSData() {
   digitalWrite(bmsCS, LOW);
 
   // USBSerial.println("Updating BMS Data");
-  unsigned long tStart = millis();
+  unsigned long tStart = timeMillis();
   bms_can->update();
 
   // All SPI traffic happens inside update() — the getters below only read
@@ -163,7 +164,7 @@ void updateBMSData() {
   bmsTelemetryData.highest_temperature = bms_can->getHighestTemperature();
   bmsTelemetryData.lowest_temperature = bms_can->getLowestTemperature();
 
-  bmsTelemetryData.lastUpdateMs = millis();
+  bmsTelemetryData.lastUpdateMs = timeMillis();
   unsigned long dur = bmsTelemetryData.lastUpdateMs - tStart;
   if (dur > 80) {  // warn if BMS update is taking longer than a frame
     USBSerial.print("Warn: BMS update slow ");

@@ -1,5 +1,6 @@
 #include "sp140/altimeter.h"
 #include "sp140/structs.h"
+#include "sp140/time_utils.h"
 
 #include <Adafruit_BMP3XX.h>
 
@@ -46,7 +47,7 @@ float getAltitude(const STR_DEVICE_DATA_140_V1& deviceData) {
       float relativeAltitude = altitude - groundAltitude;
 
       // Add new reading to buffer with timestamp
-      AltitudeReading reading = {relativeAltitude, millis()};
+      AltitudeReading reading = {relativeAltitude, timeMillis()};
       altitudeBuffer.push(reading);
 
       // Update caches (atomic 32-bit float writes on Xtensa)
@@ -134,7 +135,7 @@ bool setupAltimeter() {
   // Without this, the first begin_I2C() occasionally fails before the
   // sensor is ready, leaving bmpPresent=false for the whole session and
   // tripping the Baro_Init_Failure alert.
-  delay(20);
+  timeDelay(20);
 
   // Retry a few times — most failures here are transient I2C timing races.
   const int kInitAttempts = 4;
@@ -148,7 +149,7 @@ bool setupAltimeter() {
       break;
     }
     USBSerial.printf("BMP3xx init attempt %d/%d failed\n", i, kInitAttempts);
-    delay(50);
+    timeDelay(50);
   }
   if (!ok) return false;
 
