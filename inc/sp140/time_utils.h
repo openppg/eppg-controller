@@ -7,8 +7,10 @@
 // (espressif32@6.13.0):
 //   timeMillis() == esp_timer_get_time() / 1000ULL  (32-bit wrap, ms since boot)
 //   timeDelay()  == vTaskDelay(pdMS_TO_TICKS(ms))
-// On this firmware CONFIG_FREERTOS_HZ=1000, pdMS_TO_TICKS(ms) == ms and this
-// matches Arduino delay() which calls vTaskDelay(ms / portTICK_PERIOD_MS).
+// Return type is unsigned long, same as Arduino millis(), so existing %lu
+// format strings stay valid. On this firmware CONFIG_FREERTOS_HZ=1000,
+// pdMS_TO_TICKS(ms) == ms and this matches Arduino delay() which calls
+// vTaskDelay(ms / portTICK_PERIOD_MS).
 
 #if defined(ESP_PLATFORM)
 
@@ -16,8 +18,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-inline uint32_t timeMillis() {
-  return static_cast<uint32_t>(esp_timer_get_time() / 1000ULL);
+inline unsigned long timeMillis() {
+  return static_cast<unsigned long>(esp_timer_get_time() / 1000ULL);
 }
 
 inline void timeDelay(uint32_t ms) {
@@ -30,8 +32,8 @@ inline void timeDelay(uint32_t ms) {
 // passed as millis() from tests stay coherent with production timeMillis().
 #include <Arduino.h>
 
-inline uint32_t timeMillis() {
-  return static_cast<uint32_t>(millis());
+inline unsigned long timeMillis() {
+  return millis();
 }
 
 inline void timeDelay(uint32_t ms) {
