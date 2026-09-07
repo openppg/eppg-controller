@@ -3,11 +3,12 @@
 
 #include <stdint.h>
 
-// Small Arduino-millis/delay off-ramp. Semantics match Arduino-ESP32:
-//   timeMillis() == esp_timer_get_time() / 1000  (32-bit wrap, ms since boot)
-//   timeDelay()  == vTaskDelay(pdMS_TO_TICKS(ms)) with delay(0) as a no-op
-// On this firmware CONFIG_FREERTOS_HZ=1000, so one tick is 1 ms and this
-// matches Arduino delay() (vTaskDelay + a zero-length busy-wait remainder).
+// Small Arduino-millis/delay off-ramp. Semantics match Arduino-ESP32 2.0.17
+// (espressif32@6.13.0):
+//   timeMillis() == esp_timer_get_time() / 1000ULL  (32-bit wrap, ms since boot)
+//   timeDelay()  == vTaskDelay(pdMS_TO_TICKS(ms))
+// On this firmware CONFIG_FREERTOS_HZ=1000, pdMS_TO_TICKS(ms) == ms and this
+// matches Arduino delay() which calls vTaskDelay(ms / portTICK_PERIOD_MS).
 
 #if defined(ESP_PLATFORM)
 
@@ -20,9 +21,6 @@ inline uint32_t timeMillis() {
 }
 
 inline void timeDelay(uint32_t ms) {
-  if (ms == 0) {
-    return;
-  }
   vTaskDelay(pdMS_TO_TICKS(ms));
 }
 
