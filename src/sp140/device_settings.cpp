@@ -6,8 +6,7 @@
 #include "sp140/device_settings.h"
 #include "sp140/globals.h"
 #include "../../inc/sp140/esp32s3-config.h"
-#include <Preferences.h>  // Add ESP32 Preferences library
-#include <nvs.h>           // Raw NVS API for the batched (single-commit) write
+#include <nvs.h>  // Raw NVS API for both load and the batched (single-commit) write
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "../../inc/sp140/throttle.h"
@@ -59,10 +58,14 @@ const bool DEFAULT_METRIC_ALT = true;
 const int DEFAULT_PERFORMANCE_MODE = 0;
 const int DEFAULT_THEME = 0;  // 0=light, 1=dark
 
-// Preferences namespace
+// NVS namespace (Arduino Preferences used the same name)
 const char* PREFS_NAMESPACE = "openppg";
 
-// Preferences keys
+// NVS keys — names and types are byte-compatible with field devices:
+//   u8:   version, rotation, bools (0/1), performance_mode, theme, revision
+//   blob: sea_pressure (4-byte float, same as Preferences getFloat/putFloat)
+//   u16:  armed_time
+//   i32:  timezone_offset
 const char* KEY_VERSION_MAJOR = "ver_major";
 const char* KEY_VERSION_MINOR = "ver_minor";
 const char* KEY_SCREEN_ROTATION = "scr_rot";
@@ -74,9 +77,6 @@ const char* KEY_THEME = "theme";
 const char* KEY_ARMED_TIME = "armed_time";
 const char* KEY_REVISION = "revision";
 const char* KEY_TIMEZONE_OFFSET = "tz_offset";
-
-// Create a Preferences instance
-Preferences preferences;
 
 // Serializes all NVS settings access. writeDeviceData() is reachable
 // concurrently from the BLE host task (config-service onWrite callbacks), the
@@ -99,50 +99,94 @@ char gWebSerialCommandBuffer[kWebSerialCommandBufferSize] = {};
 size_t gWebSerialCommandLength = 0;
 bool gWebSerialCommandOverflow = false;
 
+// Arduino Preferences getters on miss leave the default in place. Match that.
+uint8_t nvsGetU8(nvs_handle_t handle, const char* key, uint8_t defaultValue) {
+  uint8_t value = defaultValue;
+  return (nvs_get_u8(handle, key, &value) == ESP_OK) ? value : defaultValue;
+}
+
+uint16_t nvsGetU16(nvs_handle_t handle, const char* key, uint16_t defaultValue) {
+  uint16_t value = defaultValue;
+  return (nvs_get_u16(handle, key, &value) == ESP_OK) ? value : defaultValue;
+}
+
+int32_t nvsGetI32(nvs_handle_t handle, const char* key, int32_t defaultValue) {
+  int32_t value = defaultValue;
+  return (nvs_get_i32(handle, key, &value) == ESP_OK) ? value : defaultValue;
+}
+
+// Preferences.getBool = (getUChar(key, default ? 1 : 0) == 1)
+bool nvsGetBool(nvs_handle_t handle, const char* key, bool defaultValue) {
+  return nvsGetU8(handle, key, defaultValue ? 1 : 0) == 1;
+}
+
+// Preferences.getFloat reads a 4-byte NVS blob.
+float nvsGetFloat(nvs_handle_t handle, const char* key, float defaultValue) {
+  float value = defaultValue;
+  size_t len = sizeof(value);
+  if (nvs_get_blob(handle, key, &value, &len) != ESP_OK || len != sizeof(value)) {
+    return defaultValue;
+  }
+  return value;
+}
+
+// Preferences.clear() == nvs_erase_all + nvs_commit on this namespace.
+bool nvsEraseNamespace() {
+  nvs_handle_t handle = 0;
+  if (nvs_open(PREFS_NAMESPACE, NVS_READWRITE, &handle) != ESP_OK) {
+    return false;
+  }
+  const bool ok = (nvs_erase_all(handle) == ESP_OK) && (nvs_commit(handle) == ESP_OK);
+  nvs_close(handle);
+  return ok;
+}
+
 }  // namespace
 
-// Read saved data from Preferences
+// Read saved data from NVS (same key layout the write path and older
+// Preferences-based firmware use, so field devices stay compatible).
 void refreshDeviceData() {
   // Create the NVS mutex now, while still single-threaded in setup(), so every
   // later (multi-task) writeDeviceData() call takes an already-existing lock.
   prefsEnsureMutex();
 
-  // Try to initialize preferences, with corruption recovery
-  if (!preferences.begin(PREFS_NAMESPACE, false)) {
+  nvs_handle_t handle = 0;
+  esp_err_t err = nvs_open(PREFS_NAMESPACE, NVS_READWRITE, &handle);
+  if (err != ESP_OK) {
     USBSerial.println(F("Failed to initialize Preferences - may be corrupted"));
 
-    // Try to clear corrupted preferences and start fresh
-    preferences.begin(PREFS_NAMESPACE, false);
-    preferences.clear();
-    preferences.end();
+    // Same recovery as Preferences.begin() failure: wipe the namespace if
+    // a retry can open it, then load factory defaults.
+    nvsEraseNamespace();
 
     USBSerial.println(F("Cleared potentially corrupted preferences, using defaults"));
     resetDeviceData();
     return;
   }
 
-  // Check if we have saved preferences before
-  if (!preferences.isKey(KEY_VERSION_MAJOR)) {
+  // Check if we have saved settings before (Preferences.isKey(ver_major)).
+  uint8_t versionMajorProbe = 0;
+  if (nvs_get_u8(handle, KEY_VERSION_MAJOR, &versionMajorProbe) != ESP_OK) {
     USBSerial.println(F("No saved preferences found - initializing with defaults"));
-    preferences.end();
+    nvs_close(handle);
     resetDeviceData();
     return;
   }
 
-  // Load all values from preferences with validation
+  // Load all values with the same defaults the Preferences getters used.
   bool dataValid = true;
 
-  deviceData.version_major = preferences.getUChar(KEY_VERSION_MAJOR, VERSION_MAJOR);
-  deviceData.version_minor = preferences.getUChar(KEY_VERSION_MINOR, VERSION_MINOR);
-  deviceData.screen_rotation = preferences.getUChar(KEY_SCREEN_ROTATION, DEFAULT_SCREEN_ROTATION);
-  deviceData.sea_pressure = preferences.getFloat(KEY_SEA_PRESSURE, DEFAULT_SEA_PRESSURE);
-  deviceData.metric_temp = preferences.getBool(KEY_METRIC_TEMP, DEFAULT_METRIC_TEMP);
-  deviceData.metric_alt = preferences.getBool(KEY_METRIC_ALT, DEFAULT_METRIC_ALT);
-  deviceData.performance_mode = preferences.getUChar(KEY_PERFORMANCE_MODE, DEFAULT_PERFORMANCE_MODE);
-  deviceData.theme = preferences.getUChar(KEY_THEME, DEFAULT_THEME);
-  deviceData.armed_time = preferences.getUShort(KEY_ARMED_TIME, 0);
-  deviceData.revision = preferences.getUChar(KEY_REVISION, 0);  // Default to ESP32-S3
-  deviceData.timezone_offset = preferences.getInt(KEY_TIMEZONE_OFFSET, 0);
+  deviceData.version_major = nvsGetU8(handle, KEY_VERSION_MAJOR, VERSION_MAJOR);
+  deviceData.version_minor = nvsGetU8(handle, KEY_VERSION_MINOR, VERSION_MINOR);
+  deviceData.screen_rotation = nvsGetU8(handle, KEY_SCREEN_ROTATION, DEFAULT_SCREEN_ROTATION);
+  deviceData.sea_pressure = nvsGetFloat(handle, KEY_SEA_PRESSURE, DEFAULT_SEA_PRESSURE);
+  deviceData.metric_temp = nvsGetBool(handle, KEY_METRIC_TEMP, DEFAULT_METRIC_TEMP);
+  deviceData.metric_alt = nvsGetBool(handle, KEY_METRIC_ALT, DEFAULT_METRIC_ALT);
+  deviceData.performance_mode = nvsGetU8(handle, KEY_PERFORMANCE_MODE, DEFAULT_PERFORMANCE_MODE);
+  deviceData.theme = nvsGetU8(handle, KEY_THEME, DEFAULT_THEME);
+  deviceData.armed_time = nvsGetU16(handle, KEY_ARMED_TIME, 0);
+  deviceData.revision = nvsGetU8(handle, KEY_REVISION, 0);  // Default to ESP32-S3
+  deviceData.timezone_offset = nvsGetI32(handle, KEY_TIMEZONE_OFFSET, 0);
 
   // Validate critical display-related settings
   if (deviceData.screen_rotation != 1 && deviceData.screen_rotation != 3) {
@@ -157,7 +201,7 @@ void refreshDeviceData() {
     dataValid = false;
   }
 
-  preferences.end();
+  nvs_close(handle);
 
   // Ensure values are within valid ranges
   if (sanitizeDeviceData() || !dataValid) {
@@ -168,13 +212,12 @@ void refreshDeviceData() {
   USBSerial.println(F("Device data loaded from Preferences"));
 }
 
-// Write to NVS. Uses the raw NVS API (not the Preferences wrapper) so all 11
-// keys share ONE nvs_commit() instead of committing per key — a single flash
-// transaction that, together with s_prefsMutex, removes any window in which a
-// concurrent writer could observe or produce a torn/partial save. The key names
-// and NVS value types here MATCH exactly what the Preferences getters in
-// refreshDeviceData() expect (u8/u16/i32, and a 4-byte blob for the float), so
-// data written by older firmware remains fully readable.
+// Write to NVS. Uses the raw NVS API so all 11 keys share ONE nvs_commit()
+// instead of committing per key — a single flash transaction that, together
+// with s_prefsMutex, removes any window in which a concurrent writer could
+// observe or produce a torn/partial save. Key names and NVS value types MATCH
+// both refreshDeviceData() and older Preferences-based firmware (u8/u16/i32,
+// and a 4-byte blob for the float), so field data remains fully readable.
 void writeDeviceData() {
   prefsEnsureMutex();
   if (s_prefsMutex != nullptr) {
@@ -238,10 +281,8 @@ void resetDeviceData() {
   deviceData.armed_time = 0;
   deviceData.timezone_offset = 0;  // Default to UTC
 
-  // Clear all preferences and save defaults
-  preferences.begin(PREFS_NAMESPACE, false);
-  preferences.clear();
-  preferences.end();
+  // Clear all keys in this namespace (Preferences.clear()) and save defaults
+  nvsEraseNamespace();
 
   writeDeviceData();
   USBSerial.println(F("Device data reset to defaults and saved to Preferences"));
