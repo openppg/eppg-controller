@@ -99,48 +99,6 @@ char gWebSerialCommandBuffer[kWebSerialCommandBufferSize] = {};
 size_t gWebSerialCommandLength = 0;
 bool gWebSerialCommandOverflow = false;
 
-// Arduino Preferences getters on miss leave the default in place. Match that.
-uint8_t nvsGetU8(nvs_handle_t handle, const char* key, uint8_t defaultValue) {
-  uint8_t value = defaultValue;
-  return (nvs_get_u8(handle, key, &value) == ESP_OK) ? value : defaultValue;
-}
-
-uint16_t nvsGetU16(nvs_handle_t handle, const char* key, uint16_t defaultValue) {
-  uint16_t value = defaultValue;
-  return (nvs_get_u16(handle, key, &value) == ESP_OK) ? value : defaultValue;
-}
-
-int32_t nvsGetI32(nvs_handle_t handle, const char* key, int32_t defaultValue) {
-  int32_t value = defaultValue;
-  return (nvs_get_i32(handle, key, &value) == ESP_OK) ? value : defaultValue;
-}
-
-// Preferences.getBool = (getUChar(key, default ? 1 : 0) == 1)
-bool nvsGetBool(nvs_handle_t handle, const char* key, bool defaultValue) {
-  return nvsGetU8(handle, key, defaultValue ? 1 : 0) == 1;
-}
-
-// Preferences.getFloat reads a 4-byte NVS blob.
-float nvsGetFloat(nvs_handle_t handle, const char* key, float defaultValue) {
-  float value = defaultValue;
-  size_t len = sizeof(value);
-  if (nvs_get_blob(handle, key, &value, &len) != ESP_OK || len != sizeof(value)) {
-    return defaultValue;
-  }
-  return value;
-}
-
-// Preferences.clear() == nvs_erase_all + nvs_commit on this namespace.
-bool nvsEraseNamespace() {
-  nvs_handle_t handle = 0;
-  if (nvs_open(PREFS_NAMESPACE, NVS_READWRITE, &handle) != ESP_OK) {
-    return false;
-  }
-  const bool ok = (nvs_erase_all(handle) == ESP_OK) && (nvs_commit(handle) == ESP_OK);
-  nvs_close(handle);
-  return ok;
-}
-
 }  // namespace
 
 // Read saved data from NVS (same key layout the write path and older
@@ -155,10 +113,8 @@ void refreshDeviceData() {
   if (err != ESP_OK) {
     USBSerial.println(F("Failed to initialize Preferences - may be corrupted"));
 
-    // Same recovery as Preferences.begin() failure: wipe the namespace if
-    // a retry can open it, then load factory defaults.
-    nvsEraseNamespace();
-
+    // resetDeviceData() wipes the namespace (Preferences.clear()) if a retry
+    // can open it, then writes factory defaults.
     USBSerial.println(F("Cleared potentially corrupted preferences, using defaults"));
     resetDeviceData();
     return;
@@ -173,20 +129,42 @@ void refreshDeviceData() {
     return;
   }
 
-  // Load all values with the same defaults the Preferences getters used.
+  // Load all values. On miss, nvs_get_* leaves the pre-set default (same as
+  // Preferences). Bools are u8 0/1; sea_pressure is a 4-byte blob.
   bool dataValid = true;
 
-  deviceData.version_major = nvsGetU8(handle, KEY_VERSION_MAJOR, VERSION_MAJOR);
-  deviceData.version_minor = nvsGetU8(handle, KEY_VERSION_MINOR, VERSION_MINOR);
-  deviceData.screen_rotation = nvsGetU8(handle, KEY_SCREEN_ROTATION, DEFAULT_SCREEN_ROTATION);
-  deviceData.sea_pressure = nvsGetFloat(handle, KEY_SEA_PRESSURE, DEFAULT_SEA_PRESSURE);
-  deviceData.metric_temp = nvsGetBool(handle, KEY_METRIC_TEMP, DEFAULT_METRIC_TEMP);
-  deviceData.metric_alt = nvsGetBool(handle, KEY_METRIC_ALT, DEFAULT_METRIC_ALT);
-  deviceData.performance_mode = nvsGetU8(handle, KEY_PERFORMANCE_MODE, DEFAULT_PERFORMANCE_MODE);
-  deviceData.theme = nvsGetU8(handle, KEY_THEME, DEFAULT_THEME);
-  deviceData.armed_time = nvsGetU16(handle, KEY_ARMED_TIME, 0);
-  deviceData.revision = nvsGetU8(handle, KEY_REVISION, 0);  // Default to ESP32-S3
-  deviceData.timezone_offset = nvsGetI32(handle, KEY_TIMEZONE_OFFSET, 0);
+  deviceData.version_major = VERSION_MAJOR;
+  nvs_get_u8(handle, KEY_VERSION_MAJOR, &deviceData.version_major);
+  deviceData.version_minor = VERSION_MINOR;
+  nvs_get_u8(handle, KEY_VERSION_MINOR, &deviceData.version_minor);
+  deviceData.screen_rotation = DEFAULT_SCREEN_ROTATION;
+  nvs_get_u8(handle, KEY_SCREEN_ROTATION, &deviceData.screen_rotation);
+
+  deviceData.sea_pressure = DEFAULT_SEA_PRESSURE;
+  size_t sea_pressure_len = sizeof(deviceData.sea_pressure);
+  if (nvs_get_blob(handle, KEY_SEA_PRESSURE, &deviceData.sea_pressure,
+                   &sea_pressure_len) != ESP_OK ||
+      sea_pressure_len != sizeof(deviceData.sea_pressure)) {
+    deviceData.sea_pressure = DEFAULT_SEA_PRESSURE;
+  }
+
+  uint8_t metric_temp = DEFAULT_METRIC_TEMP ? 1 : 0;
+  nvs_get_u8(handle, KEY_METRIC_TEMP, &metric_temp);
+  deviceData.metric_temp = (metric_temp == 1);
+  uint8_t metric_alt = DEFAULT_METRIC_ALT ? 1 : 0;
+  nvs_get_u8(handle, KEY_METRIC_ALT, &metric_alt);
+  deviceData.metric_alt = (metric_alt == 1);
+
+  deviceData.performance_mode = DEFAULT_PERFORMANCE_MODE;
+  nvs_get_u8(handle, KEY_PERFORMANCE_MODE, &deviceData.performance_mode);
+  deviceData.theme = DEFAULT_THEME;
+  nvs_get_u8(handle, KEY_THEME, &deviceData.theme);
+  deviceData.armed_time = 0;
+  nvs_get_u16(handle, KEY_ARMED_TIME, &deviceData.armed_time);
+  deviceData.revision = 0;  // Default to ESP32-S3
+  nvs_get_u8(handle, KEY_REVISION, &deviceData.revision);
+  deviceData.timezone_offset = 0;
+  nvs_get_i32(handle, KEY_TIMEZONE_OFFSET, &deviceData.timezone_offset);
 
   // Validate critical display-related settings
   if (deviceData.screen_rotation != 1 && deviceData.screen_rotation != 3) {
@@ -282,7 +260,12 @@ void resetDeviceData() {
   deviceData.timezone_offset = 0;  // Default to UTC
 
   // Clear all keys in this namespace (Preferences.clear()) and save defaults
-  nvsEraseNamespace();
+  nvs_handle_t handle = 0;
+  if (nvs_open(PREFS_NAMESPACE, NVS_READWRITE, &handle) == ESP_OK) {
+    nvs_erase_all(handle);
+    nvs_commit(handle);
+    nvs_close(handle);
+  }
 
   writeDeviceData();
   USBSerial.println(F("Device data reset to defaults and saved to Preferences"));
