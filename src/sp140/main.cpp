@@ -28,11 +28,15 @@
 #include "../../inc/sp140/ble/config_service.h"
 #include "../../inc/sp140/ble/fastlink_service.h"
 #include "../../inc/sp140/bms.h"
+#include "../../inc/sp140/climb_efficiency.h"
+#include "../../inc/sp140/monitor_config.h"
+#include "../../inc/sp140/thermal_headroom.h"
 #include "../../inc/sp140/esc.h"
 #include "../../inc/sp140/esc_config_relay.h"
 #include "../../inc/sp140/esc_flasher_relay.h"
 #include "../../inc/sp140/globals.h"  // device config
 #include "../../inc/sp140/lvgl/lvgl_alerts.h"
+#include "../../inc/sp140/lvgl/lvgl_climb_efficiency.h"
 #include "../../inc/sp140/lvgl/lvgl_core.h"
 #include "../../inc/sp140/lvgl/lvgl_main_screen.h"
 #include "../../inc/sp140/lvgl/lvgl_updates.h"
@@ -366,6 +370,50 @@ void bleNotifyTask(void *pvParameters) {
   }
 }
 
+// Climb yield (issue #57). Fed from the UI task only - the same task that
+// owns the barometer - so it needs no locking.
+static ClimbEfficiencyEstimator climbEfficiency;
+
+// Thermal headroom for the power bar, with the live alert thresholds.
+static ThermalHeadroom makeThermalHeadroom() {
+  ThermalHeadroomConfig c;
+  const Thresholds* limits[THERMAL_PART_COUNT] = {
+    &motorTempThresholds, &escMosTempThresholds, &escCapTempThresholds,
+    &escMcuTempThresholds, &bmsCellTempThresholds, &bmsTempThresholds,
+    &bmsTempThresholds};
+  for (int i = 0; i < THERMAL_PART_COUNT; ++i) {
+    c.parts[i].warnC = limits[i]->warnHigh;
+    c.parts[i].critC = limits[i]->critHigh;
+  }
+  return ThermalHeadroom(c);
+}
+static ThermalHeadroom thermalHeadroom = makeThermalHeadroom();
+
+static void updateThermalHeadroom(const TelemetryHub& hub) {
+  float temps[THERMAL_PART_COUNT];
+  for (float& t : temps) t = NAN;
+  if (hub.esc.escState == TelemetryState::CONNECTED) {
+    temps[THERMAL_MOTOR] = hub.esc.motor_temp;
+    temps[THERMAL_ESC_MOS] = hub.esc.mos_temp;
+    temps[THERMAL_ESC_CAP] = hub.esc.cap_temp;
+    temps[THERMAL_ESC_MCU] = hub.esc.mcu_temp;
+  }
+  float soc = NAN;
+  if (hub.bms.bmsState == TelemetryState::CONNECTED) {
+    const float cells[] = {hub.bms.t1_temperature, hub.bms.t2_temperature,
+                           hub.bms.t3_temperature, hub.bms.t4_temperature};
+    for (float c : cells) {
+      if (!isnan(c) && (isnan(temps[THERMAL_BATTERY]) || c > temps[THERMAL_BATTERY])) {
+        temps[THERMAL_BATTERY] = c;
+      }
+    }
+    temps[THERMAL_BMS_MOS] = hub.bms.mos_temperature;
+    temps[THERMAL_BMS_BALANCE] = hub.bms.balance_temperature;
+    soc = hub.bms.soc;
+  }
+  thermalHeadroom.update(millis(), unifiedBatteryData.power, temps, soc);
+}
+
 void refreshDisplay() {
   // Guard against calls before main_screen is set up
   if (main_screen == NULL) {
@@ -384,6 +432,12 @@ void refreshDisplay() {
   const float currentRelativeAltitude =
       (rawAltitude != __FLT_MIN__) ? rawAltitude : lastGoodAltitude;
 
+  // A failed baro read is a gap, not a repeat of the last altitude: holding
+  // the value would read as level flight.
+  climbEfficiency.update(millis(),
+                         (rawAltitude != __FLT_MIN__) ? rawAltitude : NAN,
+                         unifiedBatteryData.power, currentState != DISARMED);
+
   // Atomic snapshot of ESC/BMS telemetry from the hub. Reading the live globals
   // here would race the throttle task, which writes escTelemetryData
   // field-by-field on the other core (torn read). A function-static snapshot
@@ -391,6 +445,7 @@ void refreshDisplay() {
   // this never blocks the UI task and never shows a half-updated struct.
   static TelemetryHub uiHub = {};
   telemetryHubRead(&uiHub, pdMS_TO_TICKS(5));
+  updateThermalHeadroom(uiHub);
 
   if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(40)) == pdTRUE) {
     // Determine the altitude to show on the display
@@ -408,6 +463,14 @@ void refreshDisplay() {
       updateLvglMainScreen(deviceData, uiHub.esc, uiHub.bms,
                            unifiedBatteryData, altitudeToShow, isArmed,
                            isCruising, armedAtMillis);
+      {
+        const ThermalHeadroomResult& heat = thermalHeadroom.result();
+        const ClimbBarZones zones = climbBarZones(
+            climbEfficiency.result(), heat.valid ? heat.warnPowerKw : NAN,
+            heat.valid ? heat.critPowerKw : NAN, climbEfficiency.config());
+        updateClimbEfficiencyDisplay(climbEfficiency.result(), zones,
+                                     unifiedBatteryData.power, isArmed);
+      }
       break;
     // Add cases for other screens here later
     // case SETTINGS_SCREEN:
