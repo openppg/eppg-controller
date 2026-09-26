@@ -1,6 +1,7 @@
 #include "../../../inc/sp140/lvgl/lvgl_main_screen.h"
 #include "../../../inc/sp140/lvgl/lvgl_alerts.h"
 #include "../../../inc/sp140/lvgl/lvgl_updates.h"
+#include "../../../inc/sp140/lvgl/lvgl_climb_efficiency.h"
 #include "../../../inc/sp140/esp32s3-config.h"
 
 #include "../../assets/img/cruise-control-340255-30.c"  // Cruise control icon  // NOLINT(build/include)
@@ -160,7 +161,7 @@ void setupMainScreen(bool darkMode) {
   // Battery percentage label
   battery_label = lv_label_create(main_screen);
   lv_obj_align(battery_label, LV_ALIGN_TOP_MID, 0, 3);  // Move up for better vertical centering in battery bar
-  lv_obj_set_style_text_font(battery_label, &lv_font_montserrat_28, 0);  // Large font for prominent percentage display
+  lv_obj_set_style_text_font(battery_label, &montserrat_hinted_28, 0);  // Large font for prominent percentage display
   lv_obj_set_style_text_color(battery_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   // Center-align battery percentage since it's in the middle
@@ -172,7 +173,7 @@ void setupMainScreen(bool darkMode) {
   // Left voltage label
   voltage_left_label = lv_label_create(main_screen);
   lv_obj_align(voltage_left_label, LV_ALIGN_TOP_LEFT, 3, 12);  // Adjust Y position slightly for smaller font
-  lv_obj_set_style_text_font(voltage_left_label, &lv_font_montserrat_12, 0);  // Much smaller font for voltage
+  lv_obj_set_style_text_font(voltage_left_label, &montserrat_hinted_12, 0);  // Much smaller font for voltage
   lv_obj_set_style_text_color(voltage_left_label,
                             darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   lv_label_set_text(voltage_left_label, "");  // Blank until first update
@@ -180,7 +181,7 @@ void setupMainScreen(bool darkMode) {
   // Right voltage label
   voltage_right_label = lv_label_create(main_screen);
   lv_obj_align(voltage_right_label, LV_ALIGN_TOP_RIGHT, -3, 12);  // Adjust Y position slightly for smaller font
-  lv_obj_set_style_text_font(voltage_right_label, &lv_font_montserrat_12, 0);  // Much smaller font for voltage
+  lv_obj_set_style_text_font(voltage_right_label, &montserrat_hinted_12, 0);  // Much smaller font for voltage
   lv_obj_set_style_text_color(voltage_right_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   // Right-align right voltage so numbers grow from right to left
@@ -207,7 +208,7 @@ void setupMainScreen(bool darkMode) {
     power_char_labels[i] = lv_label_create(main_screen);
 
     // Use larger font for numbers, smaller for decimal point
-    lv_obj_set_style_text_font(power_char_labels[i], &lv_font_montserrat_24, 0);  // Large font for power numbers
+    lv_obj_set_style_text_font(power_char_labels[i], &montserrat_hinted_24, 0);  // Large font for power numbers
     lv_obj_set_style_text_color(power_char_labels[i], darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
     lv_obj_set_style_text_align(power_char_labels[i], LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_pad_all(power_char_labels[i], 0, 0);  // No padding
@@ -224,7 +225,7 @@ void setupMainScreen(bool darkMode) {
   // Power unit label ("kW" text only)
   power_unit_label = lv_label_create(main_screen);
   lv_obj_align(power_unit_label, LV_ALIGN_LEFT_MID, power_start_x + 4 * power_char_width + power_decimal_width + 2 - 20 + 4, -7);
-  lv_obj_set_style_text_font(power_unit_label, &lv_font_montserrat_10, 0);  // Even smaller font for unit
+  lv_obj_set_style_text_font(power_unit_label, &montserrat_hinted_10, 0);  // Even smaller font for unit
   lv_obj_set_style_text_color(power_unit_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   lv_label_set_text(power_unit_label, "kW");  // Static unit text
@@ -232,7 +233,7 @@ void setupMainScreen(bool darkMode) {
   // Performance mode label
   perf_mode_label = lv_label_create(main_screen);
   lv_obj_align(perf_mode_label, LV_ALIGN_RIGHT_MID, -14, -17);
-  lv_obj_set_style_text_font(perf_mode_label, &lv_font_montserrat_12, 0);
+  lv_obj_set_style_text_font(perf_mode_label, &montserrat_hinted_12, 0);
   lv_obj_set_style_text_color(perf_mode_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   // Ensure text within the label is centered
@@ -242,7 +243,7 @@ void setupMainScreen(bool darkMode) {
   // Armed time label - adjust position now that there's no bluetooth icon
   armed_time_label = lv_label_create(main_screen);
   lv_obj_align(armed_time_label, LV_ALIGN_RIGHT_MID, -15, -3);
-  lv_obj_set_style_text_font(armed_time_label, &lv_font_montserrat_14, 0);  // Use Montserrat font (has colon)
+  lv_obj_set_style_text_font(armed_time_label, &montserrat_hinted_14, 0);  // Use Montserrat font (has colon)
   lv_obj_set_style_text_color(armed_time_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   // Right-align time so numbers grow from right to left
@@ -254,7 +255,7 @@ void setupMainScreen(bool darkMode) {
   // Layout: [thousands][hundreds][tens][ones][.][tenths][m]  (7 positions total)
   int char_width = 19;      // Slightly tighter character width spacing
   int decimal_width = 8;    // Slightly wider decimal point for proportional spacing
-  int char_height = 30;     // Match lv_font_montserrat_28 line_height (v9: 30px)
+  int char_height = 30;     // Match montserrat_hinted_28 line_height (v9: 30px)
   int unit_width = 12;      // Narrower width for unit character to reduce buffer
 
   // Calculate total width needed and position from the right
@@ -278,9 +279,9 @@ void setupMainScreen(bool darkMode) {
 
     // Use smaller font for unit character (position 6), larger font for others
     if (i == 6) {
-      lv_obj_set_style_text_font(altitude_char_labels[i], &lv_font_montserrat_12, 0);  // Even smaller font for unit character
+      lv_obj_set_style_text_font(altitude_char_labels[i], &montserrat_hinted_12, 0);  // Even smaller font for unit character
     } else {
-      lv_obj_set_style_text_font(altitude_char_labels[i], &lv_font_montserrat_28, 0);  // Two font sizes larger for numbers
+      lv_obj_set_style_text_font(altitude_char_labels[i], &montserrat_hinted_28, 0);  // Two font sizes larger for numbers
     }
 
     lv_obj_set_style_text_color(altitude_char_labels[i], darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
@@ -334,7 +335,7 @@ void setupMainScreen(bool darkMode) {
   batt_temp_label = lv_label_create(main_screen);
   // Align bottom-right
   lv_obj_align(batt_temp_label, LV_ALIGN_BOTTOM_RIGHT, -11, -39);
-  lv_obj_set_style_text_font(batt_temp_label, &lv_font_montserrat_12, 0);
+  lv_obj_set_style_text_font(batt_temp_label, &montserrat_hinted_12, 0);
   lv_obj_set_style_text_color(batt_temp_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   lv_obj_set_style_bg_opa(batt_temp_label, LV_OPA_0, 0);  // Initially transparent
@@ -353,7 +354,7 @@ void setupMainScreen(bool darkMode) {
   batt_letter_label = lv_label_create(main_screen);
   // Align bottom-left
   lv_obj_align(batt_letter_label, LV_ALIGN_BOTTOM_LEFT, 116, -41);
-  lv_obj_set_style_text_font(batt_letter_label, &lv_font_montserrat_10, 0);
+  lv_obj_set_style_text_font(batt_letter_label, &montserrat_hinted_10, 0);
   lv_obj_set_style_text_color(batt_letter_label, darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   lv_obj_set_style_bg_opa(batt_letter_label, LV_OPA_0, 0);  // Transparent background
   lv_obj_set_style_border_width(batt_letter_label, 0, 0);  // No border
@@ -367,7 +368,7 @@ void setupMainScreen(bool darkMode) {
   esc_temp_label = lv_label_create(main_screen);
   // Align bottom-right
   lv_obj_align(esc_temp_label, LV_ALIGN_BOTTOM_RIGHT, -11, -20);
-  lv_obj_set_style_text_font(esc_temp_label, &lv_font_montserrat_12, 0);
+  lv_obj_set_style_text_font(esc_temp_label, &montserrat_hinted_12, 0);
   lv_obj_set_style_text_color(esc_temp_label,
                              darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   lv_obj_set_style_bg_opa(esc_temp_label, LV_OPA_0, 0);  // Initially transparent
@@ -386,7 +387,7 @@ void setupMainScreen(bool darkMode) {
   esc_letter_label = lv_label_create(main_screen);
   // Align bottom-left
   lv_obj_align(esc_letter_label, LV_ALIGN_BOTTOM_LEFT, 116, -22);
-  lv_obj_set_style_text_font(esc_letter_label, &lv_font_montserrat_10, 0);
+  lv_obj_set_style_text_font(esc_letter_label, &montserrat_hinted_10, 0);
   lv_obj_set_style_text_color(esc_letter_label, darkMode ? LVGL_WHITE : LVGL_BLACK, 0);
   lv_obj_set_style_bg_opa(esc_letter_label, LV_OPA_0, 0);  // Transparent background
   lv_obj_set_style_border_width(esc_letter_label, 0, 0);  // No border
@@ -400,7 +401,7 @@ void setupMainScreen(bool darkMode) {
   motor_temp_label = lv_label_create(main_screen);
   // Align bottom-right
   lv_obj_align(motor_temp_label, LV_ALIGN_BOTTOM_RIGHT, -11, 0);
-  lv_obj_set_style_text_font(motor_temp_label, &lv_font_montserrat_12, 0);
+  lv_obj_set_style_text_font(motor_temp_label, &montserrat_hinted_12, 0);
 
   // Set explicit size to prevent auto-sizing that could overlap with altitude
   lv_obj_set_size(motor_temp_label, 25, 18);  // Fixed width/height to contain temperature numbers
@@ -426,7 +427,7 @@ void setupMainScreen(bool darkMode) {
   motor_letter_label = lv_label_create(main_screen);
   // Align bottom-left
   lv_obj_align(motor_letter_label, LV_ALIGN_BOTTOM_LEFT, 116, -1);
-  lv_obj_set_style_text_font(motor_letter_label, &lv_font_montserrat_10, 0);
+  lv_obj_set_style_text_font(motor_letter_label, &montserrat_hinted_10, 0);
 
   // Set explicit size to prevent any sizing issues
   lv_obj_set_size(motor_letter_label, 12, 15);  // Fixed size for single letter
@@ -567,7 +568,7 @@ void setupMainScreen(bool darkMode) {
   // Create BLE pairing icon (Bluetooth symbol, initially hidden)
   ble_pairing_icon = lv_label_create(main_screen);
   lv_label_set_text(ble_pairing_icon, LV_SYMBOL_BLUETOOTH);
-  lv_obj_set_style_text_font(ble_pairing_icon, &lv_font_montserrat_14, 0);
+  lv_obj_set_style_text_font(ble_pairing_icon, &montserrat_hinted_14, 0);
   lv_obj_set_style_text_color(
       ble_pairing_icon, darkMode ? LVGL_DARK_BLE_BLUE : LVGL_BLUE, 0);
   lv_obj_set_pos(ble_pairing_icon, 103, 72);
@@ -622,6 +623,9 @@ void setupMainScreen(bool darkMode) {
     // Move fill sections behind the divider lines
     lv_obj_move_background(climb_rate_fill_sections[i]);
   }
+
+  // Climb efficiency widgets (hidden unless a display mode is selected)
+  setupClimbEfficiencyWidgets(main_screen, darkMode);
 
   // Create the critical alert border as four narrow edge strips. A full-screen
   // bordered object causes LVGL to invalidate and flush the full display on
