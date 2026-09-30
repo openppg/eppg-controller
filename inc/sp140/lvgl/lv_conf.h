@@ -80,22 +80,25 @@
 /**
  * Default font to use
  */
-#define LV_FONT_DEFAULT &lv_font_montserrat_14
+// Hinted Montserrat 14 (inc/sp140/lvgl/lvgl_fonts.h) - crisper small text
+// than the built-in fonts, which are all disabled below.
+#define LV_FONT_CUSTOM_DECLARE LV_FONT_DECLARE(montserrat_hinted_14)
+#define LV_FONT_DEFAULT &montserrat_hinted_14
 
 /**
- * Enable built-in fonts - only enable a minimal set
+ * Built-in fonts - none: the UI uses the hinted Montserrat set in lvgl_fonts.h
  */
 #define LV_FONT_MONTSERRAT_8  0
-#define LV_FONT_MONTSERRAT_10 1  /* For smaller kW unit label */
-#define LV_FONT_MONTSERRAT_12 1  /* For medium text, temperatures, and voltage labels */
-#define LV_FONT_MONTSERRAT_14 1  /* Used as default font */
-#define LV_FONT_MONTSERRAT_16 1  /* For battery percentage and power */
-#define LV_FONT_MONTSERRAT_18 1
-#define LV_FONT_MONTSERRAT_20 1  /* For larger power display numbers */
+#define LV_FONT_MONTSERRAT_10 0
+#define LV_FONT_MONTSERRAT_12 0
+#define LV_FONT_MONTSERRAT_14 0
+#define LV_FONT_MONTSERRAT_16 0
+#define LV_FONT_MONTSERRAT_18 0
+#define LV_FONT_MONTSERRAT_20 0
 #define LV_FONT_MONTSERRAT_22 0
-#define LV_FONT_MONTSERRAT_24 1  /* For larger power display numbers */
+#define LV_FONT_MONTSERRAT_24 0
 #define LV_FONT_MONTSERRAT_26 0
-#define LV_FONT_MONTSERRAT_28 1
+#define LV_FONT_MONTSERRAT_28 0
 #define LV_FONT_MONTSERRAT_30 0
 #define LV_FONT_MONTSERRAT_32 0
 #define LV_FONT_MONTSERRAT_34 0

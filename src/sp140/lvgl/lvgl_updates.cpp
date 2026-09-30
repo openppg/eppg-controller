@@ -43,6 +43,15 @@ static void setBgOpa(lv_obj_t* obj, lv_opa_t opa) {
   lv_obj_set_style_bg_opa(obj, opa, LV_PART_MAIN);
 }
 
+// White text is unreadable on the yellow warning tile in the dark theme, so a
+// temperature and its letter flip to black while their tile is yellow.
+static void setTempTileTextColor(lv_obj_t* value, lv_obj_t* letter,
+                                 uint8_t level, bool darkMode) {
+  const lv_color_t color = (darkMode && level != 1) ? LVGL_WHITE : LVGL_BLACK;
+  setLabelTextColor(value, color);
+  setLabelTextColor(letter, color);
+}
+
 static void setImageRecolor(lv_obj_t* obj, lv_color_t color) {
   if (obj == NULL) return;
   if (lv_color_eq(lv_obj_get_style_image_recolor(obj, LV_PART_MAIN), color)) return;
@@ -517,7 +526,10 @@ void updateLvglMainScreen(
     if (batteryPercent > bmsSOCThresholds.warnLow) {
       batteryColor = darkMode ? LVGL_DARK_GREEN : LVGL_GREEN;
     } else if (batteryPercent >= bmsSOCThresholds.critLow) {
-      batteryColor = darkMode ? LVGL_DARK_YELLOW : LVGL_YELLOW;
+      // Plain yellow in both themes: the subdued dark-theme yellow read as
+      // brown/orange. At 5-15 % the fill is only 8-24 px wide, so the only
+      // text over it is the first digit or two of the cell voltage.
+      batteryColor = LVGL_YELLOW;
     }
 
     setBgColor(battery_bar, batteryColor, LV_PART_INDICATOR);
@@ -846,6 +858,8 @@ void updateLvglMainScreen(
       } else {
         lv_obj_add_flag(batt_temp_bg, LV_OBJ_FLAG_HIDDEN);
       }
+      setTempTileTextColor(batt_temp_label, batt_letter_label, battTempLevel,
+                           darkMode);
       lastBattTempLevel = battTempLevel;
     }
   }
@@ -878,6 +892,8 @@ void updateLvglMainScreen(
       } else {
         lv_obj_add_flag(esc_temp_bg, LV_OBJ_FLAG_HIDDEN);
       }
+      setTempTileTextColor(esc_temp_label, esc_letter_label, escTempLevel,
+                           darkMode);
       lastEscTempLevel = escTempLevel;
     }
   }
@@ -911,6 +927,8 @@ void updateLvglMainScreen(
       } else {
         lv_obj_add_flag(motor_temp_bg, LV_OBJ_FLAG_HIDDEN);
       }
+      setTempTileTextColor(motor_temp_label, motor_letter_label,
+                           motorTempLevel, darkMode);
       lastMotorTempLevel = motorTempLevel;
     }
   }

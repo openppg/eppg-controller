@@ -65,7 +65,7 @@ void setupAlertCounterUI(bool darkMode) {
     lv_obj_add_flag(warning_counter_circle, LV_OBJ_FLAG_HIDDEN);
 
     warning_counter_label = lv_label_create(warning_counter_circle);
-    lv_obj_set_style_text_font(warning_counter_label, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(warning_counter_label, &montserrat_hinted_12, 0);
     lv_obj_set_style_text_color(warning_counter_label, LVGL_BLACK, 0);
     lv_obj_align(warning_counter_label, LV_ALIGN_CENTER, 0, 0);
     lv_label_set_text(warning_counter_label, "0");
@@ -89,7 +89,7 @@ void setupAlertCounterUI(bool darkMode) {
     lv_obj_add_flag(critical_counter_circle, LV_OBJ_FLAG_HIDDEN);
 
     critical_counter_label = lv_label_create(critical_counter_circle);
-    lv_obj_set_style_text_font(critical_counter_label, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(critical_counter_label, &montserrat_hinted_12, 0);
     lv_obj_set_style_text_color(critical_counter_label, LVGL_WHITE, 0);
     lv_obj_align(critical_counter_label, LV_ALIGN_CENTER, 0, 0);
     lv_label_set_text(critical_counter_label, "0");
@@ -98,7 +98,7 @@ void setupAlertCounterUI(bool darkMode) {
   // Warning text label (to the right of warning circle)
   if (alert_text_label == NULL) {
     alert_text_label = lv_label_create(main_screen);
-    lv_obj_set_style_text_font(alert_text_label, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(alert_text_label, &montserrat_hinted_14, 0);
     lv_obj_set_style_text_color(alert_text_label, LVGL_ORANGE, 0);
     if (warning_counter_circle) {
       lv_obj_align_to(alert_text_label, warning_counter_circle, LV_ALIGN_OUT_RIGHT_MID, 4, 0);
@@ -111,7 +111,7 @@ void setupAlertCounterUI(bool darkMode) {
   // Critical text label (in altitude area, to the right of critical circle)
   if (critical_text_label == NULL) {
     critical_text_label = lv_label_create(main_screen);
-    lv_obj_set_style_text_font(critical_text_label, &lv_font_montserrat_18, 0);
+    lv_obj_set_style_text_font(critical_text_label, &montserrat_hinted_18, 0);
     lv_obj_set_style_text_color(critical_text_label, lv_color_make(255, 0, 0), 0);
     // Initially positioned in altitude area
     if (altitude_char_labels[0]) {
@@ -183,7 +183,7 @@ void lv_showAlertTextWithLevel(SensorID id, AlertLevel level, bool critical) {
     // Use critical_text_label for critical alerts - shows on TOP row (above altitude)
     if (critical_text_label == NULL) return;
     lv_label_set_text(critical_text_label, txt);
-    lv_obj_set_style_text_font(critical_text_label, &lv_font_montserrat_18, 0);
+    lv_obj_set_style_text_font(critical_text_label, &montserrat_hinted_18, 0);
     lv_obj_set_style_text_color(critical_text_label, lv_color_make(255, 0, 0), 0);
     // Keep altitude visible when only critical is showing
     // (altitude will be hidden by warning if both are showing)
@@ -200,7 +200,7 @@ void lv_showAlertTextWithLevel(SensorID id, AlertLevel level, bool critical) {
     // Use alert_text_label for warning alerts
     if (alert_text_label == NULL) return;
     lv_label_set_text(alert_text_label, txt);
-    lv_obj_set_style_text_font(alert_text_label, &lv_font_montserrat_18, 0);
+    lv_obj_set_style_text_font(alert_text_label, &montserrat_hinted_18, 0);
     // Dark orange for better readability
     lv_obj_set_style_text_color(alert_text_label, lv_color_make(200, 100, 0), 0);
 

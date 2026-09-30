@@ -63,6 +63,11 @@ set(UI_SOURCES
   ${PROJECT_ROOT}/src/sp140/lvgl/lvgl_main_screen.cpp
   ${PROJECT_ROOT}/src/sp140/lvgl/lvgl_updates.cpp
   ${PROJECT_ROOT}/src/sp140/lvgl/lvgl_alerts.cpp
+  ${PROJECT_ROOT}/src/sp140/lvgl/lvgl_climb_efficiency.cpp
+  ${PROJECT_ROOT}/src/sp140/lvgl/lvgl_fonts.cpp
+  ${PROJECT_ROOT}/src/sp140/climb_efficiency.cpp
+  ${PROJECT_ROOT}/src/sp140/thermal_headroom.cpp
+  ${PROJECT_ROOT}/src/sp140/sensor_names.cpp
 )
 
 # Emulator sources
@@ -105,3 +110,38 @@ target_link_libraries(screenshot_tests PRIVATE
 
 # Suppress warnings in UI sources (they may use Arduino idioms)
 set_source_files_properties(${UI_SOURCES} PROPERTIES COMPILE_FLAGS "-w")
+
+# Interactive hand-controller emulator (tools/hc_emulator). Same UI sources on
+# a virtual clock, driven over stdin/stdout by tools/hc_emulator/server.py.
+option(EPPG_BUILD_EMULATOR "Build the interactive hand-controller emulator" ON)
+if(EPPG_BUILD_EMULATOR)
+  add_executable(hc_emulator
+    ${UI_SOURCES}
+    ${EMULATOR_SOURCES}
+    ${PROJECT_ROOT}/tools/hc_emulator/hc_emulator.cpp
+  )
+  target_include_directories(hc_emulator PRIVATE
+    ${STUBS_DIR}
+    ${PROJECT_ROOT}/inc
+    ${PROJECT_ROOT}/inc/sp140/lvgl
+    ${LVGL_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}
+  )
+  target_compile_definitions(hc_emulator PRIVATE
+    LV_CONF_INCLUDE_SIMPLE
+    LV_LVGL_H_INCLUDE_SIMPLE
+    ARDUINO=1
+    NATIVE_SCREENSHOT_TEST=1
+    EPPG_VIRTUAL_MILLIS=1
+  )
+  target_link_libraries(hc_emulator PRIVATE lvgl)
+endif()
+
+# Batch replay of the climb efficiency estimator alone (no UI), used by
+# tools/hc_emulator/analysis to score it against real flight logs.
+add_executable(climb_eff_replay
+  ${PROJECT_ROOT}/src/sp140/climb_efficiency.cpp
+  ${PROJECT_ROOT}/src/sp140/thermal_headroom.cpp
+  ${PROJECT_ROOT}/tools/hc_emulator/climb_eff_replay.cpp
+)
+target_include_directories(climb_eff_replay PRIVATE ${PROJECT_ROOT}/inc)
