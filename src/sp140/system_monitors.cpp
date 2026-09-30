@@ -2,6 +2,7 @@
 #include "sp140/monitor_config.h"
 #include "sp140/altimeter.h"
 #include <Arduino.h>
+#include <atomic>
 
 // External references to core monitoring infrastructure
 extern std::vector<IMonitor*> monitors;
@@ -10,18 +11,28 @@ extern MultiLogger multiLogger;
 // External reference to BMP sensor status
 extern bool bmpPresent;
 
-// Cached CPU temperature to avoid "tsens: Do not configure the temp sensor when it's running!" error
-static float cachedCpuTemp = 0.0f;
+// ESP32 tsens configuration is not safe from concurrent tasks. One task owns
+// temperatureRead(); readers consume this atomic cross-core publication.
+static std::atomic<float> cachedCpuTemp{0.0f};
 static unsigned long lastCpuTempRead = 0;
 static const unsigned long CPU_TEMP_READ_INTERVAL = 1000;  // Read every 1 second
 
-float getCachedCpuTemperature() {
+void primeCpuTemperatureCache() {
+  cachedCpuTemp.store(temperatureRead(), std::memory_order_relaxed);
+  lastCpuTempRead = millis();
+}
+
+float refreshCpuTemperature() {
   unsigned long now = millis();
   if (now - lastCpuTempRead >= CPU_TEMP_READ_INTERVAL) {
-    cachedCpuTemp = temperatureRead();
+    cachedCpuTemp.store(temperatureRead(), std::memory_order_relaxed);
     lastCpuTempRead = now;
   }
-  return cachedCpuTemp;
+  return cachedCpuTemp.load(std::memory_order_relaxed);
+}
+
+float getCachedCpuTemperature() {
+  return cachedCpuTemp.load(std::memory_order_relaxed);
 }
 
 void addInternalMonitors() {

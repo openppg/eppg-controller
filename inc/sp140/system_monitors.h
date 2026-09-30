@@ -7,7 +7,14 @@
 void addInternalMonitors();
 void addAltimeterMonitors();
 
-// Thread-safe cached CPU temperature reading (updates max once per second)
+// Prime the CPU temperature cache during single-threaded setup.
+void primeCpuTemperatureCache();
+
+// Refresh the sensor at most once per second. ctrlSensorTask is the sole
+// runtime owner; all other tasks must use getCachedCpuTemperature().
+float refreshCpuTemperature();
+
+// Cross-core read of the last published CPU temperature; never touches tsens.
 float getCachedCpuTemperature();
 
 #endif  // INC_SP140_SYSTEM_MONITORS_H_
