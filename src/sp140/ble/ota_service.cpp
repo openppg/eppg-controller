@@ -52,8 +52,24 @@ const uint16_t ACK_ERR_CRC = 0x0001;
 const uint16_t ACK_ERR_SECTOR = 0x0002;
 const uint16_t ACK_ERR_LEN = 0x0003;
 
+// CMD_START refusal reasons, sent as the command-ACK status so the app can tell
+// the pilot why. Firmware 8.0 sent 0x0001 for all of them.
+const uint16_t START_ERR_GENERIC = 0x0001;
+const uint16_t START_ERR_ARMED = 0x0002;
+const uint16_t START_ERR_TOO_LARGE = 0x0003;
+const uint16_t START_ERR_FLASH = 0x0004;
+
+// Delay between the END ACK and the reboot. The reboot runs from
+// checkOtaTimeout() (bleNotifyTask), not the write callback, so NimBLE can
+// send the END write response and the ACK notification first.
+const unsigned long OTA_REBOOT_DELAY_MS = 1000;
+
 // State
 volatile bool otaInProgress = false;
+// Non-zero once a verified image is set as the boot partition; holds the
+// millis() at which to reboot. While set, the session can't be aborted and
+// arming stays blocked.
+volatile unsigned long otaRebootAtMs = 0;
 volatile size_t imageTotalLen = 0;
 esp_ota_handle_t updateHandle = 0;
 const esp_partition_t* updatePartition = nullptr;
@@ -160,19 +176,27 @@ void handleCmdStart(const uint8_t* data) {
         abortOtaImpl();
     }
 
-    if (currentState == ARMED || currentState == ARMED_CRUISING) {
-        USBSerial.println("OTA Blocked: Device ARMED");
-        sendCommandResponse(CMD_START, 0x0001);
-        return;
-    }
-
     // Clean slate before acquiring new partition/handle
     resetOtaState();
+
+    // Claim the session before checking the arm state: toggleArm() refuses
+    // while isOtaInProgress(), so arming can't slip in during the multi-second
+    // erase in esp_ota_begin() below.
+    otaInProgress = true;
+    lastOtaActivityMs = millis();
+
+    if (currentState == ARMED || currentState == ARMED_CRUISING) {
+        USBSerial.println("OTA Blocked: Device ARMED");
+        abortOtaImpl();
+        sendCommandResponse(CMD_START, START_ERR_ARMED);
+        return;
+    }
 
     updatePartition = esp_ota_get_next_update_partition(nullptr);
     if (!updatePartition) {
         USBSerial.println("OTA Error: No partition");
-        sendCommandResponse(CMD_START, 0x0001);
+        abortOtaImpl();
+        sendCommandResponse(CMD_START, START_ERR_FLASH);
         return;
     }
 
@@ -182,21 +206,26 @@ void handleCmdStart(const uint8_t* data) {
                       | (static_cast<uint32_t>(data[5]) << 24);
     if (imageLen > updatePartition->size) {
         USBSerial.printf("OTA Error: Image size %u > partition %u\n", imageLen, updatePartition->size);
-        sendCommandResponse(CMD_START, 0x0001);
+        abortOtaImpl();
+        sendCommandResponse(CMD_START, START_ERR_TOO_LARGE);
         return;
     }
+
+    // Ask for the OTA connection parameters (longer supervision timeout)
+    // before the erase, so the stall in esp_ota_begin() doesn't drop the link.
+    requestFastConnParams();
 
     esp_err_t err = esp_ota_begin(updatePartition, imageLen, &updateHandle);
     if (err != ESP_OK) {
         USBSerial.printf("OTA Error: Begin failed 0x%x\n", err);
-        sendCommandResponse(CMD_START, 0x0001);
+        updateHandle = 0;
+        abortOtaImpl();
+        sendCommandResponse(CMD_START, START_ERR_FLASH);
         return;
     }
 
-    otaInProgress = true;
     imageTotalLen = imageLen;
     lastOtaActivityMs = millis();
-    requestFastConnParams();
     sendCommandResponse(CMD_START, 0x0000);  // Accept
 }
 
@@ -220,7 +249,13 @@ class OtaCommandCallback : public NimBLECharacteristicCallbacks {
         uint16_t calcCrc = crc16_ccitt(data, 18);
         if (rxCrc != calcCrc) {
             USBSerial.printf("OTA Error: CMD CRC Fail Exp %04X Got %04X\n", calcCrc, rxCrc);
-            sendCommandResponse(cmdId, 0x0001);  // Reject (Status 1)
+            sendCommandResponse(cmdId, START_ERR_GENERIC);  // Reject (Status 1)
+            return;
+        }
+
+        // A verified image is already staged and the reboot is imminent.
+        if (otaRebootAtMs != 0) {
+            sendCommandResponse(cmdId, cmdId == CMD_END ? 0x0000 : START_ERR_GENERIC);
             return;
         }
 
@@ -240,9 +275,11 @@ class OtaCommandCallback : public NimBLECharacteristicCallbacks {
                 if (esp_ota_end(updateHandle) == ESP_OK) {
                     if (esp_ota_set_boot_partition(updatePartition) == ESP_OK) {
                         USBSerial.println("OTA Success. Restarting...");
+                        // Reboot from checkOtaTimeout() once this callback has
+                        // returned and the write response + ACK have gone out.
+                        otaRebootAtMs = millis() + OTA_REBOOT_DELAY_MS;
+                        if (otaRebootAtMs == 0) otaRebootAtMs = 1;
                         sendCommandResponse(CMD_END, 0x0000);  // Success
-                        delay(1000);  // Allow BLE flush
-                        ESP.restart();
                         return;
                     } else {
                         USBSerial.println("OTA Error: Set Boot Partition Failed");
@@ -262,7 +299,7 @@ class OtaCommandCallback : public NimBLECharacteristicCallbacks {
 class OtaDataCallback : public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic* pChar, NimBLEConnInfo& connInfo) override {
         OtaStateLock lock(portMAX_DELAY);  // serialize vs checkOtaTimeout (other task)
-        if (!otaInProgress) return;
+        if (!otaInProgress || otaRebootAtMs != 0) return;
 
         std::string valStr = pChar->getValue();
         size_t len = valStr.length();
@@ -349,6 +386,9 @@ class OtaDataCallback : public NimBLECharacteristicCallbacks {
 };
 
 void abortOtaImpl() {
+    // The new image is already the boot partition; nothing to abort. Keep the
+    // session flag set so arming stays blocked until the reboot.
+    if (otaRebootAtMs != 0) return;
     if (otaInProgress) {
         if (updateHandle) esp_ota_abort(updateHandle);
         otaInProgress = false;
@@ -363,6 +403,13 @@ static OtaDataCallback dataCallback;
 
 }  // namespace
 
+// Arduino's initArduino() marks a freshly flashed image valid before setup()
+// unless the app overrides this weak hook, which would leave rollback with
+// nothing to catch. Returning true defers validation to the end of setup()
+// (main.cpp), so an image that crashes or hangs while booting rolls back to the
+// previous firmware.
+extern "C" bool verifyRollbackLater() { return true; }
+
 void abortOta() {
     // Called from the BLE disconnect callback (host task); lock vs checkOtaTimeout.
     OtaStateLock lock(portMAX_DELAY);
@@ -374,6 +421,14 @@ void checkOtaTimeout() {
     // device is clearly not idle, so skip this tick rather than block or race.
     OtaStateLock lock(0);
     if (!lock.held()) return;
+    if (otaRebootAtMs != 0) {
+        if (static_cast<long>(millis() - otaRebootAtMs) >= 0) {
+            USBSerial.println("OTA: Rebooting into new firmware");
+            USBSerial.flush();
+            ESP.restart();
+        }
+        return;
+    }
     if (otaInProgress && (millis() - lastOtaActivityMs > OTA_TIMEOUT_MS)) {
         USBSerial.println("OTA: Idle timeout, aborting.");
         abortOtaImpl();
@@ -391,11 +446,15 @@ void initOtaBleService(NimBLEServer* pServer) {
 
     NimBLEService* pService = pServer->createService(OTA_SERVICE_UUID);
 
+    // Writes need an encrypted (bonded) link, like every config write, so only
+    // a paired phone can flash firmware.
+
     // Firmware data (Write No Response + Indicate for ACKs)
     pRecvFwChar = pService->createCharacteristic(
         OTA_RECV_FW_UUID,
         NIMBLE_PROPERTY::WRITE |
         NIMBLE_PROPERTY::WRITE_NR |
+        NIMBLE_PROPERTY::WRITE_ENC |
         NIMBLE_PROPERTY::NOTIFY |
         NIMBLE_PROPERTY::INDICATE);
     pRecvFwChar->setCallbacks(&dataCallback);
@@ -410,6 +469,7 @@ void initOtaBleService(NimBLEServer* pServer) {
     pCommandChar = pService->createCharacteristic(
         OTA_COMMAND_UUID,
         NIMBLE_PROPERTY::WRITE |
+        NIMBLE_PROPERTY::WRITE_ENC |
         NIMBLE_PROPERTY::NOTIFY |
         NIMBLE_PROPERTY::INDICATE);
     pCommandChar->setCallbacks(&cmdCallback);
