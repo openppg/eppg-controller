@@ -532,6 +532,10 @@ void setupMainScreen(bool darkMode) {
   } else {
     icon_color = lv_color_black();  // Black icon on light background
   }
+  // updateLvglMainScreen() and the flash timers restore these after flashing;
+  // left unset they are zero (black) and the icons vanish on the dark theme.
+  original_cruise_icon_color = icon_color;
+  original_arm_fail_icon_color = icon_color;
   lv_obj_set_style_image_recolor(cruise_icon_img, icon_color, LV_PART_MAIN);
   lv_obj_set_style_image_recolor_opa(cruise_icon_img, LV_OPA_COVER, LV_PART_MAIN);  // Make icon fully opaque
 

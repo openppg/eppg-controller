@@ -2,6 +2,7 @@
 // OpenPPG
 #include "Arduino.h"
 #include "sp140/device_settings.h"
+#include "sp140/time_utils.h"
 #include "sp140/ble/ota_service.h"
 #include "esp_ota_ops.h"
 
@@ -298,7 +299,7 @@ void throttleTask(void *pvParameters) {
   const TickType_t throttleTicks = pdMS_TO_TICKS(20);  // 50 Hz
   for (;;) {
     handleThrottle();
-    lastThrottleRunMs = millis();
+    lastThrottleRunMs = timeMillis();
 #ifndef OPENPPG_DEBUG
     esp_task_wdt_reset();  // control loop ran this cycle — pet the watchdog
 #endif
@@ -318,7 +319,7 @@ void ctrlSensorTask(void *pvParameters) {
   const TickType_t sensorTicks = pdMS_TO_TICKS(100);  // 10 Hz
 
   for (;;) {
-    const unsigned long now = millis();
+    const unsigned long now = timeMillis();
     float alt = getCachedAltitude();
     // Direct read for baro temp (at 10Hz) — cheap I2C call, keeps the
     // cached value fresh for the Baro_Temp monitor which reads the cache.
@@ -479,7 +480,7 @@ void uiTask(void *pvParameters) {
   const TickType_t uiTicks = pdMS_TO_TICKS(33);  // ~30 Hz, matches LV_DEF_REFR_PERIOD
   for (;;) {
     refreshDisplay();
-    lastUiRunMs = millis();
+    lastUiRunMs = timeMillis();
     vTaskDelayUntil(&lastWake, uiTicks);
   }
 }
@@ -534,7 +535,7 @@ void bmsTask(void *pvParameters) {
       unifiedBatteryData.power = 0.0;
     }
 
-    lastBmsRunMs = millis();
+    lastBmsRunMs = timeMillis();
     vTaskDelayUntil(&lastWake, bmsTicks);
   }
 }
@@ -858,7 +859,7 @@ void buttonHandlerTask(void *parameter) {
 
   while (true) {
     buttonState = digitalRead(board_config.button_top);
-    uint32_t currentTime = millis();
+    uint32_t currentTime = timeMillis();
 
     // Debounce
     if ((currentTime - lastDebounceTime) > BUTTON_DEBOUNCE_TIME_MS) {
@@ -955,7 +956,7 @@ void buttonHandlerTask(void *parameter) {
 
 void printTime(const char *label) {
   USBSerial.print(label);
-  USBSerial.println(millis());
+  USBSerial.println(timeMillis());
 }
 
 void disarmESC() {
@@ -997,7 +998,7 @@ void disarmSystem() {
 
   // Calculate elapsed armed time in seconds before updating hour meter
   if (armedAtMillis > 0) {
-    unsigned long currentMillis = millis();
+    unsigned long currentMillis = timeMillis();
     armedSecs = (currentMillis - armedAtMillis) / 1000;
   }
 
@@ -1006,7 +1007,7 @@ void disarmSystem() {
 
   // DISARM_COOLDOWN (500ms, checked in toggleArm) prevents immediate re-arm —
   // no need to block this task for 500ms.
-  lastDisarmTime = millis();
+  lastDisarmTime = timeMillis();
 }
 
 void handleArmFail() {
@@ -1031,7 +1032,7 @@ void toggleArm() {
     }
 
     // Check if enough time has passed since last disarm
-    if (millis() - lastDisarmTime >= DISARM_COOLDOWN) {
+    if (timeMillis() - lastDisarmTime >= DISARM_COOLDOWN) {
       if (!throttleEngaged()) {
         changeDeviceState(ARMED);
       } else {
@@ -1063,7 +1064,7 @@ void toggleCruise() {
         // Record the override reference before the state flips: the throttle
         // task checks it from its first ARMED_CRUISING tick.
         cruisedPotVal = readThrottleRaw();
-        cruisedAtMillis = millis();
+        cruisedAtMillis = timeMillis();
         changeDeviceState(ARMED_CRUISING);
         pulseVibeMotor();
       }
@@ -1093,7 +1094,7 @@ bool throttleSafe(int threshold = POT_ENGAGEMENT_LEVEL) {
  * @return true if cruise should be disengaged, false otherwise
  */
 bool shouldDisengageCruise(int potVal) {
-  unsigned long timeSinceCruiseStart = millis() - cruisedAtMillis;
+  unsigned long timeSinceCruiseStart = timeMillis() - cruisedAtMillis;
 
   // Only check for disengagement *after* the grace period has passed
   if (timeSinceCruiseStart > CRUISE_DISENGAGE_GRACE_PERIOD_MS) {
@@ -1259,7 +1260,7 @@ bool armSystem() {
   // Throttle task handles ESC commands exclusively to avoid
   // race condition on the shared canard CAN bus instance
 
-  armedAtMillis = millis();
+  armedAtMillis = timeMillis();
   armedSecs = 0;  // Reset armed seconds for new session
   setGroundAltitude(deviceData);
 

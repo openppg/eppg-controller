@@ -1,5 +1,6 @@
 #include "../../../inc/sp140/lvgl/lvgl_updates.h"
 #include "../../../inc/sp140/esp32s3-config.h"
+#include "../../../inc/sp140/time_utils.h"
 #include "../../../inc/sp140/monitor_config.h"  // For direct threshold access
 #include "../../../inc/sp140/globals.h"
 #include "../../../inc/sp140/vibration_pwm.h"
@@ -658,7 +659,7 @@ void updateLvglMainScreen(
 
   // Update armed time
   if (armed_time_label != NULL) {  // Check object exists
-    const unsigned int nowMillis = millis();
+    const unsigned int nowMillis = timeMillis();
     static unsigned int _lastArmedMillis = 0;  // Renamed to avoid conflict
     if (armed) _lastArmedMillis = nowMillis;
     // Calculate session time only if armedStartMillis is valid (not 0)
@@ -1006,7 +1007,7 @@ void updateLvglMainScreen(
   // Update climb rate indicator
   static float lastAltitude = 0.0f;
   static uint32_t lastAltitudeTime = 0;
-  uint32_t currentTime = millis();
+  uint32_t currentTime = timeMillis();
 
   if (currentTime - lastAltitudeTime > 200) {  // Update climb rate every 200ms
     float climbRate = 0.0f;
@@ -1026,8 +1027,8 @@ void updateLvglMainScreen(
 // Test function with simulated data for development/testing
 void updateLvglMainScreenWithTestData(const STR_DEVICE_DATA_140_V1& deviceData) {
   // Create simulated telemetry data
-  static uint32_t testStartTime = millis();
-  uint32_t elapsed = millis() - testStartTime;
+  static uint32_t testStartTime = timeMillis();
+  uint32_t elapsed = timeMillis() - testStartTime;
 
   // Generate dynamic test values that change over time
   float time_factor = (elapsed / 1000.0f);  // Convert to seconds
@@ -1059,9 +1060,9 @@ void updateLvglMainScreenWithTestData(const STR_DEVICE_DATA_140_V1& deviceData) 
   bool testCruising = testArmed && (int(time_factor / 8) % 2 == 1);  // Toggle every 8 seconds when armed
 
   // Simulated armed start time
-  static unsigned int testArmedStartMillis = millis();
+  static unsigned int testArmedStartMillis = timeMillis();
   if (!testArmed) {
-    testArmedStartMillis = millis();  // Reset when not armed
+    testArmedStartMillis = timeMillis();  // Reset when not armed
   }
 
   // Call the main update function with test data
