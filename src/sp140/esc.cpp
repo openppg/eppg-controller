@@ -2,6 +2,7 @@
 #include "sp140/globals.h"
 #include "sp140/esc_config_relay.h"
 #include "sp140/esc_flasher_relay.h"
+#include "sp140/time_utils.h"
 #include <CircularBuffer.hpp>
 
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
@@ -19,7 +20,7 @@ static SineEsc esc(adapter);
 
 // Expose the single shared adapter to the ESC config relay module.
 CanardAdapter& escAdapter() { return adapter; }
-static unsigned long lastSuccessfulCommTimeMs = 0;  // Store millis() time of last successful ESC comm
+static unsigned long lastSuccessfulCommTimeMs = 0;  // Store timeMillis() of last successful ESC comm
 // Flag set by requestEscHardwareInfo() (may be called from BLE task),
 // consumed safely inside readESCTelemetry() on the throttle task.
 static volatile bool s_hwInfoRequested = false;
@@ -166,7 +167,7 @@ void syncEscOutputs() {
   }
 
   const EscStatusLightMode requestedMode = sRequestedStatusLightMode;
-  const unsigned long now = millis();
+  const unsigned long now = timeMillis();
   const bool needsRefresh =
       sHaveSentStatusLight &&
       escStatusLightRefreshMs(requestedMode) > 0 &&
@@ -294,7 +295,7 @@ void readESCTelemetry() {
       escTelemetryData.selfcheck_error = res->selfcheck_error;
 
       // Record the time of this successful communication using the local clock
-      lastSuccessfulCommTimeMs = millis();
+      lastSuccessfulCommTimeMs = timeMillis();
     }  // else: Timestamp hasn't changed, treat as stale data, don't update local timer or telemetry
 
   } else {
@@ -303,7 +304,7 @@ void readESCTelemetry() {
   }
 
   // Update connection state based on time since last successful communication
-  unsigned long currentTimeMs = millis();
+  unsigned long currentTimeMs = timeMillis();
   if (lastSuccessfulCommTimeMs == 0 || (currentTimeMs - lastSuccessfulCommTimeMs) > TELEMETRY_TIMEOUT_MS) {
     if (escTelemetryData.escState != TelemetryState::NOT_CONNECTED) {
       // Log state change only if it actually changed
