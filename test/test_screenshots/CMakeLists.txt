@@ -63,6 +63,7 @@ set(UI_SOURCES
   ${PROJECT_ROOT}/src/sp140/lvgl/lvgl_main_screen.cpp
   ${PROJECT_ROOT}/src/sp140/lvgl/lvgl_updates.cpp
   ${PROJECT_ROOT}/src/sp140/lvgl/lvgl_alerts.cpp
+  ${PROJECT_ROOT}/src/sp140/lvgl/lvgl_qc_screen.cpp
 )
 
 # Emulator sources
