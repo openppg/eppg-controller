@@ -23,6 +23,7 @@
 #include "../../inc/sp140/alert_display.h"
 #include "../../inc/sp140/altimeter.h"
 #include "../../inc/sp140/system_monitors.h"
+#include "../../inc/sp140/task_timing.h"
 #include "../../inc/sp140/ble.h"
 #include "../../inc/sp140/ble/ble_core.h"
 #include "../../inc/sp140/ble/ble_utils.h"
@@ -312,10 +313,33 @@ void throttleTask(void *pvParameters) {
   vTaskDelete(NULL);  // should never reach this
 }
 
+// Keep a periodic task locked to its original phase while skipping every slot
+// that elapsed during an overrun. Resetting the base to now would turn cadence
+// into work time + period and halve a near-budget UI frame rate.
+static void delayUntilNextPeriod(TickType_t* lastWake, TickType_t period) {
+  const TickType_t now = xTaskGetTickCount();
+  *lastWake = static_cast<TickType_t>(phaseAlignedWakeBase(
+      static_cast<uint32_t>(*lastWake), static_cast<uint32_t>(now),
+      static_cast<uint32_t>(period)));
+  vTaskDelayUntil(lastWake, period);
+}
+
+// Sole BMP3xx I2C producer. Each conversion supplies pressure and temperature;
+// all consumers read one coherent snapshot rather than forcing conversions.
+void barometerTask(void *pvParameters) {
+  (void)pvParameters;
+  TickType_t lastWake = xTaskGetTickCount();
+  const TickType_t sampleTicks = pdMS_TO_TICKS(40);  // 25 Hz
+  for (;;) {
+    sampleBarometer(deviceData);
+    delayUntilNextPeriod(&lastWake, sampleTicks);
+  }
+}
+
 // Lightweight task: reads controller sensors and writes to TelemetryHub at 10Hz.
-// Uses CACHED barometer/CPU values — uiTask is the sole I2C reader, and this
-// task is the sole runtime owner of tsens refresh. Other tasks only consume the
-// atomically published CPU temperature.
+// Uses CACHED barometer/CPU values — barometerTask is the sole BMP reader, and
+// this task is the sole runtime owner of tsens refresh. Other tasks only
+// consume the atomically published CPU temperature.
 void ctrlSensorTask(void *pvParameters) {
   (void)pvParameters;
   TickType_t lastWake = xTaskGetTickCount();
@@ -323,15 +347,13 @@ void ctrlSensorTask(void *pvParameters) {
 
   for (;;) {
     const unsigned long now = timeMillis();
-    float alt = getCachedAltitude();
-    // Direct read for baro temp (at 10Hz) — cheap I2C call, keeps the
-    // cached value fresh for the Baro_Temp monitor which reads the cache.
-    float bt = getBaroTemperature();
-    float bp = getBaroPressure();
-    float vs = getCachedVerticalSpeed();
+    BarometerSnapshot barometer = {};
+    getBarometerSnapshot(&barometer);
     float mt = refreshCpuTemperature();
     uint16_t pr = getLastThrottleRaw();
-    telemetryHubWriteController(alt, bt, bp, vs, mt, pr, now);
+    telemetryHubWriteController(
+        barometer.relativeAltitude, barometer.temperatureC,
+        barometer.pressureHpa, barometer.verticalSpeedMps, mt, pr, now);
     vTaskDelayUntil(&lastWake, sensorTicks);
   }
 }
@@ -368,8 +390,8 @@ void bleNotifyTask(void *pvParameters) {
   }
 }
 
-// Climb yield (issue #57). Fed from the UI task only - the same task that
-// owns the barometer - so it needs no locking.
+// Climb yield (issue #57). Fed from the UI task only, from the published
+// barometer snapshot, so it needs no locking.
 static ClimbEfficiencyEstimator climbEfficiency;
 
 // Thermal headroom for the power bar, with the live alert thresholds.
@@ -418,22 +440,22 @@ void refreshDisplay() {
     return;
   }
 
-  // Read barometer OUTSIDE lvglMutex. uiTask is the designated sole I2C
-  // barometer reader — this call populates the cached* globals in altimeter.cpp
-  // that other tasks read via getCachedAltitude()/etc. Taking i2cMutex inside
-  // lvglMutex was a nested-lock deadlock risk.
+  // Snapshot outside lvglMutex. This is a short memory copy and never takes the
+  // I2C mutex, preserving the no-nested-lock rule for display rendering.
   static float lastGoodAltitude = 0.0f;
-  const float rawAltitude = getAltitude(deviceData);
-  if (rawAltitude != __FLT_MIN__) {
-    lastGoodAltitude = rawAltitude;
+  BarometerSnapshot barometer = {};
+  const bool barometerValid = getBarometerSnapshot(&barometer);
+  if (barometerValid) {
+    lastGoodAltitude = barometer.relativeAltitude;
   }
-  const float currentRelativeAltitude =
-      (rawAltitude != __FLT_MIN__) ? rawAltitude : lastGoodAltitude;
+  const float currentRelativeAltitude = barometerValid
+      ? barometer.relativeAltitude
+      : lastGoodAltitude;
 
   // A failed baro read is a gap, not a repeat of the last altitude: holding
   // the value would read as level flight.
   climbEfficiency.update(timeMillis(),
-                         (rawAltitude != __FLT_MIN__) ? rawAltitude : NAN,
+                         barometerValid ? barometer.relativeAltitude : NAN,
                          unifiedBatteryData.power, currentState != DISARMED);
 
   // Atomic snapshot of ESC/BMS telemetry from the hub. Reading the live globals
@@ -543,11 +565,11 @@ void uiTask(void *pvParameters) {
   for (;;) {
     refreshDisplay();
     lastUiRunMs = timeMillis();
-    vTaskDelayUntil(&lastWake, uiTicks);
+    delayUntilNextPeriod(&lastWake, uiTicks);
   }
 }
 
-// BMS task: 20 Hz polling and unified battery update
+// BMS task: 10 Hz polling and unified battery update
 void bmsTask(void *pvParameters) {
   TickType_t lastWake = xTaskGetTickCount();
   const TickType_t bmsTicks = pdMS_TO_TICKS(100);  // 10 Hz
@@ -702,6 +724,9 @@ void setupTasks() {
   xTaskCreate(blinkLEDTask, "blinkLed", 2560, NULL, 1, &blinkLEDTaskHandle);
   xTaskCreatePinnedToCore(throttleTask, "throttle", 4352, NULL, 3,
                           &throttleTaskHandle, 0);
+  // A low-priority producer sustains 25 Hz without starving BLE/OTA during an
+  // expensive display redraw.
+  xTaskCreatePinnedToCore(barometerTask, "Barometer", 3072, NULL, 1, NULL, 1);
   xTaskCreatePinnedToCore(uiTask, "UI", 5888, NULL, 2, &uiTaskHandle, 1);
   xTaskCreatePinnedToCore(bmsTask, "BMS", 2304, NULL, 2, &bmsTaskHandle, 1);
   xTaskCreate(ctrlSensorTask, "CtrlSensor", 4096, NULL, 2,
@@ -1096,6 +1121,13 @@ void toggleArm() {
     // Check if enough time has passed since last disarm
     if (timeMillis() - lastDisarmTime >= DISARM_COOLDOWN) {
       if (!throttleEngaged()) {
+        // Establish AGL from an already-published fresh conversion before the
+        // state transition. Never arm with an uninitialized/stale datum.
+        if (!setGroundAltitude(deviceData)) {
+          USBSerial.println("Arm blocked: no fresh barometer sample");
+          handleArmFail();
+          return;
+        }
         changeDeviceState(ARMED);
       } else {
         handleArmFail();
@@ -1324,7 +1356,6 @@ bool armSystem() {
 
   armedAtMillis = timeMillis();
   armedSecs = 0;  // Reset armed seconds for new session
-  setGroundAltitude(deviceData);
 
   vTaskSuspend(blinkLEDTaskHandle);
   setLEDs(HIGH);  // solid LED while armed
