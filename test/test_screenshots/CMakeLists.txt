@@ -68,6 +68,7 @@ set(UI_SOURCES
   ${PROJECT_ROOT}/src/sp140/climb_efficiency.cpp
   ${PROJECT_ROOT}/src/sp140/thermal_headroom.cpp
   ${PROJECT_ROOT}/src/sp140/sensor_names.cpp
+  ${PROJECT_ROOT}/src/sp140/lvgl/lvgl_qc_screen.cpp
 )
 
 # Emulator sources
