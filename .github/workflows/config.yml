@@ -55,6 +55,8 @@ jobs:
         run: platformio test -e native-test
       - name: Run BLE OTA Emulation Tests
         run: platformio test -e native-emu-ota
+      - name: Run Settings and Factory QC Emulation Tests
+        run: platformio test -e native-emu-settings
 
   screenshot-tests:
     name: Screenshot Regression Tests

@@ -1005,7 +1005,7 @@ struct FreshTrace {
   emu_nvs::State flash;
   std::vector<emu_nvs::Op> ops;
   size_t verMajorOp = 0;   // index of the first ver_major write
-  size_t attemptedOp = 0;  // index of the qc_attempted write
+  size_t attemptedOp = 0;  // index of the first qc_attempted write
 };
 
 static size_t findOp(const std::vector<emu_nvs::Op>& ops, const std::string& what) {
@@ -1027,8 +1027,10 @@ static FreshTrace traceFreshBootWithQc() {
   t.ops = emuNvsOpLog();
   t.verMajorOp = findOp(t.ops, "set openppg/ver_major:u8");
   t.attemptedOp = findOp(t.ops, "set openppg-factory/qc_attempted:u8");
-  EXPECT_LT(t.verMajorOp, t.attemptedOp);
-  EXPECT_LT(t.attemptedOp, t.ops.size());
+  // The attempt is on flash before any user setting, so no cut can leave a
+  // fresh board looking like an upgraded fleet unit.
+  EXPECT_LT(t.attemptedOp, t.verMajorOp);
+  EXPECT_LT(t.verMajorOp, t.ops.size());
   return t;
 }
 
@@ -1067,11 +1069,12 @@ TEST_F(QcGateEmu, BrandNewUnitPowerCutAtEveryWriteAfterQcStartRerunsUntilPassed)
 // ver_major in setup() Phase 1, and qc_attempted used to be written only by
 // qcShouldRun() at Phase 4.5. A reset in between made the next boot see "user
 // settings present, never attempted" and back-fill qc_passed=1, so the board
-// never got QC. qcCaptureBootContext() now marks the attempt first.
+// never got QC. qcCaptureBootContext() now marks the attempt first, so a cut
+// before any write of the first boot leads to QC on the next one.
 TEST_F(QcGateEmu, BrandNewUnitPowerCutBeforeQcStartStillEntersQcNextBoot) {
   const FreshTrace t = traceFreshBootWithQc();
   std::string failures;
-  for (size_t k = 0; k <= t.attemptedOp; k++) {
+  for (size_t k = 0; k <= t.verMajorOp; k++) {
     const std::string f = bootAfterCut(t, k);
     if (!f.empty()) failures += f + "\n";
   }
