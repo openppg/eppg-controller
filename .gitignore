@@ -9,3 +9,4 @@ test/test_screenshots/output/png/
 
 # Local executor plans (not tracked)
 plans/
+.rc-results/
