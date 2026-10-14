@@ -439,7 +439,8 @@ bool sanitizeDeviceData() {
   // Ensure sea pressure is within acceptable limits, default to 1013.25
   // 337 is the air pressure at the top of Mt. Everest
   // 1065 is the air pressure at the dead sea. Pad both a bit
-  if (deviceData.sea_pressure < 300 || deviceData.sea_pressure > 1200) {
+  // Written as a "within range" test so NaN fails it too.
+  if (!(deviceData.sea_pressure >= 300 && deviceData.sea_pressure <= 1200)) {
     deviceData.sea_pressure = 1013.25;
     changed = true;
   }

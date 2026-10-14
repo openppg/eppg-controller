@@ -63,6 +63,14 @@ void qcCaptureBootContext() {
   s_factoryQcAttemptedAtBoot = factoryQcAttempted();
   s_rerunRequestedAtBoot = factoryRerunRequested();
   s_contextCaptured = true;
+
+  // A brand-new board: record the attempt now, before refreshDeviceData()
+  // writes user settings. A reset between here and the QC flow would
+  // otherwise make it look like an upgraded fleet unit and skip QC for good.
+  if (!s_userSettingsPresentAtBoot && !s_factoryQcPassedAtBoot &&
+      !s_factoryQcAttemptedAtBoot) {
+    factoryMarkQcAttempted();
+  }
 }
 
 bool qcShouldRun() {

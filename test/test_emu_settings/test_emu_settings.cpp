@@ -790,12 +790,11 @@ TEST_P(SettingsEmuInvalid, InvalidValueIsSanitizedAndPersisted) {
   EXPECT_EQ(emuNvsMutatingOps(), 0) << "sanitized value did not stick";
 }
 
-// BUG (pre-existing since 7.x, not introduced by #127): sanitizeDeviceData()
-// checks `sea_pressure < 300 || sea_pressure > 1200`, which is false for NaN,
-// so a NaN in NVS is loaded and kept and every altitude computes as NaN. The
-// BLE sea-pressure write handler (config_service.cpp) uses the same
-// comparison, so a 4-byte NaN written over BLE is accepted and persisted.
-TEST_F(SettingsEmu, DISABLED_NanSeaPressureIsSanitizedToDefault) {
+// Regression (pre-existing since 7.x, fixed in 8.1): the range check was
+// `sea_pressure < 300 || sea_pressure > 1200`, which is false for NaN, so a
+// NaN in NVS was loaded and kept and every altitude computed as NaN. The BLE
+// sea-pressure write handler had the same comparison.
+TEST_F(SettingsEmu, NanSeaPressureIsSanitizedToDefault) {
   STR_DEVICE_DATA_140_V1 v = kAllNonDefault;
   v.sea_pressure = NAN;
   writeSettingsAs80(v);
@@ -1064,13 +1063,12 @@ TEST_F(QcGateEmu, BrandNewUnitPowerCutAtEveryWriteAfterQcStartRerunsUntilPassed)
   EXPECT_TRUE(failures.empty()) << failures;
 }
 
-// BUG (#118 gate): on a brand-new unit, refreshDeviceData() writes ver_major
-// in setup() Phase 1, but qc_attempted is only written by qcShouldRun() at
-// Phase 4.5 (after hardware init, display init and the 2 s splash). A reset
-// or power loss anywhere in that window makes the next boot see "user
-// settings present, never attempted" -> MARK_LEGACY: qc_passed=1 is
-// back-filled and the board never gets QC or calibration.
-TEST_F(QcGateEmu, DISABLED_BrandNewUnitPowerCutBeforeQcStartStillEntersQcNextBoot) {
+// Regression (#118 gate): on a brand-new unit, refreshDeviceData() writes
+// ver_major in setup() Phase 1, and qc_attempted used to be written only by
+// qcShouldRun() at Phase 4.5. A reset in between made the next boot see "user
+// settings present, never attempted" and back-fill qc_passed=1, so the board
+// never got QC. qcCaptureBootContext() now marks the attempt first.
+TEST_F(QcGateEmu, BrandNewUnitPowerCutBeforeQcStartStillEntersQcNextBoot) {
   const FreshTrace t = traceFreshBootWithQc();
   std::string failures;
   for (size_t k = 0; k <= t.attemptedOp; k++) {

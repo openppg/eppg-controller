@@ -233,7 +233,7 @@ class SeaPressureCallbacks : public NimBLECharacteristicCallbacks {
     memcpy(&pressure, value.data(), sizeof(pressure));
 
     // Validate range: 300.0 - 1200.0 hPa/mbar
-    if (pressure < 300.0f || pressure > 1200.0f) {
+    if (!(pressure >= 300.0f && pressure <= 1200.0f)) {  // rejects NaN too
       USBSerial.println("Invalid sea pressure value - must be between 300.0 and 1200.0");
       return;
     }
