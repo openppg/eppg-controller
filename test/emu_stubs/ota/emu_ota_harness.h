@@ -69,6 +69,7 @@ struct FakeMutex {
   int takes = 0;
   int gives = 0;
   int busyTryTakes = 0;
+  int timedOutTakes = 0;
 };
 inline std::vector<std::unique_ptr<FakeMutex>> mutexes;
 inline int deadlocks = 0;

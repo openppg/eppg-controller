@@ -1120,7 +1120,10 @@ void handleArmFail() {
 
 void toggleArm() {
   if (currentState == DISARMED) {
-    if (isOtaInProgress()) {
+    // Held through changeDeviceState(ARMED) so a BLE update START can't slip
+    // in between this check and the transition (see OtaArmGuard).
+    OtaArmGuard otaGuard(pdMS_TO_TICKS(100));
+    if (!otaGuard.held() || isOtaInProgress()) {
       USBSerial.println("Arm blocked: OTA update in progress");
       return;
     }

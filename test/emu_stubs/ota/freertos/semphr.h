@@ -18,10 +18,12 @@ inline SemaphoreHandle_t xSemaphoreCreateMutex() {
 inline BaseType_t xSemaphoreTake(SemaphoreHandle_t m, TickType_t timeout) {
   if (m == nullptr) return pdFALSE;
   if (m->held) {
-    if (timeout == 0) {
+    if (timeout == portMAX_DELAY) {
+      ++emu::deadlocks;  // waits forever on a lock nothing else will release
+    } else if (timeout == 0) {
       ++m->busyTryTakes;
     } else {
-      ++emu::deadlocks;  // a blocking take on a held, non-recursive mutex
+      ++m->timedOutTakes;  // the real take would give up after `timeout`
     }
     return pdFALSE;
   }

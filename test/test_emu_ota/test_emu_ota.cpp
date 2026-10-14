@@ -164,9 +164,19 @@ class OtaEmu : public ::testing::Test {
     currentState = DISARMED;
   }
 
-  // Mirrors toggleArm() in main.cpp: arming from DISARMED is refused while
-  // isOtaInProgress().
-  static bool armingAllowed() { return !isOtaInProgress(); }
+  // Mirrors toggleArm() in main.cpp: from DISARMED it holds OtaArmGuard across
+  // the OTA check and the ARMED transition, and refuses when the guard can't be
+  // held (a START is erasing) or an update is in progress.
+  static bool tryArm() {
+    OtaArmGuard guard(pdMS_TO_TICKS(100));
+    if (!guard.held() || isOtaInProgress()) return false;
+    currentState = ARMED;
+    return true;
+  }
+  static bool armingAllowed() {
+    OtaArmGuard guard(pdMS_TO_TICKS(100));
+    return guard.held() && !isOtaInProgress();
+  }
 
   // Mirrors BleServerConnectionCallbacks::onDisconnect() in ble_core.cpp.
   static void disconnect() {
@@ -1055,31 +1065,51 @@ TEST_F(OtaEmu, RollbackEnabledInSdkconfig) {
 }
 
 // ---------------------------------------------------------------------------
-// Known issue (disabled): arming can still race CMD_START.
-//
-// toggleArm() (button task) checks isOtaInProgress() and only sets ARMED after
-// setGroundAltitude(), which can wait up to 50 ms for the I2C mutex. If START
-// arrives on the NimBLE host task inside that window, the session is claimed
-// with currentState still DISARMED, the arm check passes and the erase starts;
-// toggleArm() then sets ARMED. Nothing later re-checks the arm state, so the
-// transfer completes and checkOtaTimeout() calls ESP.restart() while ARMED.
-// Run with --gtest_also_run_disabled_tests to see it fail.
+// Arming vs CMD_START. toggleArm() (button task) needs up to ~50 ms between its
+// OTA check and setting ARMED (barometer datum). Before OtaArmGuard, a START on
+// the NimBLE host task in that window saw DISARMED, started the update, and
+// the controller later rebooted while ARMED. The guard holds the OTA state
+// lock across the check and the transition, so the two can only run in order.
 // ---------------------------------------------------------------------------
 
-TEST_F(OtaEmu, DISABLED_NeverRebootsWhileArmedWhenArmingRacesStart) {
-  ASSERT_TRUE(armingAllowed());  // toggleArm(): OTA check passes...
+TEST_F(OtaEmu, ArmingDuringStartEraseIsRefusedAndRebootStaysDisarmed) {
   emu::faults.eraseMs = 3000;
-  emu::onBegin = [] { currentState = ARMED; };  // ...and it arms during the erase
+  bool armedDuringErase = true;
+  emu::onBegin = [&] { armedDuringErase = tryArm(); };  // button pressed mid-erase
   const Bytes img = makeImage(2 * kSector);
-  const uint16_t startStatus = start(static_cast<uint32_t>(img.size()));
-  if (startStatus == 0x0000) {
-    EXPECT_TRUE(sendImage(img));
-    end();
-  }
+  ASSERT_EQ(start(static_cast<uint32_t>(img.size())), 0x0000);
+  EXPECT_FALSE(armedDuringErase);
+  EXPECT_TRUE(sendImage(img));
+  EXPECT_EQ(end(), 0x0000);
   runNotifyTask(5000);
-  EXPECT_EQ(static_cast<DeviceState>(currentState), ARMED);
-  EXPECT_EQ(emu::restartCount, 0) << "ESP.restart() while ARMED (START status " << startStatus
-                                  << ", setBoot calls " << emu::setBootCalls << ")";
+  EXPECT_EQ(emu::restartCount, 1);
+  EXPECT_EQ(static_cast<DeviceState>(currentState), DISARMED);
+}
+
+TEST_F(OtaEmu, StartWaitsForArmingInProgressThenSeesArmed) {
+  {
+    // toggleArm() between its OTA check and ARMED: START's onWrite would block
+    // on the lock here, so it can only run after the transition.
+    OtaArmGuard guard(pdMS_TO_TICKS(100));
+    ASSERT_TRUE(guard.held());
+    EXPECT_TRUE(emu::otaLockHeld());
+    currentState = ARMED;
+  }
+  EXPECT_FALSE(emu::otaLockHeld());
+  EXPECT_EQ(start(2 * kSector), 0x0002);
+  EXPECT_EQ(emu::beginCalls, 0);
+  runNotifyTask(5000);
+  EXPECT_EQ(emu::restartCount, 0);
+}
+
+TEST_F(OtaEmu, ArmGuardTimesOutInsteadOfBlockingWhileStartHoldsLock) {
+  emu::onBegin = [] {
+    OtaArmGuard guard(pdMS_TO_TICKS(100));
+    EXPECT_FALSE(guard.held());
+  };
+  ASSERT_EQ(start(2 * kSector), 0x0000);
+  EXPECT_EQ(emu::mutexes.back()->timedOutTakes, 1);
+  EXPECT_EQ(emu::deadlocks, 0);
 }
 
 int main(int argc, char** argv) {

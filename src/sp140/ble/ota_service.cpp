@@ -440,6 +440,19 @@ bool isOtaInProgress() {
     return otaInProgress;
 }
 
+OtaArmGuard::OtaArmGuard(TickType_t timeout) {
+    if (otaStateMutex == nullptr) {
+        held_ = true;  // OTA service not started: no START can race arming
+        return;
+    }
+    taken_ = (xSemaphoreTake(otaStateMutex, timeout) == pdTRUE);
+    held_ = taken_;
+}
+
+OtaArmGuard::~OtaArmGuard() {
+    if (taken_) xSemaphoreGive(otaStateMutex);
+}
+
 void initOtaBleService(NimBLEServer* pServer) {
     if (otaStateMutex == nullptr) {
         otaStateMutex = xSemaphoreCreateMutex();
