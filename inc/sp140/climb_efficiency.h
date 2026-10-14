@@ -115,6 +115,7 @@ struct ClimbEfficiencyResult {
   float powerCv;        // power spread over window + settle
   float yield;          // w / P in m/s per kW; NaN unless phase == VALID
 
+  bool airborne;        // above minAltitudeM at some point since arming
   bool levelValid;      // enough near-level flight to trust levelPowerKw
   float levelPowerKw;   // L: power that holds altitude (NaN until learned)
   float levelMarginKw;  // +/- certainty on L (NaN until learned)
@@ -196,6 +197,7 @@ class ClimbEfficiencyEstimator {
   bool haveLastUpdate_ = false;
   uint32_t lastUpdateMs_ = 0;
   bool haveLearned_ = false;
+  bool airborne_ = false;
   uint32_t lastLearnMs_ = 0;
 
   ClimbEffBin bins_[kMaxBins];

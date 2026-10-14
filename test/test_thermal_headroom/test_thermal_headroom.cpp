@@ -208,7 +208,7 @@ TEST(ClimbBarZones, NoThermalLimitKeepsTheEfficiencyBand) {
 TEST(ClimbBarZones, HeatPullsTheGreenBandBack) {
   ClimbEfficiencyConfig cfg;
   ClimbEfficiencyResult r = {};
-  r.levelValid = r.curveValid = true;
+  r.airborne = r.levelValid = r.curveValid = true;
   r.levelPowerKw = 3.2f;
   const ClimbBarZones z = climbBarZones(r, 8.6f, 9.6f, cfg);
   ASSERT_TRUE(z.green);
@@ -226,7 +226,7 @@ TEST(ClimbBarZones, HeatPullsTheGreenBandBack) {
 TEST(ClimbBarZones, GreenNeverOverlapsYellow) {
   ClimbEfficiencyConfig cfg;
   ClimbEfficiencyResult r = {};
-  r.levelValid = r.curveValid = true;
+  r.airborne = r.levelValid = r.curveValid = true;
   r.levelPowerKw = 3.2f;  // efficiency peak ~14.5 kW
   const ClimbBarZones z = climbBarZones(r, 15.0f, 15.8f, cfg);
   ASSERT_TRUE(z.green);
@@ -234,13 +234,22 @@ TEST(ClimbBarZones, GreenNeverOverlapsYellow) {
   EXPECT_TRUE(z.yellow);
 }
 
-TEST(ClimbBarZones, ThermalZonesShowBeforeTheBandIsLearned) {
+TEST(ClimbBarZones, ThermalZonesShowInFlightBeforeTheBandIsLearned) {
   ClimbEfficiencyConfig cfg;
   ClimbEfficiencyResult r = {};  // nothing learned yet
+  r.airborne = true;
   const ClimbBarZones z = climbBarZones(r, 8.0f, 9.0f, cfg);
   EXPECT_FALSE(z.green);
   EXPECT_TRUE(z.yellow);
   EXPECT_TRUE(z.red);
+}
+
+TEST(ClimbBarZones, ThermalZonesWaitForTakeoff) {
+  ClimbEfficiencyConfig cfg;
+  ClimbEfficiencyResult r = {};  // armed on the ground after a run-up
+  const ClimbBarZones z = climbBarZones(r, 8.0f, 9.0f, cfg);
+  EXPECT_FALSE(z.yellow);
+  EXPECT_FALSE(z.red);
 }
 
 int main(int argc, char **argv) {

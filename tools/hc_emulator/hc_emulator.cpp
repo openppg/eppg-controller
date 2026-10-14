@@ -333,6 +333,7 @@ int main() {
         state.mockActive = false;
       } else {
         ClimbEfficiencyResult& m = state.mock;
+        m.airborne = true;  // the mock draws an in-flight bar
         m.levelValid = get(args, "level", &v) && v > 0;
         m.levelPowerKw = m.levelValid ? static_cast<float>(v) : NAN;
         m.levelMarginKw = get(args, "margin", &v) ? static_cast<float>(v) : NAN;

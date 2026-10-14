@@ -123,6 +123,8 @@ def bar_zones(r, fw):
     max_p = fw["max_kw"]
     warn_in = r["warn_kw"] if r["th_valid"] else NAN   # main.cpp: heat.valid ? .. : NAN
     crit_in = r["crit_kw"] if r["th_valid"] else NAN
+    if not r["airborne"]:                              # heat zones wait for takeoff
+        warn_in = crit_in = NAN
     warn = max_p if math.isnan(warn_in) else min(warn_in, max_p)
     crit = max_p if math.isnan(crit_in) else min(max(crit_in, warn), max_p)
     if warn < max_p and crit > warn:
@@ -366,7 +368,7 @@ def run_replay(exe, text):
     for line in lines[1:]:
         r = {h: fnum(v) for h, v in zip(hdr, line.split(","))}
         for k in ("t_ms", "phase", "curve_valid", "level_valid", "th_valid", "warn_part",
-                  "crit_part"):
+                  "crit_part", "airborne"):
             r[k] = int(r[k])
         rows.append(r)
     return rows, out.stdout

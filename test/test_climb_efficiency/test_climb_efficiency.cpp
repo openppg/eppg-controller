@@ -100,6 +100,26 @@ TEST(ClimbEfficiency, IgnoresTakeoffBelowMinAltitude) {
   EXPECT_EQ(f.r().phase, ClimbEffPhase::NO_DATA);
 }
 
+TEST(ClimbEfficiency, GroundRunUpIsNotAirborne) {
+  Flight f;
+  f.alt = 0.0f;
+  f.fly(4 * 60000, 9.0f, 0.0f, 0.3f);  // armed run-up, still on the ground
+  EXPECT_FALSE(f.r().airborne);
+}
+
+TEST(ClimbEfficiency, AirborneOnceAboveMinAltitudeUntilDisarmed) {
+  Flight f;
+  f.alt = 0.0f;
+  f.fly(60000, 12.0f, 1.0f);  // climb out to about 60 m
+  EXPECT_TRUE(f.r().airborne);
+  f.t += 33;
+  f.est.update(f.t, NAN, 12.0f, true);  // baro dropout doesn't land the wing
+  EXPECT_TRUE(f.r().airborne);
+  f.armed = false;
+  f.fly(1000, 0.0f, 0.0f);
+  EXPECT_FALSE(f.r().airborne);
+}
+
 TEST(ClimbEfficiency, ReadingGapRestartsWindow) {
   Flight f;
   f.fly(15000, 10.0f, 2.0f);

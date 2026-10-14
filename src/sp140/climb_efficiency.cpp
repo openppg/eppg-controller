@@ -51,6 +51,8 @@ void ClimbEfficiencyEstimator::reset() {
   memset(bins_, 0, sizeof(bins_));
   haveLearned_ = false;
   lastLearnMs_ = 0;
+  airborne_ = false;
+  result_.airborne = false;
   levelW_ = levelW2_ = levelMean_ = levelM2_ = 0.0f;
   climbWeight_ = 0.0f;
 
@@ -87,6 +89,9 @@ void ClimbEfficiencyEstimator::resetWindow() {
 
 void ClimbEfficiencyEstimator::update(uint32_t nowMs, float altitudeM,
                                       float powerKw, bool armed) {
+  // A baro gap doesn't land the wing; only disarming ends the flight.
+  if (!armed) airborne_ = false;
+  result_.airborne = airborne_;
   if (!armed || isnan(altitudeM) || isnan(powerKw)) {
     resetWindow();
     return;
@@ -190,6 +195,8 @@ void ClimbEfficiencyEstimator::evaluate(uint32_t nowMs, bool armed) {
   // Slots can run a little longer than sampleMs, so allow two slots of slack.
   const bool fullSpan = oldestExtAge + 2 * config_.sampleMs >= extSpan;
   const bool aboveGround = minAlt >= config_.minAltitudeM;
+  if (armed && aboveGround) airborne_ = true;
+  r.airborne = airborne_;
 
   if (!aboveGround || isnan(r.climbRate)) {
     r.phase = ClimbEffPhase::NO_DATA;
@@ -355,6 +362,10 @@ float ClimbEfficiencyEstimator::predictedClimb(float powerKw) const {
 ClimbBarZones climbBarZones(const ClimbEfficiencyResult& r, float warnKw,
                             float critKw, const ClimbEfficiencyConfig& config) {
   ClimbBarZones z = {};
+  // Heat zones wait for takeoff like the rest of the bar: a ground run-up
+  // teaches the heat model, but yellow/red on the ground would read as a
+  // warning about the run-up itself.
+  if (!r.airborne) warnKw = critKw = NAN;
   const float maxP = config.maxPowerKw;
   const float warn = isnan(warnKw) ? maxP : minf(warnKw, maxP);
   const float crit = isnan(critKw) ? maxP : minf(maxf(critKw, warn), maxP);

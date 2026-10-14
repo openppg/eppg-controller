@@ -112,7 +112,8 @@ int main(int argc, char** argv) {
        "level_valid,level,level_w,climb_w,slope,level_margin,"
        "th_valid,warn_kw,crit_kw,warn_part,crit_part,horizon_s,pack_kwh,"
        "base_motor,base_mos,base_cap,base_mcu,"
-       "gain_motor,gain_mos,gain_cap,gain_mcu,gain_batt,gain_bmsmos,gain_bmsbal");
+       "gain_motor,gain_mos,gain_cap,gain_mcu,gain_batt,gain_bmsmos,gain_bmsbal,"
+       "airborne");
   char line[256];
   bool first = true;
   uint32_t nextOut = 0;
@@ -160,7 +161,7 @@ int main(int argc, char** argv) {
     put(h.packKwh);
     for (int i = 0; i < THERMAL_BATTERY; ++i) put(h.baseC[i]);
     for (int i = 0; i < THERMAL_PART_COUNT; ++i) put(h.gainC[i]);
-    putchar('\n');
+    printf(",%d\n", r.airborne ? 1 : 0);
   }
   return 0;
 }
