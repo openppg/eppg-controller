@@ -206,6 +206,16 @@ def main():
         + ("; main.cpp also calls it outside barometerTask" if stray else
            "; in main.cpp only inside barometerTask"))
 
+    # The OTA emulation models arming with a copy of toggleArm(); this keeps the
+    # real one honest: the guard must be taken before the OTA check and ARMED.
+    arm = function_body(main_src, "toggleArm") or ""
+    g, chk, armed = (arm.find(s) for s in ("OtaArmGuard", "isOtaInProgress()",
+                                            "changeDeviceState(ARMED)"))
+    add("static.arm_guard", "Arming holds the OTA lock through the ARMED transition",
+        0 <= g < chk < armed, "toggleArm(): OtaArmGuard taken before the OTA check and "
+        "held to changeDeviceState(ARMED)" if 0 <= g < chk < armed else
+        "toggleArm() doesn't take OtaArmGuard before its OTA check and the ARMED transition")
+
     # FreeRTOS task entry points must never return: with -O2 ESP-IDF 4.4 drops
     # the task-function wrapper that would otherwise catch it.
     all_src = "\n".join(sources.values())
