@@ -4,6 +4,7 @@
 // Factory QC screen implementation. 160x128 ST7735. See lvgl_qc_screen.h.
 
 #include "../../../inc/sp140/lvgl/lvgl_qc_screen.h"
+#include "../../../inc/sp140/lvgl/lvgl_fonts.h"
 
 #include <stdio.h>
 
@@ -85,7 +86,7 @@ void setupQcScreen(bool darkMode) {
 
   lv_obj_t* title = lv_label_create(list_view);
   lv_label_set_text(title, "FACTORY QC");
-  lv_obj_set_style_text_font(title, &lv_font_montserrat_12, 0);
+  lv_obj_set_style_text_font(title, &montserrat_hinted_12, 0);
   lv_obj_set_style_text_color(title, qcFgColor(), 0);
   lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 2);
 
@@ -94,13 +95,13 @@ void setupQcScreen(bool darkMode) {
 
     row_name_labels[i] = lv_label_create(list_view);
     lv_label_set_text(row_name_labels[i], "");
-    lv_obj_set_style_text_font(row_name_labels[i], &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(row_name_labels[i], &montserrat_hinted_12, 0);
     lv_obj_set_style_text_color(row_name_labels[i], qcFgColor(), 0);
     lv_obj_set_pos(row_name_labels[i], 4, y);
 
     row_status_labels[i] = lv_label_create(list_view);
     lv_label_set_text(row_status_labels[i], "");
-    lv_obj_set_style_text_font(row_status_labels[i], &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(row_status_labels[i], &montserrat_hinted_12, 0);
     lv_obj_set_style_text_color(row_status_labels[i], QC_COLOR_PEND, 0);
     lv_obj_set_width(row_status_labels[i], 76);
     lv_obj_set_style_text_align(row_status_labels[i], LV_TEXT_ALIGN_RIGHT, 0);
@@ -112,7 +113,7 @@ void setupQcScreen(bool darkMode) {
 
   prompt_instruction = lv_label_create(prompt_view);
   lv_label_set_text(prompt_instruction, "");
-  lv_obj_set_style_text_font(prompt_instruction, &lv_font_montserrat_18, 0);
+  lv_obj_set_style_text_font(prompt_instruction, &montserrat_hinted_18, 0);
   lv_obj_set_style_text_color(prompt_instruction, qcFgColor(), 0);
   lv_obj_set_width(prompt_instruction, 152);
   lv_obj_set_style_text_align(prompt_instruction, LV_TEXT_ALIGN_CENTER, 0);
@@ -121,13 +122,13 @@ void setupQcScreen(bool darkMode) {
 
   prompt_value = lv_label_create(prompt_view);
   lv_label_set_text(prompt_value, "");
-  lv_obj_set_style_text_font(prompt_value, &lv_font_montserrat_28, 0);
+  lv_obj_set_style_text_font(prompt_value, &montserrat_hinted_28, 0);
   lv_obj_set_style_text_color(prompt_value, qcFgColor(), 0);
   lv_obj_align(prompt_value, LV_ALIGN_CENTER, 0, 8);
 
   prompt_subtext = lv_label_create(prompt_view);
   lv_label_set_text(prompt_subtext, "");
-  lv_obj_set_style_text_font(prompt_subtext, &lv_font_montserrat_10, 0);
+  lv_obj_set_style_text_font(prompt_subtext, &montserrat_hinted_10, 0);
   lv_obj_set_style_text_color(prompt_subtext, qcFgColor(), 0);
   lv_obj_set_width(prompt_subtext, 152);
   lv_obj_set_style_text_align(prompt_subtext, LV_TEXT_ALIGN_CENTER, 0);
@@ -148,13 +149,13 @@ void setupQcScreen(bool darkMode) {
 
   banner_title = lv_label_create(banner_view);
   lv_label_set_text(banner_title, "");
-  lv_obj_set_style_text_font(banner_title, &lv_font_montserrat_28, 0);
+  lv_obj_set_style_text_font(banner_title, &montserrat_hinted_28, 0);
   lv_obj_set_style_text_color(banner_title, lv_color_white(), 0);
   lv_obj_align(banner_title, LV_ALIGN_CENTER, 0, -18);
 
   banner_detail = lv_label_create(banner_view);
   lv_label_set_text(banner_detail, "");
-  lv_obj_set_style_text_font(banner_detail, &lv_font_montserrat_12, 0);
+  lv_obj_set_style_text_font(banner_detail, &montserrat_hinted_12, 0);
   lv_obj_set_style_text_color(banner_detail, lv_color_white(), 0);
   lv_obj_set_width(banner_detail, 152);
   lv_obj_set_style_text_align(banner_detail, LV_TEXT_ALIGN_CENTER, 0);
