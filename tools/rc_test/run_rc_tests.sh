@@ -15,6 +15,9 @@ ENV_FW="OpenPPG-CESP32S3-CAN-SP140"
 rm -rf "$OUT"
 mkdir -p "$OUT/logs"
 export PATH="$HOME/.local/bin:$PATH"
+# Recorded before anything runs: the build and tests write into the tree.
+git status --porcelain --untracked-files=no > "$OUT/dirty.txt"
+echo "${RC_BRANCH:-$(git rev-parse --abbrev-ref HEAD)}" > "$OUT/branch.txt"
 
 : > "$OUT/steps.tsv"
 step() {
@@ -56,7 +59,7 @@ if has_env native-emu-settings; then
 fi
 
 # Also builds hc_emulator and climb_eff_replay (same CMake project).
-rm -rf test/test_screenshots/output
+rm -f test/test_screenshots/output/*.bmp
 step screens "Display screenshot regression" \
   ./test/test_screenshots/build_and_run.sh --gtest_output="xml:$OUT/screens.xml"
 

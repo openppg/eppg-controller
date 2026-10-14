@@ -38,6 +38,10 @@ def git(*args):
         return ""
 
 
+def read_text(path):
+    return open(path).read().strip() if os.path.exists(path) else ""
+
+
 def bmp_to_png(path):
     """24/32-bit uncompressed BMP -> PNG bytes (stdlib only)."""
     data = open(path, "rb").read()
@@ -183,10 +187,10 @@ def main():
             "id": f"{commit}-{now.strftime('%Y%m%dT%H%M%SZ')}",
             "commit": commit,
             "subject": git("log", "-1", "--format=%s"),
-            "branch": git("rev-parse", "--abbrev-ref", "HEAD"),
+            "branch": read_text(os.path.join(out, "branch.txt")) or git("rev-parse", "--abbrev-ref", "HEAD"),
             "build": int(git("rev-list", "--count", "HEAD") or 0),
             "version": f"{major}.{minor}",
-            "dirty": bool(git("status", "--porcelain", "--untracked-files=no")),
+            "dirty": bool(read_text(os.path.join(out, "dirty.txt"))),
             "finishedAt": now.isoformat(timespec="seconds"),
             "host": socket.gethostname(),
         },

@@ -19,6 +19,7 @@ if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
   echo "Note: uncommitted changes are not tested; this runs commit $(git rev-parse --short HEAD)."
 fi
 
+BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 BUNDLE="$(mktemp -d)/rc.bundle"
 git bundle create "$BUNDLE" HEAD >/dev/null 2>&1
 "$SSH" workbox "mkdir -p ~/incoming ~/logs"
@@ -35,7 +36,7 @@ git fetch -q ~/incoming/rc-test.bundle HEAD
 git checkout -q -f FETCH_HEAD
 git clean -q -fdx -e .pio -e build-screenshot
 echo "Testing \$(git log -1 --format='%h %s') on workbox"
-systemd-run --user --scope -q -p MemoryMax=6G bash tools/rc_test/run_rc_tests.sh 2>&1 | tee ~/logs/rc-test.log
+RC_BRANCH=$BRANCH systemd-run --user --scope -q -p MemoryMax=6G bash tools/rc_test/run_rc_tests.sh 2>&1 | tee ~/logs/rc-test.log
 EOF
 
 mkdir -p .rc-results

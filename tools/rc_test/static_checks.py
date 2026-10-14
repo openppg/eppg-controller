@@ -193,13 +193,18 @@ def main():
         callers == ["src/sp140/system_monitors.cpp"], "temperatureRead() in: " + ", ".join(callers))
 
     main_src = sources.get(os.path.join(root, "src/sp140/main.cpp"), "")
-    baro = sorted({rel(p) for p, s in sources.items() if re.search(r"\bsampleBarometer\s*\(", s)
-                   and not p.endswith("altimeter.cpp")})
     task_body = function_body(main_src, "barometerTask") or ""
+    main_rest = main_src.replace(task_body, "") if task_body else main_src
+    baro = sorted({rel(p) for p, s in sources.items() if p.endswith(".cpp")
+                   and not p.endswith("altimeter.cpp")
+                   and re.search(r"\bsampleBarometer\s*\(", s)})
+    stray = "sampleBarometer" in main_rest
     add("static.baro_single_reader", "Barometer sampled only by barometerTask and factory QC (#126)",
-        "sampleBarometer" in task_body and set(baro) <= {"src/sp140/main.cpp",
-                                                         "src/sp140/first_boot_qc.cpp"},
-        "sampleBarometer() called from: " + ", ".join(baro))
+        "sampleBarometer" in task_body and not stray
+        and set(baro) <= {"src/sp140/main.cpp", "src/sp140/first_boot_qc.cpp"},
+        "sampleBarometer() called from: " + ", ".join(baro)
+        + ("; main.cpp also calls it outside barometerTask" if stray else
+           "; in main.cpp only inside barometerTask"))
 
     # FreeRTOS task entry points must never return: with -O2 ESP-IDF 4.4 drops
     # the task-function wrapper that would otherwise catch it.
@@ -212,7 +217,6 @@ def main():
             bad.append(f"{t} (body not found)")
             continue
         loops = re.search(r"for\s*\(\s*;\s*;\s*\)|while\s*\(\s*(true|1)\s*\)", body)
-        tail = body.rstrip().rstrip("}").rstrip()
         if not loops and "vTaskDelete" not in body:
             bad.append(t)
         elif re.search(r"\breturn\s*;", body) and "vTaskDelete" not in body:
