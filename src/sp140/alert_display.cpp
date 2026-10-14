@@ -1,4 +1,5 @@
 #include "../../inc/sp140/alert_display.h"
+#include "../../inc/sp140/time_utils.h"
 #include <Arduino.h>
 #include <freertos/queue.h>
 #include <map>
@@ -57,7 +58,7 @@ void initAlertDisplay() {
 
 void sendAlertEvent(SensorID id, AlertLevel level) {
   if (!alertEventQueue) return;
-  AlertEvent ev{ id, level, millis() };
+  AlertEvent ev{ id, level, timeMillis() };
   xQueueSend(alertEventQueue, &ev, 0);  // best-effort, drop if full
 }
 
@@ -110,7 +111,7 @@ static void alertAggregationTask(void* parameter) {
     // Handle rotation every 2s if either list not empty
     bool hasAlerts = !g_critList.empty() || !g_warnList.empty();
     if (hasAlerts) {
-      unsigned long now = millis();
+      unsigned long now = timeMillis();
       if (now - g_lastRotateMs >= 2000) {
         g_lastRotateMs = now;
 
@@ -187,7 +188,7 @@ static void recalcCountsAndPublish() {
       g_warnList = newWarnList;
       g_warnRotateIdx = 0;
     }
-    g_lastRotateMs = millis();
+    g_lastRotateMs = timeMillis();
 
     USBSerial.printf("[Alert] Sending UI update: crit=%d warn=%d critActive=%d\n",
                      counts.criticalCount, counts.warningCount, (counts.criticalCount > 0));

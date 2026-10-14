@@ -1,6 +1,7 @@
 #include "sp140/system_monitors.h"
 #include "sp140/monitor_config.h"
 #include "sp140/altimeter.h"
+#include "sp140/time_utils.h"
 #include <Arduino.h>
 #include <atomic>
 
@@ -19,11 +20,11 @@ static const unsigned long CPU_TEMP_READ_INTERVAL = 1000;  // Read every 1 secon
 
 void primeCpuTemperatureCache() {
   cachedCpuTemp.store(temperatureRead(), std::memory_order_relaxed);
-  lastCpuTempRead = millis();
+  lastCpuTempRead = timeMillis();
 }
 
 float refreshCpuTemperature() {
-  unsigned long now = millis();
+  unsigned long now = timeMillis();
   if (now - lastCpuTempRead >= CPU_TEMP_READ_INTERVAL) {
     cachedCpuTemp.store(temperatureRead(), std::memory_order_relaxed);
     lastCpuTempRead = now;
