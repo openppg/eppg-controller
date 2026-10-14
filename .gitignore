@@ -6,3 +6,6 @@ diagnostics-logs/
 build-screenshot/
 test/test_screenshots/output/*.bmp
 test/test_screenshots/output/png/
+
+# Local executor plans (not tracked)
+plans/

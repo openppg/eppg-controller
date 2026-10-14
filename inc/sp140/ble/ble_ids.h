@@ -41,6 +41,13 @@
 // [0x02]=DATA[offset u16][bytes]. See ESC-Config-Relay-Design.md.
 #define ESC_RELAY_NOTIFY_UUID "E5C0C0DE-0006-4A5C-9B21-7E5C0F1A2B30"
 
+// Factory QC record fetch (paged, same pattern as ESC_PARAM_DATA): app writes
+// [offset u32 LE], then reads back up to ~240 bytes of the stored QC JSON
+// record from that offset. Empty read = no record / past end. The app syncs
+// this silently on connect and uploads to the cloud (fleet QC/cal data).
+// See FIRST_BOOT_QC.md.
+#define QC_RECORD_UUID "E5C0C0DE-0007-4A5C-9B21-7E5C0F1A2B30"
+
 // Device info service
 #define DEVICE_INFO_SERVICE_UUID "180A"
 #define MANUFACTURER_NAME_UUID "2A29"
