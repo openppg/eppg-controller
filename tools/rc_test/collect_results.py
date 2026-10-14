@@ -82,8 +82,11 @@ def junit_tests(path):
     if not os.path.exists(path):
         return tests
     root = ET.parse(path).getroot()
-    for case in root.iter("testcase"):
-        suite = case.get("classname") or ""
+    # PlatformIO names a suite "<env>:<test dir>"; gtest names it after the
+    # fixture. Either way that's the group shown on the page.
+    cases = [(ts.get("name", "").split(":")[-1], case)
+             for ts in root.iter("testsuite") for case in ts.findall("testcase")]
+    for suite, case in cases:
         name = case.get("name") or ""
         fail = case.find("failure")
         if fail is None:
@@ -96,7 +99,7 @@ def junit_tests(path):
         tests.append({
             "id": f"{suite}.{name}".strip("."),
             "name": name,
-            "group": suite.split(".")[-1].split("/")[-1],
+            "group": suite,
             "status": status,
             "detail": detail,
             "secs": float(case.get("time") or 0),
