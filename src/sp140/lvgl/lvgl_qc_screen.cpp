@@ -149,7 +149,7 @@ void setupQcScreen(bool darkMode) {
 
   banner_title = lv_label_create(banner_view);
   lv_label_set_text(banner_title, "");
-  lv_obj_set_style_text_font(banner_title, &montserrat_hinted_28, 0);
+  lv_obj_set_style_text_font(banner_title, &montserrat_hinted_24, 0);
   lv_obj_set_style_text_color(banner_title, lv_color_white(), 0);
   lv_obj_align(banner_title, LV_ALIGN_CENTER, 0, -18);
 
