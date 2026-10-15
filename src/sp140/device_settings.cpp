@@ -363,6 +363,28 @@ void poll_serial_commands() {
 }
 
 /**
+ * Write a whole buffer to USBSerial, retrying short writes instead of
+ * dropping bytes. Gives up if the host stops draining for ~250 ms so a
+ * vanished host can't stall the caller.
+ */
+static void writeSerialLine(const uint8_t* data, size_t length) {
+  size_t offset = 0;
+  unsigned long lastProgressMs = millis();
+  while (offset < length) {
+    const size_t written = USBSerial.write(data + offset, length - offset);
+    if (written > 0) {
+      offset += written;
+      lastProgressMs = millis();
+      continue;
+    }
+    if (millis() - lastProgressMs > 250) {
+      return;
+    }
+    delay(1);
+  }
+}
+
+/**
  * Send device data as JSON over Serial
  * Contains current device settings and state
  */
@@ -381,9 +403,15 @@ void send_device_data() {
   doc["sea_p"] = deviceData.sea_pressure;
   doc["thm"] = deviceData.theme;
 
-  // Send the JSON document over the USBSerial connection
-  serializeJson(doc, USBSerial);
-  USBSerial.println();  // Add newline for better readability
+  // Serialize to a buffer and send the whole line with one write loop.
+  // serializeJson(doc, USBSerial) writes in many small pieces; when the USB
+  // TX buffer is busy (e.g. another task's log line) a write can return 0
+  // and that byte was silently dropped, corrupting the JSON for the host.
+  char json[256];
+  size_t len = serializeJson(doc, json, sizeof(json) - 2);
+  json[len++] = '\r';
+  json[len++] = '\n';
+  writeSerialLine(reinterpret_cast<const uint8_t*>(json), len);
 }
 
 /**
