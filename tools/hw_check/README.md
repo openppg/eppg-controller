@@ -87,6 +87,7 @@ CI runs both in the **Hardware Check Tool** job.
 
 | Check | How | Fails when |
 |---|---|---|
+| `serial.link` | every serial request | the unit stops answering, or answers with a damaged reply (bytes lost, keys missing). A damaged reply is a firmware fault and isn't retried around. |
 | `fw.version` | serial `sync` | arch isn't ESP32S3, or the version isn't `--expect-version` |
 | `diag.crash_history` | serial `diag_sync` | a retained boot record shows PANIC, a watchdog, BROWNOUT or a core dump |
 | `settings.sanitize` | writes out-of-range rotation, sea pressure, mode and theme | the unit stores them instead of falling back to defaults |

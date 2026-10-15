@@ -137,7 +137,7 @@ class HardwareCheck:
                 asyncio.run(self.run_ble_checks())
             self.check_partition_table()
         except LinkError as exc:
-            self.record("serial.link", FAIL, f"lost the controller: {exc}")
+            self.record("serial.link", FAIL, f"serial exchange failed: {exc}")
         finally:
             self.serial.close()
 
@@ -244,9 +244,14 @@ class HardwareCheck:
 
     def restore_settings(self, original: dict) -> None:
         try:
-            problems = protocol.settings_mismatches(original, self.write_settings(original))
+            try:
+                reply = self.write_settings(original)
+            except LinkError:
+                reply = self.sync()  # the write may have landed even if its echo was lost
+            problems = protocol.settings_mismatches(original, reply)
         except LinkError as exc:
-            self.record("settings.restore", FAIL, f"could not restore the unit's settings: {exc}", original=original)
+            self.record("settings.restore", FAIL, f"could not confirm the unit's settings were restored: {exc}",
+                        original=original)
             return
         self.record("settings.restore", FAIL if problems else PASS,
                     "; ".join(problems) if problems else "restored the unit's original settings",

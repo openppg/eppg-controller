@@ -67,7 +67,18 @@ def parse_json_line(line: str) -> Optional[dict]:
 
 
 def is_sync_response(obj: dict) -> bool:
-    return "mj_v" in obj and "mi_v" in obj
+    # Require every key: a reply that lost bytes can still parse as JSON.
+    return all(key in obj for key in SYNC_KEYS)
+
+
+def looks_like_broken_reply(line: str, obj: Optional[dict]) -> bool:
+    """A line that started a JSON reply but is not a complete, known one."""
+    if "{" not in line:
+        return False
+    if obj is None:
+        return True
+    # Parsed, but a sync reply with keys missing is damaged, not a different message.
+    return "mj_v" in obj and not is_sync_response(obj)
 
 
 def is_diag_response(obj: dict) -> bool:

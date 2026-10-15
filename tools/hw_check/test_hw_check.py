@@ -68,6 +68,7 @@ class DryRunTest(unittest.TestCase):
             "no-bms": "telemetry.bms",
             "qc-failed": "qc.stored_record",
             "armed": "state.disarmed",
+            "garbled-sync": "serial.link",
         }
         self.assertEqual(set(cases), set(fake_controller.FAULTS))
         for fault, check in cases.items():
@@ -75,6 +76,11 @@ class DryRunTest(unittest.TestCase):
                 code, results = dry_run("--fault", fault, "--expect-bms")
                 self.assertEqual(code, 1)
                 self.assertEqual(results[check]["status"], "FAIL", results[check]["detail"])
+
+    def test_garbled_reply_is_reported_as_garbled(self):
+        code, results = dry_run("--fault", "garbled-sync")
+        self.assertEqual(code, 1)
+        self.assertIn("garbled reply", results["serial.link"]["detail"])
 
     def test_missing_bms_is_skipped_unless_expected(self):
         code, results = dry_run("--fault", "no-bms")
@@ -101,6 +107,15 @@ class DryRunTest(unittest.TestCase):
 
 
 class ParsingTest(unittest.TestCase):
+    def test_damaged_sync_replies_are_not_accepted(self):
+        full = dict.fromkeys(protocol.SYNC_KEYS, 1)
+        partial = {k: v for k, v in full.items() if k != "prf"}
+        self.assertTrue(protocol.is_sync_response(full))
+        self.assertFalse(protocol.is_sync_response(partial))
+        self.assertTrue(protocol.looks_like_broken_reply('{"mj_v":8,"mi_v":1,"arch":""scr_rt":3', None))
+        self.assertTrue(protocol.looks_like_broken_reply("{}", partial))
+        self.assertFalse(protocol.looks_like_broken_reply("[FASTLINK] stats ok=0", None))
+
     def test_json_is_found_inside_log_noise(self):
         self.assertEqual(protocol.parse_json_line('junk {"mj_v":8,"mi_v":1} junk'), {"mj_v": 8, "mi_v": 1})
         self.assertIsNone(protocol.parse_json_line("Device data saved to Preferences"))

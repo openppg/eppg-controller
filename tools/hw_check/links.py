@@ -102,6 +102,7 @@ class SerialLink:
                 retries: int = 3) -> dict:
         """Send a JSON command and wait for the first JSON reply that `match`es."""
         per_try = timeout / retries
+        garbled: List[str] = []
         for _ in range(retries):
             self.send(payload)
             deadline = time.monotonic() + per_try
@@ -112,6 +113,13 @@ class SerialLink:
                 obj = protocol.parse_json_line(line)
                 if obj is not None and match(obj):
                     return obj
+                if protocol.looks_like_broken_reply(line, obj):
+                    garbled.append(line)
+        if garbled:
+            # The firmware answered but bytes were lost on the way. Report it
+            # as a fault rather than retrying until a clean copy slips through.
+            raise LinkError(f"garbled reply to {payload} ({len(garbled)} damaged line(s), "
+                            f"e.g. {len(garbled[-1])} bytes: {garbled[-1][:160]!r})")
         raise LinkError(f"no reply to {payload} within {timeout:.0f}s")
 
     def reboot_and_capture(self, reconnect_timeout: float, boot_timeout: float) -> List[str]:

@@ -32,6 +32,7 @@ FAULTS = {
     "no-bms": "BMS sends no telemetry",
     "qc-failed": "stored first-boot QC record failed the button check",
     "armed": "telemetry reports the unit ARMED",
+    "garbled-sync": "sync replies lose bytes on the way to the host",
 }
 
 DEFAULTS = {"screen_rot": 3, "sea_pressure": 1013.25, "metric_temp": True, "metric_alt": True,
@@ -155,7 +156,7 @@ class FakeController:
                 self.pending_qc = True
                 return ["QC rerun requested - rebooting into factory QC"], True
             if command == "sync":
-                return [json.dumps(self.sync())], False
+                return [self._sync_line()], False
             if command in ("diag_sync", "diag_clear"):
                 return [json.dumps(self.diag())], False
             settings = doc.get("settings")
@@ -164,7 +165,7 @@ class FakeController:
                     if key in settings:
                         self.settings[key] = settings[key]
                 self._sanitize()
-                return ["Device data saved to Preferences", json.dumps(self.sync())], False
+                return ["Device data saved to Preferences", self._sync_line()], False
         return [], False
 
     def _sanitize(self) -> None:
@@ -185,6 +186,13 @@ class FakeController:
         self.reset_reason, self.planned = reason, planned
         if "settings-not-persisted" in self.faults:
             self.settings = dict(DEFAULTS)
+
+    def _sync_line(self) -> str:
+        line = json.dumps(self.sync(), separators=(",", ":"))
+        if "garbled-sync" in self.faults:
+            # What the 8.1 RC firmware did on real hardware: bytes dropped mid-reply.
+            line = line[:20] + line[24:60] + line[63:]
+        return line
 
     def sync(self) -> dict:
         s = self.settings
