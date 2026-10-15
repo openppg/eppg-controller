@@ -50,6 +50,10 @@ class SerialLink:
                     link.dtr = False
                     link.rts = False
                     link.open()
+                    if "://" not in port:
+                        # The ESP32-S3 USB Serial/JTAG port can mangle the first
+                        # reply right after an open; let it settle first.
+                        time.sleep(0.5)
                     self.serial = link
                     self.port_name = port
                     self.buffer.clear()
@@ -126,8 +130,9 @@ class SerialLink:
         """Send `reboot`, reopen the port when the unit re-enumerates, and return
         the boot log lines seen up to "=== Boot complete ===" (or the timeout).
 
-        The first lines of the boot log are often printed before the host has
-        reopened the port and are lost; callers must not require them.
+        On the ESP32-S3 USB Serial/JTAG port a software reboot usually keeps the
+        port open and the whole boot log arrives, but callers must not require
+        any particular line: after a hard reset early lines can be missed.
         """
         self.send('{"command":"reboot"}')
         captured: List[str] = []
