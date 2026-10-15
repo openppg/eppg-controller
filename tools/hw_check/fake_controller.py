@@ -17,6 +17,7 @@ import json
 import socket
 import struct
 import threading
+import time
 from typing import Dict, Iterable, List, Optional
 
 import protocol
@@ -108,6 +109,10 @@ class FakeController:
                 continue
             with conn:
                 conn.settimeout(0.1)
+                if pending_boot_log:
+                    # pyserial's socket:// open() discards whatever has already
+                    # arrived, so give it time to finish, as a real boot would.
+                    time.sleep(0.5)
                 for line in pending_boot_log:
                     conn.sendall(line.encode() + b"\r\n")
                 pending_boot_log = []
