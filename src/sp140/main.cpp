@@ -37,6 +37,7 @@
 #include "../../inc/sp140/lvgl/lvgl_core.h"
 #include "../../inc/sp140/lvgl/lvgl_main_screen.h"
 #include "../../inc/sp140/lvgl/lvgl_updates.h"
+#include "sp140/lvgl/lvgl_ota.h"
 #include "../../inc/sp140/simple_monitor.h"
 #include "../../inc/sp140/telemetry_hub.h"
 
@@ -157,6 +158,10 @@ void changeDeviceState(DeviceState newState) {
   // blocking other tasks that read currentState. BLE notify is handled in
   // bleNotifyTask.
   if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
+    if (newState != DISARMED && otaBlocksInput()) {
+      xSemaphoreGive(stateMutex);
+      return;
+    }
     oldState = currentState;
     currentState = newState;
 
@@ -369,6 +374,34 @@ void refreshDisplay() {
   // Guard against calls before main_screen is set up
   if (main_screen == NULL) {
     return;
+  }
+
+  static OtaScreen otaScreen;
+  static uint32_t lastOtaPaintMs = 0;
+  OtaStatus ota;
+  const uint32_t now = timeMillis();
+  const bool showOta = readOtaStatus(ota) && otaStatusVisible(ota, now);
+  if (showOta || otaScreen.screen) {
+    if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(40)) != pdTRUE) return;
+    if (showOta) {
+      const bool phaseChanged = !otaScreen.screen || otaScreen.phase != ota.phase ||
+                                otaScreen.error != ota.error;
+      if (phaseChanged || now - lastOtaPaintMs >= 250) {
+        showOtaScreen(otaScreen, ota, deviceData.theme == 1);
+        lastOtaPaintMs = now;
+      }
+      updateLvgl();
+      // Preparation/verification must reach the panel before flash work; the
+      // bounded producer wait cannot depend on the OTA mutex from this task.
+      if (ota.phase != OtaPhase::Receiving) {
+        lv_refr_now(main_display);
+        if (!lvglNeedsRepaint()) acknowledgeOtaRendered(ota.revision);
+      }
+    } else {
+      hideOtaScreen(otaScreen, main_screen);
+    }
+    xSemaphoreGive(lvglMutex);
+    if (showOta) return;
   }
 
   // Read barometer OUTSIDE lvglMutex. uiTask is the designated sole I2C
@@ -823,23 +856,26 @@ void setup() {
   // =========================================================================
   USBSerial.println("Starting external interfaces...");
 
-  // Start BLE advertising (now safe - UI is ready, tasks are running)
-  restartBLEAdvertising();
-  USBSerial.println("BLE advertising started");
-
   // Enable sensor monitoring
   enableMonitoring();
 
   // Check if this is first boot after OTA update and validate if needed
   esp_ota_img_states_t ota_state;
+  bool firmwareValid = true;
   if (esp_ota_get_state_partition(running, &ota_state) == ESP_OK) {
     if (ota_state == ESP_OTA_IMG_PENDING_VERIFY) {
       // First boot after OTA - if we made it this far, firmware is good
       USBSerial.println("OTA: First boot after update - validating firmware");
-      esp_ota_mark_app_valid_cancel_rollback();
-      USBSerial.println("OTA: Firmware marked valid - Rollback protection active");
+      firmwareValid = esp_ota_mark_app_valid_cancel_rollback() == ESP_OK;
+      USBSerial.println(firmwareValid ? "OTA: Firmware marked valid" :
+                                       "OTA: Firmware validation failed");
     }
   }
+  finishOtaBoot(firmwareValid);
+
+  // Publish the boot result before another app can start an update.
+  restartBLEAdvertising();
+  USBSerial.println("BLE advertising started");
 
   USBSerial.println("=== Boot complete ===");
 }
@@ -856,10 +892,24 @@ void buttonHandlerTask(void *parameter) {
   bool lastButtonState = HIGH;
   bool buttonState;
   bool pairingHoldHandled = false;
+  bool consumeUpdateRelease = false;
 
   while (true) {
     buttonState = digitalRead(board_config.button_top);
     uint32_t currentTime = timeMillis();
+
+    // Consume all gestures during the update, including a held button's final
+    // release. No stale click/hold may arm, change mode, or clear BLE bonds.
+    if (otaBlocksInput() || consumeUpdateRelease) {
+      consumeUpdateRelease = buttonState == LOW;
+      armSequenceStarted = false;
+      buttonPressed = false;
+      pairingHoldHandled = false;
+      lastButtonState = buttonState;
+      lastDebounceTime = currentTime;
+      vTaskDelay(pdMS_TO_TICKS(10));
+      continue;
+    }
 
     // Debounce
     if ((currentTime - lastDebounceTime) > BUTTON_DEBOUNCE_TIME_MS) {

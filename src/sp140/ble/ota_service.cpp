@@ -2,10 +2,13 @@
 
 #include <Arduino.h>
 #include "sp140/time_utils.h"
+#include <Preferences.h>
+#include <atomic>
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "freertos/queue.h"
 #include "sp140/ble/ble_core.h"
 #include "sp140/ble/ble_ids.h"
 #include "sp140/device_state.h"
@@ -13,6 +16,7 @@
 
 // Access global state to block OTA when ARMED
 extern volatile DeviceState currentState;
+extern SemaphoreHandle_t stateMutex;
 
 namespace {
 
@@ -54,7 +58,40 @@ const uint16_t ACK_ERR_SECTOR = 0x0002;
 const uint16_t ACK_ERR_LEN = 0x0003;
 
 // State
-volatile bool otaInProgress = false;
+std::atomic<bool> otaInProgress{false};
+QueueHandle_t otaStatusQueue = nullptr;
+OtaStatus otaStatus;
+std::atomic<uint32_t> renderedRevision{0};
+
+// Called under otaStateMutex. Queue copies are independent of flash writes, so
+// the UI never waits on this mutex while holding lvglMutex / the SPI bus.
+void publishStatus(OtaPhase phase, OtaError error = OtaError::None) {
+    otaStatus.phase = phase;
+    otaStatus.error = error;
+    otaStatus.changedAtMs = timeMillis();
+    ++otaStatus.revision;
+    if (otaStatusQueue) xQueueOverwrite(otaStatusQueue, &otaStatus);
+}
+
+void waitForStatusFrame() {
+    const uint32_t started = timeMillis();
+    while (renderedRevision.load() != otaStatus.revision &&
+           timeMillis() - started < 250) {
+        timeDelay(10);
+    }
+}
+
+// One receipt per completed installation, never per progress packet. Store the
+// target slot so rollback cannot be mistaken for a successful new-firmware boot.
+void saveBootReceipt(uint32_t address) {
+    Preferences prefs;
+    if (prefs.begin("ota-ui", false)) {
+        if (prefs.putUInt("target", address) != sizeof(address)) {
+            USBSerial.println("OTA: Could not save update-screen boot receipt");
+        }
+        prefs.end();
+    }
+}
 volatile size_t imageTotalLen = 0;
 esp_ota_handle_t updateHandle = 0;
 const esp_partition_t* updatePartition = nullptr;
@@ -147,7 +184,7 @@ void sendCommandResponse(uint16_t ackId, uint16_t status) {
 }
 
 // Forward declaration
-void abortOtaImpl();
+void abortOtaImpl(OtaError error = OtaError::None);
 
 void handleCmdStart(const uint8_t* data) {
     USBSerial.println("OTA: CMD_START");
@@ -161,18 +198,33 @@ void handleCmdStart(const uint8_t* data) {
         abortOtaImpl();
     }
 
+    if (!otaStatusQueue || !otaStateMutex || !stateMutex) {
+        sendCommandResponse(CMD_START, 0x0001);
+        return;
+    }
+    // Serialize acceptance with changeDeviceState so preparation cannot race
+    // the final arm transition on the button task.
+    if (xSemaphoreTake(stateMutex, portMAX_DELAY) != pdTRUE) return;
     if (currentState == ARMED || currentState == ARMED_CRUISING) {
+        xSemaphoreGive(stateMutex);
         USBSerial.println("OTA Blocked: Device ARMED");
         sendCommandResponse(CMD_START, 0x0001);
         return;
     }
 
-    // Clean slate before acquiring new partition/handle
+    // Cover partition preparation as well as the transfer with the interlock.
+    otaInProgress = true;
+    xSemaphoreGive(stateMutex);
     resetOtaState();
+    otaStatus.written = 0;
+    otaStatus.total = 0;
+    publishStatus(OtaPhase::Preparing);
+    waitForStatusFrame();
 
     updatePartition = esp_ota_get_next_update_partition(nullptr);
     if (!updatePartition) {
         USBSerial.println("OTA Error: No partition");
+        abortOtaImpl(OtaError::NoPartition);
         sendCommandResponse(CMD_START, 0x0001);
         return;
     }
@@ -181,8 +233,9 @@ void handleCmdStart(const uint8_t* data) {
                       | (static_cast<uint32_t>(data[3]) << 8)
                       | (static_cast<uint32_t>(data[4]) << 16)
                       | (static_cast<uint32_t>(data[5]) << 24);
-    if (imageLen > updatePartition->size) {
-        USBSerial.printf("OTA Error: Image size %u > partition %u\n", imageLen, updatePartition->size);
+    if (imageLen == 0 || imageLen > updatePartition->size) {
+        USBSerial.printf("OTA Error: Invalid image size %u (partition %u)\n", imageLen, updatePartition->size);
+        abortOtaImpl(OtaError::InvalidSize);
         sendCommandResponse(CMD_START, 0x0001);
         return;
     }
@@ -190,12 +243,16 @@ void handleCmdStart(const uint8_t* data) {
     esp_err_t err = esp_ota_begin(updatePartition, imageLen, &updateHandle);
     if (err != ESP_OK) {
         USBSerial.printf("OTA Error: Begin failed 0x%x\n", err);
+        updateHandle = 0;
+        abortOtaImpl(OtaError::Begin);
         sendCommandResponse(CMD_START, 0x0001);
         return;
     }
 
     otaInProgress = true;
     imageTotalLen = imageLen;
+    otaStatus.total = imageLen;
+    publishStatus(OtaPhase::Receiving);
     lastOtaActivityMs = timeMillis();
     requestFastConnParams();
     sendCommandResponse(CMD_START, 0x0000);  // Accept
@@ -204,6 +261,7 @@ void handleCmdStart(const uint8_t* data) {
 class OtaCommandCallback : public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic* pChar, NimBLEConnInfo& connInfo) override {
         OtaStateLock lock(portMAX_DELAY);  // serialize vs checkOtaTimeout (other task)
+        if (!lock.held()) return;
         std::string value = pChar->getValue();
         // Command Packet: ID(2) + Payload(16) + CRC(2) = 20 bytes
         if (value.length() < 20) {
@@ -234,25 +292,35 @@ class OtaCommandCallback : public NimBLECharacteristicCallbacks {
                 if (receivedBytes != imageTotalLen) {
                     USBSerial.printf("OTA Error: Size Mismatch Rx:%u Exp:%u\n", receivedBytes, imageTotalLen);
                     sendCommandResponse(CMD_END, 0x0001);  // Fail
-                    abortOtaImpl();
+                    abortOtaImpl(OtaError::SizeMismatch);
                     return;
                 }
 
-                if (esp_ota_end(updateHandle) == ESP_OK) {
+                publishStatus(OtaPhase::Verifying);
+                waitForStatusFrame();
+                const esp_err_t endResult = esp_ota_end(updateHandle);
+                // esp_ota_end releases the handle even when validation fails.
+                updateHandle = 0;
+                OtaError failure = OtaError::Verification;
+                if (endResult == ESP_OK) {
                     if (esp_ota_set_boot_partition(updatePartition) == ESP_OK) {
                         USBSerial.println("OTA Success. Restarting...");
+                        saveBootReceipt(updatePartition->address);
+                        publishStatus(OtaPhase::Restarting);
                         sendCommandResponse(CMD_END, 0x0000);  // Success
+                        waitForStatusFrame();
                         timeDelay(1000);  // Allow BLE flush
                         ESP.restart();
                         return;
                     } else {
                         USBSerial.println("OTA Error: Set Boot Partition Failed");
+                        failure = OtaError::BootPartition;
                     }
                 } else {
                     USBSerial.println("OTA Error: OTA End Failed");
                 }
                 sendCommandResponse(CMD_END, 0x0001);  // Fail
-                abortOtaImpl();
+                abortOtaImpl(failure);
             } else {
                 sendCommandResponse(CMD_END, 0x0001);  // Not in progress
             }
@@ -263,6 +331,7 @@ class OtaCommandCallback : public NimBLECharacteristicCallbacks {
 class OtaDataCallback : public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic* pChar, NimBLEConnInfo& connInfo) override {
         OtaStateLock lock(portMAX_DELAY);  // serialize vs checkOtaTimeout (other task)
+        if (!lock.held()) return;
         if (!otaInProgress) return;
 
         std::string valStr = pChar->getValue();
@@ -314,6 +383,8 @@ class OtaDataCallback : public NimBLECharacteristicCallbacks {
                 esp_err_t err = esp_ota_write(updateHandle, sectorBuffer, sectorBufferLen);
                 if (err == ESP_OK) {
                     receivedBytes += sectorBufferLen;
+                    otaStatus.written = receivedBytes;
+                    publishStatus(OtaPhase::Receiving);
                     sendAck(sector, ACK_SUCCESS);
                     USBSerial.printf("OTA: Sector %u written (%u bytes total)\n",
                                      static_cast<unsigned int>(currentSectorIndex),
@@ -326,7 +397,7 @@ class OtaDataCallback : public NimBLECharacteristicCallbacks {
                     // Must abort: the OTA handle's internal write offset may
                     // have advanced partially, so retrying this sector would
                     // write data at the wrong position and corrupt the image.
-                    abortOtaImpl();
+                    abortOtaImpl(OtaError::Write);
                 }
             } else {
                 USBSerial.printf("OTA Error: CRC fail exp 0x%04X got 0x%04X\n",
@@ -349,7 +420,9 @@ class OtaDataCallback : public NimBLECharacteristicCallbacks {
     }
 };
 
-void abortOtaImpl() {
+void abortOtaImpl(OtaError error) {
+    // Keep the last progress/error snapshot after resetting the transport.
+    if (error != OtaError::None) publishStatus(OtaPhase::Failed, error);
     if (otaInProgress) {
         if (updateHandle) esp_ota_abort(updateHandle);
         otaInProgress = false;
@@ -364,10 +437,40 @@ static OtaDataCallback dataCallback;
 
 }  // namespace
 
-void abortOta() {
-    // Called from the BLE disconnect callback (host task); lock vs checkOtaTimeout.
+void abortOta(OtaError error) {
+    // A disconnect during the acknowledged restart is expected, not a failure.
     OtaStateLock lock(portMAX_DELAY);
-    abortOtaImpl();
+    if (!lock.held() || !otaInProgress || otaStatus.phase == OtaPhase::Restarting) return;
+    abortOtaImpl(error);
+}
+
+bool readOtaStatus(OtaStatus& status) {
+    return otaStatusQueue && xQueuePeek(otaStatusQueue, &status, 0) == pdTRUE;
+}
+
+void acknowledgeOtaRendered(uint32_t revision) {
+    renderedRevision.store(revision);
+}
+
+bool otaBlocksInput() {
+    OtaStatus status;
+    return isOtaInProgress() || (readOtaStatus(status) && otaStatusVisible(status, timeMillis()));
+}
+
+void finishOtaBoot(bool firmwareValid) {
+    OtaStateLock lock(portMAX_DELAY);
+    if (!lock.held()) return;
+    Preferences prefs;
+    if (!prefs.begin("ota-ui", false)) return;
+    const uint32_t target = prefs.getUInt("target", 0);
+    if (target != 0) {
+        prefs.remove("target");
+        const esp_partition_t* running = esp_ota_get_running_partition();
+        const bool installed = firmwareValid && running && running->address == target;
+        publishStatus(installed ? OtaPhase::Complete : OtaPhase::Failed,
+                      installed ? OtaError::None : firmwareValid ? OtaError::RolledBack : OtaError::Verification);
+    }
+    prefs.end();
 }
 
 void checkOtaTimeout() {
@@ -377,7 +480,7 @@ void checkOtaTimeout() {
     if (!lock.held()) return;
     if (otaInProgress && (timeMillis() - lastOtaActivityMs > OTA_TIMEOUT_MS)) {
         USBSerial.println("OTA: Idle timeout, aborting.");
-        abortOtaImpl();
+        abortOtaImpl(OtaError::Timeout);
     }
 }
 
@@ -389,6 +492,8 @@ void initOtaBleService(NimBLEServer* pServer) {
     if (otaStateMutex == nullptr) {
         otaStateMutex = xSemaphoreCreateMutex();
     }
+
+    if (!otaStatusQueue) otaStatusQueue = xQueueCreate(1, sizeof(OtaStatus));
 
     NimBLEService* pService = pServer->createService(OTA_SERVICE_UUID);
 

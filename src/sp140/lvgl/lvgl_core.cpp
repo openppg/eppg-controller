@@ -134,6 +134,10 @@ void updateLvgl() {
   }
 }
 
+bool lvglNeedsRepaint() {
+  return flushSkipped;
+}
+
 void displayLvglSplash(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
   USBSerial.println("Displaying LVGL splash screen");
   createLvglSplashScreen(deviceData);

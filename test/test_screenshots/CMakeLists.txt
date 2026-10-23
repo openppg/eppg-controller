@@ -59,6 +59,7 @@ target_compile_options(lvgl PRIVATE -w)
 
 # Project UI source files (the actual code under test)
 set(UI_SOURCES
+  ${PROJECT_ROOT}/src/sp140/lvgl/lvgl_ota.cpp
   ${PROJECT_ROOT}/src/sp140/lvgl/lvgl_splash.cpp
   ${PROJECT_ROOT}/src/sp140/lvgl/lvgl_main_screen.cpp
   ${PROJECT_ROOT}/src/sp140/lvgl/lvgl_updates.cpp
@@ -105,3 +106,9 @@ target_link_libraries(screenshot_tests PRIVATE
 
 # Suppress warnings in UI sources (they may use Arduino idioms)
 set_source_files_properties(${UI_SOURCES} PROPERTIES COMPILE_FLAGS "-w")
+
+# Host coverage of the production BLE OTA callbacks and wire protocol. Keep the
+# flash/BLE fakes separate from the display emulator's stubs.
+add_executable(ota_service_tests ../test_ota_service/test_ota_service.cpp)
+target_include_directories(ota_service_tests PRIVATE ../test_ota_service/stubs ${PROJECT_ROOT}/inc)
+target_link_libraries(ota_service_tests PRIVATE gtest gtest_main)
