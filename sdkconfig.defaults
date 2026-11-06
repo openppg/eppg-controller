@@ -6,7 +6,8 @@ CONFIG_AUTOSTART_ARDUINO=y
 CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
 CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
 CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
-CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240=y
+# IDF 5.x name (was CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240 on IDF 4.4).
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
 CONFIG_BT_ENABLED=y
 CONFIG_BT_CONTROLLER_ENABLED=y
 CONFIG_BT_BLUEDROID_ENABLED=y
@@ -20,7 +21,7 @@ CONFIG_COMPILER_CXX_EXCEPTIONS=y
 # bootloader half can never be delivered over OTA.
 CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 # Reboot (not just warn) if the watchdog-fed control loop stalls. The firmware
-# already does this via a runtime esp_task_wdt_init(.., panic=true) call; setting
+# already does this via a runtime esp_task_wdt_reconfigure/init(panic=true) call; setting
 # it here makes the safety baseline hold even if that runtime call is ever moved.
 CONFIG_ESP_TASK_WDT_PANIC=y
 # Capture an ELF core dump to the (already-reserved) coredump flash partition on
@@ -36,3 +37,25 @@ CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF=y
 # still reboots via its own esp_task_wdt_add subscription.
 CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0=n
 CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1=n
+# ---------------------------------------------------------------------------
+# Non-defaults that previously lived only in the committed
+# sdkconfig.OpenPPG-CESP32S3-CAN-SP140 (not in this file). Listed explicitly so
+# they survive a regeneration (e.g. the IDF 4.4 -> 5.5 platform move) and are
+# reviewable here.
+# ---------------------------------------------------------------------------
+# ESP-IDF log level: ERROR only (IDF default is INFO). Keeps the USB console
+# quiet and saves flash for format strings; max level follows the default.
+CONFIG_LOG_DEFAULT_LEVEL_ERROR=y
+CONFIG_LOG_MAXIMUM_EQUALS_DEFAULT=y
+# mbedTLS options that were enabled in the committed config (both default off).
+CONFIG_MBEDTLS_CMAC_C=y
+CONFIG_MBEDTLS_ECP_RESTARTABLE=y
+# Partition table: the 8 MB dual-OTA + coredump layout (matches
+# board_build.partitions in platformio.ini).
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="default_8MB.csv"
+CONFIG_PARTITION_TABLE_FILENAME="default_8MB.csv"
+# IPC task stack: keep the IDF 4.4 size (1536). IDF 5.x lowered the default to
+# 1280; keep the proven value rather than shrink a system task stack in the
+# same change as the platform move.
+CONFIG_ESP_IPC_TASK_STACK_SIZE=1536
