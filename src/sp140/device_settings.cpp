@@ -2,6 +2,7 @@
 // OpenPPG
 
 #include "Arduino.h"
+#include "sp140/usb_serial.h"
 #include <ArduinoJson.h>
 #include "sp140/device_settings.h"
 #include "sp140/globals.h"

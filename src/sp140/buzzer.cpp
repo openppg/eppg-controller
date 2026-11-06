@@ -1,4 +1,5 @@
 #include "sp140/buzzer.h"
+#include "sp140/usb_serial.h"
 
 #include <Arduino.h>
 
@@ -30,8 +31,13 @@ static bool buzzerInitialized = false;
  */
 bool initBuzz() {
   // Setup LEDC channel for buzzer
-  ledcSetup(BUZZER_PWM_CHANNEL, BUZZER_PWM_FREQUENCY, BUZZER_PWM_RESOLUTION);
-  ledcAttachPin(board_config.buzzer_pin, BUZZER_PWM_CHANNEL);
+  // Arduino core 3.x LEDC API: attach by pin on the same fixed channel.
+  // Tone/duty calls are addressed by pin.
+  // As before, init continues even if the attach fails.
+  if (!ledcAttachChannel(board_config.buzzer_pin, BUZZER_PWM_FREQUENCY,
+                         BUZZER_PWM_RESOLUTION, BUZZER_PWM_CHANNEL)) {
+    USBSerial.println("LEDC attach failed (buzzer)");
+  }
   buzzerInitialized = true;
   return true;
 }
@@ -43,9 +49,9 @@ void startTone(uint16_t frequency) {
   if (!buzzerInitialized || !ENABLE_BUZZ) return;
 
   // Change the frequency for this channel
-  ledcChangeFrequency(BUZZER_PWM_CHANNEL, frequency, BUZZER_PWM_RESOLUTION);
+  ledcChangeFrequency(board_config.buzzer_pin, frequency, BUZZER_PWM_RESOLUTION);
   // Set 50% duty cycle (square wave)
-  ledcWrite(BUZZER_PWM_CHANNEL, 128);
+  ledcWrite(board_config.buzzer_pin, 128);
 }
 
 /**
@@ -55,7 +61,7 @@ void stopTone() {
   if (!buzzerInitialized) return;
 
   // Set duty cycle to 0 to stop the tone
-  ledcWrite(BUZZER_PWM_CHANNEL, 0);
+  ledcWrite(board_config.buzzer_pin, 0);
 }
 
 /**

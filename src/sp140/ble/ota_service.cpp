@@ -1,4 +1,5 @@
 #include "sp140/ble/ota_service.h"
+#include "sp140/usb_serial.h"
 
 #include <Arduino.h>
 #include "sp140/time_utils.h"
@@ -182,7 +183,7 @@ void handleCmdStart(const uint8_t* data) {
                       | (static_cast<uint32_t>(data[4]) << 16)
                       | (static_cast<uint32_t>(data[5]) << 24);
     if (imageLen > updatePartition->size) {
-        USBSerial.printf("OTA Error: Image size %u > partition %u\n", imageLen, updatePartition->size);
+        USBSerial.printf("OTA Error: Image size %" PRIu32 " > partition %" PRIu32 "\n", imageLen, updatePartition->size);
         sendCommandResponse(CMD_START, 0x0001);
         return;
     }

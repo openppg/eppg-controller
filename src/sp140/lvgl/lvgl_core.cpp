@@ -1,5 +1,6 @@
 // Copyright 2020 <Zach Whitehead>
 #include "../../../inc/sp140/lvgl/lvgl_core.h"
+#include "sp140/usb_serial.h"
 #include "sp140/lvgl/lvgl_splash.h"
 #include "../../../inc/sp140/esp32s3-config.h"
 #include "../../../inc/sp140/time_utils.h"
