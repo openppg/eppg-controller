@@ -105,14 +105,16 @@ jobs:
       - name: Build ESP32S3
         run: platformio run -e OpenPPG-CESP32S3-CAN-SP140
       - name: Install esptool
-        run: pip install esptool
+        # esptool v5 (same major as the platform's tool-esptool): the CLI is
+        # `esptool` and commands/options use dashes (merge-bin, --flash-mode).
+        run: pip install "esptool>=5,<6"
       - name: Merge Binaries
         run: |
-          esptool.py --chip esp32s3 merge_bin \
+          esptool --chip esp32s3 merge-bin \
             -o .pio/build/OpenPPG-CESP32S3-CAN-SP140/full-controller-firmware.bin \
-            --flash_mode dio \
-            --flash_freq 80m \
-            --flash_size 8MB \
+            --flash-mode dio \
+            --flash-freq 80m \
+            --flash-size 8MB \
             0x0 .pio/build/OpenPPG-CESP32S3-CAN-SP140/bootloader.bin \
             0x8000 .pio/build/OpenPPG-CESP32S3-CAN-SP140/partitions.bin \
             0xe000 /home/runner/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin \
