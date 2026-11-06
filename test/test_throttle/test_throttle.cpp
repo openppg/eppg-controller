@@ -1,4 +1,4 @@
-// Use the native Arduino stubs provided by the repo and the real CircularBuffer
+// Use the native Arduino stubs provided by the repo and the first-party ring buffer
 #include <gtest/gtest.h>
 #include "../native_stubs/Arduino.h"
 

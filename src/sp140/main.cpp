@@ -12,8 +12,6 @@
 #include "../../inc/sp140/structs.h"  // data structs
 #include "../../inc/sp140/utilities.h"
 #include <Adafruit_NeoPixel.h>  // RGB LED
-#include <ArduinoJson.h>
-#include <CircularBuffer.hpp>  // smooth out readings
 #include <SPI.h>
 #include <Wire.h>
 

@@ -2,13 +2,13 @@
 #include "sp140/throttle.h"
 #include "sp140/shared-config.h"
 #include "sp140/esp32s3-config.h"
-#include <CircularBuffer.hpp>
+#include "sp140/ring_buffer.h"
 
 // Access board configuration from main unit
 extern HardwareConfig board_config;
 
 // Internal PWM smoothing buffer (8 samples)
-static CircularBuffer<int, 8> pwmBuffer;
+static FixedRingBuffer<int, 8> pwmBuffer;
 static volatile uint16_t last_pot_raw = 0;
 
 /**

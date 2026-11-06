@@ -1,6 +1,7 @@
 #include "sp140/altimeter.h"
 #include "sp140/structs.h"
 #include "sp140/time_utils.h"
+#include "sp140/ring_buffer.h"
 
 #include <Adafruit_BMP3XX.h>
 
@@ -15,7 +16,7 @@ struct AltitudeReading {
 };
 
 // Buffer to store altitude readings with timestamps
-CircularBuffer<AltitudeReading, VARIO_BUFFER_SIZE> altitudeBuffer;
+static FixedRingBuffer<AltitudeReading, VARIO_BUFFER_SIZE> altitudeBuffer;
 
 // Cached values — written by the designated I2C reader (uiTask via getAltitude),
 // safe to read from any task (32-bit float reads are atomic on Xtensa).
@@ -24,7 +25,7 @@ static float cachedBaroTemperature = __FLT_MIN__;
 static float cachedVerticalSpeed = 0.0f;
 
 // Recompute vertical speed from the altitude buffer. Must be called from the
-// same task that pushes to altitudeBuffer (uiTask) to avoid CircularBuffer races.
+// same task that pushes to altitudeBuffer (uiTask) to avoid ring buffer races.
 static float computeVerticalSpeed() {
   if (altitudeBuffer.size() < 2) {
     return 0.0f;

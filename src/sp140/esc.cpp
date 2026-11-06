@@ -3,7 +3,6 @@
 #include "sp140/esc_config_relay.h"
 #include "sp140/esc_flasher_relay.h"
 #include "sp140/time_utils.h"
-#include <CircularBuffer.hpp>
 
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 #include "driver/twai.h"
