@@ -2,13 +2,12 @@
 #define INC_SP140_LED_H_
 
 #include <Arduino.h>
-#include <Adafruit_NeoPixel.h>
+#include "sp140/led_color.h"
 
 // External declarations
-extern Adafruit_NeoPixel pixels;
 extern uint32_t led_color;
 
-// Set the color of the NeoPixel LED
+// Set the color of the NeoPixel LED (0x00RRGGBB)
 void setLEDColor(uint32_t color);
 
 // Set the state of LEDs (on/off)
