@@ -3,6 +3,7 @@
 
 #include <lvgl.h>
 #include "lvgl_core.h"
+#include "lvgl_fonts.h"
 
 // Screen page enumeration
 enum ScreenPage {
@@ -24,7 +25,6 @@ enum ScreenPage {
 // Dark-theme accents are intentionally subdued so white foreground text stays
 // readable whether it falls over a filled indicator or the black background.
 #define LVGL_DARK_GREEN lv_color_make(0, 112, 48)
-#define LVGL_DARK_YELLOW lv_color_make(128, 96, 0)
 #define LVGL_DARK_RED lv_color_make(176, 0, 32)
 #define LVGL_DARK_CYAN lv_color_make(0, 96, 104)
 #define LVGL_DARK_BLE_BLUE lv_color_make(64, 160, 255)

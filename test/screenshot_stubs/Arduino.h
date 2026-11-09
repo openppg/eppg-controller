@@ -65,10 +65,17 @@ static DummySerial Serial;
 inline uint8_t pgm_read_byte(const void* p) { return *reinterpret_cast<const uint8_t*>(p); }
 #endif
 
+#ifdef EPPG_VIRTUAL_MILLIS
+// The interactive emulator drives time from its simulation so a flight can run
+// faster than real time and replay deterministically.
+extern unsigned long eppgVirtualMillis;
+inline unsigned long millis() { return eppgVirtualMillis; }
+#else
 inline unsigned long millis() {
   static auto start = steady_clock::now();
   return (unsigned long)std::chrono::duration_cast<milliseconds>(steady_clock::now() - start).count();
 }
+#endif
 
 inline void delay(unsigned long ms) {
   std::this_thread::sleep_for(std::chrono::milliseconds(ms));
