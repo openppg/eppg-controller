@@ -1,6 +1,7 @@
 #include "sp140/ble/ota_service.h"
 
 #include <Arduino.h>
+#include "sp140/time_utils.h"
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
 #include "freertos/FreeRTOS.h"
@@ -67,7 +68,7 @@ const unsigned long OTA_REBOOT_DELAY_MS = 1000;
 // State
 volatile bool otaInProgress = false;
 // Non-zero once a verified image is set as the boot partition; holds the
-// millis() at which to reboot. While set, the session can't be aborted and
+// timeMillis() at which to reboot. While set, the session can't be aborted and
 // arming stays blocked.
 volatile unsigned long otaRebootAtMs = 0;
 volatile size_t imageTotalLen = 0;
@@ -183,7 +184,7 @@ void handleCmdStart(const uint8_t* data) {
     // while isOtaInProgress(), so arming can't slip in during the multi-second
     // erase in esp_ota_begin() below.
     otaInProgress = true;
-    lastOtaActivityMs = millis();
+    lastOtaActivityMs = timeMillis();
 
     if (currentState == ARMED || currentState == ARMED_CRUISING) {
         USBSerial.println("OTA Blocked: Device ARMED");
@@ -225,7 +226,7 @@ void handleCmdStart(const uint8_t* data) {
     }
 
     imageTotalLen = imageLen;
-    lastOtaActivityMs = millis();
+    lastOtaActivityMs = timeMillis();
     sendCommandResponse(CMD_START, 0x0000);  // Accept
 }
 
@@ -277,7 +278,7 @@ class OtaCommandCallback : public NimBLECharacteristicCallbacks {
                         USBSerial.println("OTA Success. Restarting...");
                         // Reboot from checkOtaTimeout() once this callback has
                         // returned and the write response + ACK have gone out.
-                        otaRebootAtMs = millis() + OTA_REBOOT_DELAY_MS;
+                        otaRebootAtMs = timeMillis() + OTA_REBOOT_DELAY_MS;
                         if (otaRebootAtMs == 0) otaRebootAtMs = 1;
                         sendCommandResponse(CMD_END, 0x0000);  // Success
                         return;
@@ -307,7 +308,7 @@ class OtaDataCallback : public NimBLECharacteristicCallbacks {
 
         if (len < 3) return;  // Header: Sector(2) + Seq(1)
 
-        lastOtaActivityMs = millis();
+        lastOtaActivityMs = timeMillis();
         packetCount++;
         if (packetCount % 100 == 0) {
             USBSerial.printf("OTA: Received %lu packets (sector %u)\n",
@@ -422,14 +423,14 @@ void checkOtaTimeout() {
     OtaStateLock lock(0);
     if (!lock.held()) return;
     if (otaRebootAtMs != 0) {
-        if (static_cast<long>(millis() - otaRebootAtMs) >= 0) {
+        if (static_cast<long>(timeMillis() - otaRebootAtMs) >= 0) {
             USBSerial.println("OTA: Rebooting into new firmware");
             USBSerial.flush();
             ESP.restart();
         }
         return;
     }
-    if (otaInProgress && (millis() - lastOtaActivityMs > OTA_TIMEOUT_MS)) {
+    if (otaInProgress && (timeMillis() - lastOtaActivityMs > OTA_TIMEOUT_MS)) {
         USBSerial.println("OTA: Idle timeout, aborting.");
         abortOtaImpl();
     }
