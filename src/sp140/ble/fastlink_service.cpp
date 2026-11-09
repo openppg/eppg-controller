@@ -1,4 +1,5 @@
 #include "sp140/ble/fastlink_service.h"
+#include "sp140/time_utils.h"
 
 #include <cmath>
 #include <limits>
@@ -71,7 +72,7 @@ BLE_FastLink_Telemetry buildFastLinkTelemetry(const TelemetryHub &hub,
   BLE_FastLink_Telemetry fastLink = {};
   fastLink.version = FASTLINK_PROTOCOL_VERSION;
   fastLink.packet_id = gFastLinkPacketId++;
-  fastLink.uptime_ms = millis();
+  fastLink.uptime_ms = timeMillis();
 
   // Controller mapping (float -> fixed-point)
   fastLink.altitude_cm = scaled(hub.altitude, 100.0f);
@@ -158,7 +159,7 @@ void updateFastLinkTelemetry(const BLE_FastLink_Telemetry &data) {
       // packet_id/uptime_ms the app counts as telemetry progress. Wrap-safe
       // unsigned subtraction. At 1Hz vs the 15ms OTA interval it does not
       // meaningfully slow the flash.
-      const uint32_t nowMs = millis();
+      const uint32_t nowMs = timeMillis();
       if (deviceConnected &&
           (nowMs - gFastLinkLastOtaKeepaliveMs >= kOtaKeepaliveIntervalMs)) {
         gFastLinkLastOtaKeepaliveMs = nowMs;
@@ -181,7 +182,7 @@ void updateFastLinkTelemetry(const BLE_FastLink_Telemetry &data) {
       ++gFastLinkSkippedNoConnCount;
     }
 
-    const uint32_t nowMs = millis();
+    const uint32_t nowMs = timeMillis();
     if (nowMs - gFastLinkLastStatsMs >= 2000) {
       gFastLinkLastStatsMs = nowMs;
       USBSerial.printf(

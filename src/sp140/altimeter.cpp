@@ -1,5 +1,6 @@
 #include "sp140/altimeter.h"
 #include "sp140/structs.h"
+#include "sp140/time_utils.h"
 
 #include <Adafruit_BMP3XX.h>
 
@@ -66,7 +67,7 @@ bool sampleBarometer(const STR_DEVICE_DATA_140_V1& deviceData) {
           44330.0f *
           (1.0f - pow(pressureHpa / deviceData.sea_pressure, 0.1903f));
       const float relativeAltitude = absoluteAltitude - groundAltitude;
-      const uint32_t timestampMs = millis();
+      const uint32_t timestampMs = timeMillis();
 
       // Add new reading to buffer with timestamp
       AltitudeReading reading = {relativeAltitude, timestampMs};
@@ -103,7 +104,7 @@ bool setGroundAltitude(const STR_DEVICE_DATA_140_V1& deviceData) {
       BarometerSnapshot snapshot = {};
       const bool valid = getBarometerSnapshot(&snapshot);
       const bool fresh = valid &&
-          static_cast<uint32_t>(millis() - snapshot.sampledAtMs) <=
+          static_cast<uint32_t>(timeMillis() - snapshot.sampledAtMs) <=
               BAROMETER_ARM_MAX_AGE_MS;
       if (!fresh) {
         xSemaphoreGive(i2cMutex);
@@ -164,7 +165,7 @@ bool setupAltimeter() {
   // Without this, the first begin_I2C() occasionally fails before the
   // sensor is ready, leaving bmpPresent=false for the whole session and
   // tripping the Baro_Init_Failure alert.
-  delay(20);
+  timeDelay(20);
 
   // Retry a few times — most failures here are transient I2C timing races.
   const int kInitAttempts = 4;
@@ -178,7 +179,7 @@ bool setupAltimeter() {
       break;
     }
     USBSerial.printf("BMP3xx init attempt %d/%d failed\n", i, kInitAttempts);
-    delay(50);
+    timeDelay(50);
   }
   if (!ok) return false;
 
