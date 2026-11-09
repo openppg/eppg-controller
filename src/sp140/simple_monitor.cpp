@@ -1,4 +1,5 @@
 #include "sp140/simple_monitor.h"
+#include "sp140/usb_serial.h"
 #include <vector>
 #include "sp140/monitor_config.h"
 #include "sp140/time_utils.h"

@@ -15,15 +15,22 @@ This is an Arduino/ESP32 project using PlatformIO for build management.
 
 **Environment:**
 - Default target: `OpenPPG-CESP32S3-CAN-SP140` (ESP32-S3 based)
+- Platform: `espressif32@8.0.0`, `framework = arduino, espidf` (Arduino core 3.3.x as an
+  ESP-IDF 5.5 component). Intentional sdkconfig settings live in `sdkconfig.defaults`;
+  `sdkconfig.OpenPPG-CESP32S3-CAN-SP140` is generated from it (delete it to regenerate).
+  The IDF component manager fetches the Arduino component's dependencies into
+  `managed_components/` (gitignored); versions are pinned by `dependencies.lock`.
 - Build type: debug (configurable in platformio.ini)
 - Monitor speed: 115200 baud
 
 **Binary Generation:**
-For creating update files, use esptool to merge binaries:
+For creating update files, use esptool v5 (`pip install "esptool>=5,<6"`; the
+platform also ships it as `~/.platformio/packages/tool-esptool/esptool`) to merge
+binaries. `pio run -t mergebin` does the same via `merge-esp.py`.
 ```bash
-esptool.py --chip esp32s3 merge_bin \
+esptool --chip esp32s3 merge-bin \
   -o .pio/build/OpenPPG-CESP32S3-CAN-SP140/merged-firmware.bin \
-  --flash_mode dio --flash_freq 80m --flash_size 8MB \
+  --flash-mode dio --flash-freq 80m --flash-size 8MB \
   0x0 .pio/build/OpenPPG-CESP32S3-CAN-SP140/bootloader.bin \
   0x8000 .pio/build/OpenPPG-CESP32S3-CAN-SP140/partitions.bin \
   0xe000 ~/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin \

@@ -1,4 +1,5 @@
 #include "sp140/ble/fastlink_service.h"
+#include "sp140/usb_serial.h"
 #include "sp140/time_utils.h"
 
 #include <cmath>
