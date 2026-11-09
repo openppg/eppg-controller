@@ -10,8 +10,8 @@
    COLOR SETTINGS
  *====================*/
 
-/*Color depth: 8 (A8), 16 (RGB565), 24 (RGB888), 32 (XRGB8888)*/
-#define LV_COLOR_DEPTH 16
+/*Default color format (LVGL 9.6+ replacement for LV_COLOR_DEPTH 16)*/
+#define LV_COLOR_FORMAT_DEFAULT LV_COLOR_FORMAT_RGB565
 
 /*=========================
    STDLIB SETTINGS
