@@ -84,6 +84,9 @@ jobs:
           token: ${{ secrets.GH_TOKEN || github.token }}
           persist-credentials: true
           show-progress: false
+          # Full history: VERSION_BUILD is the commit count (extra_script.py),
+          # which a shallow clone reports as 1.
+          fetch-depth: 0
       - name: Setup Git Credentials
         run: |
           git config --global credential.helper store
