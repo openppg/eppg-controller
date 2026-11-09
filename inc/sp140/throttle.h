@@ -18,10 +18,14 @@
 #define DECEL_MULTIPLIER 2.0     // How much faster deceleration is vs acceleration
 
 // Throttle control (PWM-first) constants
+// Output percentages are of the stock ESC throttle window (normal_pwm_start
+// 1050us .. normal_pwm_end 1950us, "Linear Thrust" curve):
+//   output % = (pwm - 1050) / 900
 // Ramping in PWM microseconds per tick (~20ms per tick in throttle task)
-#define CHILL_MODE_MAX_PWM 1600   // 70% max power in chill mode
-#define CHILL_MODE_RAMP_RATE 8   // us/tick in chill mode (~1.6s 1035->1600)
+#define CHILL_MODE_MAX_PWM 1770   // 80% ESC output max in chill mode
+#define CHILL_MODE_RAMP_RATE 8   // us/tick in chill mode (~1.8s 1035->1770)
 #define SPORT_MODE_RAMP_RATE 27   // us/tick in sport mode (~0.68s 1035->1950)
+#define CRUISE_MAX_PWM 1680       // 70% ESC output, same cruise max in both modes
 
 /**
  * Limits how quickly a value may change between ticks.
@@ -122,27 +126,15 @@ void resetThrottleState(int& prevPwm);
 void handleThrottle();
 
 /**
- * Calculate the cruise control PWM value from a raw pot reading.
- * Uses the same mode-aware mapping as normal throttle, then applies
- * the absolute cruise max cap.
+ * Check whether cruise may hold the given output.
+ * Cruise holds the exact output being flown when it engages and never clamps
+ * it, so an output above CRUISE_MAX_PWM refuses activation instead. The cap
+ * is an output level, so it is the same in chill and sport.
  *
- * @param potVal           Raw potentiometer value (0..4095)
- * @param performance_mode 0 = CHILL, 1 = SPORT
- * @param cruiseMaxPct     Maximum cruise throttle as percentage (e.g., 0.60)
- * @return Final PWM value for cruise control
+ * @param pwm Output being commanded to the ESC (microseconds)
+ * @return true if cruise may hold this output
  */
-uint16_t calculateCruisePwm(uint16_t potVal, uint8_t performance_mode, float cruiseMaxPct);
-
-/**
- * Check if pot value is in valid range for cruise activation.
- * Must be above engagement level (5%) and below max activation (70%).
- *
- * @param potVal              Raw potentiometer value (0..4095)
- * @param engagementLevel     Minimum pot value to be considered engaged
- * @param maxActivationPct    Maximum pot percentage for activation (e.g., 0.70)
- * @return true if pot is in valid activation range
- */
-bool isPotInCruiseActivationRange(uint16_t potVal, uint16_t engagementLevel, float maxActivationPct);
+bool isCruiseOutputAllowed(uint16_t pwm);
 
 /**
  * Check if pot value should trigger cruise disengagement.

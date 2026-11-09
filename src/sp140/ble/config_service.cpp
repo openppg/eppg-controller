@@ -123,7 +123,8 @@ class ThrottleValueCallbacks : public NimBLECharacteristicCallbacks {
     }
 
     uint16_t newPWM = (static_cast<uint16_t>(value[0]) << 8) | static_cast<uint16_t>(value[1]);
-    if (newPWM < ESC_MIN_PWM || newPWM > ESC_MAX_PWM) {
+    // Same cruise max as button-set cruise: refuse, don't clamp
+    if (newPWM < ESC_MIN_PWM || !isCruiseOutputAllowed(newPWM)) {
       return;
     }
 
