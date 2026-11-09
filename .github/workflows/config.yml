@@ -24,6 +24,24 @@ jobs:
       - run: pip install cpplint
       - run: cpplint --linelength 140 --filter=-legal/copyright,-runtime/int,-build/include_subdir,-readability/casting,-readability/todo,-build/include_order,-build/include_what_you_use,-whitespace/newline --recursive ./inc/ ./lib/ ./src/
 
+  hw-check-tool:
+    name: Hardware Check Tool
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ github.token }}
+          show-progress: false
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: 3.x
+      - run: pip install pyserial
+      - name: Unit and firmware-drift tests
+        run: python -m unittest discover -s tools/hw_check -v
+      - name: Dry run against the simulated controller
+        run: python tools/hw_check/hw_check.py --dry-run --run-qc --expect-esc --expect-bms
+
   pio-test:
     name: PlatformIO Tests
     runs-on: ubuntu-latest
