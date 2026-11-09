@@ -31,6 +31,7 @@ void setupLvglBuffer();
 void setupLvglDisplay(const STR_DEVICE_DATA_140_V1& deviceData, int8_t dc_pin, int8_t rst_pin, SPIClass* spi);
 void lvgl_flush_cb(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map);
 void updateLvgl();
+bool lvglNeedsRepaint();
 void displayLvglSplash(const STR_DEVICE_DATA_140_V1& deviceData, int duration);
 
 #endif  // INC_SP140_LVGL_LVGL_CORE_H_
