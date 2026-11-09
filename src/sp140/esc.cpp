@@ -3,7 +3,6 @@
 #include "sp140/esc_config_relay.h"
 #include "sp140/esc_flasher_relay.h"
 #include "sp140/time_utils.h"
-#include <CircularBuffer.hpp>
 
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 #include "driver/twai.h"
@@ -38,11 +37,8 @@ static unsigned long sLastStatusLightSendMs = 0;
 static bool sHaveSentStatusLight = false;
 static volatile PendingEscTone sPendingEscTone = PendingEscTone::NONE;
 
-// ESC runtime accumulation — unwraps the uint16 time_10ms counter (~10.9 min period)
-// Unsigned subtraction naturally handles wrap: (uint16_t)(current - last) is correct even across rollover.
-static uint16_t sEscLastTime10ms = 0;
-static uint32_t sEscAccumulatedRuntimeMs = 0;
-static bool sEscFirstUpdate = true;
+// ESC runtime accumulation + stale-data guard (see esc_telemetry_logic.h)
+static EscRuntimeTracker sEscRuntime;
 
 namespace {
 
@@ -251,22 +247,12 @@ void readESCTelemetry() {
   if (model.hasSetThrottleSettings2Response) {
     const sine_esc_SetThrottleSettings2Response *res = &model.setThrottleSettings2Response;
 
-    uint16_t rawTime10ms = res->time_10ms;
-
-    // Check if the timestamp from the ESC has actually changed (stale-data guard)
-    if (rawTime10ms != sEscLastTime10ms) {
-      // Unwrap the uint16 counter using unsigned subtraction — naturally correct across rollover.
-      // e.g. last=65000, current=100: (uint16_t)(100-65000) = 636 ticks = 6360ms elapsed.
-      if (!sEscFirstUpdate) {
-        uint16_t deltaTicks = rawTime10ms - sEscLastTime10ms;
-        sEscAccumulatedRuntimeMs += (uint32_t)deltaTicks * 10UL;
-      }
-      sEscFirstUpdate = false;
-      sEscLastTime10ms = rawTime10ms;
-
+    // Only a changed time_10ms counter means a new frame (stale-data guard);
+    // it also accumulates runtime across the uint16 rollover.
+    if (escRuntimeOnFrame(sEscRuntime, res->time_10ms)) {
       // Timestamp is new, process the telemetry data
-      escTelemetryData.lastUpdateMs = sEscAccumulatedRuntimeMs;
-      escTelemetryData.esc_runtime_ms = sEscAccumulatedRuntimeMs;
+      escTelemetryData.lastUpdateMs = sEscRuntime.accumulatedMs;
+      escTelemetryData.esc_runtime_ms = sEscRuntime.accumulatedMs;
 
       // Update telemetry data
       escTelemetryData.volts = res->voltage / 10.0f;
@@ -274,15 +260,8 @@ void readESCTelemetry() {
       escTelemetryData.mos_temp = res->mos_temp / 10.0f;
       escTelemetryData.cap_temp = res->cap_temp / 10.0f;
       escTelemetryData.mcu_temp = res->mcu_temp / 10.0f;
-      // Filter motor temp - only update if sensor is connected (valid range: -20°C to 140°C)
-      // Disconnected sensor reads ~149°C (thermistor pulled high)
-      float rawMotorTemp = res->motor_temp / 10.0f;
-      if (isMotorTempValidC(rawMotorTemp)) {
-        escTelemetryData.motor_temp = rawMotorTemp;
-      } else {
-        // Store invalid motor temp as NaN. Downstream consumers can skip on isnan().
-        escTelemetryData.motor_temp = NAN;
-      }
+      // Disconnected motor thermistor (~149°C) or out-of-range -> NaN
+      escTelemetryData.motor_temp = sanitizeMotorTempC(res->motor_temp / 10.0f);
       escTelemetryData.phase_current = res->current / 10.0f;
       escTelemetryData.eRPM = res->speed;
       escTelemetryData.inPWM = res->recv_pwm / 10.0f;
@@ -305,16 +284,14 @@ void readESCTelemetry() {
 
   // Update connection state based on time since last successful communication
   unsigned long currentTimeMs = timeMillis();
-  if (lastSuccessfulCommTimeMs == 0 || (currentTimeMs - lastSuccessfulCommTimeMs) > TELEMETRY_TIMEOUT_MS) {
+  if (escTelemetryTimedOut(currentTimeMs, lastSuccessfulCommTimeMs, TELEMETRY_TIMEOUT_MS)) {
     if (escTelemetryData.escState != TelemetryState::NOT_CONNECTED) {
       // Log state change only if it actually changed
       USBSerial.printf("ESC State: %d -> NOT_CONNECTED (Timeout)\n", static_cast<int>(escTelemetryData.escState));
       escTelemetryData.escState = TelemetryState::NOT_CONNECTED;
-      // Reset runtime accumulator so it restarts from zero on reconnect.
-      // Keep sEscLastTime10ms at its last real value so the stale-data guard
-      // continues to reject the unchanged res->time_10ms from the SINE library.
-      sEscAccumulatedRuntimeMs = 0;
-      sEscFirstUpdate = true;
+      // Restart runtime from zero on reconnect; the stale-data guard keeps
+      // rejecting the unchanged res->time_10ms from the SINE library.
+      escRuntimeOnDisconnect(sEscRuntime);
     }
   } else {
     if (escTelemetryData.escState != TelemetryState::CONNECTED) {

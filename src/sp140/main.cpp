@@ -11,9 +11,6 @@
 #include "../../inc/sp140/esp32s3-config.h"
 #include "../../inc/sp140/structs.h"  // data structs
 #include "../../inc/sp140/utilities.h"
-#include <Adafruit_NeoPixel.h>  // RGB LED
-#include <ArduinoJson.h>
-#include <CircularBuffer.hpp>  // smooth out readings
 #include <SPI.h>
 #include <Wire.h>
 
@@ -104,7 +101,6 @@ UnifiedBatteryData unifiedBatteryData = {0.0f, 0.0f, 0.0f, 0.0f};  // volts, amp
 
 // Throttle PWM smoothing buffer is managed in throttle.cpp
 
-Adafruit_NeoPixel pixels(1, 21, NEO_GRB + NEO_KHZ800);
 uint32_t led_color = STATUS_LED_RED;  // current LED color
 
 // Global variable for device state
@@ -563,7 +559,6 @@ void setupBarometer() {
 void setupLED() {
   pinMode(board_config.led_sw, OUTPUT);  // set up the internal LED2 pin
   if (board_config.enable_neopixel) {
-    pixels.begin();
     setLEDColor(led_color);
   }
 }

@@ -4,7 +4,6 @@
 #include "sp140/shared-config.h"
 #include "sp140/structs.h"
 #include <Arduino.h>
-#include <CircularBuffer.hpp>
 #include <freertos/semphr.h>
 
 // Constants
