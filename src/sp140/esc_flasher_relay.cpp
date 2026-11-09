@@ -1,6 +1,7 @@
 #include "sp140/esc_flasher_relay.h"
 
 #include <Arduino.h>
+#include "sp140/time_utils.h"
 #include <string.h>
 #include <stdlib.h>
 #include <canard.h>
@@ -297,7 +298,7 @@ bool escFlasherRelayBegin(uint16_t hardwareId, uint32_t totalSize) {
   s_status.phase = EscFwPhase::RECEIVING;
   s_status.progressPermille = 0;
   portEXIT_CRITICAL(&s_mux);
-  s_lastRxMs = millis();
+  s_lastRxMs = timeMillis();
   s_hwId = hardwareId;
   USBSerial.printf("ESC FW relay: begin hwId=0x%04X size=%u\n", hardwareId, totalSize);
   return true;
@@ -319,7 +320,7 @@ int32_t escFlasherRelayWriteChunk(uint32_t offset, const uint8_t* data, uint16_t
     s_status.progressPermille = permille;
   }
   portEXIT_CRITICAL(&s_mux);
-  if (received >= 0) s_lastRxMs = millis();
+  if (received >= 0) s_lastRxMs = timeMillis();
   return received;
 }
 
@@ -343,7 +344,7 @@ bool escFlasherRelayEnd() {
   }
   portEXIT_CRITICAL(&s_mux);
   if (ok) {
-    s_phaseStartMs = millis();
+    s_phaseStartMs = timeMillis();
     s_lastSendMs = 0;  // force first restart send on next tick
     USBSerial.printf("ESC FW relay: end, flashing hwId=0x%04X sizeKb=%u chunks=%u\n",
                      s_hwId, s_sizeKb, s_totalChunks);
@@ -378,7 +379,7 @@ void escFlasherRelayServiceTick() {
     return;
   }
 
-  const unsigned long now = millis();
+  const unsigned long now = timeMillis();
 
   // RECEIVING: no CAN traffic; just guard against an app that stalls.
   if (s_phase == EscFwPhase::RECEIVING) {

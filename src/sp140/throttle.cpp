@@ -120,7 +120,7 @@ int throttleFilterAverage() {
  * Read throttle input and return smoothed PWM value.
  * This is the core throttle processing pipeline without any state logic.
  * Uses mode-aware mapping so the full physical range covers the mode's
- * PWM output range (chill: 1035-1600, sport: 1035-1950).
+ * PWM output range (chill: 1035-1770, sport: 1035-1950).
  *
  * @param performance_mode 0 = CHILL, 1 = SPORT
  * @return Smoothed PWM value from throttle input
@@ -145,29 +145,11 @@ void resetThrottleState(int& prevPwm) {
 }
 
 /**
- * Calculate the cruise control PWM value from a raw pot reading.
- * Uses the same mode-aware mapping as normal throttle so the full
- * physical range maps to the mode's output range, then applies the
- * absolute cruise max cap.
+ * Check whether cruise may hold the given output. The cap is an output
+ * level shared by both modes; activation above it is refused, not clamped.
  */
-uint16_t calculateCruisePwm(uint16_t potVal, uint8_t performance_mode, float cruiseMaxPct) {
-  // Step 1: Map to mode-specific PWM range (same mapping as normal throttle)
-  uint16_t pwm = potRawToModePwm(potVal, performance_mode);
-
-  // Step 2: Apply absolute cruise max cap
-  uint16_t absoluteMaxCruisePwm = ESC_MIN_PWM + (uint16_t)((ESC_MAX_PWM - ESC_MIN_PWM) * cruiseMaxPct);
-  pwm = min(pwm, absoluteMaxCruisePwm);
-
-  return pwm;
-}
-
-/**
- * Check if pot value is in valid range for cruise activation.
- * Must be above engagement level and below max activation threshold.
- */
-bool isPotInCruiseActivationRange(uint16_t potVal, uint16_t engagementLevel, float maxActivationPct) {
-  uint16_t maxActivationVal = (uint16_t)(POT_MAX_VALUE * maxActivationPct);
-  return potVal >= engagementLevel && potVal <= maxActivationVal;
+bool isCruiseOutputAllowed(uint16_t pwm) {
+  return pwm <= CRUISE_MAX_PWM;
 }
 
 /**

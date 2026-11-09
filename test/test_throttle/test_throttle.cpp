@@ -151,7 +151,7 @@ TEST(ThrottleTest, ApplyModeRampClamp) {
     // Test CHILL mode max PWM clamping
     prevPwm = 1840;
     result = applyModeRampClamp(1900, prevPwm, 0);
-    EXPECT_EQ(result, 1600);     // Should clamp to CHILL_MODE_MAX_PWM
+    EXPECT_EQ(result, 1770);     // Should clamp to CHILL_MODE_MAX_PWM
 
     // Test SPORT mode allows higher PWM
     prevPwm = 1840;
@@ -242,7 +242,7 @@ TEST(ThrottleTest, GetSmoothedThrottlePwmModeAwareAndSmoothing) {
     // CHILL full-stick should map to chill max
     throttleFilterClear();
     setTestAnalogReadValue(4095);
-    EXPECT_EQ(getSmoothedThrottlePwm(0), 1600);
+    EXPECT_EQ(getSmoothedThrottlePwm(0), 1770);
 
     // SPORT full-stick should map to full ESC max
     throttleFilterClear();
@@ -266,116 +266,53 @@ TEST(ThrottleTest, PotRawToModePwmMapping) {
     EXPECT_EQ(potRawToModePwm(1024, 1), 1263);
     EXPECT_EQ(potRawToModePwm(3072, 1), 1721);
 
-    // CHILL mode (mode 0) maps full physical range to 1035-1600
-    // Range: 1600 - 1035 = 565
+    // CHILL mode (mode 0) maps full physical range to 1035-1770
+    // Range: 1770 - 1035 = 735
     EXPECT_EQ(potRawToModePwm(0, 0), 1035);        // Min ADC -> Min PWM
-    EXPECT_EQ(potRawToModePwm(4095, 0), 1600);     // Max ADC -> CHILL max
-    EXPECT_EQ(potRawToModePwm(2048, 0), 1317);     // 50% -> mid chill range
-    EXPECT_EQ(potRawToModePwm(1024, 0), 1176);     // 25% -> 25% of chill range
-    EXPECT_EQ(potRawToModePwm(3072, 0), 1458);     // 75% -> 75% of chill range
+    EXPECT_EQ(potRawToModePwm(4095, 0), 1770);     // Max ADC -> CHILL max
+    EXPECT_EQ(potRawToModePwm(2048, 0), 1402);     // 50% -> mid chill range
+    EXPECT_EQ(potRawToModePwm(1024, 0), 1218);     // 25% -> 25% of chill range
+    EXPECT_EQ(potRawToModePwm(3072, 0), 1586);     // 75% -> 75% of chill range
 }
 
-// Test calculateCruisePwm function - ensures cruise uses same mode-aware mapping
-TEST(ThrottleTest, CalculateCruisePwmBasic) {
-    // 50% pot in SPORT mode (mode 1) - should match potRawToModePwm exactly
-    // potRawToModePwm(2048, 1) = 1492, cruise cap at 60% = 1584
-    uint16_t result = calculateCruisePwm(2048, 1, 0.60);
-    EXPECT_EQ(result, 1492);  // Below cruise cap
+// Chill max is 80% and cruise max is 70% of the ESC's 1050-1950us window
+TEST(ThrottleTest, OutputLimitsAsPercentOfEscWindow) {
+    const int escStart = 1050;
+    const int escSpan = 1950 - 1050;
+    EXPECT_EQ(CHILL_MODE_MAX_PWM, escStart + escSpan * 80 / 100);  // 1770
+    EXPECT_EQ(CRUISE_MAX_PWM, escStart + escSpan * 70 / 100);      // 1680
 
-    // 50% pot in CHILL mode (mode 0) - uses chill range mapping
-    // potRawToModePwm(2048, 0) = 1317, cruise cap at 60% = 1584
-    result = calculateCruisePwm(2048, 0, 0.60);
-    EXPECT_EQ(result, 1317);  // Chill mode maps full physical range to 1035-1600
+    // Chill reaches above the cruise max, so both modes hit the same cap
+    EXPECT_GT(CHILL_MODE_MAX_PWM, CRUISE_MAX_PWM);
 }
 
-// Test that cruise in chill mode uses the same mapping as normal throttle
-TEST(ThrottleTest, CalculateCruisePwmChillModeConsistency) {
-    // Cruise should use the same mode-aware mapping as normal throttle.
-    // In chill mode, full physical range maps to 1035-1600.
-    int normalThrottle = potRawToModePwm(2048, 0);  // 1317
-    EXPECT_EQ(normalThrottle, 1317);
+// Cruise refuses (never clamps) outputs above the cruise max
+TEST(ThrottleTest, IsCruiseOutputAllowed) {
+    EXPECT_TRUE(isCruiseOutputAllowed(ESC_MIN_PWM));
+    EXPECT_TRUE(isCruiseOutputAllowed(1400));
+    EXPECT_TRUE(isCruiseOutputAllowed(1680));   // Exactly at cruise max
 
-    // Cruise in chill mode should match the normal throttle mapping
-    uint16_t cruiseThrottle = calculateCruisePwm(2048, 0, 0.60);
-    EXPECT_EQ(cruiseThrottle, (uint16_t)normalThrottle);  // Both use same mapping
+    EXPECT_FALSE(isCruiseOutputAllowed(1681));  // Just above cruise max
+    EXPECT_FALSE(isCruiseOutputAllowed(CHILL_MODE_MAX_PWM));
+    EXPECT_FALSE(isCruiseOutputAllowed(ESC_MAX_PWM));
 }
 
-// Test chill mode at full physical range
-TEST(ThrottleTest, CalculateCruisePwmChillModeFullRange) {
-    // 100% pot in CHILL mode - maps to exactly CHILL_MODE_MAX_PWM (1600)
-    // potRawToModePwm(4095, 0) = 1600, cruise cap at 70% = 1675
-    uint16_t result = calculateCruisePwm(4095, 0, 0.70);
-    EXPECT_EQ(result, 1600);  // Full physical range -> CHILL_MODE_MAX_PWM
+// The cruise max is the same output in both modes; only the lever position
+// that reaches it differs (~70% lever in sport, ~88% in chill)
+TEST(ThrottleTest, CruiseMaxSameOutputBothModes) {
+    // SPORT: last lever position that can set cruise
+    EXPECT_EQ(potRawToModePwm(2891, 1), 1680);
+    EXPECT_TRUE(isCruiseOutputAllowed(potRawToModePwm(2891, 1)));
+    EXPECT_FALSE(isCruiseOutputAllowed(potRawToModePwm(2892, 1)));
 
-    // 80% pot in CHILL mode - potRawToModePwm(3276, 0) = 1487
-    // Cruise cap at 70% = 1675, so 1487 is below cap
-    result = calculateCruisePwm(3276, 0, 0.70);
-    EXPECT_EQ(result, 1487);  // Full granular control, no clamping
-}
+    // CHILL: last lever position that can set cruise
+    EXPECT_EQ(potRawToModePwm(3599, 0), 1680);
+    EXPECT_TRUE(isCruiseOutputAllowed(potRawToModePwm(3599, 0)));
+    EXPECT_FALSE(isCruiseOutputAllowed(potRawToModePwm(3600, 0)));
 
-// Test cruise max percentage capping
-TEST(ThrottleTest, CalculateCruisePwmCruiseMaxCap) {
-    // Cruise max cap at 60%: 1035 + (1950-1035)*0.6 = 1035 + 549 = 1584
-
-    // In SPORT mode at full throttle, cruise cap should apply
-    // potRawToModePwm(4095, 1) = 1950, cruise cap at 60% = 1584
-    uint16_t result = calculateCruisePwm(4095, 1, 0.60);
-    EXPECT_EQ(result, 1584);  // Capped by cruise max
-
-    // At 70% cruise cap: 1035 + 915*0.7 = 1675
-    result = calculateCruisePwm(4095, 1, 0.70);
-    EXPECT_EQ(result, 1675);  // Higher cruise cap
-
-    // In chill mode at full throttle, chill max (1600) < cruise cap (1675)
-    // potRawToModePwm(4095, 0) = 1600
-    result = calculateCruisePwm(4095, 0, 0.70);
-    EXPECT_EQ(result, 1600);  // Chill mode max is the limiter
-}
-
-// Test edge cases
-TEST(ThrottleTest, CalculateCruisePwmEdgeCases) {
-    // Minimum pot value - same in both modes
-    uint16_t result = calculateCruisePwm(0, 0, 0.60);
-    EXPECT_EQ(result, 1035);  // ESC_MIN_PWM
-
-    result = calculateCruisePwm(0, 1, 0.60);
-    EXPECT_EQ(result, 1035);  // ESC_MIN_PWM
-
-    // Low throttle (25%) in chill mode - uses chill mapping
-    // potRawToModePwm(1024, 0) = 1176
-    result = calculateCruisePwm(1024, 0, 0.60);
-    EXPECT_EQ(result, 1176);  // Chill mode maps to reduced range
-
-    // Low throttle (25%) in sport mode - uses full mapping
-    // potRawToModePwm(1024, 1) = 1263
-    result = calculateCruisePwm(1024, 1, 0.60);
-    EXPECT_EQ(result, 1263);
-}
-
-// Test cruise activation range check
-TEST(ThrottleTest, IsPotInCruiseActivationRange) {
-    // Using real values: engagement = 5% of 4095 = 204, max = 70% of 4095 = 2866
-    const uint16_t engagementLevel = 204;
-    const float maxActivationPct = 0.70;
-
-    // Below engagement level - should NOT be in range
-    EXPECT_FALSE(isPotInCruiseActivationRange(0, engagementLevel, maxActivationPct));
-    EXPECT_FALSE(isPotInCruiseActivationRange(100, engagementLevel, maxActivationPct));
-    EXPECT_FALSE(isPotInCruiseActivationRange(203, engagementLevel, maxActivationPct));
-
-    // At engagement level - should be in range
-    EXPECT_TRUE(isPotInCruiseActivationRange(204, engagementLevel, maxActivationPct));
-
-    // In valid range - should be in range
-    EXPECT_TRUE(isPotInCruiseActivationRange(500, engagementLevel, maxActivationPct));
-    EXPECT_TRUE(isPotInCruiseActivationRange(1000, engagementLevel, maxActivationPct));
-    EXPECT_TRUE(isPotInCruiseActivationRange(2000, engagementLevel, maxActivationPct));
-    EXPECT_TRUE(isPotInCruiseActivationRange(2866, engagementLevel, maxActivationPct));  // At 70%
-
-    // Above max activation - should NOT be in range
-    EXPECT_FALSE(isPotInCruiseActivationRange(2867, engagementLevel, maxActivationPct));
-    EXPECT_FALSE(isPotInCruiseActivationRange(3000, engagementLevel, maxActivationPct));
-    EXPECT_FALSE(isPotInCruiseActivationRange(4095, engagementLevel, maxActivationPct));  // Full throttle
+    // Full lever is above the cruise max in both modes
+    EXPECT_FALSE(isCruiseOutputAllowed(potRawToModePwm(4095, 0)));
+    EXPECT_FALSE(isCruiseOutputAllowed(potRawToModePwm(4095, 1)));
 }
 
 // Test cruise disengagement threshold
@@ -416,24 +353,6 @@ TEST(ThrottleTest, ShouldPotDisengageCruiseVariousActivations) {
     // Very low cruise (10% pot = 409), threshold = 327
     EXPECT_FALSE(shouldPotDisengageCruise(326, 409, thresholdPct));
     EXPECT_TRUE(shouldPotDisengageCruise(327, 409, thresholdPct));
-}
-
-// Test edge case: cruise at minimum engagement
-TEST(ThrottleTest, CruiseActivationEdgeCases) {
-    const uint16_t engagementLevel = 204;  // 5% of 4095
-    const float maxActivationPct = 0.70;
-
-    // Exactly at engagement level should be valid
-    EXPECT_TRUE(isPotInCruiseActivationRange(204, engagementLevel, maxActivationPct));
-
-    // Just below engagement should be invalid
-    EXPECT_FALSE(isPotInCruiseActivationRange(203, engagementLevel, maxActivationPct));
-
-    // At max threshold (70% = 2866) should be valid
-    EXPECT_TRUE(isPotInCruiseActivationRange(2866, engagementLevel, maxActivationPct));
-
-    // Just above max threshold should be invalid
-    EXPECT_FALSE(isPotInCruiseActivationRange(2867, engagementLevel, maxActivationPct));
 }
 
 int main(int argc, char **argv) {
