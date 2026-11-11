@@ -10,3 +10,8 @@ updates:
     schedule:
       # Check for updates to GitHub Actions every week
       interval: "weekly"
+  - package-ecosystem: "pip"
+    # Pinned CI tool versions in .github/requirements-ci.txt
+    directory: "/.github"
+    schedule:
+      interval: "weekly"

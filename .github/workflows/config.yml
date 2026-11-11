@@ -8,49 +8,45 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   cpplint:
     name: CPP Lint
     runs-on: ubuntu-slim
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          token: ${{ github.token }}
+          persist-credentials: false
           show-progress: false
       - name: Setup Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
         with:
           python-version: 3.x
-      - run: pip install cpplint
+      - run: pip install -c .github/requirements-ci.txt cpplint
       - run: cpplint --linelength 140 --filter=-legal/copyright,-runtime/int,-build/include_subdir,-readability/casting,-readability/todo,-build/include_order,-build/include_what_you_use,-whitespace/newline --recursive ./inc/ ./lib/ ./src/
 
   pio-test:
     name: PlatformIO Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          token: ${{ secrets.GH_TOKEN || github.token }}
-          persist-credentials: true
+          persist-credentials: false
           show-progress: false
-      - name: Setup Git Credentials
-        run: |
-          git config --global credential.helper store
-          echo "https://oauth2:${{ secrets.GH_TOKEN || github.token }}@github.com" > ~/.git-credentials
       - name: Setup Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
         with:
           python-version: "3.13"
       - name: Cache PlatformIO
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: ~/.platformio
           key: pio-${{ hashFiles('platformio.ini') }}
           restore-keys: pio-
       - name: Install PlatformIO
-        run: |
-          python -m pip install --upgrade pip
-          pip install -U platformio
+        run: pip install -c .github/requirements-ci.txt platformio
       - name: Run Unit Tests
         run: platformio test -e native-test
 
@@ -58,9 +54,9 @@ jobs:
     name: Screenshot Regression Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          token: ${{ github.token }}
+          persist-credentials: false
           show-progress: false
       - name: Install Dependencies
         run: sudo apt-get update && sudo apt-get install -y cmake g++
@@ -68,7 +64,7 @@ jobs:
         run: ./test/test_screenshots/build_and_run.sh
       - name: Upload Screenshots on Failure
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: screenshot-regression-output
           path: test/test_screenshots/output/
@@ -79,33 +75,35 @@ jobs:
     name: PlatformIO Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          token: ${{ secrets.GH_TOKEN || github.token }}
-          persist-credentials: true
+          persist-credentials: false
           show-progress: false
-      - name: Setup Git Credentials
-        run: |
-          git config --global credential.helper store
-          echo "https://oauth2:${{ secrets.GH_TOKEN || github.token }}@github.com" > ~/.git-credentials
       - name: Setup Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
         with:
           python-version: "3.13"
       - name: Cache PlatformIO
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: ~/.platformio
           key: pio-${{ hashFiles('platformio.ini') }}
           restore-keys: pio-
       - name: Install PlatformIO
-        run: |
-          python -m pip install --upgrade pip
-          pip install -U platformio
+        run: pip install -c .github/requirements-ci.txt platformio
+      - name: Install Project Dependencies
+        # The private library repos need a token. Hand it to git through the
+        # environment for this step only, so it is never written to disk and
+        # the build below runs without it.
+        env:
+          GIT_CONFIG_COUNT: 1
+          GIT_CONFIG_KEY_0: "url.https://oauth2:${{ secrets.GH_TOKEN || github.token }}@github.com/.insteadOf"
+          GIT_CONFIG_VALUE_0: "https://github.com/"
+        run: platformio pkg install -e OpenPPG-CESP32S3-CAN-SP140
       - name: Build ESP32S3
         run: platformio run -e OpenPPG-CESP32S3-CAN-SP140
       - name: Install esptool
-        run: pip install esptool
+        run: pip install -c .github/requirements-ci.txt esptool
       - name: Merge Binaries
         run: |
           esptool.py --chip esp32s3 merge_bin \
@@ -123,7 +121,15 @@ jobs:
           cp .pio/build/OpenPPG-CESP32S3-CAN-SP140/firmware.bin release-artifacts/openppg-sp140-ota-firmware.bin
           cp .pio/build/OpenPPG-CESP32S3-CAN-SP140/full-controller-firmware.bin release-artifacts/openppg-sp140-full-flash.bin
       - name: Archive ESP32S3 Firmware
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: OpenPPG-CESP32S3-CAN-SP140-firmware
           path: release-artifacts/
+      - name: Archive ESP32S3 Debug Symbols
+        # Kept apart from the flashable images: the ELF is what turns a crash
+        # backtrace from a given build back into file and line numbers.
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: OpenPPG-CESP32S3-CAN-SP140-debug-symbols
+          path: .pio/build/OpenPPG-CESP32S3-CAN-SP140/firmware.elf
+          if-no-files-found: error

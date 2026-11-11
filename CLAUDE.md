@@ -31,8 +31,10 @@ esptool.py --chip esp32s3 merge_bin \
 ```
 
 **Testing:**
-- Basic test files exist in `/test/` directory
-- No automated test framework configured - testing is primarily hardware-in-the-loop
+- `pio test -e native-test` - Host-side googletest unit tests in `/test/test_*` (throttle, ESC error decoding, monitors, diagnostics)
+- `./test/test_screenshots/build_and_run.sh` - LVGL screenshot regression tests (needs cmake and g++)
+- Native tests compile individual firmware `.cpp` files against the stubs in `/test/native_stubs/`, so logic must be free of hardware calls to be testable
+- Anything touching CAN, the display, or FreeRTOS tasks is still verified hardware-in-the-loop
 
 ## Code Architecture
 
@@ -45,7 +47,7 @@ esptool.py --chip esp32s3 merge_bin \
 
 **Core Components:**
 
-**Main Controller (`sp140.ino`):**
+**Main Controller (`src/sp140/main.cpp`):**
 The entry point that coordinates all subsystems. Handles:
 - Hardware initialization and SPI bus management
 - Main control loop and state management  
@@ -54,19 +56,20 @@ The entry point that coordinates all subsystems. Handles:
 
 **Key Subsystems:**
 - **ESC Control** (`esc.h/cpp`) - Motor speed control and CAN communication
+- **ESC Errors** (`esc_errors.h/cpp`) - Decoding of ESC error bitmasks (hardware-free, unit tested)
 - **BMS Interface** (`bms.h/cpp`) - Battery management system communication
 - **Throttle Processing** (`throttle.h/cpp`) - Input filtering and response curves
 - **Display/LVGL** (`lvgl/`) - LCD graphics and user interface
 - **Altimeter** (`altimeter.h/cpp`) - Barometric altitude sensing
-- **Device State** (`device_state.h/cpp`) - System state machine management
+- **Device State** (`device_state.h`) - System state enum; transitions live in `main.cpp`
 - **Mode Control** (`mode.h/cpp`) - Flight modes (manual, cruise, etc.)
 
 **Hardware Platform:**
 - ESP32-S3 microcontroller (M5Stack STAMPS3 board)
 - CAN bus communication for ESC and BMS
 - Shared SPI bus for display and peripherals
-- NeoPixel RGB LEDs for status indication
-- Analog throttle input with ResponsiveAnalogRead filtering
+- Single NeoPixel RGB LED for status indication
+- Analog throttle input, smoothed by a moving average in `throttle.cpp`
 
 **Configuration:**
 - Hardware pin definitions in `esp32s3-config.h`
