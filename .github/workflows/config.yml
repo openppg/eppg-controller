@@ -125,3 +125,11 @@ jobs:
         with:
           name: OpenPPG-CESP32S3-CAN-SP140-firmware
           path: release-artifacts/
+      - name: Archive ESP32S3 Debug Symbols
+        # Kept apart from the flashable images: the ELF is what turns a crash
+        # backtrace from a given build back into file and line numbers.
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: OpenPPG-CESP32S3-CAN-SP140-debug-symbols
+          path: .pio/build/OpenPPG-CESP32S3-CAN-SP140/firmware.elf
+          if-no-files-found: error
