@@ -92,4 +92,3 @@ extern BMS_CAN* bms_can;
 // BMS functions
 bool initBMSCAN(SPIClass* spi);
 void updateBMSData();
-void printBMSData();

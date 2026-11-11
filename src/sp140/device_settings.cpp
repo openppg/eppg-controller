@@ -454,38 +454,3 @@ bool sanitizeDeviceData() {
   }
   return changed;
 }
-
-/**
- * Prints the hardware configuration to the Serial monitor.
- *
- * @param config The HardwareConfig object containing the hardware configuration.
- */
-void debugHardwareConfig(const HardwareConfig& config) {
-  USBSerial.println("Hardware Configuration:");
-  USBSerial.print("button_top: ");
-  USBSerial.println(config.button_top);
-  USBSerial.print("buzzer_pin: ");
-  USBSerial.println(config.buzzer_pin);
-  USBSerial.print("led_sw: ");
-  USBSerial.println(config.led_sw);
-  USBSerial.print("throttle_pin: ");
-  USBSerial.println(config.throttle_pin);
-  USBSerial.print("bmp_pin: ");
-  USBSerial.println(config.bmp_pin);
-  USBSerial.print("tft_rst: ");
-  USBSerial.println(config.tft_rst);
-  USBSerial.print("tft_cs: ");
-  USBSerial.println(config.tft_cs);
-  USBSerial.print("tft_dc: ");
-  USBSerial.println(config.tft_dc);
-  USBSerial.print("spi_mosi: ");
-  USBSerial.println(config.spi_mosi);
-  USBSerial.print("spi_miso: ");
-  USBSerial.println(config.spi_miso);
-  USBSerial.print("spi_sclk: ");
-  USBSerial.println(config.spi_sclk);
-  USBSerial.print("enable_vib: ");
-  USBSerial.println(config.enable_vib ? "true" : "false");
-  USBSerial.print("enable_neopixel: ");
-  USBSerial.println(config.enable_neopixel ? "true" : "false");
-}

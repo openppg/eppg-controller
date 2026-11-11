@@ -200,7 +200,6 @@ void changeDeviceState(DeviceState newState) {
 }
 
 uint32_t armedAtMillis = 0;
-uint32_t cruisedAtMillisMilis = 0;
 unsigned long armedSecs = 0;
 
 TaskHandle_t blinkLEDTaskHandle = NULL;
@@ -954,11 +953,6 @@ void buttonHandlerTask(void *parameter) {
   }
 }
 
-void printTime(const char *label) {
-  USBSerial.print(label);
-  USBSerial.println(timeMillis());
-}
-
 void disarmESC() {
   // Throttle task sends ESC_DISARMED_PWM on its next 20ms cycle
   // when it sees DISARMED state — no direct CAN write needed here
@@ -1282,13 +1276,6 @@ void afterCruiseEnd() {
 
   cruisedPotVal = 0;
   // pulseVibeMotor();
-}
-
-void playCruiseSound() {
-  if (ENABLE_BUZZ) {
-    uint16_t notify_melody[] = {1976};
-    playMelody(notify_melody, 1);
-  }
 }
 
 void audioTask(void *parameter) {

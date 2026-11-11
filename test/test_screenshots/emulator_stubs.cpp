@@ -138,4 +138,3 @@ bool isBLEPairingModeActive() { return false; }
 BMS_CAN* bms_can = nullptr;
 bool initBMSCAN(SPIClass*) { return false; }
 void updateBMSData() {}
-void printBMSData() {}

@@ -48,10 +48,6 @@ void requestEscStatusLightMode(EscStatusLightMode mode);
 void queueEscMotorBeepArm();
 void queueEscMotorBeepDisarm();
 
-// for debugging
-void dumpThrottleResponse(const sine_esc_SetThrottleSettings2Response *res);
-void dumpESCMessages();  // dumps all messages to USBSerial
-
 // External declaration of telemetry data structure
 extern STR_ESC_TELEMETRY_140 escTelemetryData;
 
