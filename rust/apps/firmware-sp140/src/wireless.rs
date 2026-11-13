@@ -35,7 +35,7 @@ pub fn spawn(
 ) -> SyncSender<RemoteControl> {
     let (tx, rx) = sync_channel(4);
     platform::console(
-        "EPPG_QEMU ESP-NOW RF unsupported; encrypted transport modeled by native Rust lab\n",
+        "EPPG_QEMU ESP-NOW RF unsupported; application protocol and failsafe modeled by native Rust lab\n",
     );
     crate::spawn_task(move || while rx.recv().is_ok() {});
     tx
