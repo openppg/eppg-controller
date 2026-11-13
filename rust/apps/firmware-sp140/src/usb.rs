@@ -5,7 +5,29 @@ use crate::{
     storage::{self, RadioSettings},
 };
 use serde_json::{json, Value};
+use std::io::{self, Write};
 use std::sync::{Arc, Mutex};
+struct UsbWriter;
+impl Write for UsbWriter {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        let n = unsafe { platform::eppg_usb_write(bytes.as_ptr(), bytes.len()) };
+        if n > 0 {
+            Ok(n as usize)
+        } else {
+            Err(io::ErrorKind::WouldBlock.into())
+        }
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+fn send_diagnostics(packet: ([u8; 92], Vec<[u8; 92]>)) {
+    let mut out = io::BufWriter::with_capacity(256, UsbWriter);
+    if crate::diagnostic_json::write_json(&mut out, &packet.0, &packet.1).is_ok() {
+        let _ = out.write_all(b"\n");
+        let _ = out.flush();
+    }
+}
 pub fn sync(shared: &Shared, radio: &RadioSettings) -> Value {
     let s = shared.lock().unwrap();
     let d = &s.settings;
@@ -91,16 +113,17 @@ fn handle(
             return;
         }
         Some("diag_sync") => {
-            let packet = { diagnostics.lock().unwrap().json() };
-            send(packet);
+            let packet = diagnostics.lock().unwrap().packet();
+            send_diagnostics(packet);
             return;
         }
         Some("diag_clear") => {
-            let mut d = diagnostics.lock().unwrap();
-            d.clear();
-            let packet = d.json();
-            drop(d);
-            send(packet);
+            let packet = {
+                let mut d = diagnostics.lock().unwrap();
+                d.clear();
+                d.packet()
+            };
+            send_diagnostics(packet);
             return;
         }
         _ => {}

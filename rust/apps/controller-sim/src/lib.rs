@@ -1150,3 +1150,7 @@ mod maintenance_tests {
         assert_eq!(sim.controller.state, State::Disarmed);
     }
 }
+
+#[cfg(test)]
+#[path = "../../firmware-sp140/src/diagnostic_json.rs"]
+mod diagnostic_json;

@@ -4,6 +4,7 @@ mod altimeter;
 mod app;
 mod ble;
 mod ble_ids;
+mod diagnostic_json;
 mod diagnostics;
 mod feedback;
 mod ota;
@@ -130,6 +131,11 @@ fn main() {
         crate::spawn_task(move || {
             let mut alt = altimeter::Altimeter::new();
             shared.lock().unwrap().baro_initialized = alt.is_some();
+            platform::console(if alt.is_some() {
+                "Barometer initialized\n"
+            } else {
+                "Error initializing BMP3xx\n"
+            });
             let mut last = unsafe { sys::xTaskGetTickCount() };
             let mut last_cpu = 0u32.wrapping_sub(1000);
             loop {
@@ -204,6 +210,8 @@ fn main() {
             ui.show_splash(&settings, platform::now());
             #[cfg(feature = "qemu")]
             qemu::boot_complete();
+            #[cfg(not(feature = "qemu"))]
+            platform::console("Rust controller boot complete\n");
             let mut last = unsafe { sys::xTaskGetTickCount() };
             let mut old_rotation = settings.screen_rotation;
             loop {
@@ -556,9 +564,7 @@ fn main() {
             sys::esp_ota_mark_app_valid_cancel_rollback();
         }
     }
-    loop {
-        platform::sleep(1000);
-    }
+    // Workers own their state. Returning releases the startup task and its stack.
 }
 fn monitor_data(s: &Snapshot) -> Data {
     let f = &s.telemetry;

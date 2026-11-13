@@ -216,7 +216,7 @@ impl Panel {
     }
     pub fn set_rotation(&mut self, rotation: u8) {
         self.rotation = rotation;
-        self.command(0x36, &[if rotation == 1 { 0x60 } else { 0xa0 }]);
+        self.command(0x36, &[if rotation == 1 { 0xa0 } else { 0x60 }]);
     }
     pub fn flush(&mut self, x1: i32, y1: i32, x2: i32, y2: i32, pixels: &[u8]) {
         self.command(0x2a, &[0, x1 as u8, 0, x2 as u8]);

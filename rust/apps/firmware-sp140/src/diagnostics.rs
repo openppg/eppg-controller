@@ -31,7 +31,6 @@ unsafe extern "C" fn shutdown_handler() {
 // Existing packed NVS diagnostics ABI, JSON schema, and RTC heartbeat retention.
 use crate::{app::Shared, platform, storage::Nvs};
 use esp_idf_svc::sys;
-use serde_json::{json, Value};
 const RECORD: usize = 92;
 const HEARTBEAT: usize = 37;
 const MAGIC: u32 = 0x44484731;
@@ -42,53 +41,6 @@ fn u32at(b: &[u8], at: usize) -> u32 {
 }
 fn put(b: &mut [u8], at: usize, v: u32) {
     b[at..at + 4].copy_from_slice(&v.to_le_bytes());
-}
-fn reason(r: u8) -> &'static str {
-    match r {
-        1 => "POWERON",
-        2 => "EXTERNAL",
-        3 => "SOFTWARE",
-        4 => "PANIC",
-        5 => "INT_WDT",
-        6 => "TASK_WDT",
-        7 => "WDT",
-        8 => "DEEPSLEEP",
-        9 => "BROWNOUT",
-        10 => "SDIO",
-        11 => "USB_UART",
-        _ => "UNKNOWN",
-    }
-}
-fn plan(r: u8) -> &'static str {
-    match r {
-        1 => "usb_command_reboot",
-        2 => "ble_unbond_reboot",
-        _ => "none",
-    }
-}
-fn state(r: u8) -> &'static str {
-    match r {
-        1 => "ARMED",
-        2 => "ARMED_CRUISING",
-        _ => "DISARMED",
-    }
-}
-fn record_json(b: &[u8]) -> Value {
-    let mut cd = json!({"present":b[37]!=0,"valid":b[38]!=0});
-    if b[37] != 0 {
-        cd["task"] = Value::String(
-            String::from_utf8_lossy(&b[40..56])
-                .trim_end_matches('\0')
-                .into(),
-        );
-        cd["pc"] = json!(u32at(b, 56));
-        cd["cause"] = json!(u32at(b, 60));
-        cd["vaddr"] = json!(u32at(b, 64));
-        cd["bt"] = json!((0..b[39].min(6) as usize)
-            .map(|i| u32at(b, 68 + i * 4))
-            .collect::<Vec<_>>());
-    }
-    json!({"boot":u32at(b,0),"rst":reason(b[28]),"raw0":b[29],"raw1":b[30],"plan":plan(b[32]),"snap_ok":b[33]==1,"prev_state":state(b[31]),"prev_up_ms":u32at(b,4),"thr_age_ms":u32at(b,8),"ui_age_ms":u32at(b,12),"bms_age_ms":u32at(b,16),"free_heap":u32at(b,20),"min_heap":u32at(b,24),"esc_ok":b[34]==1,"bms_ok":b[35]==1,"cdmp":cd})
 }
 pub struct Diagnostics {
     current: [u8; RECORD],
@@ -188,8 +140,10 @@ impl Diagnostics {
             RTC_HEARTBEAT = b;
         }
     }
-    pub fn json(&self) -> Value {
-        json!({"diag_v":1,"hist_n":self.history.records().len(),"cur":record_json(&self.current),"hist":self.history.records().iter().map(|b|record_json(b)).collect::<Vec<_>>()})
+    pub fn packet(&self) -> ([u8; RECORD], Vec<[u8; RECORD]>) {
+        // Copy bounded packed records, then release the mutex before USB can block.
+        // The watchdog must never wait for a diagnostic response to drain.
+        (self.current, self.history.records().to_vec())
     }
     pub fn clear(&mut self) {
         self.history.clear();

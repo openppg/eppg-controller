@@ -138,7 +138,7 @@ pub struct Ui {
     w: Widgets,
     display: *mut lv_display_t,
     sink: Box<Sink>,
-    _buffers: [Box<[u8]>; 2],
+    _buffers: [Box<[u8]>; 1],
     keepalive_points: Vec<Box<[lv_point_precise_t]>>,
     climb_points: Box<[[lv_point_precise_t; 2]; 13]>,
     style_warning: lv_style_t,
@@ -207,17 +207,16 @@ impl Ui {
                 },
                 panel: None,
             });
-            let mut buffers = [
-                vec![0u8; 20480].into_boxed_slice(),
-                vec![0u8; 20480].into_boxed_slice(),
-            ];
+            // The panel flush is synchronous; a second buffer cannot overlap DMA.
+            // Sixteen RGB565 rows leave internal RAM available to BLE and services.
+            let mut buffers = [vec![0u8; 160 * 16 * 2].into_boxed_slice()];
             lv_display_set_user_data(display, (&mut *sink as *mut Sink).cast());
             lv_display_set_flush_cb(display, Some(flush));
             lv_display_set_buffers(
                 display,
                 buffers[0].as_mut_ptr().cast(),
-                buffers[1].as_mut_ptr().cast(),
-                20480,
+                std::ptr::null_mut(),
+                (160 * 16 * 2) as u32,
                 LV_DISPLAY_RENDER_MODE_PARTIAL,
             );
             lv_display_set_color_format(display, LV_COLOR_FORMAT_RGB565);

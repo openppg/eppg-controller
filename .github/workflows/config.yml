@@ -195,10 +195,12 @@ jobs:
             --image rust/target/qemu/xtensa-esp32s3-espidf/release/images/qemu-flash.bin \
             --qemu .tools/qemu/bin/qemu-system-xtensa --timeout 30 --control-proof \
             --expect 'Rust controller boot complete' --expect 'pwm_01us=16000' \
+            --expect 'Barometer initialized' --reject 'Error initializing BMP3xx' \
             --report rust/target/qemu/smoke.json
           python3 simulator/tools/qemu_smoke.py \
             --image rust/target/qemu/xtensa-esp32s3-espidf/release/images/qemu-flash.bin \
             --qemu .tools/qemu/bin/qemu-system-xtensa --timeout 35 \
+            --send-after 'Rust controller boot complete' \
             --send '{"emulator":{"stage_test":true}}' \
             --expect 'Rust controller boot complete' \
             --expect 'EPPG_QEMU_STAGE size=262144 verified=1 scratch=4096' \

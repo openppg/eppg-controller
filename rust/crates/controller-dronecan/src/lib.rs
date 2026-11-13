@@ -8,6 +8,7 @@ unsafe extern "C" {
     fn dc_rx(ptr: *mut c_void, id: u32, data: *const u8, len: u8, now: u64) -> i32;
     fn dc_tx(ptr: *mut c_void, id: *mut u32, data: *mut u8, len: *mut u8) -> i32;
     fn dc_tx_pop(ptr: *mut c_void);
+    fn dc_next_size(ptr: *mut c_void) -> i32;
     fn dc_take(
         ptr: *mut c_void,
         id: *mut u16,
@@ -110,12 +111,19 @@ impl DroneCan {
         }
     }
     pub fn take_transfer(&mut self) -> Option<Transfer> {
+        let size = unsafe { dc_next_size(self.ptr.as_ptr()) };
+        if size < 0 {
+            return None;
+        }
+        let mut data = Vec::new();
+        data.try_reserve_exact(size as usize).ok()?;
+        data.resize(size as usize, 0);
         let mut t = Transfer {
             id: 0,
             kind: 0,
             source: 0,
             transfer_id: 0,
-            data: vec![0; 1024],
+            data,
         };
         let n = unsafe {
             dc_take(
@@ -125,7 +133,7 @@ impl DroneCan {
                 &mut t.source,
                 &mut t.transfer_id,
                 t.data.as_mut_ptr(),
-                1024,
+                size as u16,
             )
         };
         if n < 0 {
@@ -196,6 +204,44 @@ impl Drop for DroneCan {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn deliver(sender: &mut DroneCan, receiver: &mut DroneCan, now: u64) {
+        while let Some(frame) = sender.peek_frame() {
+            assert!(receiver.receive(frame, now) >= 0);
+            sender.pop_frame();
+        }
+    }
+    #[test]
+    fn completed_payloads_survive_wrap_overflow_and_empty_poll() {
+        let mut sender = DroneCan::new(1).unwrap();
+        let mut receiver = DroneCan::new(32).unwrap();
+        assert!(receiver.register(217, 1, 1, 0x30c3f78df78cbee5));
+        let mut tid = 0;
+        // Queue capacity and maximum payload support remain unchanged.
+        for batch in 0..3 {
+            for n in 0..17u8 {
+                let payload = vec![n; 1023];
+                assert!(sender.request(32, 217, 0x30c3f78df78cbee5, &mut tid, &payload) > 0);
+                deliver(
+                    &mut sender,
+                    &mut receiver,
+                    1 + (batch * 17 + u64::from(n)) * 10_000,
+                );
+            }
+            for n in 0..16u8 {
+                let transfer = receiver.take_transfer().unwrap();
+                assert_eq!(transfer.id, 217);
+                assert_eq!(transfer.source, 1);
+                assert_eq!(transfer.data, vec![n; 1023]);
+            }
+            assert!(receiver.take_transfer().is_none());
+        }
+        assert!(sender.request(32, 217, 0x30c3f78df78cbee5, &mut tid, &[]) > 0);
+        deliver(&mut sender, &mut receiver, 600_000);
+        assert!(receiver.take_transfer().unwrap().data.is_empty());
+        // Drop also owns any queued payloads that were never taken.
+        assert!(sender.request(32, 217, 0x30c3f78df78cbee5, &mut tid, &[42; 128]) > 0);
+        deliver(&mut sender, &mut receiver, 610_000);
+    }
     #[test]
     fn request_frame_id_and_tail() {
         let mut c = DroneCan::new(1).unwrap();
