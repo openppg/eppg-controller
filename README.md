@@ -2,8 +2,11 @@
 
 [![Build](https://github.com/openppg/eppg-controller/actions/workflows/config.yml/badge.svg)](https://github.com/openppg/eppg-controller/actions/workflows/config.yml)
 
-Native ESP-IDF firmware for the ESP32-S3 OpenPPG SP140 Throttle Controller.
-The application is C++, uses FreeRTOS directly, and has no Arduino SDK dependency.
+Rust firmware for the ESP32-S3 OpenPPG SP140 Throttle Controller. Cargo builds
+the application on ESP-IDF 5.5.3 and FreeRTOS, with no Arduino SDK dependency.
+Controller logic, tasks, services, chip drivers, diagnostics and screen composition
+are Rust. ESP-IDF, LVGL, Bosch compensation and libcanard remain C dependencies;
+a small native peripheral boundary is shared with the preceding ESP-IDF branch.
 
 ### Key Features
 
@@ -16,7 +19,23 @@ The application is C++, uses FreeRTOS directly, and has no Arduino SDK dependenc
 - Web-based configuration via [config.openppg.com](https://config.openppg.com) (no firmware flash needed)
 - Optional encrypted ESP-NOW controller-to-controller control and mirrored telemetry; see [WIRELESS_CONTROL.md](WIRELESS_CONTROL.md)
 
-#### This master branch is only for testing the latest firmware for the SP140 controllers running the ESP32-S3 processor.
+The migration is split into stacked branches: `codex/esp-idf-no-arduino` removes
+Arduino while retaining the C++ application; `codex/rust-port` builds on that
+branch and makes Rust the production application. The C++ sources remain as
+compatibility references and are excluded from the Rust firmware image.
+
+### Reasons for this migration
+
+- The ESC transport has one Rust owner; BLE and radio workers send bounded typed requests.
+- Shared telemetry and settings use synchronized snapshots instead of unsynchronized application globals.
+- Firmware and the native emulator execute the same controller, monitor, ESC and UI code.
+- Fixed-width byte encoders make BLE, OTA and wireless compatibility independent of compiler struct layout.
+- Removing Arduino allows direct use of the pinned ESP-IDF SDK and its drivers.
+- Cargo locking, host tests, clippy and screenshot fixtures make changes easier to reproduce and review.
+
+These are architectural and correctness benefits. Faster execution, smaller images
+or lower power consumption are not assumed. The [migration assessment](advisor-plans/001-rust-port.md)
+records the repository-specific rationale and original feature inventory.
 
 X4 code has been migrated to a separate repo - https://github.com/openppg/x4-controller
 
@@ -38,79 +57,84 @@ For batch 2 (Arduino nano based) controllers please see the [batch-2 branch](htt
 
 ## Build and flash firmware
 
-Install [ESP-IDF 5.5.3](https://docs.espressif.com/projects/esp-idf/en/v5.5.3/esp32s3/get-started/index.html)
-with its ESP32-S3 tools, then activate its `export.sh` environment. Dependencies
-are vendored under `components/`; PlatformIO and Arduino are not used.
+Follow the pinned toolchain installation in [rust/README.md](rust/README.md):
+ESP-IDF 5.5.3, host Rust 1.100.0, espup 0.19.0, Xtensa Rust 1.97.0.0 and
+ldproxy 0.3.5. Activate the IDF and espup export environments, then run:
 
 ```sh
-IDF_COMPONENT_MANAGER=0 idf.py -B build-idf build
-python3 tools/check_native_release.py build-idf
-idf.py -B build-idf -p PORT flash monitor
+bash rust/tools/build.sh
 ```
 
-The active 8 MB partition layout, NVS types/keys, BLE UUIDs and packet formats
-are preserved. Firmware starts in `src/sp140/main.cpp:app_main`. The native
-platform boundary is `inc/platform/`, implemented in `components/controller_platform/`.
-[Dependency versions and licenses](components/README.md) describe the retained C libraries.
+Artifacts are written to `rust/target/xtensa-esp32s3-espidf/release/images/`:
 
-Use `build-idf/openppg_controller.bin` for existing BLE OTA clients. Keep its
-matching `.elf` and `.map` for crash decoding. A complete recovery image is separate:
+- `firmware.bin`: app-only image for the existing BLE OTA clients.
+- `firmware.elf` and `firmware.map`: matching crash/debug evidence.
+- `recovery.bin`: bootloader, partition table, OTA selection and app0 for recovery.
+- `release-check.json`: image size, discovery marker and linked dependency checks.
 
-```sh
-python3 simulator/tools/merge_idf_flash.py build-idf build-idf/openppg-full-recovery.bin
-```
+The exporter verifies the installed 8 MB partition geometry and excludes Arduino
+and the legacy C++ application. Existing NVS keys/types, BLE UUIDs and wire formats
+are retained. A full recovery write replaces OTA selection metadata; normal app
+OTA uses the inactive slot and preserves settings. ESC uploads retain the full
+256 KiB limit using bounded buffers and the reserved scratch partition. Unknown
+pre-existing scratch-partition data is rejected without erasure.
 
-The recovery image contains erased data regions; normal OTA and developer flash
-commands preserve NVS. Application OTA does not replace an installed bootloader.
-ESC firmware uploads retain their 256 KiB limit with a flash staging fallback
-when RAM is insufficient; [staging ownership and interruption behavior](components/README.md#esc-image-staging)
-protect unknown existing partition data.
+Production startup is [rust/apps/firmware-sp140/src/main.rs](rust/apps/firmware-sp140/src/main.rs).
+See [Rust architecture, compatibility and build details](rust/README.md) and
+[retained dependency provenance](components/README.md).
 
 ## Testing
 
-Host tests compile production controller logic, protocol codecs and LVGL screens.
-They need a C/C++ compiler and CMake; GoogleTest 1.15.2 is fetched if `GTEST_DIR`
-is not supplied. No board, ESP-IDF or Arduino installation is required for host tests.
+Native tests require host Rust 1.100.0, a C compiler and system libclang. Use the
+system libclang for host tests; unset `LIBCLANG_PATH` if it was set by espup.
 
 ```sh
-cmake -S tools/host-native-tests -B build-host-native-tests
-cmake --build build-host-native-tests --parallel
-ctest --test-dir build-host-native-tests --output-on-failure
-./simulator/run.sh --test-only
-cmake -S tools/host-can-protocol-probe -B build-host-can-protocol
-cmake --build build-host-can-protocol --parallel
-./build-host-can-protocol/host_can_protocol_probe
-cmake -S tools/host-screenshot-offline -B build-host-screenshots
-cmake --build build-host-screenshots --parallel
-ctest --test-dir build-host-screenshots --output-on-failure
+cd rust
+unset LIBCLANG_PATH
+cargo +1.100.0 test --locked --workspace --exclude firmware-sp140
+cargo +1.100.0 clippy --locked --workspace --exclude firmware-sp140 --all-targets -- -D warnings
+cargo +1.100.0 build --locked -p controller-sim
+cd ..
+./simulator/run.sh --rust --test-only
 ```
 
-`./simulator/verify.sh` runs the firmware build and all host gates from an active
-IDF environment. CI performs the same checks and retains release ELF/map files.
+These exercise production control/state transitions, monitoring, explicit wire
+codecs, DroneCAN peers, maintenance sessions, NOR-staged maximum-size ESC images,
+phone OTA packet sequences, and all 34 existing screen fixtures. The native C++
+regressions and pinned protocol oracles remain separately available under `tools/`
+and run in CI as compatibility references.
 
-## ESP32-S3 instruction-level emulator
-
-The QEMU variant executes this application's actual ESP32-S3 instructions,
-FreeRTOS tasks, control logic, monitoring, display driver and protocol adapters.
-MCP2515/ST7735/BMP3xx registers and a separate DroneCAN ESC peer provide modeled
-peripherals. BLE/Wi-Fi RF and electrical timing need physical hardware validation.
+## Interactive emulator
 
 ```sh
-IDF_COMPONENT_MANAGER=0 idf.py -B build-idf-qemu \
-  -D EPPG_QEMU=ON -D SDKCONFIG=build-idf-qemu/sdkconfig \
-  -D 'SDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.qemu.defaults' build
-python3 simulator/tools/merge_idf_flash.py build-idf-qemu build-idf-qemu/qemu-flash.bin
-python3 simulator/tools/qemu_smoke.py --image build-idf-qemu/qemu-flash.bin \
-  --qemu /path/to/qemu-system-xtensa --timeout 30 \
+./simulator/run.sh --rust --test-only
+cd simulator/ui
+npm ci
+npm start
+```
+
+Open `http://127.0.0.1:4174/`. The lab drives the production Rust controller,
+serializes ESC/BMS telemetry onto real CAN frames, and renders the actual Rust
+LVGL screen as a live 160×128 framebuffer. It supports button/throttle input,
+wire faults and scenario replay. [Emulator commands and fidelity](simulator/README.md)
+describe the modeled devices.
+
+For execution of the cross-compiled ESP32-S3 instructions and FreeRTOS tasks:
+
+```sh
+bash rust/tools/build.sh --qemu
+python3 simulator/tools/qemu_smoke.py \
+  --image rust/target/qemu/xtensa-esp32s3-espidf/release/images/qemu-flash.bin \
+  --qemu /path/to/qemu-system-xtensa --timeout 30 --control-proof \
   --expect '=== Boot complete ===' --expect 'pwm_01us=16000' \
-  --report build-idf-qemu/qemu-smoke.json
+  --report rust/target/qemu/smoke.json
 ```
 
-Use Espressif's QEMU with the `esp32s3` machine. The emulator image uses DIO and
-UART0 because the QEMU NOR/USB models differ from the board; physical firmware
-continues to use its configured QIO flash and USB Serial/JTAG console. The smoke
-scenario drives the real click/hold arming gesture and raw ADC throttle ramp.
-Reports retain full UART output and the input image hash.
+Use Espressif QEMU's `esp32s3` machine. Its build uses DIO flash and UART0 for the
+emulator, with register-level MCP2515, ST7735 and BMP3xx models and a separate
+DroneCAN ESC peer. Physical builds use QIO and USB Serial/JTAG. QEMU explicitly
+skips unsupported BLE/Wi-Fi RF. Phone pairing/bond migration, electrical timing,
+real sensors and physical update interruption still require board testing.
 
 ## Config tool
 

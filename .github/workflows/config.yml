@@ -21,7 +21,7 @@ jobs:
       - run: cpplint --linelength 140 --filter=-legal/copyright,-runtime/int,-build/include_subdir,-readability/casting,-readability/todo,-build/include_order,-build/include_what_you_use,-whitespace/newline --recursive ./inc/ ./lib/ ./src/
 
   native-tests:
-    name: Native controller, CAN, device and display tests
+    name: C++ compatibility references and device tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -38,7 +38,7 @@ jobs:
           cmake --build build-host-native-tests --parallel
           ctest --test-dir build-host-native-tests --output-on-failure
       - name: Controller and register-level device models
-        run: ./simulator/run.sh --test-only
+        run: ./simulator/run.sh --native --test-only
       - name: Pinned CAN protocol oracle
         run: |
           cmake -S tools/host-can-protocol-probe -B build-host-can-protocol
@@ -62,7 +62,7 @@ jobs:
           path: test/test_screenshots/output/
 
   idf-build:
-    name: Native ESP-IDF ESP32-S3 firmware
+    name: C++ reference ESP32-S3 firmware
     runs-on: ubuntu-latest
     container: espressif/idf:v5.5.3
     env:
@@ -85,11 +85,11 @@ jobs:
           python3 simulator/tools/merge_idf_flash.py build-idf release-artifacts/openppg-sp140-full-flash.bin
       - uses: actions/upload-artifact@v7
         with:
-          name: OpenPPG-CESP32S3-CAN-SP140-firmware
+          name: cpp-reference-esp32s3-firmware
           path: release-artifacts/
 
   qemu-control:
-    name: Actual ESP32-S3 control and maximum image staging
+    name: C++ reference ESP32-S3 QEMU control and staging
     runs-on: ubuntu-latest
     container: espressif/idf:v5.5.3
     env:
@@ -113,5 +113,109 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: ESP32-S3-QEMU-evidence
+          name: cpp-reference-ESP32-S3-QEMU-evidence
           path: build-idf-qemu/qemu-*.json
+
+  rust-host:
+    name: Production Rust controller, protocols, UI and browser API
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: simulator/ui/package-lock.json
+      - name: Native build dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang libclang-dev cmake ninja-build g++
+      - name: Pinned host Rust
+        run: rustup toolchain install 1.100.0 --profile minimal --component rustfmt --component clippy
+      - name: Format every Rust source, including included UI modules
+        run: git ls-files -z 'rust/**/*.rs' | xargs -0 rustfmt +1.100.0 --edition 2021 --check
+      - name: Production Rust tests and strict lint
+        working-directory: rust
+        run: |
+          unset LIBCLANG_PATH
+          cargo +1.100.0 test --locked --workspace --exclude firmware-sp140
+          cargo +1.100.0 clippy --locked --workspace --exclude firmware-sp140 --all-targets -- -D warnings
+          cargo +1.100.0 build --locked -p controller-sim
+      - name: Browser lab build and live controller API
+        working-directory: simulator/ui
+        env:
+          EPPG_SIM_BACKEND: rust
+        run: |
+          test -x ../../rust/target/debug/controller-sim
+          npm ci
+          npm run build
+          npm test
+
+  rust-firmware:
+    name: Rust ESP32-S3 (${{ matrix.profile }})
+    runs-on: ubuntu-latest
+    container: espressif/idf:v5.5.3
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [physical, qemu]
+    env:
+      IDF_COMPONENT_MANAGER: '0'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Pinned Espressif Rust toolchains
+        shell: bash
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o /tmp/eppg-rustup-init.sh
+          sh /tmp/eppg-rustup-init.sh -y --default-toolchain 1.100.0 --profile minimal
+          . "$HOME/.cargo/env"
+          cargo +1.100.0 install --locked espup --version 0.19.0
+          espup install --toolchain-version 1.97.0.0 --targets esp32s3 --std --export-file "$HOME/export-esp.sh"
+          cargo +1.100.0 install --locked ldproxy --version 0.3.5
+      - name: Cross-build, validate and export complete firmware
+        shell: bash
+        env:
+          PROFILE: ${{ matrix.profile }}
+        run: |
+          . "$HOME/.cargo/env"
+          . /opt/esp/idf/export.sh
+          . "$HOME/export-esp.sh"
+          if [[ "$PROFILE" = qemu ]]; then
+            bash rust/tools/build.sh --qemu
+          else
+            bash rust/tools/build.sh
+          fi
+      - name: Execute Rust firmware in the ESP32-S3 emulator
+        if: matrix.profile == 'qemu'
+        shell: bash
+        run: |
+          . /opt/esp/idf/export.sh
+          bash simulator/tools/install_qemu.sh
+          python3 simulator/tools/qemu_smoke.py \
+            --image rust/target/qemu/xtensa-esp32s3-espidf/release/images/qemu-flash.bin \
+            --qemu .tools/qemu/bin/qemu-system-xtensa --timeout 30 --control-proof \
+            --expect '=== Boot complete ===' --expect 'pwm_01us=16000' \
+            --report rust/target/qemu/smoke.json
+      - name: Preserve canonical OTA and recovery artifact names
+        if: matrix.profile == 'physical'
+        shell: bash
+        run: |
+          images=rust/target/xtensa-esp32s3-espidf/release/images
+          mkdir -p release-artifacts
+          cp "$images/firmware.bin" release-artifacts/openppg-sp140-ota-firmware.bin
+          cp "$images/recovery.bin" release-artifacts/openppg-sp140-full-flash.bin
+          cp "$images/firmware.elf" release-artifacts/openppg_controller.elf
+          cp "$images/firmware.map" release-artifacts/openppg_controller.map
+          cp "$images/partitions.bin" "$images/release-check.json" release-artifacts/
+      - uses: actions/upload-artifact@v7
+        if: matrix.profile == 'physical'
+        with:
+          name: OpenPPG-CESP32S3-CAN-SP140-firmware
+          path: release-artifacts/
+      - uses: actions/upload-artifact@v7
+        if: always() && matrix.profile == 'qemu'
+        with:
+          name: rust-esp32s3-qemu-evidence
+          path: |
+            rust/target/qemu/smoke.json
+            rust/target/qemu/xtensa-esp32s3-espidf/release/images/

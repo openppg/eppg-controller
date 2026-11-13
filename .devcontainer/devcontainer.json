@@ -1,5 +1,5 @@
 {
-  "name": "OpenPPG native ESP-IDF 5.5.3",
+  "name": "OpenPPG Rust ESP32-S3 / ESP-IDF 5.5.3",
   "image": "espressif/idf:v5.5.3",
   "features": {
     "ghcr.io/devcontainers/features/python:1": {
@@ -13,6 +13,8 @@
   "customizations": {
     "vscode": {
       "extensions": [
+        "rust-lang.rust-analyzer",
+        "tamasfe.even-better-toml",
         "espressif.esp-idf-extension",
         "ms-vscode.cpptools-extension-pack",
         "ms-python.python"
@@ -25,7 +27,11 @@
         "files.associations": {
           "*.h": "c",
           "*.hpp": "cpp"
-        }
+        },
+        "rust-analyzer.cargo.target": "xtensa-esp32s3-espidf",
+        "rust-analyzer.linkedProjects": [
+          "rust/Cargo.toml"
+        ]
       }
     }
   },
