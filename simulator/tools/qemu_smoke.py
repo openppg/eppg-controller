@@ -116,6 +116,18 @@ def run(args: argparse.Namespace) -> dict:
             if missing and not failure:
                 failure = f"timeout after {args.timeout}s waiting for application markers"
         finally:
+            # Preserve the backtrace following the first failure marker. Killing
+            # at its first UART byte hides the information needed to fix it.
+            if failure:
+                drain_start = len(output)
+                drain_until = time.monotonic() + 0.25
+                while time.monotonic() < drain_until and process.poll() is None:
+                    for key, _ in selector.select(timeout=0.01):
+                        chunk = os.read(key.fileobj.fileno(), 16384)
+                        if chunk:
+                            output.extend(chunk)
+                    if b"ELF file SHA256:" in output[drain_start:] or b"Rebooting..." in output[drain_start:]:
+                        break
             selector.close()
             if process.poll() is None:
                 process.terminate()
