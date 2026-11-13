@@ -720,13 +720,33 @@ void diagnosticsPopulateJson(cJSON* doc) {
 }
 
 void diagnosticsSendJson(platform::Console& stream) {
-  platform::json::Document doc(cJSON_CreateObject());
-  if (!doc) { stream.text("{\"diag_v\":0,\"err\":\"oom\"}"); return; }
-  diagnosticsPopulateJson(doc.get());
-  char* output = cJSON_PrintUnformatted(doc.get());
-  if (!output) { stream.text("{\"diag_v\":0,\"err\":\"oom\"}"); return; }
+  [[maybe_unused]] auto transaction = stream.transaction();
+  // A full 16-record cJSON tree exceeds physical-board free RAM with BLE active.
+  // Serialize one record at a time, retaining the existing packet schema.
+  char output[1024];
+  auto encode = [&](const BootDiagRecord& record) {
+    platform::json::Document doc(cJSON_CreateObject());
+    if (!doc) return false;
+    diagRecordToJson(doc.get(), record);
+    return cJSON_PrintPreallocated(doc.get(), output, sizeof(output), false) != 0;
+  };
+  if (!encode(gDiagPacket.current)) {
+    stream.text("{\"diag_v\":0,\"err\":\"oom\"}");
+    return;
+  }
+  const uint8_t count = std::min<uint8_t>(gDiagPacket.history_count, DIAG_HISTORY_CAPACITY);
+  char header[64];
+  const int length = snprintf(header, sizeof(header), "{\"diag_v\":%u,\"hist_n\":%u,\"cur\":",
+                              DIAG_SCHEMA_VERSION, count);
+  diagWriteStreamChunked(stream, reinterpret_cast<const uint8_t*>(header), length);
   diagWriteStreamChunked(stream, reinterpret_cast<const uint8_t*>(output), strlen(output));
-  cJSON_free(output);
+  diagWriteStreamChunked(stream, reinterpret_cast<const uint8_t*>(",\"hist\":["), 9);
+  for (uint8_t i = 0; i < count; ++i) {
+    if (i) diagWriteStreamChunked(stream, reinterpret_cast<const uint8_t*>(","), 1);
+    if (!encode(gDiagPacket.history[i])) strcpy(output, "null");
+    diagWriteStreamChunked(stream, reinterpret_cast<const uint8_t*>(output), strlen(output));
+  }
+  diagWriteStreamChunked(stream, reinterpret_cast<const uint8_t*>("]}"), 2);
 }
 
 void diagnosticsClearPersistentData() {
