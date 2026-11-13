@@ -6,14 +6,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 get_filename_component(PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
-set(FIRMWARE_DEPS "${PROJECT_ROOT}/.pio/libdeps/OpenPPG-CESP32S3-CAN-SP140")
-set(SINE_DIR "${FIRMWARE_DEPS}/SINE ESC CAN/src")
-set(BMS_DIR "${FIRMWARE_DEPS}/ANT BMS CAN")
-if(NOT EXISTS "${SINE_DIR}/SineEsc.cpp" OR NOT EXISTS "${BMS_DIR}/BMS_CAN.cpp")
-  message(FATAL_ERROR
-    "Firmware CAN libraries are missing; run 'pio run -e OpenPPG-CESP32S3-CAN-SP140' first")
-endif()
-file(GLOB SINE_GENERATED_C CONFIGURE_DEPENDS "${SINE_DIR}/*.c")
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/Dependencies.cmake")
+eppg_require_can_references()
+file(GLOB SINE_GENERATED_C CONFIGURE_DEPENDS "${DRONECAN_DIR}/*.c")
 
 add_library(eppg_sim_core
   controller_sim.cpp
@@ -29,6 +24,7 @@ target_include_directories(eppg_sim_core PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}/include"
   "${CMAKE_CURRENT_SOURCE_DIR}/hardware"
   "${SINE_DIR}"
+  "${DRONECAN_DIR}"
   "${BMS_DIR}"
   "${PROJECT_ROOT}/inc"
 )
@@ -42,3 +38,10 @@ target_link_libraries(eppg-sim-tests PRIVATE eppg_sim_core)
 
 enable_testing()
 add_test(NAME controller_simulator COMMAND eppg-sim-tests)
+
+add_library(eppg_device_models devices/peripherals.cpp)
+target_include_directories(eppg_device_models PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/devices")
+target_compile_options(eppg_device_models PRIVATE -Wall -Wextra -Wpedantic)
+add_executable(eppg-device-tests devices/tests.cpp)
+target_link_libraries(eppg-device-tests PRIVATE eppg_device_models)
+add_test(NAME register_device_models COMMAND eppg-device-tests)
