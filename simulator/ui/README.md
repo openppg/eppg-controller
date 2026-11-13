@@ -1,27 +1,29 @@
-# OpenPPG Hardware Lab
+# Local controller hardware lab
 
-This React console is a thin control surface over the native controller and
-LVGL emulators. It does not reimplement controller state or screen widgets in
-JavaScript.
+Build either native backend described in [the simulator README](../README.md),
+then run:
 
-From the repository root:
-
-```bash
-./simulator/run.sh --test-only
-./test/test_screenshots/build_and_run.sh --local
-cd simulator/ui
-npm install
+```sh
+npm ci
 npm start
 ```
 
-Then open `http://127.0.0.1:4174/`.
+Open http://127.0.0.1:4174/. The server chooses the built Rust production-core
+simulator when available, otherwise the native C++ reference. Explicit selection:
 
-- Drag the throttle to send a 0–4095 ADC value through the production filter.
-- Click the controller button once, then hold it for two seconds to arm.
-- Hold the same button for two seconds while armed to toggle cruise.
-- Use **Inject Telemetry** to set exact ESC/BMS link and sensor values. They
-  cross the virtual CAN wire and vendor decoders before reaching firmware UI.
-- Use fault injection to drop/corrupt frames or trigger bus-off recovery.
+```sh
+EPPG_SIM_BACKEND=rust npm start
+EPPG_SIM_BACKEND=native npm start
+```
 
-The controller display is the native production LVGL framebuffer at its real
-160×128 resolution. Light mode is the default.
+The Rust backend renders the same Rust LVGL UI as the firmware. Native C++ uses
+the standalone production framebuffer renderer built under
+`build-host-screenshots/`. These are live rendered160x128 pixels, not prerecorded
+screen images. Throttle, arm/cruise gestures, sensor injection and wire faults
+run in deterministic virtual time. RF and electrical behavior remain outside
+this functional simulator; the separate ESP32-S3 QEMU path executes the actual
+firmware instructions and models unsupported peripheral boundaries.
+
+`npm test` runs a local API/real wire-fault/framebuffer integration test once a
+backend is built. It does not require Vite/React to exercise the backend API.
+`npm run dev` starts API and Vite separately for UI development.

@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { createReadStream, promises as fs } from 'node:fs'
+import { createReadStream, existsSync, promises as fs } from 'node:fs'
 import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
@@ -9,8 +9,17 @@ import { promisify } from 'node:util'
 const execFileAsync = promisify(execFile)
 const uiRoot = path.dirname(fileURLToPath(import.meta.url))
 const projectRoot = path.resolve(uiRoot, '../..')
-const simulatorBinary = path.join(projectRoot, 'build-simulator/eppg-sim')
-const framebufferBinary = path.join(projectRoot, 'build-screenshot/framebuffer_renderer')
+const rustBinary = path.join(projectRoot, 'rust/target/debug/controller-sim')
+const backend = process.env.EPPG_SIM_BACKEND || (existsSync(rustBinary) ? 'rust' : 'native')
+if (!['rust', 'native'].includes(backend)) throw new Error('EPPG_SIM_BACKEND must be rust or native')
+const simulatorBinary = process.env.EPPG_SIMULATOR_BINARY || (backend === 'rust'
+  ? rustBinary : path.join(projectRoot, 'build-simulator/eppg-sim'))
+const framebufferBinary = process.env.EPPG_FRAMEBUFFER_BINARY || [
+  'build-host-screenshots/framebuffer_renderer',
+  'build-host-screenshot/framebuffer_renderer',
+  'build-screenshot/framebuffer_renderer',
+].map((file) => path.join(projectRoot, file)).find(existsSync) ||
+  path.join(projectRoot, 'build-host-screenshots/framebuffer_renderer')
 const screenRoot = path.join(projectRoot, 'test/test_screenshots/reference')
 const distRoot = path.join(uiRoot, 'dist')
 const port = Number(process.env.OPENPPG_UI_PORT || 4174)
@@ -19,6 +28,7 @@ const allowedActions = new Set([
   'throttle', 'arm', 'cruise', 'mode', 'altitude', 'esc_link', 'bms_link',
   'barometer_link', 'soc', 'bms_temp', 'esc_temp', 'cpu_temp',
   'esc_rpm', 'esc_amps', 'esc_voltage', 'bms_voltage', 'bms_current',
+  'button', 'role', 'maintenance', 'wireless_control',
   'stall_throttle', 'esc_drop_every', 'bms_drop_every',
   'esc_corrupt_every', 'bms_corrupt_every', 'esc_bus_off', 'bms_bus_off',
 ])
@@ -81,14 +91,16 @@ async function simulate(req, res) {
     tempDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'openppg-ui-'))
     const scenarioPath = path.join(tempDirectory, 'scenario.csv')
     await fs.writeFile(scenarioPath, scenario)
+    const framebufferPath = path.join(tempDirectory, 'framebuffer.bmp')
     const { stdout } = await execFileAsync(simulatorBinary, [
       '--scenario', scenarioPath,
       '--duration', String(input.duration_ms),
       '--quiet',
+      ...(backend === 'rust' ? ['--framebuffer', framebufferPath] : []),
     ], { cwd: projectRoot, maxBuffer: 2_000_000 })
     const snapshot = JSON.parse(stdout.trim())
+    if (backend === 'native') {
     await fs.access(framebufferBinary)
-    const framebufferPath = path.join(tempDirectory, 'framebuffer.bmp')
     const modeEvent = [...input.events].reverse().find((event) => event.action === 'mode')
     const mode = modeEvent?.value === 'chill' ? 'chill' : 'sport'
     let armedStartMs = 0
@@ -123,6 +135,8 @@ async function simulate(req, res) {
       String(snapshot.barometer.altitude_m),
       String(snapshot.barometer.vertical_speed_mps),
     ], { cwd: projectRoot, maxBuffer: 2_000_000 })
+    }
+    snapshot.backend ||= backend === 'rust' ? 'rust-production-core' : 'native-reference'
     const framebuffer = await fs.readFile(framebufferPath)
     snapshot.framebuffer = {
       width: 160,
@@ -135,7 +149,7 @@ async function simulate(req, res) {
     const missingBinary = error?.code === 'ENOENT'
     json(res, missingBinary ? 503 : 400, {
       error: missingBinary
-        ? 'Native simulator or LVGL renderer is not built. Run ./simulator/run.sh --test-only and ./test/test_screenshots/build_and_run.sh --local first.'
+        ? 'The selected simulator or renderer is not built. See simulator/README.md for native and Rust build commands.'
         : error.message,
     })
   } finally {
@@ -170,6 +184,10 @@ async function serveFile(res, filePath) {
 
 const server = http.createServer(async (req, res) => {
   const requestUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`)
+  if (req.method === 'GET' && requestUrl.pathname === '/api/health') {
+    json(res, 200, { backend, simulator: path.basename(simulatorBinary), ready: existsSync(simulatorBinary) })
+    return
+  }
   if (req.method === 'POST' && requestUrl.pathname === '/api/simulate') {
     await simulate(req, res)
     return
@@ -193,5 +211,5 @@ const server = http.createServer(async (req, res) => {
 })
 
 server.listen(port, '127.0.0.1', () => {
-  console.log(`OpenPPG Hardware Lab listening on http://127.0.0.1:${port}`)
+  console.log(`OpenPPG Hardware Lab listening on http://127.0.0.1:${server.address().port}`)
 })

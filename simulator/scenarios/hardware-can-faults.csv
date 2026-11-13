@@ -1,8 +1,8 @@
 # Establish both buses, exercise DroneCAN CRC loss, recover through the same
 # 250 ms TWAI health interval as firmware, then corrupt raw ANT BMS payloads.
 0,throttle,0
-100,arm,on
-300,throttle,2800
+600,arm,on
+800,throttle,2800
 1500,esc_corrupt_every,2
 2300,esc_corrupt_every,0
 2600,esc_bus_off,on

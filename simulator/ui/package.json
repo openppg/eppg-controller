@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "build": "vite build",
+    "test": "node --test server.test.mjs",
     "start": "npm run build && node server.mjs"
   },
   "dependencies": {

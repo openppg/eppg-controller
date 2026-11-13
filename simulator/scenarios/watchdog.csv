@@ -1,5 +1,5 @@
 # Stop the 50 Hz control loop; the 5-second task watchdog must fail safe.
 0,throttle,0
-100,arm,on
-300,throttle,3000
+600,arm,on
+800,throttle,3000
 1000,stall_throttle,on

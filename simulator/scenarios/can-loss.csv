@@ -1,7 +1,7 @@
 # Establish both links, arm, then unplug ESC CAN long enough to cross debounce.
 0,throttle,0
-100,arm,on
-300,throttle,2500
+600,arm,on
+800,throttle,2500
 1500,esc_link,off
 2600,esc_link,on
 3200,throttle,0
