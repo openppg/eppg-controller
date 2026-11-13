@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "sp140/structs.h"
+#include "sp140/time_utils.h"
 
 #ifndef PIO_UNIT_TESTING
 #include "sp140/globals.h"

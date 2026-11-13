@@ -1,6 +1,7 @@
 #include "platform/runtime.h"
 #include "../../../inc/sp140/lvgl/lvgl_updates.h"
 #include "../../../inc/sp140/esp32s3-config.h"
+#include "../../../inc/sp140/time_utils.h"
 #include "../../../inc/sp140/monitor_config.h"  // For direct threshold access
 #include "../../../inc/sp140/globals.h"
 #include "../../../inc/sp140/vibration_pwm.h"

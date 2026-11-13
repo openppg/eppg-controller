@@ -30,7 +30,7 @@ if(NOT LVGL_DIR OR NOT EXISTS ${LVGL_DIR}/CMakeLists.txt)
   FetchContent_Declare(
     lvgl
     GIT_REPOSITORY https://github.com/lvgl/lvgl.git
-    GIT_TAG v9.5.0
+    GIT_TAG v9.6.0
     GIT_SHALLOW TRUE
   )
   FetchContent_GetProperties(lvgl)

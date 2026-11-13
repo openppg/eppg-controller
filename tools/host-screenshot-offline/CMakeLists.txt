@@ -8,7 +8,7 @@ get_filename_component(DEFAULT_PROJECT_ROOT "${CMAKE_CURRENT_LIST_DIR}/../.." AB
 set(PROJECT_ROOT "${DEFAULT_PROJECT_ROOT}" CACHE PATH "Controller source tree to render")
 set(HOST_TEST_ROOT "${DEFAULT_PROJECT_ROOT}" CACHE PATH "Source of host-only adapters")
 
-set(LVGL_DIR "$ENV{LVGL_DIR}" CACHE PATH "Path to pinned LVGL 9.5.0 source")
+set(LVGL_DIR "$ENV{LVGL_DIR}" CACHE PATH "Path to pinned LVGL 9.6.0 source")
 set(GTEST_DIR "$ENV{GTEST_DIR}" CACHE PATH "Path to GoogleTest source")
 if(NOT LVGL_DIR)
   foreach(candidate "${PROJECT_ROOT}/components/lvgl" "${PROJECT_ROOT}/.pio/libdeps/native-screenshot/lvgl")
@@ -22,7 +22,7 @@ if(NOT GTEST_DIR AND EXISTS "${PROJECT_ROOT}/.pio/libdeps/native-screenshot/goog
   set(GTEST_DIR "${PROJECT_ROOT}/.pio/libdeps/native-screenshot/googletest")
 endif()
 if(NOT EXISTS "${LVGL_DIR}/lvgl.h")
-  message(FATAL_ERROR "Set LVGL_DIR to the pinned LVGL 9.5.0 source or vendor components/lvgl")
+  message(FATAL_ERROR "Set LVGL_DIR to the pinned LVGL 9.6.0 source or vendor components/lvgl")
 endif()
 if(NOT EXISTS "${GTEST_DIR}/googletest/src/gtest-all.cc")
   include(FetchContent)

@@ -127,7 +127,7 @@ bash rust/tools/build.sh --qemu
 python3 simulator/tools/qemu_smoke.py \
   --image rust/target/qemu/xtensa-esp32s3-espidf/release/images/qemu-flash.bin \
   --qemu /path/to/qemu-system-xtensa --timeout 30 --control-proof \
-  --expect 'Rust controller boot complete' --expect 'pwm_01us=16000' \
+  --expect 'Rust controller boot complete' --expect 'pwm_01us=17700' \
   --report rust/target/qemu/smoke.json
 ```
 

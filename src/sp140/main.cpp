@@ -4,6 +4,7 @@
 #include "nvs_flash.h"
 #include "esp_system.h"
 #include "sp140/device_settings.h"
+#include "sp140/time_utils.h"
 #include "sp140/ble/ota_service.h"
 #include "esp_ota_ops.h"
 
@@ -58,7 +59,6 @@ extern "C" void eppg_qemu_boot_complete();
 void disarmSystem();
 bool armSystem();
 void afterCruiseEnd();
-void afterCruiseStart();
 void setupTasks();
 void createAllSyncPrimitives();
 void audioTask(void* parameter);
@@ -86,16 +86,11 @@ int8_t bmsCS = MCP_CS;
 #define PERFORMANCE_MODE_HOLD_MS 3000  // Longer hold time for performance mode
 #define BLE_PAIRING_HOLD_MS 10000      // Hold duration to enter BLE pairing mode
 
-// Throttle control constants moved to inc/sp140/throttle.h
-#define CRUISE_MAX_PERCENTAGE                                                  \
-  0.60  // Maximum cruise throttle as a percentage of the total ESC range (e.g.,
-       // 0.60 = 60%)
+// Throttle control constants (incl. CRUISE_MAX_PWM) are in inc/sp140/throttle.h
 #define CRUISE_DISENGAGE_POT_THRESHOLD_PERCENTAGE                              \
   0.80  // Current pot must be >= this % of activation value to disengage
 #define CRUISE_DISENGAGE_GRACE_PERIOD_MS                                       \
   2000  // Delay before checking pot disengagement after cruise activation
-#define CRUISE_ACTIVATION_MAX_POT_PERCENTAGE                                   \
-  0.70  // Prevent cruise activation if pot is above this percentage
 
 // Button state tracking
 volatile bool buttonPressed = false;
@@ -216,9 +211,9 @@ void changeDeviceState(DeviceState newState) {
     }
     break;
   case ARMED_CRUISING:
-    if (oldState == ARMED) {
-      afterCruiseStart();
-    }
+    // Cruise references are recorded in toggleCruise() before the state
+    // change, and the throttle task latches its own output on entry, so
+    // there is nothing left to do here.
     break;
   }
 }
@@ -242,6 +237,10 @@ TaskHandle_t audioTaskHandle = NULL;
 
 QueueHandle_t throttleUpdateQueue = NULL;
 QueueHandle_t vibeQueue = NULL;  // Vibration motor queue
+
+// Output the throttle task last commanded while ARMED. Written only by the
+// throttle task; read by toggleCruise() to gate cruise activation.
+static volatile uint16_t armedOutputPwm = ESC_MIN_PWM;
 
 unsigned long lastDisarmTime = 0;
 const unsigned long DISARM_COOLDOWN = 500;  // 500ms cooldown
@@ -1235,9 +1234,10 @@ void toggleCruise() {
   if (wirelessIsRemote()) {
     if (currentState == ARMED) {
       const uint16_t pot = readThrottleRaw();
-      const uint16_t max_activation = static_cast<uint16_t>(
-          POT_MAX_VALUE * CRUISE_ACTIVATION_MAX_POT_PERCENTAGE);
-      if (pot >= POT_ENGAGEMENT_LEVEL && pot <= max_activation) {
+      // The receiver enforces its actual output cap; reject a remote request
+      // here as well when its mode-mapped target is already above that cap.
+      if (pot >= POT_ENGAGEMENT_LEVEL &&
+          isCruiseOutputAllowed(potRawToModePwm(pot, deviceData.performance_mode))) {
         wirelessRemoteDesiredState = ARMED_CRUISING;
       } else {
         startCruiseIconFlash();
@@ -1257,17 +1257,15 @@ void toggleCruise() {
 
     // Check if throttle is engaged (not at zero)
     if (throttleEngaged()) {
-      // Check if throttle is too high to activate cruise
-      int currentPotVal = readControlThrottleRaw();
-      const int activationThreshold =
-          (int)(4095 * CRUISE_ACTIVATION_MAX_POT_PERCENTAGE);  // Calculate 70%
-                                                              // threshold
-
-      if (currentPotVal > activationThreshold) {
-        // Throttle is engaged and too high, flash the icon
+      // Hold the actual output; refuse activation above the shared cruise cap.
+      if (!isCruiseOutputAllowed(armedOutputPwm)) {
         startCruiseIconFlash();
+        platform::console.line("Cruise blocked: output above cruise max");
       } else {
-        // Throttle is engaged and not too high, activate cruise
+        // Record the override reference before the state flips: the throttle
+        // task checks it from its first ARMED_CRUISING tick.
+        cruisedPotVal = readControlThrottleRaw();
+        cruisedAtMillis = platform::millis32();
         changeDeviceState(ARMED_CRUISING);
         pulseVibeMotor();
       }
@@ -1321,13 +1319,9 @@ bool shouldDisengageCruise(int potVal) {
 
 /**
  * Handles throttle control when in ARMED_CRUISING state
- * @param currentCruiseThrottlePWM Reference to the cruise PWM value
  * @param potVal Current raw potentiometer value
  */
-void handleCruisingThrottle(uint16_t &currentCruiseThrottlePWM, int potVal) {
-  // Set the ESC throttle to the determined (and potentially capped) cruise PWM
-  setESCThrottle(currentCruiseThrottlePWM);
-
+void handleCruisingThrottle(int potVal) {
   // Check for cruise disengagement via potentiometer override
   if (shouldDisengageCruise(potVal)) {
     changeDeviceState(ARMED);  // Transition back to normal ARMED state
@@ -1349,6 +1343,7 @@ void handleCruisingThrottle(uint16_t &currentCruiseThrottlePWM, int potVal) {
 void handleThrottle() {
   static uint16_t currentCruiseThrottlePWM = ESC_MIN_PWM;
   static int prevPwm = ESC_MIN_PWM;  // Previous PWM for ramping
+  static bool wasCruising = false;
   uint16_t newPWM;
 
   if (wirelessIsRemote()) {
@@ -1373,9 +1368,18 @@ void handleThrottle() {
     }
   }
 
-  // Check for throttle updates from cruise activation
+  // Sample state once so the latch and output agree across task boundaries.
+  const DeviceState state = currentState;
+  const bool cruising = state == ARMED_CRUISING;
+  if (cruising && !wasCruising) {
+    currentCruiseThrottlePWM = std::min<int>(prevPwm, CRUISE_MAX_PWM);
+    platform::console.format("Cruise PWM latched at: %u\n", currentCruiseThrottlePWM);
+  }
+  wasCruising = cruising;
+
+  // Apply BLE cruise setpoint updates after the entry latch.
   if (xQueueReceive(throttleUpdateQueue, &newPWM, 0) == pdTRUE) {
-    if (currentState == ARMED_CRUISING) {
+    if (state == ARMED_CRUISING) {
       currentCruiseThrottlePWM = newPWM;
       platform::console.text("Cruise PWM initialized/updated to: ");
       platform::console.line(currentCruiseThrottlePWM);
@@ -1385,15 +1389,17 @@ void handleThrottle() {
   int finalPwm = ESC_DISARMED_PWM;
 
   // Handle throttle based on current device state
-  switch (currentState) {
+  switch (state) {
   case DISARMED:
     resetThrottleState(prevPwm);
+    armedOutputPwm = ESC_MIN_PWM;
     finalPwm = ESC_DISARMED_PWM;
     break;
 
   case ARMED_CRUISING:
-    handleCruisingThrottle(currentCruiseThrottlePWM, control_throttle);
+    handleCruisingThrottle(control_throttle);
     finalPwm = currentCruiseThrottlePWM;  // Use cruise PWM
+    prevPwm = finalPwm;  // Leaving cruise ramps from the output actually held
     break;
 
   case ARMED:
@@ -1403,6 +1409,7 @@ void handleThrottle() {
         : getSmoothedThrottlePwm(deviceData.performance_mode);
     finalPwm =
         applyModeRampClamp(smoothedPwm, prevPwm, deviceData.performance_mode);
+    armedOutputPwm = finalPwm;
     break;
   }
 
@@ -1482,24 +1489,6 @@ bool armSystem() {
   // runVibePattern(arm_vibes, 7);
   pulseVibeMotor();  // Ensure this is the active call
   return true;
-}
-
-void afterCruiseStart() {
-  cruisedPotVal =
-      readControlThrottleRaw();  // Store raw control value at activation
-  cruisedAtMillis = platform::millis32();
-
-  // Calculate cruise PWM using the same mapping as normal throttle
-  // (prevents throttle drop when activating cruise in chill mode)
-  uint16_t initialCruisePWM = calculateCruisePwm(
-      cruisedPotVal, deviceData.performance_mode, CRUISE_MAX_PERCENTAGE);
-
-  // Send the cruise PWM value to the throttle task via queue (non-blocking
-  // overwrite — blocking send inside changeDeviceState could trigger the
-  // xQueueGenericSend assert during cruise engagement).
-  xQueueOverwrite(throttleUpdateQueue, &initialCruisePWM);
-
-  // pulseVibeMotor();
 }
 
 void afterCruiseEnd() {

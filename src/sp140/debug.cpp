@@ -1,5 +1,6 @@
 #include "platform/runtime.h"
 #include "sp140/debug.h"
+#include "sp140/time_utils.h"
 
 static unsigned long last_update = 0;
 static float fake_values[4] = {65.0, 0.0, 0.0, 0.0};  // Initialize first value to 65V

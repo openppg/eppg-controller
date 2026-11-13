@@ -17,6 +17,11 @@ The exporter checks OTA slot size, firmware marker, unchanged partition geometry
 and absence of Arduino/legacy C++ application objects. Archive matching ELF/map
 files. App-only OTA and full recovery images are distinct artifacts.
 
+Host regressions are documented in `tools/host-native-tests/README.md`; build with
+CMake and run CTest. `./simulator/verify.sh` runs all firmware/host gates.
+`tools/host-screenshot-offline` compares production LVGL 9.6 screens with existing
+references and fails on missing/different references. QEMU instructions are in README.
+
 Production controller state, monitoring, byte protocols, ESC sessions and UI live
 in `rust/crates/`. The native simulator uses those same crates. Host verification:
 

@@ -2,8 +2,9 @@
 pub const MIN: u16 = 1035;
 pub const MAX: u16 = 1950;
 pub const IDLE: u16 = 1000;
+pub const CRUISE_MAX: u16 = 1680;
 pub fn map_mode(raw: u16, mode: u8) -> u16 {
-    let max = if mode == 0 { 1600 } else { 1950 };
+    let max = if mode == 0 { 1770 } else { 1950 };
     (1035 + (raw as u32 * (max - 1035)) / 4095) as u16
 }
 pub fn map_full(raw: u16) -> u16 {
@@ -16,10 +17,10 @@ pub fn limited(current: i32, last: i32, threshold: i32) -> i32 {
 }
 pub fn ramp(value: u16, last: u16, mode: u8) -> u16 {
     limited(value as i32, last as i32, if mode == 0 { 8 } else { 27 })
-        .clamp(1035, if mode == 0 { 1600 } else { 1950 }) as u16
+        .clamp(1035, if mode == 0 { 1770 } else { 1950 }) as u16
 }
-pub fn cruise_pwm(raw: u16, mode: u8) -> u16 {
-    map_mode(raw, mode).min(1035 + ((1950 - 1035) as f64 * 0.60) as u16)
+pub fn cruise_output_allowed(pwm: u16) -> bool {
+    pwm <= CRUISE_MAX
 }
 #[derive(Clone, Debug)]
 pub struct Filter {
@@ -72,7 +73,7 @@ mod tests {
     #[test]
     fn mapping_exhaustive() {
         for raw in 0..=4095 {
-            assert_eq!(map_mode(raw, 0), 1035 + (raw as u32 * 565 / 4095) as u16);
+            assert_eq!(map_mode(raw, 0), 1035 + (raw as u32 * 735 / 4095) as u16);
             assert_eq!(map_full(raw), 1035 + (raw as u32 * 915 / 4095) as u16);
         }
     }
@@ -80,7 +81,7 @@ mod tests {
     fn ramp_matches() {
         assert_eq!(ramp(1950, 1035, 1), 1062);
         assert_eq!(ramp(1035, 1600, 0), 1584);
-        assert_eq!(ramp(1950, 1950, 0), 1600);
+        assert_eq!(ramp(1950, 1950, 0), 1770);
     }
     #[test]
     fn filter_wrap() {

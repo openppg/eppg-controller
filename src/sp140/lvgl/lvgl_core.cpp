@@ -3,11 +3,11 @@
 #include "../../../inc/sp140/lvgl/lvgl_core.h"
 #include "sp140/lvgl/lvgl_splash.h"
 #include "../../../inc/sp140/esp32s3-config.h"
+#include "../../../inc/sp140/time_utils.h"
 
 // Global variables for core LVGL functionality
 lv_display_t* main_display = nullptr;
 static uint8_t buf[LVGL_BUF_BYTES];
-static uint8_t buf2[LVGL_BUF_BYTES];
 platform::St7735* tft_driver = nullptr;
 // Define the shared SPI bus mutex
 SemaphoreHandle_t spiBusMutex = NULL;
@@ -54,7 +54,11 @@ void setupLvglDisplay(
   // Create display and configure it
   main_display = lv_display_create(SCREEN_WIDTH, SCREEN_HEIGHT);
   lv_display_set_flush_cb(main_display, lvgl_flush_cb);
-  lv_display_set_buffers(main_display, buf, buf2, sizeof(buf), LV_DISPLAY_RENDER_MODE_PARTIAL);
+  // The current SPI flush is synchronous, so LVGL cannot render into a second
+  // buffer while the first is being transferred. Keep one half-screen buffer
+  // and restore double buffering when the transport becomes asynchronous.
+  lv_display_set_buffers(main_display, buf, nullptr, sizeof(buf),
+                         LV_DISPLAY_RENDER_MODE_PARTIAL);
   lv_display_set_color_format(main_display, LV_COLOR_FORMAT_RGB565);
 
   platform::console.line("Display driver registered");

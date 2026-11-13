@@ -1,6 +1,6 @@
 # Rust ESP32-S3 firmware
 
-This workspace is the production firmware on this branch. All controller state, tasks, sensor monitoring, BLE/ESP-NOW services, settings, diagnostics, ESC maintenance, feedback, and UI orchestration are Rust. ESP-IDF supplies the RTOS/drivers/radio stack; LVGL 9.5, Bosch BMP3 compensation and libcanard remain C. `platform-rust` links only low-level peripheral calls from the native branch. The C++ application is retained as a reference and is excluded from the Rust image.
+This workspace is the production firmware on this branch. All controller state, tasks, sensor monitoring, BLE/ESP-NOW services, settings, diagnostics, ESC maintenance, feedback, and UI orchestration are Rust. ESP-IDF supplies the RTOS/drivers/radio stack; LVGL 9.6, Bosch BMP3 compensation and libcanard remain C. `platform-rust` links only low-level peripheral calls from the native branch. The C++ application is retained as a reference and is excluded from the Rust image.
 
 ## Toolchain
 

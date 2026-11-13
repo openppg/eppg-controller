@@ -178,7 +178,8 @@ impl Controller {
             State::Cruising => {
                 self.cruise_raw = raw;
                 self.cruise_at = now;
-                self.cruise_pwm = throttle::cruise_pwm(raw, self.mode);
+                // Capture the commanded output, matching master's throttle-owner latch.
+                self.cruise_pwm = self.previous_pwm.min(throttle::CRUISE_MAX);
                 self.effect(Effects::CRUISE_START);
             }
         }
@@ -213,7 +214,13 @@ impl Controller {
     pub fn toggle_cruise(&mut self, now: u32, raw: u16, maintenance: bool) {
         if self.state == State::Armed {
             if !maintenance {
-                if ((if self.role == Role::Remote { 205 } else { 204 })..=2866).contains(&raw) {
+                let engaged = raw >= if self.role == Role::Remote { 205 } else { 204 };
+                let output = if self.role == Role::Remote {
+                    throttle::map_mode(raw, self.mode)
+                } else {
+                    self.previous_pwm
+                };
+                if engaged && throttle::cruise_output_allowed(output) {
                     if self.role == Role::Remote {
                         self.desired_state = State::Cruising;
                     } else {
@@ -232,7 +239,7 @@ impl Controller {
         }
     }
     pub fn set_cruise_pwm(&mut self, pwm: u16) -> bool {
-        if self.state == State::Cruising && (1035..=1950).contains(&pwm) {
+        if self.state == State::Cruising && (1035..=throttle::CRUISE_MAX).contains(&pwm) {
             self.cruise_pwm = pwm;
             true
         } else {
@@ -412,6 +419,7 @@ impl Controller {
                     }
                     State::Cruising => {
                         let output = self.cruise_pwm;
+                        self.previous_pwm = output;
                         if now.wrapping_sub(self.cruise_at) > 2000
                             && raw >= ((self.cruise_raw as f64) * 0.8) as u16
                         {

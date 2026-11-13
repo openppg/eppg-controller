@@ -1,7 +1,7 @@
 # Offline host screenshot build probe
 
 This is an isolated macOS/native build of the existing LVGL screenshot test.
-It uses the exact vendored production LVGL 9.5.0 source. Set GTEST_DIR for an
+It uses the exact vendored production LVGL 9.6.0 source. Set GTEST_DIR for an
 offline GoogleTest build, or CMake fetches the pinned GoogleTest 1.15.2.
 
 From the repository root:

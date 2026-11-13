@@ -194,7 +194,7 @@ jobs:
           python3 simulator/tools/qemu_smoke.py \
             --image rust/target/qemu/xtensa-esp32s3-espidf/release/images/qemu-flash.bin \
             --qemu .tools/qemu/bin/qemu-system-xtensa --timeout 30 --control-proof \
-            --expect 'Rust controller boot complete' --expect 'pwm_01us=16000' \
+            --expect 'Rust controller boot complete' --expect 'pwm_01us=17700' \
             --expect 'Barometer initialized' --reject 'Error initializing BMP3xx' \
             --report rust/target/qemu/smoke.json
           python3 simulator/tools/qemu_smoke.py \

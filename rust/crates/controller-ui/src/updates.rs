@@ -310,10 +310,10 @@ impl Ui {
             } else {
                 false
             };
-            // Preserve the original zero-initialized cruise recolor, including dark mode.
+            // Match master: restore the theme foreground after flashing.
             if !cruise_flashing {
                 visible(self.w.cruise_icon_img, p.device_state == 2);
-                lv_obj_set_style_image_recolor(self.w.cruise_icon_img, LVGL_BLACK(), 0);
+                lv_obj_set_style_image_recolor(self.w.cruise_icon_img, fg, 0);
             }
             if let Some(start) = self.arm_fail_flash {
                 if now.wrapping_sub(start) >= 1500 {
