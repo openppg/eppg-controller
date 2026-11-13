@@ -1,7 +1,8 @@
+#include "platform/runtime.h"
 #ifndef INC_SP140_BLE_BLE_UTILS_H_
 #define INC_SP140_BLE_BLE_UTILS_H_
 
-#include <NimBLECharacteristic.h>
+#include "platform/ble.h"
 
 // Forward declare deviceConnected from ble.h (volatile for thread safety)
 extern volatile bool deviceConnected;
@@ -16,7 +17,7 @@ extern volatile bool deviceConnected;
  * @return true if value changed and notification sent, false if no change
  */
 template<typename T>
-bool setAndNotifyOnChange(NimBLECharacteristic* characteristic, T newValue, T& lastValue) {
+bool setAndNotifyOnChange(platform::BleCharacteristic* characteristic, T newValue, T& lastValue) {
   if (characteristic == nullptr) {
     return false;
   }
@@ -42,6 +43,6 @@ bool setAndNotifyOnChange(NimBLECharacteristic* characteristic, T newValue, T& l
  * @param lastValue Reference to the variable tracking the previous value
  * @return true if value changed and notification sent, false if no change
  */
-bool setAndNotifyOnChange(NimBLECharacteristic* characteristic, uint8_t newValue, uint8_t& lastValue);
+bool setAndNotifyOnChange(platform::BleCharacteristic* characteristic, uint8_t newValue, uint8_t& lastValue);
 
 #endif  // INC_SP140_BLE_BLE_UTILS_H_

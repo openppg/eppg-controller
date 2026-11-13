@@ -1,7 +1,7 @@
 #ifndef INC_SP140_ALERT_DISPLAY_H_
 #define INC_SP140_ALERT_DISPLAY_H_
 
-#include <Arduino.h>
+#include "platform/runtime.h"
 #include <stdint.h>
 #include <stddef.h>
 #include <freertos/FreeRTOS.h>

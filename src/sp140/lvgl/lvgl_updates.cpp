@@ -1,3 +1,4 @@
+#include "platform/runtime.h"
 #include "../../../inc/sp140/lvgl/lvgl_updates.h"
 #include "../../../inc/sp140/esp32s3-config.h"
 #include "../../../inc/sp140/monitor_config.h"  // For direct threshold access
@@ -153,7 +154,7 @@ void startCruiseIconFlash() {
       isFlashingCruiseIcon = false;
       lv_obj_add_flag(cruise_icon_img, LV_OBJ_FLAG_HIDDEN);  // Hide it again
       lv_obj_set_style_image_recolor(cruise_icon_img, original_cruise_icon_color, LV_PART_MAIN);  // Restore color on failure
-      USBSerial.println("Error: Failed to create cruise flash timer!");
+      platform::console.line("Error: Failed to create cruise flash timer!");
     } else {
       // Set icon to red for flashing
       lv_obj_set_style_image_recolor(cruise_icon_img, LVGL_RED, LV_PART_MAIN);
@@ -161,7 +162,7 @@ void startCruiseIconFlash() {
 
     xSemaphoreGive(lvglMutex);
   } else {
-     USBSerial.println("Warning: Failed to acquire LVGL mutex for startCruiseIconFlash");
+     platform::console.line("Warning: Failed to acquire LVGL mutex for startCruiseIconFlash");
   }
 }
 
@@ -233,12 +234,12 @@ void startArmFailIconFlash() {
       isFlashingArmFailIcon = false;
       lv_obj_add_flag(arm_fail_warning_icon_img, LV_OBJ_FLAG_HIDDEN);  // Hide it again
       lv_obj_set_style_image_recolor(arm_fail_warning_icon_img, original_arm_fail_icon_color, LV_PART_MAIN);  // Restore color
-      USBSerial.println("Error: Failed to create arm fail flash timer!");
+      platform::console.line("Error: Failed to create arm fail flash timer!");
     }
 
     xSemaphoreGive(lvglMutex);
   } else {
-     USBSerial.println("Warning: Failed to acquire LVGL mutex for startArmFailIconFlash");
+     platform::console.line("Warning: Failed to acquire LVGL mutex for startArmFailIconFlash");
   }
 }
 
@@ -348,7 +349,7 @@ void startBLEPairingIconFlash() {
     if (ble_pairing_flash_timer == NULL) {
       isFlashingBLEPairingIcon = false;
       lv_obj_add_flag(ble_pairing_icon, LV_OBJ_FLAG_HIDDEN);
-      USBSerial.println("Error: Failed to create BLE pairing flash timer!");
+      platform::console.line("Error: Failed to create BLE pairing flash timer!");
     }
 
     xSemaphoreGive(lvglMutex);
@@ -479,7 +480,7 @@ void updateLvglMainScreen(
   float batteryTemp = NAN;
   bool hasValidBatteryTemp = false;
   for (float cellTemp : cellTemps) {
-    if (isnan(cellTemp)) {
+    if (std::isnan(cellTemp)) {
       continue;
     }
 
@@ -496,7 +497,7 @@ void updateLvglMainScreen(
   const float mosTemp = escTelemetry.mos_temp;
   float escTemp;
   const Thresholds* escTempThresholds;
-  if (!isnan(mosTemp) && (isnan(capTemp) || mosTemp >= capTemp)) {
+  if (!std::isnan(mosTemp) && (std::isnan(capTemp) || mosTemp >= capTemp)) {
     escTemp = mosTemp;
     escTempThresholds = &escMosTempThresholds;
   } else {
@@ -658,7 +659,7 @@ void updateLvglMainScreen(
 
   // Update armed time
   if (armed_time_label != NULL) {  // Check object exists
-    const unsigned int nowMillis = millis();
+    const unsigned int nowMillis = platform::millis32();
     static unsigned int _lastArmedMillis = 0;  // Renamed to avoid conflict
     if (armed) _lastArmedMillis = nowMillis;
     // Calculate session time only if armedStartMillis is valid (not 0)
@@ -853,7 +854,7 @@ void updateLvglMainScreen(
   // -- ESC Temperature --
   if (esc_temp_label != NULL && esc_letter_label != NULL) {  // Check labels exist
     uint8_t escTempLevel = 0;
-    if (escTelemetry.escState == TelemetryState::CONNECTED && !isnan(escTemp)) {
+    if (escTelemetry.escState == TelemetryState::CONNECTED && !std::isnan(escTemp)) {
       char buffer[12];
       snprintf(buffer, sizeof(buffer), "%d", static_cast<int>(escTemp));
       setLabelText(esc_temp_label, buffer);
@@ -886,7 +887,7 @@ void updateLvglMainScreen(
   if (motor_temp_label != NULL && motor_letter_label != NULL) {  // Check labels exist
     uint8_t motorTempLevel = 0;
     // Show motor temp only for a valid numeric reading while ESC is connected.
-    if (escTelemetry.escState == TelemetryState::CONNECTED && !isnan(motorTemp)) {
+    if (escTelemetry.escState == TelemetryState::CONNECTED && !std::isnan(motorTemp)) {
       char buffer[12];
       snprintf(buffer, sizeof(buffer), "%d", static_cast<int>(motorTemp));
       setLabelText(motor_temp_label, buffer);
@@ -983,7 +984,7 @@ void updateLvglMainScreen(
         if (ble_pairing_flash_timer == NULL) {
           isFlashingBLEPairingIcon = false;
           lv_obj_add_flag(ble_pairing_icon, LV_OBJ_FLAG_HIDDEN);
-          USBSerial.println("Error: Failed to create BLE pairing flash timer!");
+          platform::console.line("Error: Failed to create BLE pairing flash timer!");
         }
       }
     } else if (deviceConnected) {
@@ -1006,7 +1007,7 @@ void updateLvglMainScreen(
   // Update climb rate indicator
   static float lastAltitude = 0.0f;
   static uint32_t lastAltitudeTime = 0;
-  uint32_t currentTime = millis();
+  uint32_t currentTime = platform::millis32();
 
   if (currentTime - lastAltitudeTime > 200) {  // Update climb rate every 200ms
     float climbRate = 0.0f;
@@ -1026,8 +1027,8 @@ void updateLvglMainScreen(
 // Test function with simulated data for development/testing
 void updateLvglMainScreenWithTestData(const STR_DEVICE_DATA_140_V1& deviceData) {
   // Create simulated telemetry data
-  static uint32_t testStartTime = millis();
-  uint32_t elapsed = millis() - testStartTime;
+  static uint32_t testStartTime = platform::millis32();
+  uint32_t elapsed = platform::millis32() - testStartTime;
 
   // Generate dynamic test values that change over time
   float time_factor = (elapsed / 1000.0f);  // Convert to seconds
@@ -1059,9 +1060,9 @@ void updateLvglMainScreenWithTestData(const STR_DEVICE_DATA_140_V1& deviceData) 
   bool testCruising = testArmed && (int(time_factor / 8) % 2 == 1);  // Toggle every 8 seconds when armed
 
   // Simulated armed start time
-  static unsigned int testArmedStartMillis = millis();
+  static unsigned int testArmedStartMillis = platform::millis32();
   if (!testArmed) {
-    testArmedStartMillis = millis();  // Reset when not armed
+    testArmedStartMillis = platform::millis32();  // Reset when not armed
   }
 
   // Call the main update function with test data

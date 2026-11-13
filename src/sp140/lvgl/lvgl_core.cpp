@@ -1,3 +1,4 @@
+#include "platform/runtime.h"
 // Copyright 2020 <Zach Whitehead>
 #include "../../../inc/sp140/lvgl/lvgl_core.h"
 #include "sp140/lvgl/lvgl_splash.h"
@@ -7,7 +8,7 @@
 lv_display_t* main_display = nullptr;
 static uint8_t buf[LVGL_BUF_BYTES];
 static uint8_t buf2[LVGL_BUF_BYTES];
-Adafruit_ST7735* tft_driver = nullptr;
+platform::St7735* tft_driver = nullptr;
 // Define the shared SPI bus mutex
 SemaphoreHandle_t spiBusMutex = NULL;
 // Set when a flush had to be skipped because the SPI bus was busy. LVGL is
@@ -21,33 +22,30 @@ void setupLvglBuffer() {
   lv_init();
   // Let LVGL read time directly so animation/refresh pacing stays accurate
   // regardless of how often lv_timer_handler() gets called.
-  lv_tick_set_cb([]() -> uint32_t { return millis(); });
+  lv_tick_set_cb([]() -> uint32_t { return platform::millis32(); });
 }
 
 void setupLvglDisplay(
   const STR_DEVICE_DATA_140_V1& deviceData,
   int8_t dc_pin,
-  int8_t rst_pin,
-  SPIClass* spi
+  int8_t rst_pin
 ) {
-  USBSerial.println("Initializing display system");
+  platform::console.line("Initializing display system");
 
   // Create SPI bus mutex on first use if not already created
   if (spiBusMutex == NULL) {
     spiBusMutex = xSemaphoreCreateMutex();
     if (spiBusMutex == NULL) {
-      USBSerial.println("Error creating SPI bus mutex");
+      platform::console.line("Error creating SPI bus mutex");
     }
   }
 
   // Create the TFT driver instance if not already created
   if (tft_driver == nullptr) {
-    tft_driver = new Adafruit_ST7735(spi, displayCS, dc_pin, rst_pin);
-
-    // Initialize the display
-    tft_driver->initR(INITR_BLACKTAB);
-    tft_driver->setRotation(deviceData.screen_rotation);
-    tft_driver->fillScreen(ST77XX_BLACK);
+    tft_driver = new platform::St7735();
+    if (!tft_driver->initialize(displayCS, dc_pin, rst_pin, deviceData.screen_rotation)) {
+      platform::console.line("ST7735 initialization failed");
+    }
   }
 
   // Initialize LVGL buffer
@@ -59,7 +57,7 @@ void setupLvglDisplay(
   lv_display_set_buffers(main_display, buf, buf2, sizeof(buf), LV_DISPLAY_RENDER_MODE_PARTIAL);
   lv_display_set_color_format(main_display, LV_COLOR_FORMAT_RGB565);
 
-  USBSerial.println("Display driver registered");
+  platform::console.line("Display driver registered");
 
   // Set LVGL default theme - using default font
   lv_theme_t* theme = lv_theme_default_init(
@@ -83,7 +81,7 @@ void lvgl_flush_cb(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map) {
   if (spiBusMutex != NULL) {
     if (xSemaphoreTake(spiBusMutex, pdMS_TO_TICKS(200)) != pdTRUE) {
       // SPI bus timeout - BMS might be doing long operation, skip display flush
-      USBSerial.println("[DISPLAY] SPI bus timeout - skipping display flush");
+      platform::console.line("[DISPLAY] SPI bus timeout - skipping display flush");
       // Must still signal LVGL that flush is done to avoid deadlock. That
       // marks the area clean without it ever reaching the panel, so flag it
       // for a recovery repaint (handled in updateLvgl).
@@ -93,18 +91,11 @@ void lvgl_flush_cb(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map) {
     }
   }
 
-  // Make sure display CS is selected only after SPI bus is acquired
-  digitalWrite(displayCS, LOW);
-  tft_driver->startWrite();
-  tft_driver->setAddrWindow(area->x1, area->y1, w, h);
+  if (!tft_driver->writeRegion(area->x1, area->y1, w, h,
+                              reinterpret_cast<const uint16_t*>(px_map))) {
+    flushSkipped = true;
+  }
 
-  // Push colors - using DMA if available
-  uint32_t len = w * h;
-  tft_driver->writePixels((uint16_t*)px_map, len);  // NOLINT(readability/casting)
-  tft_driver->endWrite();
-
-  // Deselect display CS when done
-  digitalWrite(displayCS, HIGH);
   if (spiBusMutex != NULL) {
     xSemaphoreGive(spiBusMutex);
   }
@@ -131,12 +122,12 @@ void updateLvgl() {
 }
 
 void displayLvglSplash(const STR_DEVICE_DATA_140_V1& deviceData, int duration) {
-  USBSerial.println("Displaying LVGL splash screen");
+  platform::console.line("Displaying LVGL splash screen");
   createLvglSplashScreen(deviceData);
 
   // Process LVGL for the duration
-  uint32_t start_time = millis();
-  while (millis() - start_time < duration) {
+  uint32_t start_time = platform::millis32();
+  while (platform::millis32() - start_time < duration) {
     updateLvgl();
     vTaskDelay(pdMS_TO_TICKS(LVGL_REFRESH_TIME));
   }

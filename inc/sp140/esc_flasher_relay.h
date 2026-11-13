@@ -1,3 +1,4 @@
+#include "platform/runtime.h"
 #ifndef INC_SP140_ESC_FLASHER_RELAY_H_
 #define INC_SP140_ESC_FLASHER_RELAY_H_
 
@@ -13,10 +14,10 @@
 //
 // Transport model: BUFFER-THEN-FLASH.
 //   1. The app sends FW_START(hwId, totalSize), then streams the complete image
-//      (32-byte header + firmware) in offset-addressed chunks into a controller
+//      (32-uint8_t header + firmware) in offset-addressed chunks into a controller
 //      heap/PSRAM buffer (BLE task), then FW_END.
 //   2. Only after the full image is received does the throttle task (the sole
-//      CAN owner) stream it to the ESC bootloader in 256-byte SendFwData chunks,
+//      CAN owner) stream it to the ESC bootloader in 256-uint8_t SendFwData chunks,
 //      paced by the ESC's next_index flow control.
 // This decouples the BLE transfer from the CAN streaming entirely, so a slow
 // ESC flash cannot trip a BLE idle timeout, and the buffer is written by only
@@ -25,7 +26,7 @@
 // Safety: only starts while DISARMED; aborts if the device arms; the controller
 // never reboots (only the ESC does); the hardware_id is validated against the
 // connected ESC before entering the bootloader. Fully non-blocking on the
-// throttle task (no delay()/vTaskDelay()), so the 50 Hz control loop is never
+// throttle task (no platform::delayMs()/vTaskDelay()), so the 50 Hz control loop is never
 // stalled. See: powerpack-flash-qc/configs/ESC-Config-Relay-Design.md (§4).
 // =============================================================================
 
@@ -70,7 +71,7 @@ void escFlasherRelayServiceTick();
 
 // ---- BLE-side API (safe to call from the BLE task) -------------------------
 // Begin a transfer: allocate a buffer for totalSize bytes (the complete image
-// incl. 32-byte header) and validate hwId against the connected ESC. Returns
+// incl. 32-uint8_t header) and validate hwId against the connected ESC. Returns
 // false if armed, busy, hwId mismatch, size out of range, or allocation fails.
 bool escFlasherRelayBegin(uint16_t hardwareId, uint32_t totalSize);
 

@@ -1,3 +1,4 @@
+#include "platform/runtime.h"
 #include "sp140/simple_monitor.h"
 #include <vector>
 #include "sp140/monitor_config.h"
@@ -34,7 +35,7 @@ static void setupLoggerSinks() {
 
 void SerialLogger::log(SensorID id, AlertLevel lvl, float v) {
   const char* levelNames[] = {"OK", "WARN_LOW", "WARN_HIGH", "CRIT_LOW", "CRIT_HIGH", "INFO"};
-  USBSerial.printf("[%lu] [%s] %s = %.2f\n", millis(), levelNames[(int)lvl], sensorIDToString(id), v);
+  platform::console.format("[%lu] [%s] %s = %.2f\n", platform::millis32(), levelNames[(int)lvl], sensorIDToString(id), v);
 }
 
 void SerialLogger::log(SensorID id, AlertLevel lvl, bool v) {
@@ -45,13 +46,13 @@ void SerialLogger::log(SensorID id, AlertLevel lvl, bool v) {
       id == SensorID::ESC_OverTemp_Error || id == SensorID::ESC_OverVolt_Error ||
       id == SensorID::ESC_VoltageDrop_Error || id == SensorID::ESC_ThrottleSat_Warning) {
     if (v) {
-      USBSerial.printf("[%lu] [%s] %s = %s (0x%04X: %s)\n",
-                       millis(), levelNames[(int)lvl], sensorIDToString(id),
+      platform::console.format("[%lu] [%s] %s = %s (0x%04X: %s)\n",
+                       platform::millis32(), levelNames[(int)lvl], sensorIDToString(id),
                        v ? "ON" : "OFF", monitoringEscData.running_error,
                        decodeRunningError(monitoringEscData.running_error).c_str());
     } else {
-      USBSerial.printf("[%lu] [%s] %s = %s (cleared)\n",
-                       millis(), levelNames[(int)lvl], sensorIDToString(id),
+      platform::console.format("[%lu] [%s] %s = %s (cleared)\n",
+                       platform::millis32(), levelNames[(int)lvl], sensorIDToString(id),
                        v ? "ON" : "OFF");
     }
   // Enhanced logging for ESC self-check errors - show decoded error details
@@ -63,18 +64,18 @@ void SerialLogger::log(SensorID id, AlertLevel lvl, bool v) {
              id == SensorID::ESC_MotorVDet2_Error || id == SensorID::ESC_MotorIDet2_Error ||
              id == SensorID::ESC_SwHwIncompat_Error || id == SensorID::ESC_BootloaderBad_Error) {
     if (v) {
-      USBSerial.printf("[%lu] [%s] %s = %s (0x%04X: %s)\n",
-                       millis(), levelNames[(int)lvl], sensorIDToString(id),
+      platform::console.format("[%lu] [%s] %s = %s (0x%04X: %s)\n",
+                       platform::millis32(), levelNames[(int)lvl], sensorIDToString(id),
                        v ? "ON" : "OFF", monitoringEscData.selfcheck_error,
                        decodeSelfCheckError(monitoringEscData.selfcheck_error).c_str());
     } else {
-      USBSerial.printf("[%lu] [%s] %s = %s (cleared)\n",
-                       millis(), levelNames[(int)lvl], sensorIDToString(id),
+      platform::console.format("[%lu] [%s] %s = %s (cleared)\n",
+                       platform::millis32(), levelNames[(int)lvl], sensorIDToString(id),
                        v ? "ON" : "OFF");
     }
   } else {
     // Standard logging for all other sensors
-    USBSerial.printf("[%lu] [%s] %s = %s\n", millis(), levelNames[(int)lvl], sensorIDToString(id), v ? "ON" : "OFF");
+    platform::console.format("[%lu] [%s] %s = %s\n", platform::millis32(), levelNames[(int)lvl], sensorIDToString(id), v ? "ON" : "OFF");
   }
 }
 
@@ -305,14 +306,14 @@ const char* sensorIDToAbbreviationWithLevel(SensorID id, AlertLevel level) {
 }
 
 void initSimpleMonitor() {
-  USBSerial.println("Initializing Simple Monitor System");
+  platform::console.line("Initializing Simple Monitor System");
   setupLoggerSinks();
   monitors.clear();
   addESCMonitors();
   addBMSMonitors();
   addAltimeterMonitors();
   addInternalMonitors();
-  USBSerial.printf("Monitoring %d sensors\n", monitors.size());
+  platform::console.format("Monitoring %d sensors\n", monitors.size());
 }
 
 // No more giant switch statement! Each monitor knows its own category.
@@ -368,7 +369,7 @@ void checkAllSensorsWithData(const STR_ESC_TELEMETRY_140& escData,
 
   // If a device reconnected, reset monitor states so they can alert fresh (like at boot)
   if (!prevEscConnected && escConnected) {
-    USBSerial.println("[MONITOR] ESC reconnected - resetting ESC monitor states");
+    platform::console.line("[MONITOR] ESC reconnected - resetting ESC monitor states");
     for (auto* monitor : monitors) {
       if (monitor && monitor->getCategory() == SensorCategory::ESC &&
           !monitor->runsWhenDisconnected()) {
@@ -392,9 +393,9 @@ void checkAllSensorsWithData(const STR_ESC_TELEMETRY_140& escData,
   static bool bmsGraceStarted = false;
   static bool bmsGraceExpired = false;
   if (!prevBmsConnected && bmsConnected) {
-    USBSerial.println("[MONITOR] BMS reconnected - resetting BMS monitor states");
+    platform::console.line("[MONITOR] BMS reconnected - resetting BMS monitor states");
     if (!bmsGraceStarted) {
-      bmsGraceStartMs = millis();
+      bmsGraceStartMs = platform::millis32();
       bmsGraceStarted = true;
     }
     for (auto* monitor : monitors) {
@@ -405,7 +406,7 @@ void checkAllSensorsWithData(const STR_ESC_TELEMETRY_140& escData,
     }
   }
   if (bmsGraceStarted && !bmsGraceExpired &&
-      (millis() - bmsGraceStartMs >= BMS_ALERT_GRACE_MS)) {
+      (platform::millis32() - bmsGraceStartMs >= BMS_ALERT_GRACE_MS)) {
     bmsGraceExpired = true;
   }
   const bool bmsMonitorsArmed = bmsConnected && bmsGraceExpired;
@@ -456,5 +457,5 @@ void checkAllSensorsWithData(const STR_ESC_TELEMETRY_140& escData,
 
 void enableMonitoring() {
   monitoringEnabled = true;
-  USBSerial.println("Sensor monitoring enabled");
+  platform::console.line("Sensor monitoring enabled");
 }

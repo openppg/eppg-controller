@@ -1,7 +1,7 @@
 #ifndef INC_SP140_WIRELESS_SETTINGS_H_
 #define INC_SP140_WIRELESS_SETTINGS_H_
 
-#include <ArduinoJson.h>
+#include "platform/json.h"
 #include <cstdint>
 
 enum class WirelessRole : uint8_t {
@@ -22,7 +22,7 @@ struct WirelessSettings {
 extern WirelessSettings wirelessSettings;
 
 void loadWirelessSettings();
-bool applyWirelessSettingsJson(JsonObjectConst settings);
+bool applyWirelessSettingsJson(const cJSON* settings);
 const char* wirelessRoleName(WirelessRole role);
 void formatWirelessPeerMac(char* output, size_t output_size);
 void formatWirelessLocalMac(char* output, size_t output_size);

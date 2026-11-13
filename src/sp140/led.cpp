@@ -1,18 +1,17 @@
 #include "sp140/led.h"
-#include "Arduino.h"
+#include "platform/runtime.h"
 #include "sp140/globals.h"
 #include "sp140/esp32s3-config.h"
 
 // Global variable to track LED state for blinking
 extern HardwareConfig board_config;
-byte ledState = LOW;
+uint8_t ledState = 0;
 
 // Set LED color for NeoPixel
 void setLEDColor(uint32_t color) {
   if (board_config.enable_neopixel) {
     led_color = color;
-    pixels.setPixelColor(0, color);
-    pixels.show();
+    eppg_pixel_write(board_config.led_sw, color);
   }
 }
 
@@ -20,21 +19,16 @@ void setLEDColor(uint32_t color) {
  * Sets the state of the LEDs.
  *
  * If board_config.enable_neopixel is true, sets the color of the NeoPixel LED to led_color
- * when the state is HIGH, and clears the NeoPixel LED when the state is LOW.
+ * when the state is 1, and clears the NeoPixel LED when the state is 0.
  * Otherwise, sets the state of the LED_SW pin to the given state.
  *
- * @param state The state to set the LEDs to (HIGH or LOW).
+ * @param state The state to set the LEDs to (1 or 0).
  */
-void setLEDs(byte state) {
+void setLEDs(uint8_t state) {
   if (board_config.enable_neopixel) {
-    if (state == HIGH) {
-      pixels.setPixelColor(0, led_color);
-    } else {
-      pixels.clear();
-    }
-    pixels.show();
+    eppg_pixel_write(board_config.led_sw, state ? led_color : 0);
   } else {
-    digitalWrite(board_config.led_sw, state);
+    eppg_gpio_write(board_config.led_sw, state);
   }
 }
 

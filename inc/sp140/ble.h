@@ -1,14 +1,12 @@
 #ifndef INC_SP140_BLE_H_
 #define INC_SP140_BLE_H_
 
-#include <NimBLEDevice.h>
-#include <NimBLEUtils.h>
-#include <NimBLEServer.h>
+#include "platform/ble.h"
 
 // BLE globals
-extern NimBLECharacteristic* pThrottleCharacteristic;
-extern NimBLECharacteristic* pDeviceStateCharacteristic;
-extern NimBLEServer* pServer;
+extern platform::BleCharacteristic* pThrottleCharacteristic;
+extern platform::BleCharacteristic* pDeviceStateCharacteristic;
+extern platform::BleServer* pServer;
 extern volatile uint16_t connectedHandle;
 extern volatile bool deviceConnected;
 

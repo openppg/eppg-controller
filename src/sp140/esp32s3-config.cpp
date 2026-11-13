@@ -1,4 +1,4 @@
-#include <Arduino.h>
+#include "platform/runtime.h"
 
 #include "../../inc/sp140/esp32s3-config.h"
 

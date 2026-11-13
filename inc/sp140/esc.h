@@ -1,7 +1,7 @@
 #ifndef INC_SP140_ESC_H_
 #define INC_SP140_ESC_H_
 
-#include <Arduino.h>
+#include "platform/runtime.h"
 
 // Motor temp validity range (disconnected/invalid readings are represented as NaN)
 constexpr float MOTOR_TEMP_VALID_MIN_C = -20.0f;
@@ -59,8 +59,8 @@ CanardAdapter& escAdapter();
 void requestEscHardwareInfo();
 
 // ESC Error Decoding Functions
-String decodeRunningError(uint16_t errorCode);
-String decodeSelfCheckError(uint16_t errorCode);
+std::string decodeRunningError(uint16_t errorCode);
+std::string decodeSelfCheckError(uint16_t errorCode);
 bool hasRunningError(uint16_t errorCode);
 bool hasSelfCheckError(uint16_t errorCode);
 bool hasCriticalRunningError(uint16_t errorCode);

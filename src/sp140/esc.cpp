@@ -1,8 +1,9 @@
+#include "platform/runtime.h"
 #include "sp140/esc.h"
 #include "sp140/globals.h"
 #include "sp140/esc_config_relay.h"
 #include "sp140/esc_flasher_relay.h"
-#include <CircularBuffer.hpp>
+#include "platform/ring_buffer.h"
 
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 #include "driver/twai.h"
@@ -20,7 +21,7 @@ static SineEsc esc(adapter);
 
 // Expose the single shared adapter to the ESC config relay module.
 CanardAdapter& escAdapter() { return adapter; }
-static unsigned long lastSuccessfulCommTimeMs = 0;  // Store millis() time of last successful ESC comm
+static unsigned long lastSuccessfulCommTimeMs = 0;  // Store platform::millis32() time of last successful ESC comm
 // Flag set by requestEscHardwareInfo() (may be called from BLE task),
 // consumed safely inside readESCTelemetry() on the throttle task.
 static volatile bool s_hwInfoRequested = false;
@@ -167,7 +168,7 @@ void syncEscOutputs() {
   }
 
   const EscStatusLightMode requestedMode = sRequestedStatusLightMode;
-  const unsigned long now = millis();
+  const unsigned long now = platform::millis32();
   const bool needsRefresh =
       sHaveSentStatusLight &&
       escStatusLightRefreshMs(requestedMode) > 0 &&
@@ -215,7 +216,7 @@ TwaiBusHealth getTwaiBusHealth() {
  * restart it.
  */
 static void serviceTwaiBusHealth() {
-  const unsigned long now = millis();
+  const unsigned long now = platform::millis32();
   static unsigned long lastPollMs = 0;
   if (now - lastPollMs < TWAI_HEALTH_POLL_MS) { return; }  // NOLINT(whitespace/newline)
   lastPollMs = now;
@@ -225,14 +226,14 @@ static void serviceTwaiBusHealth() {
   uint32_t alerts = 0;
   if (twai_read_alerts(&alerts, 0) == ESP_OK && alerts != 0) {
     if (alerts & TWAI_ALERT_ERR_PASS) {
-      USBSerial.println("[TWAI] Entered error-passive (CAN wiring fault or unacked TX)");
+      platform::console.line("[TWAI] Entered error-passive (CAN wiring fault or unacked TX)");
     }
     if (alerts & TWAI_ALERT_BUS_OFF) {
       sTwaiHealth.bus_off_count++;
-      USBSerial.println("[TWAI] BUS-OFF");
+      platform::console.line("[TWAI] BUS-OFF");
     }
     if (alerts & TWAI_ALERT_BUS_RECOVERED) {
-      USBSerial.println("[TWAI] Bus recovered");
+      platform::console.line("[TWAI] Bus recovered");
     }
   }
 
@@ -249,7 +250,7 @@ static void serviceTwaiBusHealth() {
   sTwaiHealth.rx_error_counter = status.rx_error_counter;
 
   if (prevState != sTwaiHealth.state) {
-    USBSerial.printf("[TWAI] State %s -> %s (tec=%lu rec=%lu busErr=%lu)\n",
+    platform::console.format("[TWAI] State %s -> %s (tec=%lu rec=%lu busErr=%lu)\n",
                      twaiBusStateName(prevState), twaiBusStateName(sTwaiHealth.state),
                      (unsigned long)status.tx_error_counter,
                      (unsigned long)status.rx_error_counter,
@@ -260,7 +261,7 @@ static void serviceTwaiBusHealth() {
     case TWAI_STATE_BUS_OFF:
       if (!sTwaiRecoveryPending) {
         sTwaiRecoveryPending = true;
-        USBSerial.println("[TWAI] Initiating bus-off recovery");
+        platform::console.line("[TWAI] Initiating bus-off recovery");
         twai_initiate_recovery();
       }
       break;
@@ -270,7 +271,7 @@ static void serviceTwaiBusHealth() {
       if (sTwaiRecoveryPending && twai_start() == ESP_OK) {
         sTwaiRecoveryPending = false;
         sTwaiHealth.recovery_count++;
-        USBSerial.println("[TWAI] Driver restarted after bus-off recovery");
+        platform::console.line("[TWAI] Driver restarted after bus-off recovery");
       }
       break;
     case TWAI_STATE_RUNNING:
@@ -294,7 +295,7 @@ STR_ESC_TELEMETRY_140 escTelemetryData = {
 void initESC() {
   escTwaiInitialized = setupTWAI();
   if (!escTwaiInitialized) {
-    USBSerial.println("ESC TWAI Initialization failed. ESC will not function.");
+    platform::console.line("ESC TWAI Initialization failed. ESC will not function.");
     return;  // Can't proceed without TWAI driver
   }
 
@@ -375,7 +376,7 @@ void readESCTelemetry() {
       if (isMotorTempValidC(rawMotorTemp)) {
         escTelemetryData.motor_temp = rawMotorTemp;
       } else {
-        // Store invalid motor temp as NaN. Downstream consumers can skip on isnan().
+        // Store invalid motor temp as NaN. Downstream consumers can skip on std::isnan().
         escTelemetryData.motor_temp = NAN;
       }
       escTelemetryData.phase_current = res->current / 10.0f;
@@ -390,7 +391,7 @@ void readESCTelemetry() {
       escTelemetryData.selfcheck_error = res->selfcheck_error;
 
       // Record the time of this successful communication using the local clock
-      lastSuccessfulCommTimeMs = millis();
+      lastSuccessfulCommTimeMs = platform::millis32();
     }  // else: Timestamp hasn't changed, treat as stale data, don't update local timer or telemetry
 
   } else {
@@ -399,11 +400,11 @@ void readESCTelemetry() {
   }
 
   // Update connection state based on time since last successful communication
-  unsigned long currentTimeMs = millis();
+  unsigned long currentTimeMs = platform::millis32();
   if (lastSuccessfulCommTimeMs == 0 || (currentTimeMs - lastSuccessfulCommTimeMs) > TELEMETRY_TIMEOUT_MS) {
     if (escTelemetryData.escState != TelemetryState::NOT_CONNECTED) {
       // Log state change only if it actually changed
-      USBSerial.printf("ESC State: %d -> NOT_CONNECTED (Timeout)\n", static_cast<int>(escTelemetryData.escState));
+      platform::console.format("ESC State: %d -> NOT_CONNECTED (Timeout)\n", static_cast<int>(escTelemetryData.escState));
       escTelemetryData.escState = TelemetryState::NOT_CONNECTED;
       // Reset runtime accumulator so it restarts from zero on reconnect.
       // Keep sEscLastTime10ms at its last real value so the stale-data guard
@@ -414,11 +415,11 @@ void readESCTelemetry() {
   } else {
     if (escTelemetryData.escState != TelemetryState::CONNECTED) {
       // Log state change only if it actually changed
-      USBSerial.printf("ESC State: %d -> CONNECTED\n", static_cast<int>(escTelemetryData.escState));
+      platform::console.format("ESC State: %d -> CONNECTED\n", static_cast<int>(escTelemetryData.escState));
       escTelemetryData.escState = TelemetryState::CONNECTED;
       // Auto-request hardware info on first connection if not already populated
       if (escTelemetryData.hardware_id == 0) {
-        USBSerial.println("ESC: Auto-requesting hardware info");
+        platform::console.line("ESC: Auto-requesting hardware info");
         esc.getHardwareInfo();
       }
     }
@@ -427,7 +428,7 @@ void readESCTelemetry() {
   // Process any pending hardware info request (set from BLE command or retry)
   if (s_hwInfoRequested) {
     s_hwInfoRequested = false;
-    USBSerial.println("ESC: Sending GetHwInfo (app-requested)");
+    platform::console.line("ESC: Sending GetHwInfo (app-requested)");
     esc.getHardwareInfo();
   }
 
@@ -485,13 +486,13 @@ bool setupTWAI() {
 
   if (status_result == ESP_OK) {
     // Driver is installed. We can check its state if needed.
-    USBSerial.printf("TWAI driver already installed. State: %d\n", status_info.state);
+    platform::console.format("TWAI driver already installed. State: %d\n", status_info.state);
     // If it's stopped, maybe we need to start it? For now, assume it's okay.
     // if (status_info.state == TWAI_STATE_STOPPED) { twai_start(); }
     return true;  // Already initialized
   } else if (status_result != ESP_ERR_INVALID_STATE) {
     // An error other than "not installed" occurred
-    USBSerial.printf("Error checking TWAI status: %s\n", esp_err_to_name(status_result));
+    platform::console.format("Error checking TWAI status: %s\n", esp_err_to_name(status_result));
     return false;  // Don't proceed if status check failed unexpectedly
   }
   // If status_result was ESP_ERR_INVALID_STATE, proceed with installation
@@ -505,17 +506,17 @@ bool setupTWAI() {
 
   esp_err_t install_err = twai_driver_install(&g_config, &t_config, &f_config);
   if (install_err == ESP_OK) {
-      USBSerial.println("TWAI Driver installed");
+      platform::console.line("TWAI Driver installed");
   } else {
-      USBSerial.printf("Failed to install TWAI driver: %s\n", esp_err_to_name(install_err));
+      platform::console.format("Failed to install TWAI driver: %s\n", esp_err_to_name(install_err));
       return false;
   }
 
   esp_err_t start_err = twai_start();
   if (start_err == ESP_OK) {
-      USBSerial.println("TWAI Driver started");
+      platform::console.line("TWAI Driver started");
   } else {
-      USBSerial.printf("Failed to start TWAI driver: %s\n", esp_err_to_name(start_err));
+      platform::console.format("Failed to start TWAI driver: %s\n", esp_err_to_name(start_err));
       // Attempt to uninstall if start failed
       twai_driver_uninstall();
       return false;
@@ -529,9 +530,9 @@ bool setupTWAI() {
                               | TWAI_ALERT_BUS_OFF
                               | TWAI_ALERT_BUS_RECOVERED;
   if (twai_reconfigure_alerts(alerts_to_enable, NULL) == ESP_OK) {
-      USBSerial.println("CAN Alerts reconfigured");
+      platform::console.line("CAN Alerts reconfigured");
   } else {
-      USBSerial.println("Failed to reconfigure CAN alerts");
+      platform::console.line("Failed to reconfigure CAN alerts");
       // Consider this non-fatal for now? Or return false?
   }
 
@@ -543,55 +544,55 @@ bool setupTWAI() {
  * @param res Pointer to the throttle response structure from ESC
  */
 void dumpThrottleResponse(const sine_esc_SetThrottleSettings2Response *res) {
-  USBSerial.println("Got SetThrottleSettings2 response");
+  platform::console.line("Got SetThrottleSettings2 response");
 
-  USBSerial.print("\trecv_pwm: ");
-  USBSerial.println(res->recv_pwm);
+  platform::console.text("\trecv_pwm: ");
+  platform::console.line(res->recv_pwm);
 
-  USBSerial.print("\tcomm_pwm: ");
-  USBSerial.println(res->comm_pwm);
+  platform::console.text("\tcomm_pwm: ");
+  platform::console.line(res->comm_pwm);
 
-  USBSerial.print("\tspeed: ");
-  USBSerial.println(res->speed);
+  platform::console.text("\tspeed: ");
+  platform::console.line(res->speed);
 
-  USBSerial.print("\tcurrent: ");
-  USBSerial.println(res->current);
+  platform::console.text("\tcurrent: ");
+  platform::console.line(res->current);
 
-  USBSerial.print("\tbus_current: ");
-  USBSerial.println(res->bus_current);
+  platform::console.text("\tbus_current: ");
+  platform::console.line(res->bus_current);
 
-  USBSerial.print("\tvoltage: ");
-  USBSerial.println(res->voltage);
+  platform::console.text("\tvoltage: ");
+  platform::console.line(res->voltage);
 
-  USBSerial.print("\tv_modulation: ");
-  USBSerial.println(res->v_modulation);
+  platform::console.text("\tv_modulation: ");
+  platform::console.line(res->v_modulation);
 
-  USBSerial.print("\tmos_temp: ");
-  USBSerial.println(res->mos_temp);
+  platform::console.text("\tmos_temp: ");
+  platform::console.line(res->mos_temp);
 
-  USBSerial.print("\tcap_temp: ");
-  USBSerial.println(res->cap_temp);
+  platform::console.text("\tcap_temp: ");
+  platform::console.line(res->cap_temp);
 
-  USBSerial.print("\tmcu_temp: ");
-  USBSerial.println(res->mcu_temp);
+  platform::console.text("\tmcu_temp: ");
+  platform::console.line(res->mcu_temp);
 
-  USBSerial.print("\trunning_error: ");
-  USBSerial.print(res->running_error);
-  USBSerial.print(" (");
-  USBSerial.print(decodeRunningError(res->running_error));
-  USBSerial.println(")");
+  platform::console.text("\trunning_error: ");
+  platform::console.text(res->running_error);
+  platform::console.text(" (");
+  platform::console.text(decodeRunningError(res->running_error));
+  platform::console.line(")");
 
-  USBSerial.print("\tselfcheck_error: ");
-  USBSerial.print(res->selfcheck_error);
-  USBSerial.print(" (");
-  USBSerial.print(decodeSelfCheckError(res->selfcheck_error));
-  USBSerial.println(")");
+  platform::console.text("\tselfcheck_error: ");
+  platform::console.text(res->selfcheck_error);
+  platform::console.text(" (");
+  platform::console.text(decodeSelfCheckError(res->selfcheck_error));
+  platform::console.line(")");
 
-  USBSerial.print("\tmotor_temp: ");
-  USBSerial.println(res->motor_temp);
+  platform::console.text("\tmotor_temp: ");
+  platform::console.line(res->motor_temp);
 
-  USBSerial.print("\ttime_10ms: ");
-  USBSerial.println(res->time_10ms);
+  platform::console.text("\ttime_10ms: ");
+  platform::console.line(res->time_10ms);
 }
 
 /**
@@ -602,15 +603,15 @@ void dumpESCMessages(void) {
   const SineEscModel &model = esc.getModel();
 
   if (model.hasGetHardwareInfoResponse) {
-    USBSerial.println("Got HwInfo response");
+    platform::console.line("Got HwInfo response");
 
     const sine_esc_GetHwInfoResponse *b = &model.getHardwareInfoResponse;
-    USBSerial.print("\thardware_id: ");
-    USBSerial.println(b->hardware_id, HEX);
-    USBSerial.print("\tbootloader_version: ");
-    USBSerial.println(b->bootloader_version, HEX);
-    USBSerial.print("\tapp_version: ");
-    USBSerial.println(b->app_version, HEX);
+    platform::console.text("\thardware_id: ");
+    platform::console.format("%lX\r\n", static_cast<unsigned long>(b->hardware_id));
+    platform::console.text("\tbootloader_version: ");
+    platform::console.format("%lX\r\n", static_cast<unsigned long>(b->bootloader_version));
+    platform::console.text("\tapp_version: ");
+    platform::console.format("%lX\r\n", static_cast<unsigned long>(b->app_version));
   }
 
   if (model.hasSetThrottleSettings2Response) {
@@ -618,7 +619,7 @@ void dumpESCMessages(void) {
   }
 
   if (model.hasSetRotationSpeedSettingsResponse) {
-    USBSerial.println("Got SetRotationSpeedSettings response");
+    platform::console.line("Got SetRotationSpeedSettings response");
   }
 }
 
@@ -638,14 +639,14 @@ double mapDouble(double x, double in_min, double in_max, double out_min, double 
 /**
  * Decode running error bitmask into human-readable string
  * @param errorCode 16-bit running error code from ESC
- * @return String containing decoded error messages
+ * @return std::string containing decoded error messages
  */
-String decodeRunningError(uint16_t errorCode) {
+std::string decodeRunningError(uint16_t errorCode) {
   if (errorCode == 0) {
     return "no_errors";
   }
 
-  String result = "";
+  std::string result = "";
   bool firstError = true;
 
   // Define error messages for each bit
@@ -684,14 +685,14 @@ String decodeRunningError(uint16_t errorCode) {
 /**
  * Decode self-check error bitmask into human-readable string
  * @param errorCode 16-bit self-check error code from ESC
- * @return String containing decoded error messages
+ * @return std::string containing decoded error messages
  */
-String decodeSelfCheckError(uint16_t errorCode) {
+std::string decodeSelfCheckError(uint16_t errorCode) {
   if (errorCode == 0) {
     return "no_errors";
   }
 
-  String result = "";
+  std::string result = "";
   bool firstError = true;
 
   // Define error messages for each bit

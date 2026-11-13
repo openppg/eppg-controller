@@ -1,14 +1,15 @@
+#include "platform/runtime.h"
 // Throttle utilities and hardware interface
 #include "sp140/throttle.h"
 #include "sp140/shared-config.h"
 #include "sp140/esp32s3-config.h"
-#include <CircularBuffer.hpp>
+#include "platform/ring_buffer.h"
 
 // Access board configuration from main unit
 extern HardwareConfig board_config;
 
 // Internal PWM smoothing buffer (8 samples)
-static CircularBuffer<int, 8> pwmBuffer;
+static platform::RingBuffer<int, 8> pwmBuffer;
 static volatile uint16_t last_pot_raw = 0;
 
 /**
@@ -27,7 +28,7 @@ static volatile uint16_t last_pot_raw = 0;
 int limitedThrottle(int current, int last, int threshold) {
   int delta = current - last;
   int maxDelta = (delta > 0) ? threshold : threshold * DECEL_MULTIPLIER;
-  return last + constrain(delta, -maxDelta, maxDelta);
+  return last + platform::clamp(delta, -maxDelta, maxDelta);
 }
 
 /**
@@ -35,10 +36,7 @@ int limitedThrottle(int current, int last, int threshold) {
  * ESP32 uses 12-bit ADC resolution (0..4095) for throttle.
  */
 void initThrottleInput() {
-  pinMode(board_config.throttle_pin, INPUT);
-  #if defined(ARDUINO_ARCH_ESP32)
-    analogReadResolution(12);
-  #endif
+  eppg_gpio_config(board_config.throttle_pin, false, false);
 }
 
 /**
@@ -46,7 +44,7 @@ void initThrottleInput() {
  * Range: 0..4095 (12-bit).
  */
 uint16_t readThrottleRaw() {
-  uint16_t raw = analogRead(board_config.throttle_pin);
+  uint16_t raw = eppg_adc_read(board_config.throttle_pin);
   last_pot_raw = raw;
   return raw;
 }
@@ -57,8 +55,8 @@ uint16_t getLastThrottleRaw() {
 
 /** Map raw ADC (0..4095) to PWM (ESC_MIN_PWM..ESC_MAX_PWM). */
 int potRawToPwm(uint16_t raw) {
-  // map() already constrains output, no need for explicit constrain()
-  return map(raw, POT_MIN_VALUE, POT_MAX_VALUE, ESC_MIN_PWM, ESC_MAX_PWM);
+  // platform::scaleInteger() already constrains output, no need for explicit platform::clamp()
+  return platform::scaleInteger(raw, POT_MIN_VALUE, POT_MAX_VALUE, ESC_MIN_PWM, ESC_MAX_PWM);
 }
 
 /** Map raw ADC (0..4095) to mode-specific PWM range.
@@ -67,7 +65,7 @@ int potRawToPwm(uint16_t raw) {
  */
 int potRawToModePwm(uint16_t raw, uint8_t performance_mode) {
   int maxPwm = (performance_mode == 0) ? CHILL_MODE_MAX_PWM : ESC_MAX_PWM;
-  return map(raw, POT_MIN_VALUE, POT_MAX_VALUE, ESC_MIN_PWM, maxPwm);
+  return platform::scaleInteger(raw, POT_MIN_VALUE, POT_MAX_VALUE, ESC_MIN_PWM, maxPwm);
 }
 
 /**
@@ -79,7 +77,7 @@ int applyModeRampClamp(int pwmAvg, int& prevPwm, uint8_t performance_mode) {
   const int maxPWM = (performance_mode == 0) ? CHILL_MODE_MAX_PWM : ESC_MAX_PWM;
 
   int limitedPwm = limitedThrottle(pwmAvg, prevPwm, rampRateUs);
-  int clampedPwm = constrain(limitedPwm, ESC_MIN_PWM, maxPWM);
+  int clampedPwm = platform::clamp(limitedPwm, ESC_MIN_PWM, maxPWM);
   prevPwm = clampedPwm;
   return clampedPwm;
 }
@@ -158,7 +156,7 @@ uint16_t calculateCruisePwm(uint16_t potVal, uint8_t performance_mode, float cru
 
   // Step 2: Apply absolute cruise max cap
   uint16_t absoluteMaxCruisePwm = ESC_MIN_PWM + (uint16_t)((ESC_MAX_PWM - ESC_MIN_PWM) * cruiseMaxPct);
-  pwm = min(pwm, absoluteMaxCruisePwm);
+  pwm = std::min(pwm, absoluteMaxCruisePwm);
 
   return pwm;
 }

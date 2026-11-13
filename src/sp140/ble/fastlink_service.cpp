@@ -10,12 +10,12 @@
 #include "sp140/esc.h"  // For requestEscHardwareInfo()
 #include "sp140/esc_config_relay.h"   // throttle telemetry during config relay
 #include "sp140/esc_flasher_relay.h"  // ... and firmware relay
-#include <Arduino.h>
-#include <NimBLECharacteristic.h>
-#include <NimBLEDevice.h>
+#include "platform/runtime.h"
+#include "platform/ble.h"
+#include "platform/ble.h"
 
 namespace {
-NimBLECharacteristic *pFastLinkCharacteristic = nullptr;
+platform::BleCharacteristic *pFastLinkCharacteristic = nullptr;
 uint32_t gFastLinkNotifyOkCount = 0;
 uint32_t gFastLinkNotifyFailCount = 0;
 uint32_t gFastLinkSkippedNoConnCount = 0;
@@ -30,10 +30,10 @@ uint32_t gFastLinkLastOtaKeepaliveMs = 0;
 constexpr uint32_t kOtaKeepaliveIntervalMs = 1000;
 
 constexpr uint32_t kFastLinkTelemetryProperties =
-NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY |
-NIMBLE_PROPERTY::READ_ENC;
+platform::BleProperty::READ | platform::BleProperty::NOTIFY |
+platform::BleProperty::READ_ENC;
 constexpr uint32_t kFastLinkCommandProperties =
-NIMBLE_PROPERTY::WRITE_NR | NIMBLE_PROPERTY::WRITE_ENC;
+platform::BleProperty::WRITE_NR | platform::BleProperty::WRITE_ENC;
 constexpr int32_t kI8Min = std::numeric_limits<int8_t>::min();
 constexpr int32_t kI8Max = std::numeric_limits<int8_t>::max();
 constexpr int32_t kU8Max = std::numeric_limits<uint8_t>::max();
@@ -43,23 +43,23 @@ constexpr int32_t kU16Max = std::numeric_limits<uint16_t>::max();
 constexpr int64_t kU32Max = std::numeric_limits<uint32_t>::max();
 
 inline int8_t toI8(int32_t value) {
-  return static_cast<int8_t>(constrain(value, kI8Min, kI8Max));
+  return static_cast<int8_t>(platform::clamp(value, kI8Min, kI8Max));
 }
 
 inline uint8_t toU8(int32_t value) {
-  return static_cast<uint8_t>(constrain(value, 0, kU8Max));
+  return static_cast<uint8_t>(platform::clamp(value, 0, kU8Max));
 }
 
 inline int16_t toI16(int32_t value) {
-  return static_cast<int16_t>(constrain(value, kI16Min, kI16Max));
+  return static_cast<int16_t>(platform::clamp(value, kI16Min, kI16Max));
 }
 
 inline uint16_t toU16(int32_t value) {
-  return static_cast<uint16_t>(constrain(value, 0, kU16Max));
+  return static_cast<uint16_t>(platform::clamp(value, 0, kU16Max));
 }
 
 inline uint32_t toU32(int64_t value) {
-  return static_cast<uint32_t>(constrain(value, 0LL, kU32Max));
+  return static_cast<uint32_t>(platform::clamp(value, 0LL, kU32Max));
 }
 
 // Float-to-fixed-point: multiply by scale, round, return as int32.
@@ -72,7 +72,7 @@ BLE_FastLink_Telemetry buildFastLinkTelemetry(const TelemetryHub &hub,
   BLE_FastLink_Telemetry fastLink = {};
   fastLink.version = FASTLINK_PROTOCOL_VERSION;
   fastLink.packet_id = gFastLinkPacketId++;
-  fastLink.uptime_ms = millis();
+  fastLink.uptime_ms = platform::millis32();
 
   // Controller mapping (float -> fixed-point)
   fastLink.altitude_cm = scaled(hub.altitude, 100.0f);
@@ -168,7 +168,7 @@ void updateFastLinkTelemetry(const BLE_FastLink_Telemetry &data) {
       // packet_id/uptime_ms the app counts as telemetry progress. Wrap-safe
       // unsigned subtraction. At 1Hz vs the 15ms OTA interval it does not
       // meaningfully slow the flash.
-      const uint32_t nowMs = millis();
+      const uint32_t nowMs = platform::millis32();
       if (deviceConnected &&
           (nowMs - gFastLinkLastOtaKeepaliveMs >= kOtaKeepaliveIntervalMs)) {
         gFastLinkLastOtaKeepaliveMs = nowMs;
@@ -191,10 +191,10 @@ void updateFastLinkTelemetry(const BLE_FastLink_Telemetry &data) {
       ++gFastLinkSkippedNoConnCount;
     }
 
-    const uint32_t nowMs = millis();
+    const uint32_t nowMs = platform::millis32();
     if (nowMs - gFastLinkLastStatsMs >= 2000) {
       gFastLinkLastStatsMs = nowMs;
-      USBSerial.printf(
+      platform::console.format(
           "[FASTLINK] stats ok=%lu fail=%lu skippedNoConn=%lu skippedOta=%lu v=%u packet=%lu uptime=%lu connected=%d ota=%d\n",
           static_cast<unsigned long>(gFastLinkNotifyOkCount),
           static_cast<unsigned long>(gFastLinkNotifyFailCount),
@@ -210,8 +210,8 @@ void updateFastLinkTelemetry(const BLE_FastLink_Telemetry &data) {
 
 // Handles write commands from the app on FAST_LINK_COMMAND_UUID.
 // Command 0x01: request ESC hardware info (HW ID, FW version, bootloader, serial).
-class FastLinkCommandCallbacks : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic *pChar, NimBLEConnInfo &connInfo) override {
+class FastLinkCommandCallbacks : public platform::BleCharacteristicCallbacks {
+  void onWrite(platform::BleCharacteristic *pChar, platform::BleConnection &connInfo) override {
     std::string val = pChar->getValue();
     if (val.empty()) return;
     switch (static_cast<uint8_t>(val[0])) {
@@ -224,10 +224,10 @@ class FastLinkCommandCallbacks : public NimBLECharacteristicCallbacks {
   }
 };
 
-class FastLinkTelemetryCallbacks : public NimBLECharacteristicCallbacks {
-  void onSubscribe(NimBLECharacteristic *pChar, NimBLEConnInfo &connInfo,
+class FastLinkTelemetryCallbacks : public platform::BleCharacteristicCallbacks {
+  void onSubscribe(platform::BleCharacteristic *pChar, platform::BleConnection &connInfo,
                    uint16_t subValue) override {
-    USBSerial.printf(
+    platform::console.format(
         "[FASTLINK] subscribe conn=%u addr=%s value=0x%02x notify=%u indicate=%u\n",
         connInfo.getConnHandle(), connInfo.getAddress().toString().c_str(),
         subValue, subValue & 0x01, (subValue >> 1) & 0x01);
@@ -238,7 +238,7 @@ FastLinkCommandCallbacks commandCallbacks;
 FastLinkTelemetryCallbacks telemetryCallbacks;
 }  // namespace
 
-void initFastLinkBleService(NimBLEServer *pServer) {
+void initFastLinkBleService(platform::BleServer *pServer) {
   if (pServer == nullptr)
     return;
 
@@ -250,7 +250,7 @@ void initFastLinkBleService(NimBLEServer *pServer) {
   pFastLinkCharacteristic->setCallbacks(&telemetryCallbacks);
 
   // Set initial value so GATT reads before the first notify return a valid
-  // version byte instead of all-zeros (which the app rejects as version 0).
+  // version uint8_t instead of all-zeros (which the app rejects as version 0).
   BLE_FastLink_Telemetry initialData = {};
   initialData.version = FASTLINK_PROTOCOL_VERSION;
   pFastLinkCharacteristic->setValue(

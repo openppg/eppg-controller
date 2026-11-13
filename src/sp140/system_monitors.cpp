@@ -1,7 +1,7 @@
 #include "sp140/system_monitors.h"
 #include "sp140/monitor_config.h"
 #include "sp140/altimeter.h"
-#include <Arduino.h>
+#include "platform/runtime.h"
 
 // External references to core monitoring infrastructure
 extern std::vector<IMonitor*> monitors;
@@ -16,9 +16,9 @@ static unsigned long lastCpuTempRead = 0;
 static const unsigned long CPU_TEMP_READ_INTERVAL = 1000;  // Read every 1 second
 
 float getCachedCpuTemperature() {
-  unsigned long now = millis();
+  unsigned long now = platform::millis32();
   if (now - lastCpuTempRead >= CPU_TEMP_READ_INTERVAL) {
-    cachedCpuTemp = temperatureRead();
+    cachedCpuTemp = eppg_cpu_temperature();
     lastCpuTempRead = now;
   }
   return cachedCpuTemp;

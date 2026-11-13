@@ -1,3 +1,4 @@
+#include "platform/runtime.h"
 #include "sp140/bms.h"
 #include "sp140/structs.h"
 #include "sp140/globals.h"
@@ -10,7 +11,7 @@ void logBmsCellProbeConnectionTransitions(const float sanitizedCellTemps[BMS_CEL
   static bool wasConnected[BMS_CELL_PROBE_COUNT] = {false, false, false, false};
 
   for (uint8_t i = 0; i < BMS_CELL_PROBE_COUNT; i++) {
-    const bool connected = !isnan(sanitizedCellTemps[i]);
+    const bool connected = !std::isnan(sanitizedCellTemps[i]);
 
     if (!hasPreviousState) {
       wasConnected[i] = connected;
@@ -18,7 +19,7 @@ void logBmsCellProbeConnectionTransitions(const float sanitizedCellTemps[BMS_CEL
     }
 
     if (connected != wasConnected[i]) {
-      USBSerial.printf("[BMS] T%u sensor %s (sanitized=%.1fC)\n",
+      platform::console.format("[BMS] T%u sensor %s (sanitized=%.1fC)\n",
                        i + 1,
                        connected ? "reconnected" : "disconnected",
                        sanitizedCellTemps[i]);
@@ -54,7 +55,7 @@ void updateBMSData() {
   if (spiBusMutex != NULL) {
     if (xSemaphoreTake(spiBusMutex, pdMS_TO_TICKS(150)) != pdTRUE) {
       // SPI bus timeout - display might be doing long operation
-      USBSerial.println("[BMS] SPI bus timeout - skipping BMS update cycle");
+      platform::console.line("[BMS] SPI bus timeout - skipping BMS update cycle");
       return;  // Use stale BMS data this cycle rather than hang
     }
   }
@@ -62,17 +63,17 @@ void updateBMSData() {
   // only AFTER the bus mutex is held: writing displayCS while a TFT flush is
   // streaming pixels deselects the panel mid-transfer and the rest of that
   // flush is silently lost, leaving stale bands on screen.
-  digitalWrite(displayCS, HIGH);
-  digitalWrite(bmsCS, LOW);
+  eppg_gpio_write(displayCS, 1);
 
-  // USBSerial.println("Updating BMS Data");
-  unsigned long tStart = millis();
+
+  // platform::console.line("Updating BMS Data");
+  unsigned long tStart = platform::millis32();
   bms_can->update();
 
   // All SPI traffic happens inside update() — the getters below only read
   // values the library cached in RAM. Release the bus first so a pending
   // display flush waits only for the CAN drain, not the whole copy-out.
-  digitalWrite(bmsCS, HIGH);
+
   if (spiBusMutex != NULL) {
     xSemaphoreGive(spiBusMutex);
   }
@@ -107,7 +108,7 @@ void updateBMSData() {
   bmsTelemetryData.bms_type = (uint8_t)bms_can->getBmsType();
 
   // Battery identity string
-  String bid = bms_can->getBatteryID();
+  std::string bid = bms_can->getBatteryID();
   strncpy(bmsTelemetryData.battery_id, bid.c_str(), sizeof(bmsTelemetryData.battery_id) - 1);
   bmsTelemetryData.battery_id[sizeof(bmsTelemetryData.battery_id) - 1] = '\0';
 
@@ -163,12 +164,12 @@ void updateBMSData() {
   bmsTelemetryData.highest_temperature = bms_can->getHighestTemperature();
   bmsTelemetryData.lowest_temperature = bms_can->getLowestTemperature();
 
-  bmsTelemetryData.lastUpdateMs = millis();
+  bmsTelemetryData.lastUpdateMs = platform::millis32();
   unsigned long dur = bmsTelemetryData.lastUpdateMs - tStart;
   if (dur > 80) {  // warn if BMS update is taking longer than a frame
-    USBSerial.print("Warn: BMS update slow ");
-    USBSerial.print(dur);
-    USBSerial.println("ms");
+    platform::console.text("Warn: BMS update slow ");
+    platform::console.text(dur);
+    platform::console.line("ms");
   }
   // printBMSData();
 }
@@ -178,61 +179,61 @@ void printBMSData() {
   if (bms_can == nullptr || !bmsCanInitialized) return;
 
 
-  // USBSerial.println("BMS Data:");
-  USBSerial.print("SOC: ");  // State of Charge
-  USBSerial.print(bms_can->getSOC());
-  USBSerial.println(" %");
+  // platform::console.line("BMS Data:");
+  platform::console.text("SOC: ");  // State of Charge
+  platform::console.text(bms_can->getSOC());
+  platform::console.line(" %");
 
-  USBSerial.print("Battery Voltage: ");
-  USBSerial.print(bms_can->getBatteryVoltage());
-  USBSerial.println(" V");
+  platform::console.text("Battery Voltage: ");
+  platform::console.text(bms_can->getBatteryVoltage());
+  platform::console.line(" V");
 
-  USBSerial.print("Battery Current: ");
-  USBSerial.print(bms_can->getBatteryCurrent());
-  USBSerial.println(" A");
+  platform::console.text("Battery Current: ");
+  platform::console.text(bms_can->getBatteryCurrent());
+  platform::console.line(" A");
 
-  USBSerial.print("Power: ");
-  USBSerial.print(bms_can->getPower());
-  USBSerial.println(" kW");
+  platform::console.text("Power: ");
+  platform::console.text(bms_can->getPower());
+  platform::console.line(" kW");
 
-  USBSerial.print("Highest Cell Voltage: ");
-  USBSerial.print(bms_can->getHighestCellVoltage(), 3);
-  USBSerial.println(" V");
+  platform::console.text("Highest Cell Voltage: ");
+  platform::console.text(bms_can->getHighestCellVoltage(), 3);
+  platform::console.line(" V");
 
-  USBSerial.print("Lowest Cell Voltage: ");
-  USBSerial.print(bms_can->getLowestCellVoltage(), 3);
-  USBSerial.println(" V");
+  platform::console.text("Lowest Cell Voltage: ");
+  platform::console.text(bms_can->getLowestCellVoltage(), 3);
+  platform::console.line(" V");
 
-  USBSerial.print("Voltage Differential: ");
-  USBSerial.print(bms_can->getHighestCellVoltage() - bms_can->getLowestCellVoltage(), 3);
-  USBSerial.println(" V");
+  platform::console.text("Voltage Differential: ");
+  platform::console.text(bms_can->getHighestCellVoltage() - bms_can->getLowestCellVoltage(), 3);
+  platform::console.line(" V");
 
-  USBSerial.print("Discharge MOS Status: ");
-  USBSerial.println(bms_can->isDischargeMOSStatus() ? "OPEN" : "CLOSED");
+  platform::console.text("Discharge MOS Status: ");
+  platform::console.line(bms_can->isDischargeMOSStatus() ? "OPEN" : "CLOSED");
 
-  USBSerial.print("Charge MOS Status: ");
-  USBSerial.println(bms_can->isChargeMOSStatus() ? "OPEN" : "CLOSED");
+  platform::console.text("Charge MOS Status: ");
+  platform::console.line(bms_can->isChargeMOSStatus() ? "OPEN" : "CLOSED");
 
-  USBSerial.print("Battery Charging: ");
-  USBSerial.println(bms_can->isBatteryCharging() ? "YES" : "NO");
+  platform::console.text("Battery Charging: ");
+  platform::console.line(bms_can->isBatteryCharging() ? "YES" : "NO");
 
   // Log each temperature sensor value
   // The first 2 are for the BMS (mosfet and balance resistors)
   // The next 4 are for the cell probes
   for (uint8_t i = 0; i < 6; i++) {
-    USBSerial.print("Temperature Sensor ");
-    USBSerial.print(i);
-    USBSerial.print(": ");
-    USBSerial.print(bms_can->getTemperature(i));
-    USBSerial.println(" °C");
+    platform::console.text("Temperature Sensor ");
+    platform::console.text(i);
+    platform::console.text(": ");
+    platform::console.text(bms_can->getTemperature(i));
+    platform::console.line(" °C");
   }
 
   // Print all cell voltages
   for (uint8_t i = 0; i < 24; i++) {
-    USBSerial.print("Cell ");
-    USBSerial.print(i + 1);
-    USBSerial.print(": ");
-    USBSerial.print(bms_can->getCellVoltage(i), 3);
-    USBSerial.println(" V");
+    platform::console.text("Cell ");
+    platform::console.text(i + 1);
+    platform::console.text(": ");
+    platform::console.text(bms_can->getCellVoltage(i), 3);
+    platform::console.line(" V");
   }
 }

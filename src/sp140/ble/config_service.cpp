@@ -1,6 +1,6 @@
 #include "sp140/ble/config_service.h"
 
-#include <Arduino.h>
+#include "platform/runtime.h"
 #include <ctime>
 #include <cstring>
 #include <string>
@@ -27,91 +27,91 @@ extern volatile DeviceState currentState;
 
 // ESC relay NOTIFY characteristic — the controller pushes status + result blob
 // here (config-service GATT reads return null on this BLE stack).
-static NimBLECharacteristic* pEscRelayNotifyCharacteristic = nullptr;
+static platform::BleCharacteristic* pEscRelayNotifyCharacteristic = nullptr;
 
 namespace {
 
-constexpr uint32_t kReadSecure = NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_ENC;
+constexpr uint32_t kReadSecure = platform::BleProperty::READ | platform::BleProperty::READ_ENC;
 constexpr uint32_t kReadWriteSecure =
-NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE |
-NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::WRITE_ENC;
+platform::BleProperty::READ | platform::BleProperty::WRITE |
+platform::BleProperty::READ_ENC | platform::BleProperty::WRITE_ENC;
 constexpr uint32_t kNotifyReadSecure =
-NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY |
-NIMBLE_PROPERTY::READ_ENC;
+platform::BleProperty::READ | platform::BleProperty::NOTIFY |
+platform::BleProperty::READ_ENC;
 constexpr uint32_t kReadWriteNotifyIndicateSecure =
-NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE |
-NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::INDICATE |
-NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::WRITE_ENC;
+platform::BleProperty::READ | platform::BleProperty::WRITE |
+platform::BleProperty::NOTIFY | platform::BleProperty::INDICATE |
+platform::BleProperty::READ_ENC | platform::BleProperty::WRITE_ENC;
 // Write-without-response (plus plain write) on an encrypted link — used for the
 // high-throughput ESC firmware data stream.
 __attribute__((unused)) constexpr uint32_t kWriteNrSecure =
-NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR | NIMBLE_PROPERTY::WRITE_ENC;
+platform::BleProperty::WRITE | platform::BleProperty::WRITE_NR | platform::BleProperty::WRITE_ENC;
 
-class MetricAltCallbacks : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+class MetricAltCallbacks : public platform::BleCharacteristicCallbacks {
+  void onWrite(platform::BleCharacteristic* characteristic, platform::BleConnection& connInfo) override {
     (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.length() != 1) {
-      USBSerial.println("Invalid value length - expected 1 byte");
+      platform::console.line("Invalid value length - expected 1 uint8_t");
       return;
     }
 
     deviceData.metric_alt = (value[0] != 0);
     ::writeDeviceData();
-    USBSerial.println("Metric alt setting saved to Preferences");
+    platform::console.line("Metric alt setting saved to Preferences");
   }
 };
 
-class PerformanceModeCallbacks : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+class PerformanceModeCallbacks : public platform::BleCharacteristicCallbacks {
+  void onWrite(platform::BleCharacteristic* characteristic, platform::BleConnection& connInfo) override {
     (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.length() != 1) {
-      USBSerial.println("Invalid value length - expected 1 byte");
+      platform::console.line("Invalid value length - expected 1 uint8_t");
       return;
     }
 
     uint8_t mode = value[0];
     if (mode > 1) {
-      USBSerial.println("Invalid performance mode value");
+      platform::console.line("Invalid performance mode value");
       return;
     }
 
     deviceData.performance_mode = mode;
     ::writeDeviceData();
-    USBSerial.println("Performance mode saved to Preferences");
+    platform::console.line("Performance mode saved to Preferences");
   }
 };
 
-class ScreenRotationCallbacks : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+class ScreenRotationCallbacks : public platform::BleCharacteristicCallbacks {
+  void onWrite(platform::BleCharacteristic* characteristic, platform::BleConnection& connInfo) override {
     (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.length() != 1) {
-      USBSerial.println("Invalid value length - expected 1 byte");
+      platform::console.line("Invalid value length - expected 1 uint8_t");
       return;
     }
 
     uint8_t rotation = value[0];
     if (rotation != 1 && rotation != 3) {
-      USBSerial.println("Invalid rotation value");
+      platform::console.line("Invalid rotation value");
       return;
     }
 
     deviceData.screen_rotation = rotation;
     ::writeDeviceData();
-    USBSerial.println("Screen rotation saved to Preferences");
+    platform::console.line("Screen rotation saved to Preferences");
   }
 };
 
-class ThrottleValueCallbacks : public NimBLECharacteristicCallbacks {
-  void onRead(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+class ThrottleValueCallbacks : public platform::BleCharacteristicCallbacks {
+  void onRead(platform::BleCharacteristic* characteristic, platform::BleConnection& connInfo) override {
     (void)connInfo;
     uint16_t potVal = getLastThrottleRaw();
     characteristic->setValue(reinterpret_cast<uint8_t*>(&potVal), sizeof(potVal));
   }
 
-  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+  void onWrite(platform::BleCharacteristic* characteristic, platform::BleConnection& connInfo) override {
     (void)connInfo;
     if (currentState != ARMED_CRUISING) {
       return;  // Only allow updates while in cruise mode
@@ -128,50 +128,57 @@ class ThrottleValueCallbacks : public NimBLECharacteristicCallbacks {
     }
 
     if (xQueueSend(throttleUpdateQueue, &newPWM, pdMS_TO_TICKS(100)) != pdTRUE) {
-      USBSerial.println("Failed to queue throttle update");
+      platform::console.line("Failed to queue throttle update");
     }
   }
 };
 
-class TimeCallbacks : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+class TimeCallbacks : public platform::BleCharacteristicCallbacks {
+  void onWrite(platform::BleCharacteristic* characteristic, platform::BleConnection& connInfo) override {
     (void)connInfo;
     std::string value = characteristic->getValue();
-    if (value.length() != sizeof(time_t)) {
-      USBSerial.println("Invalid timestamp length");
+    if (value.length() != sizeof(int32_t)) {
+      platform::console.line("Invalid timestamp length");
       return;
     }
 
-    time_t timestamp;
-    memcpy(&timestamp, value.data(), sizeof(timestamp));
-    timestamp += deviceData.timezone_offset;
+    // Installed IDF 4 firmware exposed signed 32-bit seconds. IDF 5's
+    // time_t is 64-bit; keep the GATT wire format independent of libc ABI.
+    const auto* wire = reinterpret_cast<const uint8_t*>(value.data());
+    const int32_t wire_timestamp = static_cast<int32_t>(
+        static_cast<uint32_t>(wire[0]) | static_cast<uint32_t>(wire[1]) << 8 |
+        static_cast<uint32_t>(wire[2]) << 16 | static_cast<uint32_t>(wire[3]) << 24);
+    const time_t timestamp = static_cast<time_t>(wire_timestamp) + deviceData.timezone_offset;
 
     struct timeval tv;
     tv.tv_sec = timestamp;
     tv.tv_usec = 0;
 
     if (settimeofday(&tv, NULL) == 0) {
-      USBSerial.println("Time set successfully");
+      platform::console.line("Time set successfully");
     } else {
-      USBSerial.println("Failed to set time");
+      platform::console.line("Failed to set time");
     }
   }
 
-  void onRead(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+  void onRead(platform::BleCharacteristic* characteristic, platform::BleConnection& connInfo) override {
     (void)connInfo;
     time_t now;
     time(&now);
     now -= deviceData.timezone_offset;
-    characteristic->setValue(reinterpret_cast<uint8_t*>(&now), sizeof(now));
+    const uint32_t seconds = static_cast<uint32_t>(now);
+    const uint8_t wire[] = {static_cast<uint8_t>(seconds), static_cast<uint8_t>(seconds >> 8),
+                            static_cast<uint8_t>(seconds >> 16), static_cast<uint8_t>(seconds >> 24)};
+    characteristic->setValue(wire, sizeof(wire));
   }
 };
 
-class TimezoneCallbacks : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+class TimezoneCallbacks : public platform::BleCharacteristicCallbacks {
+  void onWrite(platform::BleCharacteristic* characteristic, platform::BleConnection& connInfo) override {
     (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.length() != sizeof(int32_t)) {
-      USBSerial.println("Invalid timezone offset length");
+      platform::console.line("Invalid timezone offset length");
       return;
     }
 
@@ -179,11 +186,11 @@ class TimezoneCallbacks : public NimBLECharacteristicCallbacks {
     memcpy(&offset, value.data(), sizeof(offset));
     deviceData.timezone_offset = offset;
     ::writeDeviceData();
-    USBSerial.print("Timezone offset set to: ");
-    USBSerial.println(offset);
+    platform::console.text("Timezone offset set to: ");
+    platform::console.line(offset);
   }
 
-  void onRead(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+  void onRead(platform::BleCharacteristic* characteristic, platform::BleConnection& connInfo) override {
     (void)connInfo;
     characteristic->setValue(
         reinterpret_cast<uint8_t*>(&deviceData.timezone_offset),
@@ -191,38 +198,38 @@ class TimezoneCallbacks : public NimBLECharacteristicCallbacks {
   }
 };
 
-class ThemeCallbacks : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+class ThemeCallbacks : public platform::BleCharacteristicCallbacks {
+  void onWrite(platform::BleCharacteristic* characteristic, platform::BleConnection& connInfo) override {
     (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.length() != 1) {
-      USBSerial.println("Invalid value length - expected 1 byte");
+      platform::console.line("Invalid value length - expected 1 uint8_t");
       return;
     }
 
     uint8_t theme = value[0];
     if (theme > 1) {
-      USBSerial.println("Invalid theme value - must be 0 or 1");
+      platform::console.line("Invalid theme value - must be 0 or 1");
       return;
     }
 
     deviceData.theme = theme;
     ::writeDeviceData();
-    USBSerial.println("Theme setting saved to Preferences");
+    platform::console.line("Theme setting saved to Preferences");
   }
 
-  void onRead(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+  void onRead(platform::BleCharacteristic* characteristic, platform::BleConnection& connInfo) override {
     (void)connInfo;
     characteristic->setValue(&deviceData.theme, sizeof(deviceData.theme));
   }
 };
 
-class SeaPressureCallbacks : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+class SeaPressureCallbacks : public platform::BleCharacteristicCallbacks {
+  void onWrite(platform::BleCharacteristic* characteristic, platform::BleConnection& connInfo) override {
     (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.length() != sizeof(float)) {
-      USBSerial.println("Invalid sea pressure length");
+      platform::console.line("Invalid sea pressure length");
       return;
     }
 
@@ -231,17 +238,17 @@ class SeaPressureCallbacks : public NimBLECharacteristicCallbacks {
 
     // Validate range: 300.0 - 1200.0 hPa/mbar
     if (pressure < 300.0f || pressure > 1200.0f) {
-      USBSerial.println("Invalid sea pressure value - must be between 300.0 and 1200.0");
+      platform::console.line("Invalid sea pressure value - must be between 300.0 and 1200.0");
       return;
     }
 
     deviceData.sea_pressure = pressure;
     ::writeDeviceData();
-    USBSerial.print("Sea pressure set to: ");
-    USBSerial.println(pressure);
+    platform::console.text("Sea pressure set to: ");
+    platform::console.line(pressure);
   }
 
-  void onRead(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+  void onRead(platform::BleCharacteristic* characteristic, platform::BleConnection& connInfo) override {
     (void)connInfo;
     characteristic->setValue(
         reinterpret_cast<uint8_t*>(&deviceData.sea_pressure),
@@ -249,21 +256,21 @@ class SeaPressureCallbacks : public NimBLECharacteristicCallbacks {
   }
 };
 
-class MetricTempCallbacks : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+class MetricTempCallbacks : public platform::BleCharacteristicCallbacks {
+  void onWrite(platform::BleCharacteristic* characteristic, platform::BleConnection& connInfo) override {
     (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.length() != 1) {
-      USBSerial.println("Invalid value length - expected 1 byte");
+      platform::console.line("Invalid value length - expected 1 uint8_t");
       return;
     }
 
     deviceData.metric_temp = (value[0] != 0);
     ::writeDeviceData();
-    USBSerial.println("Metric temp setting saved to Preferences");
+    platform::console.line("Metric temp setting saved to Preferences");
   }
 
-  void onRead(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+  void onRead(platform::BleCharacteristic* characteristic, platform::BleConnection& connInfo) override {
     (void)connInfo;
     uint8_t metricTempValue = deviceData.metric_temp ? 1 : 0;
     characteristic->setValue(&metricTempValue, sizeof(metricTempValue));
@@ -275,8 +282,8 @@ class MetricTempCallbacks : public NimBLECharacteristicCallbacks {
 // which runs the write/save/restart/verify on the throttle task (CAN owner).
 //   0x10 SET_PARAM / 0x1F SET_AND_COMMIT : [op][config_id u16 LE][len u8][data...]
 // The DISARMED gate is enforced inside the relay (status reports REJECTED_ARMED).
-class EscRelayCmdCallbacks : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+class EscRelayCmdCallbacks : public platform::BleCharacteristicCallbacks {
+  void onWrite(platform::BleCharacteristic* characteristic, platform::BleConnection& connInfo) override {
     (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.size() < 1) return;
@@ -291,18 +298,18 @@ class EscRelayCmdCallbacks : public NimBLECharacteristicCallbacks {
         if (len > 48 || value.size() < static_cast<size_t>(4 + len)) return;
         bool accepted = escConfigRelayRequestSetParam(
             configId, reinterpret_cast<const uint8_t*>(value.data()) + 4, len);
-        USBSerial.printf("ESC relay cmd op=0x%02X id=0x%04X len=%d accepted=%d\n",
+        platform::console.format("ESC relay cmd op=0x%02X id=0x%04X len=%d accepted=%d\n",
                          op, configId, len, accepted);
         break;
       }
       case 0x30: {  // READ_ALL parameters
         bool accepted = escConfigRelayRequestReadAll();
-        USBSerial.printf("ESC relay READ_ALL accepted=%d\n", accepted);
+        platform::console.format("ESC relay READ_ALL accepted=%d\n", accepted);
         break;
       }
       case 0x40: {  // BATCH_BEGIN — clear the staging buffer
         bool accepted = escConfigRelayBatchBegin();
-        USBSerial.printf("ESC relay BATCH_BEGIN accepted=%d\n", accepted);
+        platform::console.format("ESC relay BATCH_BEGIN accepted=%d\n", accepted);
         break;
       }
       case 0x41: {  // BATCH_ADD — [op][config_id u16][len u8][data...]
@@ -317,11 +324,11 @@ class EscRelayCmdCallbacks : public NimBLECharacteristicCallbacks {
       }
       case 0x42: {  // BATCH_COMMIT — run write-all + save + restart + verify
         bool accepted = escConfigRelayRequestBatchCommit();
-        USBSerial.printf("ESC relay BATCH_COMMIT accepted=%d\n", accepted);
+        platform::console.format("ESC relay BATCH_COMMIT accepted=%d\n", accepted);
         break;
       }
       default:
-        USBSerial.printf("ESC relay: unknown opcode 0x%02X\n", op);
+        platform::console.format("ESC relay: unknown opcode 0x%02X\n", op);
         break;
     }
   }
@@ -329,10 +336,10 @@ class EscRelayCmdCallbacks : public NimBLECharacteristicCallbacks {
 
 // ESC parameter read-all result fetch. The app writes [offset u32 LE] to set the
 // read cursor, then reads back up to ~240 bytes of the result blob from there.
-class EscParamDataCallbacks : public NimBLECharacteristicCallbacks {
+class EscParamDataCallbacks : public platform::BleCharacteristicCallbacks {
   uint32_t offset_ = 0;
 
-  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+  void onWrite(platform::BleCharacteristic* characteristic, platform::BleConnection& connInfo) override {
     (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.size() < 4) return;
@@ -342,7 +349,7 @@ class EscParamDataCallbacks : public NimBLECharacteristicCallbacks {
               (static_cast<uint32_t>(static_cast<uint8_t>(value[3])) << 24);
   }
 
-  void onRead(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+  void onRead(platform::BleCharacteristic* characteristic, platform::BleConnection& connInfo) override {
     (void)connInfo;
     uint8_t buf[240];
     uint16_t n = escConfigRelayReadResult(offset_, buf, sizeof(buf));
@@ -354,8 +361,8 @@ class EscParamDataCallbacks : public NimBLECharacteristicCallbacks {
 // session status so the app can poll until a terminal result (the design's
 // poll-until-terminal contract, which also survives a BLE drop + reconnect).
 //   [code][config_id u16 LE][phase][detail][progress u16 LE][readback...]
-class EscRelayStatusCallbacks : public NimBLECharacteristicCallbacks {
-  void onRead(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+class EscRelayStatusCallbacks : public platform::BleCharacteristicCallbacks {
+  void onRead(platform::BleCharacteristic* characteristic, platform::BleConnection& connInfo) override {
     (void)connInfo;
     EscRelayStatus s = escConfigRelayGetStatus();
     uint8_t buf[16];
@@ -377,8 +384,8 @@ class EscRelayStatusCallbacks : public NimBLECharacteristicCallbacks {
 //   0x21 FW_END   : [0x21]
 //   0x22 FW_ABORT : [0x22]
 // Status read layout: [code][phase][progress permille u16 LE].
-class EscFwCtrlCallbacks : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+class EscFwCtrlCallbacks : public platform::BleCharacteristicCallbacks {
+  void onWrite(platform::BleCharacteristic* characteristic, platform::BleConnection& connInfo) override {
     (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.size() < 1) return;
@@ -393,7 +400,7 @@ class EscFwCtrlCallbacks : public NimBLECharacteristicCallbacks {
                         (static_cast<uint32_t>(static_cast<uint8_t>(value[5])) << 16) |
                         (static_cast<uint32_t>(static_cast<uint8_t>(value[6])) << 24);
         bool ok = escFlasherRelayBegin(hwId, size);
-        USBSerial.printf("ESC FW START hwId=0x%04X size=%u ok=%d\n", hwId, size, ok);
+        platform::console.format("ESC FW START hwId=0x%04X size=%u ok=%d\n", hwId, size, ok);
         break;
       }
       case 0x21:  // FW_END
@@ -403,12 +410,12 @@ class EscFwCtrlCallbacks : public NimBLECharacteristicCallbacks {
         escFlasherRelayAbort();
         break;
       default:
-        USBSerial.printf("ESC FW: unknown opcode 0x%02X\n", op);
+        platform::console.format("ESC FW: unknown opcode 0x%02X\n", op);
         break;
     }
   }
 
-  void onRead(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+  void onRead(platform::BleCharacteristic* characteristic, platform::BleConnection& connInfo) override {
     (void)connInfo;
     EscFwStatus s = escFlasherRelayGetStatus();
     uint8_t buf[4];
@@ -422,8 +429,8 @@ class EscFwCtrlCallbacks : public NimBLECharacteristicCallbacks {
 
 // ESC firmware image data: [offset u32 LE][image bytes...]. Write-no-response
 // for throughput; the controller copies each chunk into its image buffer.
-class EscFwDataCallbacks : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+class EscFwDataCallbacks : public platform::BleCharacteristicCallbacks {
+  void onWrite(platform::BleCharacteristic* characteristic, platform::BleConnection& connInfo) override {
     (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.size() < 4) return;  // need at least the offset
@@ -439,17 +446,17 @@ class EscFwDataCallbacks : public NimBLECharacteristicCallbacks {
 
 }  // namespace
 
-void initConfigBleService(NimBLEServer* server, const std::string& uniqueId) {
-  NimBLEService* configService = server->createService(NimBLEUUID(CONFIG_SERVICE_UUID));
+void initConfigBleService(platform::BleServer* server, const std::string& uniqueId) {
+  platform::BleService* configService = server->createService(platform::BleUuid(CONFIG_SERVICE_UUID));
 
-  NimBLECharacteristic* unixTime = configService->createCharacteristic(
-      NimBLEUUID(UNIX_TIME_UUID),
+  platform::BleCharacteristic* unixTime = configService->createCharacteristic(
+      platform::BleUuid(UNIX_TIME_UUID),
       kReadWriteSecure);
   static TimeCallbacks timeCallbacks;
   unixTime->setCallbacks(&timeCallbacks);
 
-  NimBLECharacteristic* timezone = configService->createCharacteristic(
-      NimBLEUUID(TIMEZONE_UUID),
+  platform::BleCharacteristic* timezone = configService->createCharacteristic(
+      platform::BleUuid(TIMEZONE_UUID),
       kReadWriteSecure);
   static TimezoneCallbacks timezoneCallbacks;
   timezone->setCallbacks(&timezoneCallbacks);
@@ -457,44 +464,44 @@ void initConfigBleService(NimBLEServer* server, const std::string& uniqueId) {
                      sizeof(deviceData.timezone_offset));
 
   pDeviceStateCharacteristic = configService->createCharacteristic(
-      NimBLEUUID(DEVICE_STATE_UUID),
+      platform::BleUuid(DEVICE_STATE_UUID),
       kNotifyReadSecure);
   uint8_t initialState = DISARMED;
   pDeviceStateCharacteristic->setValue(&initialState, sizeof(initialState));
 
-  NimBLECharacteristic* metricAlt = configService->createCharacteristic(
-      NimBLEUUID(METRIC_ALT_UUID),
+  platform::BleCharacteristic* metricAlt = configService->createCharacteristic(
+      platform::BleUuid(METRIC_ALT_UUID),
       kReadWriteSecure);
   static MetricAltCallbacks metricAltCallbacks;
   metricAlt->setCallbacks(&metricAltCallbacks);
   int metricAltValue = deviceData.metric_alt ? 1 : 0;
   metricAlt->setValue(metricAltValue);
 
-  NimBLECharacteristic* performanceMode = configService->createCharacteristic(
-      NimBLEUUID(PERFORMANCE_MODE_UUID),
+  platform::BleCharacteristic* performanceMode = configService->createCharacteristic(
+      platform::BleUuid(PERFORMANCE_MODE_UUID),
       kReadWriteSecure);
   static PerformanceModeCallbacks performanceModeCallbacks;
   performanceMode->setCallbacks(&performanceModeCallbacks);
   int performanceValue = deviceData.performance_mode ? 1 : 0;
   performanceMode->setValue(performanceValue);
 
-  NimBLECharacteristic* screenRotation = configService->createCharacteristic(
-      NimBLEUUID(SCREEN_ROTATION_UUID),
+  platform::BleCharacteristic* screenRotation = configService->createCharacteristic(
+      platform::BleUuid(SCREEN_ROTATION_UUID),
       kReadWriteSecure);
   static ScreenRotationCallbacks screenRotationCallbacks;
   screenRotation->setCallbacks(&screenRotationCallbacks);
   int screenValue = (deviceData.screen_rotation == 1) ? 1 : 3;
   screenRotation->setValue(screenValue);
 
-  NimBLECharacteristic* theme = configService->createCharacteristic(
-      NimBLEUUID(THEME_UUID),
+  platform::BleCharacteristic* theme = configService->createCharacteristic(
+      platform::BleUuid(THEME_UUID),
       kReadWriteSecure);
   static ThemeCallbacks themeCallbacks;
   theme->setCallbacks(&themeCallbacks);
   theme->setValue(&deviceData.theme, sizeof(deviceData.theme));
 
-  NimBLECharacteristic* seaPressure = configService->createCharacteristic(
-      NimBLEUUID(SEA_PRESSURE_UUID),
+  platform::BleCharacteristic* seaPressure = configService->createCharacteristic(
+      platform::BleUuid(SEA_PRESSURE_UUID),
       kReadWriteSecure);
   static SeaPressureCallbacks seaPressureCallbacks;
   seaPressure->setCallbacks(&seaPressureCallbacks);
@@ -502,16 +509,16 @@ void initConfigBleService(NimBLEServer* server, const std::string& uniqueId) {
       reinterpret_cast<uint8_t*>(&deviceData.sea_pressure),
       sizeof(deviceData.sea_pressure));
 
-  NimBLECharacteristic* metricTemp = configService->createCharacteristic(
-      NimBLEUUID(METRIC_TEMP_UUID),
+  platform::BleCharacteristic* metricTemp = configService->createCharacteristic(
+      platform::BleUuid(METRIC_TEMP_UUID),
       kReadWriteSecure);
   static MetricTempCallbacks metricTempCallbacks;
   metricTemp->setCallbacks(&metricTempCallbacks);
   uint8_t metricTempValue = deviceData.metric_temp ? 1 : 0;
   metricTemp->setValue(&metricTempValue, sizeof(metricTempValue));
 
-  NimBLECharacteristic* firmwareVersion = configService->createCharacteristic(
-      NimBLEUUID(FW_VERSION_UUID), kReadSecure);
+  platform::BleCharacteristic* firmwareVersion = configService->createCharacteristic(
+      platform::BleUuid(FW_VERSION_UUID), kReadSecure);
   // Include an internal build number so the app can distinguish same-version OTA releases.
   uint8_t versionBytes[6] = {
       VERSION_MAJOR,
@@ -523,63 +530,63 @@ void initConfigBleService(NimBLEServer* server, const std::string& uniqueId) {
   };
   firmwareVersion->setValue(versionBytes, sizeof(versionBytes));
 
-  NimBLECharacteristic* hardwareRevision = configService->createCharacteristic(
-      NimBLEUUID(HW_REVISION_UUID), kReadSecure);
+  platform::BleCharacteristic* hardwareRevision = configService->createCharacteristic(
+      platform::BleUuid(HW_REVISION_UUID), kReadSecure);
   hardwareRevision->setValue(&deviceData.revision, sizeof(deviceData.revision));
 
-  NimBLECharacteristic* armedTime = configService->createCharacteristic(
-      NimBLEUUID(ARMED_TIME_UUID), kReadSecure);
+  platform::BleCharacteristic* armedTime = configService->createCharacteristic(
+      platform::BleUuid(ARMED_TIME_UUID), kReadSecure);
   armedTime->setValue(reinterpret_cast<uint8_t*>(&deviceData.armed_time),
                       sizeof(deviceData.armed_time));
 
   pThrottleCharacteristic = configService->createCharacteristic(
-      NimBLEUUID(THROTTLE_VALUE_UUID),
+      platform::BleUuid(THROTTLE_VALUE_UUID),
       kReadWriteNotifyIndicateSecure);
   static ThrottleValueCallbacks throttleValueCallbacks;
   pThrottleCharacteristic->setCallbacks(&throttleValueCallbacks);
 
 #if 1  // ESC relay chars: all read/write/write-nr (NO notify) — zero CCCD footprint.
   // ESC config relay: command (write) + status (read).
-  NimBLECharacteristic* escRelayCmd = configService->createCharacteristic(
-      NimBLEUUID(ESC_RELAY_CMD_UUID), kReadWriteSecure);
+  platform::BleCharacteristic* escRelayCmd = configService->createCharacteristic(
+      platform::BleUuid(ESC_RELAY_CMD_UUID), kReadWriteSecure);
   static EscRelayCmdCallbacks escRelayCmdCallbacks;
   escRelayCmd->setCallbacks(&escRelayCmdCallbacks);
 
-  NimBLECharacteristic* escRelayStatus = configService->createCharacteristic(
-      NimBLEUUID(ESC_RELAY_STATUS_UUID), kReadSecure);
+  platform::BleCharacteristic* escRelayStatus = configService->createCharacteristic(
+      platform::BleUuid(ESC_RELAY_STATUS_UUID), kReadSecure);
   static EscRelayStatusCallbacks escRelayStatusCallbacks;
   escRelayStatus->setCallbacks(&escRelayStatusCallbacks);
 
   // ESC firmware relay: control (read status + write opcodes; NO notify) + data.
-  NimBLECharacteristic* escFwCtrl = configService->createCharacteristic(
-      NimBLEUUID(ESC_FW_CTRL_UUID), kReadWriteSecure);
+  platform::BleCharacteristic* escFwCtrl = configService->createCharacteristic(
+      platform::BleUuid(ESC_FW_CTRL_UUID), kReadWriteSecure);
   static EscFwCtrlCallbacks escFwCtrlCallbacks;
   escFwCtrl->setCallbacks(&escFwCtrlCallbacks);
 
-  NimBLECharacteristic* escFwData = configService->createCharacteristic(
-      NimBLEUUID(ESC_FW_DATA_UUID), kWriteNrSecure);
+  platform::BleCharacteristic* escFwData = configService->createCharacteristic(
+      platform::BleUuid(ESC_FW_DATA_UUID), kWriteNrSecure);
   static EscFwDataCallbacks escFwDataCallbacks;
   escFwData->setCallbacks(&escFwDataCallbacks);
 
   // ESC parameter read-all result fetch (write offset, read chunk).
-  NimBLECharacteristic* escParamData = configService->createCharacteristic(
-      NimBLEUUID(ESC_PARAM_DATA_UUID), kReadWriteSecure);
+  platform::BleCharacteristic* escParamData = configService->createCharacteristic(
+      platform::BleUuid(ESC_PARAM_DATA_UUID), kReadWriteSecure);
   static EscParamDataCallbacks escParamDataCallbacks;
   escParamData->setCallbacks(&escParamDataCallbacks);
 
   // ESC relay NOTIFY: status + result-blob stream (GATT reads return null on
   // this stack; notify is reliable). Pumped from the 50 Hz notify task.
   pEscRelayNotifyCharacteristic = configService->createCharacteristic(
-      NimBLEUUID(ESC_RELAY_NOTIFY_UUID), kNotifyReadSecure);
+      platform::BleUuid(ESC_RELAY_NOTIFY_UUID), kNotifyReadSecure);
 #endif  // ESC_RELAY_BLE_CHARS
 
-  NimBLEService* deviceInfoService = server->createService(NimBLEUUID(DEVICE_INFO_SERVICE_UUID));
-  NimBLECharacteristic* manufacturer = deviceInfoService->createCharacteristic(
-      NimBLEUUID(MANUFACTURER_NAME_UUID), kReadSecure);
+  platform::BleService* deviceInfoService = server->createService(platform::BleUuid(DEVICE_INFO_SERVICE_UUID));
+  platform::BleCharacteristic* manufacturer = deviceInfoService->createCharacteristic(
+      platform::BleUuid(MANUFACTURER_NAME_UUID), kReadSecure);
   manufacturer->setValue("OpenPPG");
 
-  NimBLECharacteristic* uniqueIdCharacteristic = deviceInfoService->createCharacteristic(
-      NimBLEUUID(DEVICE_UNIQUE_ID_UUID), kReadSecure);
+  platform::BleCharacteristic* uniqueIdCharacteristic = deviceInfoService->createCharacteristic(
+      platform::BleUuid(DEVICE_UNIQUE_ID_UUID), kReadSecure);
   uniqueIdCharacteristic->setValue(uniqueId);  // Already uppercase string
 
   configService->start();
@@ -598,7 +605,7 @@ void updateThrottleBLE(int value) {
     }
     vTaskDelay(pdMS_TO_TICKS(5));
   } catch (...) {
-    USBSerial.println("Error sending BLE notification");
+    platform::console.line("Error sending BLE notification");
   }
 }
 

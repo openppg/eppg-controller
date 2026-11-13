@@ -1,7 +1,7 @@
 #ifndef INC_SP140_BUZZER_H_
 #define INC_SP140_BUZZER_H_
 
-#include <Arduino.h>
+#include "platform/runtime.h"
 #include "sp140/structs.h"
 
 /**

@@ -1,6 +1,6 @@
 #include "sp140/esc_config_relay.h"
 
-#include <Arduino.h>
+#include "platform/runtime.h"
 #include <string.h>
 #include <canard.h>
 #include <CanardAdapter.h>
@@ -333,7 +333,7 @@ static void finishOk(const uint8_t* readback, uint8_t len) {
   for (uint8_t i = 0; i < s_status.readback_len; i++) s_status.readback[i] = readback[i];
   portEXIT_CRITICAL(&s_mux);
   escAdapter().setLocalNodeId(CTRL_NORMAL_NODE_ID);  // restore normal CAN identity
-  s_terminalAtMs = millis();
+  s_terminalAtMs = platform::millis32();
   s_hadSession = true;  // open the telemetry-throttle settle window for read-back
   s_phase = EscRelayPhase::DONE_OK;
 }
@@ -341,7 +341,7 @@ static void finishOk(const uint8_t* readback, uint8_t len) {
 static void finishFail(EscRelayStatusCode code, uint8_t detail) {
   setStatus(code, EscRelayPhase::DONE_FAIL, detail);
   escAdapter().setLocalNodeId(CTRL_NORMAL_NODE_ID);  // restore normal CAN identity
-  s_terminalAtMs = millis();
+  s_terminalAtMs = platform::millis32();
   s_hadSession = true;  // open the telemetry-throttle settle window for read-back
   s_phase = EscRelayPhase::DONE_FAIL;
 }
@@ -372,7 +372,7 @@ static void finishReadDone() {
   s_status.detail = 100;
   portEXIT_CRITICAL(&s_mux);
   escAdapter().setLocalNodeId(CTRL_NORMAL_NODE_ID);  // restore normal CAN identity
-  s_terminalAtMs = millis();
+  s_terminalAtMs = platform::millis32();
   s_hadSession = true;  // open the telemetry-throttle settle window for read-back
   s_phase = EscRelayPhase::DONE_OK;
 }
@@ -406,7 +406,7 @@ static void beginReadSession() {
     setStatus(EscRelayStatusCode::READING, EscRelayPhase::READING, 0);
     sendGetConfig(ESC_PARAM_IDS[0]);
   }
-  s_lastSendMs = millis();
+  s_lastSendMs = platform::millis32();
 }
 
 static void beginSession(uint16_t id, const uint8_t* data, uint8_t len) {
@@ -433,7 +433,7 @@ static void beginSession(uint16_t id, const uint8_t* data, uint8_t len) {
     setStatus(EscRelayStatusCode::RUNNING, EscRelayPhase::WRITE, 0);
     sendSetConfig(s_targetId, s_expData, s_expLen);
   }
-  s_lastSendMs = millis();
+  s_lastSendMs = platform::millis32();
 }
 
 // Start a batch session over the staged params: unlock -> SetConfig each ->
@@ -464,7 +464,7 @@ static void beginBatchSession() {
     setStatus(EscRelayStatusCode::RUNNING, EscRelayPhase::BATCH_WRITE, 0);
     if (d) sendSetConfig(id, d, len);
   }
-  s_lastSendMs = millis();
+  s_lastSendMs = platform::millis32();
 }
 
 // =============================================================================
@@ -493,7 +493,7 @@ bool escConfigRelayIsActive() {
 bool escConfigRelayResultPending() {
   if (escConfigRelayIsActive()) return true;
   if (!s_hadSession) return false;
-  return (millis() - s_terminalAtMs) < RESULT_SETTLE_MS;
+  return (platform::millis32() - s_terminalAtMs) < RESULT_SETTLE_MS;
 }
 
 bool escConfigRelayRequestSetParam(uint16_t config_id, const uint8_t* data, uint8_t len) {
@@ -634,7 +634,7 @@ void escConfigRelayServiceTick() {
     return;
   }
 
-  const unsigned long now = millis();
+  const unsigned long now = platform::millis32();
   // Array/curve params answer over a slower multi-frame transfer — give them a
   // longer per-request window while reading; everything else uses the scalar wait.
   unsigned long timeoutWindow = RELAY_TIMEOUT_MS;
@@ -687,25 +687,25 @@ void escConfigRelayServiceTick() {
         if (s_gotGet) {
           readStoreTuple(ESC_PARAM_IDS[s_readIndex], (uint8_t)s_getResp.flag,
                          s_getResp.data, s_getResp.data_len);
-          readAdvance(millis());                          // store + send next GetConfig
+          readAdvance(platform::millis32());                          // store + send next GetConfig
           if (s_phase != EscRelayPhase::READING) break;   // finished (node restored)
           escAdapter().processTxRxOnce();                 // push the next request out
         } else {
           const unsigned long win = relayIsArrayParamId(ESC_PARAM_IDS[s_readIndex])
                                         ? RELAY_ARRAY_TIMEOUT_MS : RELAY_TIMEOUT_MS;
-          if ((millis() - s_lastSendMs) > win) {
+          if ((platform::millis32() - s_lastSendMs) > win) {
             if (s_retries++ < RELAY_MAX_RETRIES) {
-              s_gotGet = false; sendGetConfig(ESC_PARAM_IDS[s_readIndex]); s_lastSendMs = millis();
+              s_gotGet = false; sendGetConfig(ESC_PARAM_IDS[s_readIndex]); s_lastSendMs = platform::millis32();
             } else {
               readStoreTuple(ESC_PARAM_IDS[s_readIndex], 0xFF, nullptr, 0);  // timed out — skip
-              readAdvance(millis());
+              readAdvance(platform::millis32());
               if (s_phase != EscRelayPhase::READING) break;
             }
           }
           escAdapter().processTxRxOnce();                 // drain RX — response may arrive
-          delayMicroseconds(150);
+          esp_rom_delay_us(150);
         }
-        if (millis() >= deadline) break;                  // yield; resume next tick
+        if (platform::millis32() >= deadline) break;                  // yield; resume next tick
       }
       break;
     }
@@ -744,7 +744,7 @@ void escConfigRelayServiceTick() {
 
     // ---------------------------------------------------------------------
     // BATCH_VERIFY: after the reboot, GetConfig every staged param and confirm
-    // it persisted (byte-match). Mismatches are counted, not fatal per-param.
+    // it persisted (uint8_t-match). Mismatches are counted, not fatal per-param.
     case EscRelayPhase::BATCH_VERIFY: {
       uint16_t id; const uint8_t* d; uint8_t len;
       if (!batchCurrentTuple(&id, &d, &len)) {

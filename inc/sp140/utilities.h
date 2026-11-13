@@ -1,10 +1,10 @@
 #ifndef INC_SP140_UTILITIES_H_
 #define INC_SP140_UTILITIES_H_
 
-#include <Arduino.h>
+#include "platform/runtime.h"
 
 // Function to get unique chip ID
-String chipId();
+std::string chipId();
 
 // Controller status LED colors in WRGB format for NeoPixel.
 #define STATUS_LED_RED 0x00FF0000

@@ -1,3 +1,4 @@
+#include "platform/runtime.h"
 #include "sp140/debug.h"
 
 static unsigned long last_update = 0;
@@ -28,7 +29,7 @@ void generateFakeTelemetry(STR_ESC_TELEMETRY_140& escTelemetry,
                           STR_BMS_TELEMETRY_140& bmsTelemetry,
                           UnifiedBatteryData& unifiedBatteryData,
                           float& altitude) {
-    unsigned long now = millis();
+    unsigned long now = platform::millis32();
     if (now - last_update < UPDATE_INTERVAL) return;
     last_update = now;
 
@@ -48,13 +49,13 @@ void generateFakeTelemetry(STR_ESC_TELEMETRY_140& escTelemetry,
 
     escTelemetry.cap_temp = escTelemetry.mos_temp - 5;
     escTelemetry.mcu_temp = escTelemetry.mos_temp - 10;
-    escTelemetry.eRPM = map(escTelemetry.amps * 100, 0, 5000, 0, 25000);
-    escTelemetry.inPWM = map(escTelemetry.amps * 100, 0, 5000, 1000, 2000);
+    escTelemetry.eRPM = platform::scaleInteger(escTelemetry.amps * 100, 0, 5000, 0, 25000);
+    escTelemetry.inPWM = platform::scaleInteger(escTelemetry.amps * 100, 0, 5000, 1000, 2000);
     escTelemetry.outPWM = escTelemetry.inPWM;
     escTelemetry.statusFlag = 0;
 
     // BMS Telemetry
-    bmsTelemetry.soc = map(escTelemetry.volts * 100, 8000, 10000, 0, 100);
+    bmsTelemetry.soc = platform::scaleInteger(escTelemetry.volts * 100, 8000, 10000, 0, 100);
     bmsTelemetry.battery_voltage = escTelemetry.volts;
     bmsTelemetry.battery_current = escTelemetry.amps;
     bmsTelemetry.power = bmsTelemetry.battery_voltage * bmsTelemetry.battery_current / 1000.0;  // kW
@@ -79,24 +80,24 @@ void generateFakeTelemetry(STR_ESC_TELEMETRY_140& escTelemetry,
 
 // for debugging
 void printDeviceData(const STR_DEVICE_DATA_140_V1& deviceData) {
-  Serial.print(F("version major "));
-  Serial.println(deviceData.version_major);
-  Serial.print(F("version minor "));
-  Serial.println(deviceData.version_minor);
-  Serial.print(F("screen rotation "));
-  Serial.println(deviceData.screen_rotation);
-  Serial.print(F("sea pressure "));
-  Serial.println(deviceData.sea_pressure);
-  Serial.print(F("metric temp "));
-  Serial.println(deviceData.metric_temp);
-  Serial.print(F("metric alt "));
-  Serial.println(deviceData.metric_alt);
-  Serial.print(F("performance mode "));
-  Serial.println(deviceData.performance_mode);
-  Serial.print(F("theme "));
-  Serial.println(deviceData.theme);
-  Serial.print(F("armed time "));
-  Serial.println(deviceData.armed_time);
-  Serial.print(F("revision "));
-  Serial.println(deviceData.revision);
+  platform::console.text("version major ");
+  platform::console.line(deviceData.version_major);
+  platform::console.text("version minor ");
+  platform::console.line(deviceData.version_minor);
+  platform::console.text("screen rotation ");
+  platform::console.line(deviceData.screen_rotation);
+  platform::console.text("sea pressure ");
+  platform::console.line(deviceData.sea_pressure);
+  platform::console.text("metric temp ");
+  platform::console.line(deviceData.metric_temp);
+  platform::console.text("metric alt ");
+  platform::console.line(deviceData.metric_alt);
+  platform::console.text("performance mode ");
+  platform::console.line(deviceData.performance_mode);
+  platform::console.text("theme ");
+  platform::console.line(deviceData.theme);
+  platform::console.text("armed time ");
+  platform::console.line(deviceData.armed_time);
+  platform::console.text("revision ");
+  platform::console.line(deviceData.revision);
 }

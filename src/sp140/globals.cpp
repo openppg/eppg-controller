@@ -23,7 +23,7 @@
  * necessary, add it here and in globals.h, and document why it's needed.
  */
 
-#include "Arduino.h"
+#include "platform/runtime.h"
 
 #include "sp140/globals.h"
 

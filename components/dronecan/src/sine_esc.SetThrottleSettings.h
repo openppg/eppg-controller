@@ -1,0 +1,11 @@
+#pragma once
+#include <sine_esc.SetThrottleSettings_req.h>
+#include <sine_esc.SetThrottleSettings_res.h>
+
+#define SINE_ESC_SETTHROTTLESETTINGS_ID 210
+#define SINE_ESC_SETTHROTTLESETTINGS_SIGNATURE (0x1653C41DA4E45824ULL)
+
+#if defined(__cplusplus) && defined(DRONECAN_CXX_WRAPPERS)
+#include <canard/cxx_wrappers.h>
+SERVICE_MESSAGE_CXX_IFACE(sine_esc_SetThrottleSettings, SINE_ESC_SETTHROTTLESETTINGS_ID, SINE_ESC_SETTHROTTLESETTINGS_SIGNATURE, SINE_ESC_SETTHROTTLESETTINGS_REQUEST_MAX_SIZE, SINE_ESC_SETTHROTTLESETTINGS_RESPONSE_MAX_SIZE);
+#endif

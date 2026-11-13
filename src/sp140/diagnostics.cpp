@@ -1,3 +1,4 @@
+#include "platform/runtime.h"
 #include "sp140/diagnostics.h"
 
 #include <new>
@@ -8,7 +9,7 @@
 
 #ifndef PIO_UNIT_TESTING
 #include "sp140/globals.h"
-#include <Preferences.h>
+#include "platform/nvs_store.h"
 #include <esp_attr.h>
 #include <esp_core_dump.h>
 #include <esp32s3/rom/rtc.h>
@@ -41,7 +42,7 @@ struct BootDiagMeta {
 BootDiagPacket gDiagPacket = {};
 
 #ifndef PIO_UNIT_TESTING
-Preferences gDiagPreferences;
+platform::NvsStore gDiagPreferences;
 RTC_NOINIT_ATTR RuntimeHeartbeatSnapshot gRtcHeartbeatSnapshot;
 unsigned long gLastHeartbeatRefreshMs = 0;
 #endif
@@ -93,7 +94,7 @@ void zeroPacket(BootDiagPacket* packet) {
   memset(packet, 0, sizeof(*packet));
 }
 
-void diagWriteStreamChunked(Stream& stream, const uint8_t* data, size_t length) {
+void diagWriteStreamChunked(platform::Console& stream, const uint8_t* data, size_t length) {
   if (data == nullptr || length == 0) {
     return;
   }
@@ -106,66 +107,66 @@ void diagWriteStreamChunked(Stream& stream, const uint8_t* data, size_t length) 
     const size_t written = stream.write(data + offset, chunk_len);
     if (written == 0) {
 #ifndef PIO_UNIT_TESTING
-      delay(1);
+      platform::delayMs(1);
 #endif
       continue;
     }
     offset += written;
 #ifndef PIO_UNIT_TESTING
-    delay(1);
+    platform::delayMs(1);
 #endif
   }
 }
 
-void diagRecordToJson(JsonObject obj, const BootDiagRecord& record) {
-  obj["boot"] = record.boot_counter;
-  obj["rst"] = diagResetReasonToString(
-      diagResetReasonFromStoredValue(record.reset_reason));
-  obj["raw0"] = record.raw_cpu0_reset_reason;
-  obj["raw1"] = record.raw_cpu1_reset_reason;
-  obj["plan"] = plannedRestartReasonToString(
-      plannedRestartReasonFromValue(record.planned_restart_reason));
-  obj["snap_ok"] = record.snapshot_valid == 1;
-  obj["prev_state"] = diagDeviceStateToString(record.prev_device_state);
-  obj["prev_up_ms"] = record.prev_uptime_ms;
-  obj["thr_age_ms"] = record.prev_throttle_age_ms;
-  obj["ui_age_ms"] = record.prev_ui_age_ms;
-  obj["bms_age_ms"] = record.prev_bms_age_ms;
-  obj["free_heap"] = record.prev_free_heap;
-  obj["min_heap"] = record.prev_min_free_heap;
-  obj["esc_ok"] = record.esc_connected == 1;
-  obj["bms_ok"] = record.bms_connected == 1;
+void diagRecordToJson(cJSON* obj, const BootDiagRecord& record) {
+  platform::json::set(obj, "boot", record.boot_counter);
+  platform::json::set(obj, "rst", diagResetReasonToString(
+      diagResetReasonFromStoredValue(record.reset_reason)));
+  platform::json::set(obj, "raw0", record.raw_cpu0_reset_reason);
+  platform::json::set(obj, "raw1", record.raw_cpu1_reset_reason);
+  platform::json::set(obj, "plan", plannedRestartReasonToString(
+      plannedRestartReasonFromValue(record.planned_restart_reason)));
+  platform::json::set(obj, "snap_ok", record.snapshot_valid == 1);
+  platform::json::set(obj, "prev_state", diagDeviceStateToString(record.prev_device_state));
+  platform::json::set(obj, "prev_up_ms", record.prev_uptime_ms);
+  platform::json::set(obj, "thr_age_ms", record.prev_throttle_age_ms);
+  platform::json::set(obj, "ui_age_ms", record.prev_ui_age_ms);
+  platform::json::set(obj, "bms_age_ms", record.prev_bms_age_ms);
+  platform::json::set(obj, "free_heap", record.prev_free_heap);
+  platform::json::set(obj, "min_heap", record.prev_min_free_heap);
+  platform::json::set(obj, "esc_ok", record.esc_connected == 1);
+  platform::json::set(obj, "bms_ok", record.bms_connected == 1);
 
-  JsonObject coredump = obj["cdmp"].to<JsonObject>();
-  coredump["present"] = record.coredump.present == 1;
-  coredump["valid"] = record.coredump.valid == 1;
+  cJSON* coredump = cJSON_AddObjectToObject(obj, "cdmp");
+  platform::json::set(coredump, "present", record.coredump.present == 1);
+  platform::json::set(coredump, "valid", record.coredump.valid == 1);
   if (record.coredump.present == 1) {
-    coredump["task"] = record.coredump.task;
-    coredump["pc"] = record.coredump.pc;
-    coredump["cause"] = record.coredump.exc_cause;
-    coredump["vaddr"] = record.coredump.exc_vaddr;
+    platform::json::set(coredump, "task", record.coredump.task);
+    platform::json::set(coredump, "pc", record.coredump.pc);
+    platform::json::set(coredump, "cause", record.coredump.exc_cause);
+    platform::json::set(coredump, "vaddr", record.coredump.exc_vaddr);
 
-    JsonArray backtrace = coredump["bt"].to<JsonArray>();
+    cJSON* backtrace = cJSON_AddArrayToObject(coredump, "bt");
     const uint8_t depth = record.coredump.backtrace_depth <= DIAG_BACKTRACE_DEPTH
                               ? record.coredump.backtrace_depth
                               : DIAG_BACKTRACE_DEPTH;
     for (uint8_t i = 0; i < depth; ++i) {
-      backtrace.add(record.coredump.backtrace[i]);
+      cJSON_AddItemToArray(backtrace, cJSON_CreateNumber(record.coredump.backtrace[i]));
     }
   }
 }
 
-bool diagRecordFromJsonObject(JsonObjectConst obj, BootDiagRecord* record) {
-  if (record == nullptr || obj.isNull()) {
+bool diagRecordFromJsonObject(const cJSON* obj, BootDiagRecord* record) {
+  if (record == nullptr || obj == nullptr) {
     return false;
   }
 
   BootDiagRecord parsed = {};
-  parsed.boot_counter = obj["boot"] | 0U;
+  parsed.boot_counter = platform::json::get<uint32_t>(obj, "boot", 0U);
   parsed.reset_reason = static_cast<uint8_t>(DiagResetReason::UNKNOWN);
-  const char* reset_reason = obj["rst"] | "UNKNOWN";
-  const char* planned_reason = obj["plan"] | "none";
-  const char* prev_state = obj["prev_state"] | "DISARMED";
+  const char* reset_reason = platform::json::string(obj, "rst", "UNKNOWN");
+  const char* planned_reason = platform::json::string(obj, "plan", "none");
+  const char* prev_state = platform::json::string(obj, "prev_state", "DISARMED");
 
   for (uint8_t i = 0; i <= static_cast<uint8_t>(DiagResetReason::USB_UART);
        ++i) {
@@ -195,32 +196,32 @@ bool diagRecordFromJsonObject(JsonObjectConst obj, BootDiagRecord* record) {
     parsed.prev_device_state = static_cast<uint8_t>(DISARMED);
   }
 
-  parsed.raw_cpu0_reset_reason = obj["raw0"] | 0;
-  parsed.raw_cpu1_reset_reason = obj["raw1"] | 0;
-  parsed.snapshot_valid = (obj["snap_ok"] | false) ? 1 : 0;
-  parsed.prev_uptime_ms = obj["prev_up_ms"] | 0U;
-  parsed.prev_throttle_age_ms = obj["thr_age_ms"] | 0U;
-  parsed.prev_ui_age_ms = obj["ui_age_ms"] | 0U;
-  parsed.prev_bms_age_ms = obj["bms_age_ms"] | 0U;
-  parsed.prev_free_heap = obj["free_heap"] | 0U;
-  parsed.prev_min_free_heap = obj["min_heap"] | 0U;
-  parsed.esc_connected = (obj["esc_ok"] | false) ? 1 : 0;
-  parsed.bms_connected = (obj["bms_ok"] | false) ? 1 : 0;
+  parsed.raw_cpu0_reset_reason = platform::json::get<uint32_t>(obj, "raw0", 0);
+  parsed.raw_cpu1_reset_reason = platform::json::get<uint32_t>(obj, "raw1", 0);
+  parsed.snapshot_valid = (platform::json::get<bool>(obj, "snap_ok", false)) ? 1 : 0;
+  parsed.prev_uptime_ms = platform::json::get<uint32_t>(obj, "prev_up_ms", 0U);
+  parsed.prev_throttle_age_ms = platform::json::get<uint32_t>(obj, "thr_age_ms", 0U);
+  parsed.prev_ui_age_ms = platform::json::get<uint32_t>(obj, "ui_age_ms", 0U);
+  parsed.prev_bms_age_ms = platform::json::get<uint32_t>(obj, "bms_age_ms", 0U);
+  parsed.prev_free_heap = platform::json::get<uint32_t>(obj, "free_heap", 0U);
+  parsed.prev_min_free_heap = platform::json::get<uint32_t>(obj, "min_heap", 0U);
+  parsed.esc_connected = (platform::json::get<bool>(obj, "esc_ok", false)) ? 1 : 0;
+  parsed.bms_connected = (platform::json::get<bool>(obj, "bms_ok", false)) ? 1 : 0;
 
-  JsonObjectConst coredump = obj["cdmp"].as<JsonObjectConst>();
-  parsed.coredump.present = (coredump["present"] | false) ? 1 : 0;
-  parsed.coredump.valid = (coredump["valid"] | false) ? 1 : 0;
-  strncpy(parsed.coredump.task, coredump["task"] | "",
+  const cJSON* coredump = platform::json::field(obj, "cdmp");
+  parsed.coredump.present = (platform::json::get<bool>(coredump, "present", false)) ? 1 : 0;
+  parsed.coredump.valid = (platform::json::get<bool>(coredump, "valid", false)) ? 1 : 0;
+  strncpy(parsed.coredump.task, platform::json::string(coredump, "task", ""),
           sizeof(parsed.coredump.task) - 1);
-  parsed.coredump.pc = coredump["pc"] | 0U;
-  parsed.coredump.exc_cause = coredump["cause"] | 0U;
-  parsed.coredump.exc_vaddr = coredump["vaddr"] | 0U;
+  parsed.coredump.pc = platform::json::get<uint32_t>(coredump, "pc", 0U);
+  parsed.coredump.exc_cause = platform::json::get<uint32_t>(coredump, "cause", 0U);
+  parsed.coredump.exc_vaddr = platform::json::get<uint32_t>(coredump, "vaddr", 0U);
 
-  JsonArrayConst backtrace = coredump["bt"].as<JsonArrayConst>();
+  const cJSON* backtrace = platform::json::field(coredump, "bt");
   uint8_t depth = 0;
-  for (JsonVariantConst value : backtrace) {
+  for (const cJSON* value = backtrace ? backtrace->child : nullptr; value; value = value->next) {
     if (depth >= DIAG_BACKTRACE_DEPTH) break;
-    parsed.coredump.backtrace[depth++] = value.as<uint32_t>();
+    parsed.coredump.backtrace[depth++] = static_cast<uint32_t>(value->valuedouble);
   }
   parsed.coredump.backtrace_depth = depth;
 
@@ -269,20 +270,20 @@ void diagMakeSlotKey(uint8_t slot, char* key, size_t key_len) {
 }
 
 bool diagOpenPreferences() {
-  return gDiagPreferences.begin(kDiagNamespace, false);
+  return gDiagPreferences.open(kDiagNamespace, false);
 }
 
 void diagLoadMetaFromPreferences(BootDiagMeta* meta) {
   diagInitMeta(meta);
   if (meta == nullptr) return;
 
-  const size_t stored_len = gDiagPreferences.getBytesLength(kDiagMetaKey);
+  const size_t stored_len = gDiagPreferences.blobSize(kDiagMetaKey);
   if (stored_len != sizeof(BootDiagMeta)) {
     return;
   }
 
   BootDiagMeta stored = {};
-  if (gDiagPreferences.getBytes(kDiagMetaKey, &stored, sizeof(stored)) !=
+  if (gDiagPreferences.readBlob(kDiagMetaKey, &stored, sizeof(stored)) !=
       sizeof(stored)) {
     return;
   }
@@ -297,7 +298,7 @@ void diagLoadMetaFromPreferences(BootDiagMeta* meta) {
 }
 
 void diagStoreMetaToPreferences(const BootDiagMeta& meta) {
-  gDiagPreferences.putBytes(kDiagMetaKey, &meta, sizeof(meta));
+  gDiagPreferences.writeBlob(kDiagMetaKey, &meta, sizeof(meta));
 }
 
 void diagLoadHistoryFromPreferences(const BootDiagMeta& meta,
@@ -316,13 +317,13 @@ void diagLoadHistoryFromPreferences(const BootDiagMeta& meta,
     char key[8] = {};
     diagMakeSlotKey(slot, key, sizeof(key));
 
-    const size_t stored_len = gDiagPreferences.getBytesLength(key);
+    const size_t stored_len = gDiagPreferences.blobSize(key);
     if (stored_len != sizeof(BootDiagRecord)) {
       continue;
     }
 
     BootDiagRecord record = {};
-    if (gDiagPreferences.getBytes(key, &record, sizeof(record)) !=
+    if (gDiagPreferences.readBlob(key, &record, sizeof(record)) !=
         sizeof(record)) {
       continue;
     }
@@ -332,22 +333,22 @@ void diagLoadHistoryFromPreferences(const BootDiagMeta& meta,
 
 PlannedRestartReason diagLoadPlannedRestartFromPreferences() {
   return plannedRestartReasonFromValue(
-      gDiagPreferences.getUChar(kDiagPlannedKey, 0));
+      gDiagPreferences.get<uint8_t>(kDiagPlannedKey, 0));
 }
 
 void diagStorePlannedRestartToPreferences(PlannedRestartReason reason) {
-  gDiagPreferences.putUChar(kDiagPlannedKey, static_cast<uint8_t>(reason));
+  gDiagPreferences.set<uint8_t>(kDiagPlannedKey, static_cast<uint8_t>(reason));
 }
 
 void diagStoreRecordToPreferences(uint8_t slot, const BootDiagRecord& record) {
   char key[8] = {};
   diagMakeSlotKey(slot, key, sizeof(key));
-  gDiagPreferences.putBytes(key, &record, sizeof(record));
+  gDiagPreferences.writeBlob(key, &record, sizeof(record));
 }
 
 void diagCaptureHeartbeatSnapshot(PlannedRestartReason override_reason,
                                   bool force) {
-  const unsigned long now = millis();
+  const unsigned long now = platform::millis32();
   if (!force && (now - gLastHeartbeatRefreshMs) < kHeartbeatRefreshIntervalMs) {
     return;
   }
@@ -388,7 +389,7 @@ RuntimeHeartbeatSnapshot diagReadHeartbeatSnapshot() {
 }
 
 void diagPrintBootSummary(const BootDiagRecord& record) {
-  USBSerial.printf(
+  platform::console.format(
       "[DIAG] boot=%lu rst=%s plan=%s prev=%s up=%lums age=%lu/%lu/%lums "
       "esc=%u bms=%u heap=%lu/%lu cdmp=%u\n",
       static_cast<unsigned long>(record.boot_counter),
@@ -407,7 +408,7 @@ void diagPrintBootSummary(const BootDiagRecord& record) {
       static_cast<unsigned int>(record.coredump.present));
 
   if (record.coredump.valid == 1) {
-    USBSerial.printf("[DIAG] coredump task=%s pc=0x%08lX cause=%lu vaddr=0x%08lX\n",
+    platform::console.format("[DIAG] coredump task=%s pc=0x%08lX cause=%lu vaddr=0x%08lX\n",
                      record.coredump.task,
                      static_cast<unsigned long>(record.coredump.pc),
                      static_cast<unsigned long>(record.coredump.exc_cause),
@@ -583,39 +584,40 @@ void diagPushHistory(BootDiagPacket* packet, const BootDiagRecord& record) {
   packet->history[DIAG_HISTORY_CAPACITY - 1] = record;
 }
 
-void diagPacketToJson(JsonDocument& doc, const BootDiagPacket& packet) {
-  doc.clear();
-  doc["diag_v"] = DIAG_SCHEMA_VERSION;
-  doc["hist_n"] = packet.history_count;
+void diagPacketToJson(cJSON* doc, const BootDiagPacket& packet) {
+  while (doc && doc->child) cJSON_DeleteItemFromArray(doc, 0);
+  platform::json::set(doc, "diag_v", DIAG_SCHEMA_VERSION);
+  platform::json::set(doc, "hist_n", packet.history_count);
 
-  JsonObject current = doc["cur"].to<JsonObject>();
+  cJSON* current = cJSON_AddObjectToObject(doc, "cur");
   diagRecordToJson(current, packet.current);
 
-  JsonArray history = doc["hist"].to<JsonArray>();
+  cJSON* history = cJSON_AddArrayToObject(doc, "hist");
   for (uint8_t i = 0; i < packet.history_count; ++i) {
-    JsonObject entry = history.add<JsonObject>();
+    cJSON* entry = cJSON_CreateObject();
+    cJSON_AddItemToArray(history, entry);
     diagRecordToJson(entry, packet.history[i]);
   }
 }
 
-bool diagPacketFromJson(JsonDocument& doc, BootDiagPacket* packet) {
+bool diagPacketFromJson(cJSON* doc, BootDiagPacket* packet) {
   if (packet == nullptr) {
     return false;
   }
 
-  const uint8_t schema = doc["diag_v"] | 0;
+  const uint8_t schema = platform::json::get<uint32_t>(doc, "diag_v", 0);
   if (schema != DIAG_SCHEMA_VERSION) {
     return false;
   }
 
   BootDiagPacket parsed = {};
-  if (!diagRecordFromJsonObject(doc["cur"].as<JsonObjectConst>(),
+  if (!diagRecordFromJsonObject(platform::json::field(doc, "cur"),
                                 &parsed.current)) {
     return false;
   }
 
-  JsonArrayConst history = doc["hist"].as<JsonArrayConst>();
-  for (JsonObjectConst entry : history) {
+  const cJSON* history = platform::json::field(doc, "hist");
+  for (const cJSON* entry = history ? history->child : nullptr; entry; entry = entry->next) {
     if (parsed.history_count >= DIAG_HISTORY_CAPACITY) {
       break;
     }
@@ -642,9 +644,9 @@ void diagnosticsInit() {
     diagLoadMetaFromPreferences(&meta);
     diagLoadHistoryFromPreferences(meta, &gDiagPacket);
     planned_restart = diagLoadPlannedRestartFromPreferences();
-    gDiagPreferences.end();
+    gDiagPreferences.close();
   } else {
-    USBSerial.println("[DIAG] Failed opening diagnostics namespace");
+    platform::console.line("[DIAG] Failed opening diagnostics namespace");
   }
 
   RuntimeHeartbeatSnapshot snapshot = diagReadHeartbeatSnapshot();
@@ -682,7 +684,7 @@ void diagnosticsInit() {
       ++meta.count;
     }
     diagStoreMetaToPreferences(meta);
-    gDiagPreferences.end();
+    gDiagPreferences.close();
   }
 
   esp_register_shutdown_handler(diagShutdownHandler);
@@ -701,7 +703,7 @@ void diagnosticsMarkPlannedRestart(PlannedRestartReason reason) {
   diagCaptureHeartbeatSnapshot(reason, true);
   if (diagOpenPreferences()) {
     diagStorePlannedRestartToPreferences(reason);
-    gDiagPreferences.end();
+    gDiagPreferences.close();
   }
 #else
   (void)reason;
@@ -713,33 +715,28 @@ void diagnosticsPopulatePacket(BootDiagPacket* packet) {
   *packet = gDiagPacket;
 }
 
-void diagnosticsPopulateJson(JsonDocument& doc) {
+void diagnosticsPopulateJson(cJSON* doc) {
   diagPacketToJson(doc, gDiagPacket);
 }
 
-void diagnosticsSendJson(Stream& stream) {
-  JsonDocument doc;
-  diagnosticsPopulateJson(doc);
-  const size_t json_len = measureJson(doc);
-  char* json = new (std::nothrow) char[json_len + 1];
-  if (json == nullptr) {
-    stream.print("{\"diag_v\":0,\"err\":\"oom\"}");
-    return;
-  }
-
-  const size_t written = serializeJson(doc, json, json_len + 1);
-  diagWriteStreamChunked(stream, reinterpret_cast<const uint8_t*>(json), written);
-  delete[] json;
+void diagnosticsSendJson(platform::Console& stream) {
+  platform::json::Document doc(cJSON_CreateObject());
+  if (!doc) { stream.text("{\"diag_v\":0,\"err\":\"oom\"}"); return; }
+  diagnosticsPopulateJson(doc.get());
+  char* output = cJSON_PrintUnformatted(doc.get());
+  if (!output) { stream.text("{\"diag_v\":0,\"err\":\"oom\"}"); return; }
+  diagWriteStreamChunked(stream, reinterpret_cast<const uint8_t*>(output), strlen(output));
+  cJSON_free(output);
 }
 
 void diagnosticsClearPersistentData() {
 #ifndef PIO_UNIT_TESTING
   if (diagOpenPreferences()) {
-    gDiagPreferences.clear();
-    gDiagPreferences.end();
+    gDiagPreferences.eraseAll();
+    gDiagPreferences.close();
   }
   esp_core_dump_image_erase();
-  USBSerial.println("[DIAG] Cleared persistent diagnostics");
+  platform::console.line("[DIAG] Cleared persistent diagnostics");
 #endif
   diagClearRetainedHistory(&gDiagPacket);
 }

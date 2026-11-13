@@ -1,7 +1,7 @@
 #pragma once
 
-#include <Arduino.h>
-#include <SPI.h>
+#include "platform/runtime.h"
+
 #include <BMS_CAN.h>
 #include <math.h>
 
@@ -52,9 +52,9 @@ inline bool bmsSnapshotCoherent(const STR_BMS_TELEMETRY_140& t) {
 // must not run, or it fires -40 °C criticals for T3/T4 at every boot.
 inline bool bmsTempFrameSeen(float mosTemp, float balanceTemp,
                              const float cellTemps[BMS_CELL_PROBE_COUNT]) {
-  if (!isnan(mosTemp) || !isnan(balanceTemp)) return true;
+  if (!std::isnan(mosTemp) || !std::isnan(balanceTemp)) return true;
   for (uint8_t i = 0; i < BMS_CELL_PROBE_COUNT; i++) {
-    if (!isnan(cellTemps[i])) return true;
+    if (!std::isnan(cellTemps[i])) return true;
   }
   return false;
 }
@@ -66,7 +66,7 @@ inline void sanitizeCellProbeTemps(
 
   // First pass: count disconnected probes (NaN from library)
   for (uint8_t i = 0; i < BMS_CELL_PROBE_COUNT; i++) {
-    if (isnan(temps[i])) disconnectedCount++;
+    if (std::isnan(temps[i])) disconnectedCount++;
   }
 
   // Second pass: if within tolerance, pass NaN through (silently ignored).
@@ -74,7 +74,7 @@ inline void sanitizeCellProbeTemps(
   // so temperature monitors fire a CRIT_LOW alert.
   uint8_t ignoredCount = 0;
   for (uint8_t i = 0; i < BMS_CELL_PROBE_COUNT; i++) {
-    if (!isnan(temps[i])) {
+    if (!std::isnan(temps[i])) {
       out[i] = temps[i];
     } else if (ignoredCount < BMS_MAX_IGNORED_DISCONNECTED_PROBES) {
       out[i] = NAN;
@@ -90,6 +90,6 @@ extern STR_BMS_TELEMETRY_140 bmsTelemetryData;
 extern BMS_CAN* bms_can;
 
 // BMS functions
-bool initBMSCAN(SPIClass* spi);
+bool initBMSCAN();
 void updateBMSData();
 void printBMSData();

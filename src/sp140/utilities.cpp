@@ -1,16 +1,17 @@
+#include "esp_mac.h"
 // Copyright 2021 <Zach Whitehead>
 #include "sp140/utilities.h"
-#include "Arduino.h"
+#include "platform/runtime.h"
 
 /**
  * Gets a unique ID string for the ESP32 chip
  *
- * @return String representation of the chip ID
+ * @return std::string representation of the chip ID
  */
-String chipId() {
-  uint32_t chipId = 0;
-  for (int i = 0; i < 17; i = i + 8) {
-    chipId |= ((ESP.getEfuseMac() >> (40 - i)) & 0xff) << i;
-  }
-  return String(chipId);
+std::string chipId() {
+  uint8_t mac[6]{};
+  esp_read_mac(mac, ESP_MAC_EFUSE_FACTORY);
+  const uint32_t value = (static_cast<uint32_t>(mac[5]) << 0) |
+      (static_cast<uint32_t>(mac[4]) << 8) | (static_cast<uint32_t>(mac[3]) << 16);
+  return std::to_string(value);
 }

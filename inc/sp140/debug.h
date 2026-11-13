@@ -1,7 +1,7 @@
 #ifndef INC_SP140_DEBUG_H_
 #define INC_SP140_DEBUG_H_
 
-#include <Arduino.h>
+#include "platform/runtime.h"
 #include "sp140/structs.h"
 
 // Helper function to generate smooth oscillating values

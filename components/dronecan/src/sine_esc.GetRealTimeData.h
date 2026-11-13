@@ -1,0 +1,11 @@
+#pragma once
+#include <sine_esc.GetRealTimeData_req.h>
+#include <sine_esc.GetRealTimeData_res.h>
+
+#define SINE_ESC_GETREALTIMEDATA_ID 211
+#define SINE_ESC_GETREALTIMEDATA_SIGNATURE (0x9AB6F8CCCBF6F016ULL)
+
+#if defined(__cplusplus) && defined(DRONECAN_CXX_WRAPPERS)
+#include <canard/cxx_wrappers.h>
+SERVICE_MESSAGE_CXX_IFACE(sine_esc_GetRealTimeData, SINE_ESC_GETREALTIMEDATA_ID, SINE_ESC_GETREALTIMEDATA_SIGNATURE, SINE_ESC_GETREALTIMEDATA_REQUEST_MAX_SIZE, SINE_ESC_GETREALTIMEDATA_RESPONSE_MAX_SIZE);
+#endif

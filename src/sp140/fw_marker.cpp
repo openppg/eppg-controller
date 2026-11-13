@@ -1,7 +1,7 @@
 // Copyright <Zach Whitehead>
 // Self-identifying firmware marker embedded in the binary image.
 //
-// The OTA backend scans an uploaded .bin for the 8-byte magic "OPPGFWV1" and
+// The OTA backend scans an uploaded .bin for the 8-uint8_t magic "OPPGFWV1" and
 // reads the version fields that immediately follow it, so every build is
 // identifiable from the binary alone (no sidecar file). Keep this layout in
 // sync with the OTA backend parser (openppg-ota: src/utils/firmware.ts).

@@ -1,7 +1,7 @@
 #include "sp140/wireless_settings.h"
 
-#include <Arduino.h>
-#include <Preferences.h>
+#include "platform/runtime.h"
+#include "platform/nvs_store.h"
 #include <esp_mac.h>
 #include <cctype>
 #include <cstdio>
@@ -60,28 +60,28 @@ bool parseRole(const char* value, WirelessRole* role) {
 }
 
 bool saveWirelessSettings() {
-  Preferences preferences;
-  if (!preferences.begin(kNamespace, false)) return false;
+  platform::NvsStore preferences;
+  if (!preferences.open(kNamespace, false)) return false;
 
   bool ok = true;
-  ok &= preferences.putUChar(kRoleKey,
+  ok &= preferences.set<uint8_t>(kRoleKey,
                              static_cast<uint8_t>(wirelessSettings.role)) == 1;
-  ok &= preferences.putUChar(kChannelKey, wirelessSettings.channel) == 1;
+  ok &= preferences.set<uint8_t>(kChannelKey, wirelessSettings.channel) == 1;
   if (wirelessSettings.peer_configured) {
-    ok &= preferences.putBytes(kPeerKey, wirelessSettings.peer_mac,
+    ok &= preferences.writeBlob(kPeerKey, wirelessSettings.peer_mac,
                                sizeof(wirelessSettings.peer_mac)) ==
           sizeof(wirelessSettings.peer_mac);
   } else {
-    preferences.remove(kPeerKey);
+    preferences.erase(kPeerKey);
   }
   if (wirelessSettings.secret_configured) {
-    ok &= preferences.putBytes(kSecretKey, wirelessSettings.pairing_secret,
+    ok &= preferences.writeBlob(kSecretKey, wirelessSettings.pairing_secret,
                                sizeof(wirelessSettings.pairing_secret)) ==
           sizeof(wirelessSettings.pairing_secret);
   } else {
-    preferences.remove(kSecretKey);
+    preferences.erase(kSecretKey);
   }
-  preferences.end();
+  preferences.close();
   return ok;
 }
 
@@ -94,54 +94,55 @@ void loadWirelessSettings() {
   wirelessSettings = {
       WirelessRole::STANDALONE, {0}, {0}, kDefaultChannel, false, false};
 
-  Preferences preferences;
-  if (!preferences.begin(kNamespace, true)) return;
+  platform::NvsStore preferences;
+  if (!preferences.open(kNamespace, true)) return;
 
-  const uint8_t stored_role = preferences.getUChar(kRoleKey, 0);
+  const uint8_t stored_role = preferences.get<uint8_t>(kRoleKey, 0);
   if (stored_role <= static_cast<uint8_t>(WirelessRole::RECEIVER)) {
     wirelessSettings.role = static_cast<WirelessRole>(stored_role);
   }
 
-  const uint8_t channel = preferences.getUChar(kChannelKey, kDefaultChannel);
+  const uint8_t channel = preferences.get<uint8_t>(kChannelKey, kDefaultChannel);
   wirelessSettings.channel = (channel >= 1 && channel <= 13)
       ? channel
       : kDefaultChannel;
 
   wirelessSettings.peer_configured =
-      preferences.getBytesLength(kPeerKey) == sizeof(wirelessSettings.peer_mac) &&
-      preferences.getBytes(kPeerKey, wirelessSettings.peer_mac,
+      preferences.blobSize(kPeerKey) == sizeof(wirelessSettings.peer_mac) &&
+      preferences.readBlob(kPeerKey, wirelessSettings.peer_mac,
                            sizeof(wirelessSettings.peer_mac)) ==
           sizeof(wirelessSettings.peer_mac);
   wirelessSettings.secret_configured =
-      preferences.getBytesLength(kSecretKey) ==
+      preferences.blobSize(kSecretKey) ==
           sizeof(wirelessSettings.pairing_secret) &&
-      preferences.getBytes(kSecretKey, wirelessSettings.pairing_secret,
+      preferences.readBlob(kSecretKey, wirelessSettings.pairing_secret,
                            sizeof(wirelessSettings.pairing_secret)) ==
           sizeof(wirelessSettings.pairing_secret);
-  preferences.end();
+  preferences.close();
 }
 
-bool applyWirelessSettingsJson(JsonObjectConst settings) {
+bool applyWirelessSettingsJson(const cJSON* settings) {
+  using namespace platform::json;
   WirelessSettings candidate = wirelessSettings;
 
-  if (!settings["role"].isNull() &&
-      !parseRole(settings["role"].as<const char*>(), &candidate.role)) {
+  if (has(settings, "role") &&
+      !parseRole(string(settings, "role", nullptr), &candidate.role)) {
     return false;
   }
-  if (!settings["peer"].isNull()) {
+  if (has(settings, "peer")) {
     candidate.peer_configured = parseHexBytes(
-        settings["peer"].as<const char*>(), candidate.peer_mac,
+        string(settings, "peer", nullptr), candidate.peer_mac,
         sizeof(candidate.peer_mac), true);
     if (!candidate.peer_configured) return false;
   }
-  if (!settings["key"].isNull()) {
+  if (has(settings, "key")) {
     candidate.secret_configured = parseHexBytes(
-        settings["key"].as<const char*>(), candidate.pairing_secret,
+        string(settings, "key", nullptr), candidate.pairing_secret,
         sizeof(candidate.pairing_secret), false);
     if (!candidate.secret_configured) return false;
   }
-  if (!settings["channel"].isNull()) {
-    const int channel = settings["channel"].as<int>();
+  if (has(settings, "channel")) {
+    const int channel = get<int>(settings, "channel");
     if (channel < 1 || channel > 13) return false;
     candidate.channel = static_cast<uint8_t>(channel);
   }

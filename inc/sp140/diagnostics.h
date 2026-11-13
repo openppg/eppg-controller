@@ -1,8 +1,8 @@
 #ifndef INC_SP140_DIAGNOSTICS_H_
 #define INC_SP140_DIAGNOSTICS_H_
 
-#include <Arduino.h>
-#include <ArduinoJson.h>
+#include "platform/runtime.h"
+#include "platform/json.h"
 #include <stdint.h>
 #include "sp140/device_state.h"
 
@@ -110,15 +110,15 @@ PlannedRestartReason diagConsumePlannedRestartReason(PlannedRestartReason* marke
 BootDiagRecord diagBuildRecord(const BootDiagBuildInput& input);
 void diagClearRetainedHistory(BootDiagPacket* packet);
 void diagPushHistory(BootDiagPacket* packet, const BootDiagRecord& record);
-void diagPacketToJson(JsonDocument& doc, const BootDiagPacket& packet);
-bool diagPacketFromJson(JsonDocument& doc, BootDiagPacket* packet);
+void diagPacketToJson(cJSON* doc, const BootDiagPacket& packet);
+bool diagPacketFromJson(cJSON* doc, BootDiagPacket* packet);
 
 void diagnosticsInit();
 void diagnosticsRefreshHeartbeat();
 void diagnosticsMarkPlannedRestart(PlannedRestartReason reason);
 void diagnosticsPopulatePacket(BootDiagPacket* packet);
-void diagnosticsPopulateJson(JsonDocument& doc);
-void diagnosticsSendJson(Stream& stream);
+void diagnosticsPopulateJson(cJSON* doc);
+void diagnosticsSendJson(platform::Console& stream);
 void diagnosticsClearPersistentData();
 
 #ifdef PIO_UNIT_TESTING

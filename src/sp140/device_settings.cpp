@@ -1,12 +1,13 @@
+#include "esp_system.h"
 // Copyright 2020 <Zach Whitehead>
 // OpenPPG
 
-#include "Arduino.h"
-#include <ArduinoJson.h>
+#include "platform/runtime.h"
+#include "platform/json.h"
 #include "sp140/device_settings.h"
 #include "sp140/globals.h"
 #include "../../inc/sp140/esp32s3-config.h"
-#include <Preferences.h>  // Add ESP32 Preferences library
+#include "platform/nvs_store.h"
 #include <nvs.h>           // Raw NVS API for the batched (single-commit) write
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -60,10 +61,10 @@ const bool DEFAULT_METRIC_ALT = true;
 const int DEFAULT_PERFORMANCE_MODE = 0;
 const int DEFAULT_THEME = 0;  // 0=light, 1=dark
 
-// Preferences namespace
+// platform::NvsStore namespace
 const char* PREFS_NAMESPACE = "openppg";
 
-// Preferences keys
+// platform::NvsStore keys
 const char* KEY_VERSION_MAJOR = "ver_major";
 const char* KEY_VERSION_MINOR = "ver_minor";
 const char* KEY_SCREEN_ROTATION = "scr_rot";
@@ -76,8 +77,8 @@ const char* KEY_ARMED_TIME = "armed_time";
 const char* KEY_REVISION = "revision";
 const char* KEY_TIMEZONE_OFFSET = "tz_offset";
 
-// Create a Preferences instance
-Preferences preferences;
+// Create a platform::NvsStore instance
+platform::NvsStore preferences;
 
 // Serializes all NVS settings access. writeDeviceData() is reachable
 // concurrently from the BLE host task (config-service onWrite callbacks), the
@@ -102,30 +103,30 @@ bool gWebSerialCommandOverflow = false;
 
 }  // namespace
 
-// Read saved data from Preferences
+// Read saved data from platform::NvsStore
 void refreshDeviceData() {
   // Create the NVS mutex now, while still single-threaded in setup(), so every
   // later (multi-task) writeDeviceData() call takes an already-existing lock.
   prefsEnsureMutex();
 
   // Try to initialize preferences, with corruption recovery
-  if (!preferences.begin(PREFS_NAMESPACE, false)) {
-    USBSerial.println(F("Failed to initialize Preferences - may be corrupted"));
+  if (!preferences.open(PREFS_NAMESPACE, false)) {
+    platform::console.line("Failed to initialize platform::NvsStore - may be corrupted");
 
     // Try to clear corrupted preferences and start fresh
-    preferences.begin(PREFS_NAMESPACE, false);
-    preferences.clear();
-    preferences.end();
+    preferences.open(PREFS_NAMESPACE, false);
+    preferences.eraseAll();
+    preferences.close();
 
-    USBSerial.println(F("Cleared potentially corrupted preferences, using defaults"));
+    platform::console.line("Cleared potentially corrupted preferences, using defaults");
     resetDeviceData();
     return;
   }
 
   // Check if we have saved preferences before
-  if (!preferences.isKey(KEY_VERSION_MAJOR)) {
-    USBSerial.println(F("No saved preferences found - initializing with defaults"));
-    preferences.end();
+  if (!preferences.contains(KEY_VERSION_MAJOR)) {
+    platform::console.line("No saved preferences found - initializing with defaults");
+    preferences.close();
     resetDeviceData();
     return;
   }
@@ -133,48 +134,48 @@ void refreshDeviceData() {
   // Load all values from preferences with validation
   bool dataValid = true;
 
-  deviceData.version_major = preferences.getUChar(KEY_VERSION_MAJOR, VERSION_MAJOR);
-  deviceData.version_minor = preferences.getUChar(KEY_VERSION_MINOR, VERSION_MINOR);
-  deviceData.screen_rotation = preferences.getUChar(KEY_SCREEN_ROTATION, DEFAULT_SCREEN_ROTATION);
-  deviceData.sea_pressure = preferences.getFloat(KEY_SEA_PRESSURE, DEFAULT_SEA_PRESSURE);
-  deviceData.metric_temp = preferences.getBool(KEY_METRIC_TEMP, DEFAULT_METRIC_TEMP);
-  deviceData.metric_alt = preferences.getBool(KEY_METRIC_ALT, DEFAULT_METRIC_ALT);
-  deviceData.performance_mode = preferences.getUChar(KEY_PERFORMANCE_MODE, DEFAULT_PERFORMANCE_MODE);
-  deviceData.theme = preferences.getUChar(KEY_THEME, DEFAULT_THEME);
-  deviceData.armed_time = preferences.getUShort(KEY_ARMED_TIME, 0);
-  deviceData.revision = preferences.getUChar(KEY_REVISION, 0);  // Default to ESP32-S3
-  deviceData.timezone_offset = preferences.getInt(KEY_TIMEZONE_OFFSET, 0);
+  deviceData.version_major = preferences.get<uint8_t>(KEY_VERSION_MAJOR, VERSION_MAJOR);
+  deviceData.version_minor = preferences.get<uint8_t>(KEY_VERSION_MINOR, VERSION_MINOR);
+  deviceData.screen_rotation = preferences.get<uint8_t>(KEY_SCREEN_ROTATION, DEFAULT_SCREEN_ROTATION);
+  deviceData.sea_pressure = preferences.get<float>(KEY_SEA_PRESSURE, DEFAULT_SEA_PRESSURE);
+  deviceData.metric_temp = preferences.get<bool>(KEY_METRIC_TEMP, DEFAULT_METRIC_TEMP);
+  deviceData.metric_alt = preferences.get<bool>(KEY_METRIC_ALT, DEFAULT_METRIC_ALT);
+  deviceData.performance_mode = preferences.get<uint8_t>(KEY_PERFORMANCE_MODE, DEFAULT_PERFORMANCE_MODE);
+  deviceData.theme = preferences.get<uint8_t>(KEY_THEME, DEFAULT_THEME);
+  deviceData.armed_time = preferences.get<uint16_t>(KEY_ARMED_TIME, 0);
+  deviceData.revision = preferences.get<uint8_t>(KEY_REVISION, 0);  // Default to ESP32-S3
+  deviceData.timezone_offset = preferences.get<int32_t>(KEY_TIMEZONE_OFFSET, 0);
 
   // Validate critical display-related settings
   if (deviceData.screen_rotation != 1 && deviceData.screen_rotation != 3) {
-    USBSerial.println(F("Warning: Invalid screen rotation detected, using default"));
+    platform::console.line("Warning: Invalid screen rotation detected, using default");
     deviceData.screen_rotation = DEFAULT_SCREEN_ROTATION;
     dataValid = false;
   }
 
   if (deviceData.theme > 1) {
-    USBSerial.println(F("Warning: Invalid theme detected, using default"));
+    platform::console.line("Warning: Invalid theme detected, using default");
     deviceData.theme = DEFAULT_THEME;
     dataValid = false;
   }
 
-  preferences.end();
+  preferences.close();
 
   // Ensure values are within valid ranges
   if (sanitizeDeviceData() || !dataValid) {
-    USBSerial.println(F("Sanitized corrupted preference values"));
+    platform::console.line("Sanitized corrupted preference values");
     writeDeviceData();  // Save sanitized values
   }
 
-  USBSerial.println(F("Device data loaded from Preferences"));
+  platform::console.line("Device data loaded from platform::NvsStore");
 }
 
-// Write to NVS. Uses the raw NVS API (not the Preferences wrapper) so all 11
+// Write to NVS. Uses the raw NVS API (not the platform::NvsStore wrapper) so all 11
 // keys share ONE nvs_commit() instead of committing per key — a single flash
 // transaction that, together with s_prefsMutex, removes any window in which a
 // concurrent writer could observe or produce a torn/partial save. The key names
-// and NVS value types here MATCH exactly what the Preferences getters in
-// refreshDeviceData() expect (u8/u16/i32, and a 4-byte blob for the float), so
+// and NVS value types here MATCH exactly what the platform::NvsStore getters in
+// refreshDeviceData() expect (u8/u16/i32, and a 4-uint8_t blob for the float), so
 // data written by older firmware remains fully readable.
 void writeDeviceData() {
   prefsEnsureMutex();
@@ -185,7 +186,7 @@ void writeDeviceData() {
   nvs_handle_t handle = 0;
   esp_err_t err = nvs_open(PREFS_NAMESPACE, NVS_READWRITE, &handle);
   if (err != ESP_OK) {
-    USBSerial.println(F("Failed to open NVS for writing"));
+    platform::console.line("Failed to open NVS for writing");
     if (s_prefsMutex != nullptr) {
       xSemaphoreGive(s_prefsMutex);
     }
@@ -215,13 +216,13 @@ void writeDeviceData() {
   }
 
   if (success) {
-    USBSerial.println(F("Device data saved to Preferences"));
+    platform::console.line("Device data saved to NVS");
   } else {
-    USBSerial.println(F("Warning: Some preferences may not have been saved correctly"));
+    platform::console.line("Warning: Some preferences may not have been saved correctly");
   }
 }
 
-// Reset Preferences and deviceData to factory defaults
+// Reset platform::NvsStore and deviceData to factory defaults
 void resetDeviceData() {
   deviceData = STR_DEVICE_DATA_140_V1();
 
@@ -240,12 +241,12 @@ void resetDeviceData() {
   deviceData.timezone_offset = 0;  // Default to UTC
 
   // Clear all preferences and save defaults
-  preferences.begin(PREFS_NAMESPACE, false);
-  preferences.clear();
-  preferences.end();
+  preferences.open(PREFS_NAMESPACE, false);
+  preferences.eraseAll();
+  preferences.close();
 
   writeDeviceData();
-  USBSerial.println(F("Device data reset to defaults and saved to Preferences"));
+  platform::console.line("Device data reset to defaults and saved to platform::NvsStore");
 }
 
 /**
@@ -257,86 +258,48 @@ void parse_serial_command_line(const char* json_line) {
     return;
   }
 
-  JsonDocument doc;
-  DeserializationError error = deserializeJson(doc, json_line);
-  if (error) {
+  using namespace platform::json;
+  Document doc(cJSON_Parse(json_line));
+  if (!doc || !cJSON_IsObject(doc.get())) return;
+  const char* command = string(doc.get(), "command");
+  if (strcmp(command, "reboot") == 0) {
+    platform::console.line("Rebooting");
+    diagnosticsMarkPlannedRestart(PlannedRestartReason::USB_COMMAND_REBOOT);
+    esp_restart();
+    return;
+  } else if (strcmp(command, "sync") == 0) {
+    send_device_data();
+    return;
+  } else if (strcmp(command, "diag_sync") == 0 || strcmp(command, "diag_clear") == 0) {
+    if (strcmp(command, "diag_clear") == 0) diagnosticsClearPersistentData();
+    diagnosticsSendJson(platform::console);
+    platform::console.line();
     return;
   }
-
-  if (!doc["command"].isNull()) {
-    String command = doc["command"].as<String>();
-
-    if (command == "reboot") {
-      USBSerial.println("Rebooting");
-      diagnosticsMarkPlannedRestart(
-          PlannedRestartReason::USB_COMMAND_REBOOT);
-      ESP.restart();
-      return;
-    } else if (command == "sync") {
-      send_device_data();
-      return;
-    } else if (command == "diag_sync") {
-      diagnosticsSendJson(USBSerial);
-      USBSerial.println();
-      return;
-    } else if (command == "diag_clear") {
-      diagnosticsClearPersistentData();
-      diagnosticsSendJson(USBSerial);
-      USBSerial.println();
-      return;
-    }
-  }
-
-  if (!doc["settings"].isNull()) {
-    JsonObject settings = doc["settings"].as<JsonObject>();
-
-    if (!settings.isNull()) {
-      if (!settings["screen_rot"].isNull()) {
-        deviceData.screen_rotation = settings["screen_rot"].as<unsigned int>();
-      }
-
-      if (!settings["sea_pressure"].isNull()) {
-        deviceData.sea_pressure = settings["sea_pressure"].as<float>();
-      }
-
-      if (!settings["metric_temp"].isNull()) {
-        deviceData.metric_temp = settings["metric_temp"].as<bool>();
-      }
-
-      if (!settings["metric_alt"].isNull()) {
-        deviceData.metric_alt = settings["metric_alt"].as<bool>();
-      }
-
-      if (!settings["performance_mode"].isNull()) {
-        deviceData.performance_mode = settings["performance_mode"].as<int>();
-      }
-
-      if (!settings["theme"].isNull()) {
-        deviceData.theme = settings["theme"].as<int>();
-      }
-    }
-
+  const cJSON* settings = field(doc.get(), "settings");
+  if (cJSON_IsObject(settings)) {
+    if (has(settings, "screen_rot")) deviceData.screen_rotation = get<unsigned int>(settings, "screen_rot");
+    if (has(settings, "sea_pressure")) deviceData.sea_pressure = get<float>(settings, "sea_pressure");
+    if (has(settings, "metric_temp")) deviceData.metric_temp = get<bool>(settings, "metric_temp");
+    if (has(settings, "metric_alt")) deviceData.metric_alt = get<bool>(settings, "metric_alt");
+    if (has(settings, "performance_mode")) deviceData.performance_mode = get<int>(settings, "performance_mode");
+    if (has(settings, "theme")) deviceData.theme = get<int>(settings, "theme");
     sanitizeDeviceData();
     writeDeviceData();
     send_device_data();
   }
-
-  if (!doc["wireless"].isNull()) {
-    const JsonObjectConst wireless = doc["wireless"].as<JsonObjectConst>();
-    if (!wireless.isNull() && applyWirelessSettingsJson(wireless)) {
-      USBSerial.println(
-          "Wireless settings saved; reboot required to apply role/radio changes");
+  const cJSON* wireless = field(doc.get(), "wireless");
+  if (wireless && !cJSON_IsNull(wireless)) {
+    if (cJSON_IsObject(wireless) && applyWirelessSettingsJson(wireless)) {
+      platform::console.line("Wireless settings saved; reboot required to apply role/radio changes");
       send_device_data();
-    } else {
-      USBSerial.println(
-          "Invalid wireless settings (role, peer, 32-hex key, channel 1..13 required)");
-    }
+    } else platform::console.line("Invalid wireless settings (role, peer, 32-hex key, channel 1..13 required)");
   }
 }
 
 void poll_serial_commands() {
-  while (USBSerial.available()) {
-    const int byte_read = USBSerial.read();
+  while (platform::console.hasInput()) {
+    const int byte_read = platform::console.readByte();
     if (byte_read < 0) {
       return;
     }
@@ -380,32 +343,34 @@ void poll_serial_commands() {
  * Contains current device settings and state
  */
 void send_device_data() {
-  // With ArduinoJson 7, we no longer need to specify capacity
-  JsonDocument doc;
+  using namespace platform::json;
+  Document doc(cJSON_CreateObject());
+  if (!doc) return;
 
-  doc["mj_v"] = VERSION_MAJOR;
-  doc["mi_v"] = VERSION_MINOR;
-  doc["arch"] = "ESP32S3";
-  doc["scr_rt"] = deviceData.screen_rotation;
-  doc["ar_tme"] = deviceData.armed_time;
-  doc["m_tmp"] = deviceData.metric_temp;
-  doc["m_alt"] = deviceData.metric_alt;
-  doc["prf"] = deviceData.performance_mode;
-  doc["sea_p"] = deviceData.sea_pressure;
-  doc["thm"] = deviceData.theme;
+  set(doc.get(), "mj_v", VERSION_MAJOR);
+  set(doc.get(), "mi_v", VERSION_MINOR);
+  set(doc.get(), "arch", "ESP32S3");
+  set(doc.get(), "scr_rt", deviceData.screen_rotation);
+  set(doc.get(), "ar_tme", deviceData.armed_time);
+  set(doc.get(), "m_tmp", deviceData.metric_temp);
+  set(doc.get(), "m_alt", deviceData.metric_alt);
+  set(doc.get(), "prf", deviceData.performance_mode);
+  set(doc.get(), "sea_p", deviceData.sea_pressure);
+  set(doc.get(), "thm", deviceData.theme);
   char peer_mac[18] = {};
   char local_mac[18] = {};
   formatWirelessPeerMac(peer_mac, sizeof(peer_mac));
   formatWirelessLocalMac(local_mac, sizeof(local_mac));
-  doc["wireless_role"] = wirelessRoleName(wirelessSettings.role);
-  doc["wireless_mac"] = local_mac;
-  doc["wireless_peer"] = peer_mac;
-  doc["wireless_channel"] = wirelessSettings.channel;
-  doc["wireless_key_set"] = wirelessSettings.secret_configured;
+  set(doc.get(), "wireless_role", wirelessRoleName(wirelessSettings.role));
+  set(doc.get(), "wireless_mac", local_mac);
+  set(doc.get(), "wireless_peer", peer_mac);
+  set(doc.get(), "wireless_channel", wirelessSettings.channel);
+  set(doc.get(), "wireless_key_set", wirelessSettings.secret_configured);
 
   // Send the JSON document over the USBSerial connection
-  serializeJson(doc, USBSerial);
-  USBSerial.println();  // Add newline for better readability
+  char* output = cJSON_PrintUnformatted(doc.get());
+  if (output) { platform::console.text(output); cJSON_free(output); }
+  platform::console.line();  // Add newline for better readability
 }
 
 /**
@@ -459,31 +424,31 @@ bool sanitizeDeviceData() {
  * @param config The HardwareConfig object containing the hardware configuration.
  */
 void debugHardwareConfig(const HardwareConfig& config) {
-  USBSerial.println("Hardware Configuration:");
-  USBSerial.print("button_top: ");
-  USBSerial.println(config.button_top);
-  USBSerial.print("buzzer_pin: ");
-  USBSerial.println(config.buzzer_pin);
-  USBSerial.print("led_sw: ");
-  USBSerial.println(config.led_sw);
-  USBSerial.print("throttle_pin: ");
-  USBSerial.println(config.throttle_pin);
-  USBSerial.print("bmp_pin: ");
-  USBSerial.println(config.bmp_pin);
-  USBSerial.print("tft_rst: ");
-  USBSerial.println(config.tft_rst);
-  USBSerial.print("tft_cs: ");
-  USBSerial.println(config.tft_cs);
-  USBSerial.print("tft_dc: ");
-  USBSerial.println(config.tft_dc);
-  USBSerial.print("spi_mosi: ");
-  USBSerial.println(config.spi_mosi);
-  USBSerial.print("spi_miso: ");
-  USBSerial.println(config.spi_miso);
-  USBSerial.print("spi_sclk: ");
-  USBSerial.println(config.spi_sclk);
-  USBSerial.print("enable_vib: ");
-  USBSerial.println(config.enable_vib ? "true" : "false");
-  USBSerial.print("enable_neopixel: ");
-  USBSerial.println(config.enable_neopixel ? "true" : "false");
+  platform::console.line("Hardware Configuration:");
+  platform::console.text("button_top: ");
+  platform::console.line(config.button_top);
+  platform::console.text("buzzer_pin: ");
+  platform::console.line(config.buzzer_pin);
+  platform::console.text("led_sw: ");
+  platform::console.line(config.led_sw);
+  platform::console.text("throttle_pin: ");
+  platform::console.line(config.throttle_pin);
+  platform::console.text("bmp_pin: ");
+  platform::console.line(config.bmp_pin);
+  platform::console.text("tft_rst: ");
+  platform::console.line(config.tft_rst);
+  platform::console.text("tft_cs: ");
+  platform::console.line(config.tft_cs);
+  platform::console.text("tft_dc: ");
+  platform::console.line(config.tft_dc);
+  platform::console.text("spi_mosi: ");
+  platform::console.line(config.spi_mosi);
+  platform::console.text("spi_miso: ");
+  platform::console.line(config.spi_miso);
+  platform::console.text("spi_sclk: ");
+  platform::console.line(config.spi_sclk);
+  platform::console.text("enable_vib: ");
+  platform::console.line(config.enable_vib ? "true" : "false");
+  platform::console.text("enable_neopixel: ");
+  platform::console.line(config.enable_neopixel ? "true" : "false");
 }

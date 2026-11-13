@@ -4,7 +4,7 @@
 #include <vector>
 #include <functional>
 #include <math.h>
-#include <Arduino.h>
+#include "platform/runtime.h"
 #include "sp140/structs.h"
 
 // Sensor categories for grouped handling
@@ -148,7 +148,7 @@ struct SensorMonitor : public IMonitor {
 
   void check() override {
     float v = read();
-    if (isnan(v)) {
+    if (std::isnan(v)) {
       if (last != AlertLevel::OK) {
         logger->log(id, AlertLevel::OK, v);
         last = AlertLevel::OK;
@@ -190,7 +190,7 @@ struct HysteresisSensorMonitor : public SensorMonitor {
 
   void check() override {
     float v = read();
-    if (isnan(v)) {
+    if (std::isnan(v)) {
       if (last != AlertLevel::OK) {
         logger->log(id, AlertLevel::OK, v);
         last = AlertLevel::OK;
@@ -328,7 +328,7 @@ struct CanLinkMonitor : public IMonitor {
         lostTiming(false), lostSinceMs(0), last(AlertLevel::OK) {}
 
   void check() override {
-    const uint32_t now = millis();
+    const uint32_t now = platform::millis32();
     if (connected()) {
       lostTiming = false;
       if (!upTiming) {

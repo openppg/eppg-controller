@@ -1,13 +1,14 @@
+#include "platform/runtime.h"
 #ifndef INC_SP140_BLE_OTA_SERVICE_H_
 #define INC_SP140_BLE_OTA_SERVICE_H_
 
-#include <NimBLEDevice.h>
+#include "platform/ble.h"
 
 /**
  * Initialize the OTA BLE service.
- * @param pServer Pointer to the NimBLEServer instance.
+ * @param pServer Pointer to the platform::BleServer instance.
  */
-void initOtaBleService(NimBLEServer* pServer);
+void initOtaBleService(platform::BleServer* pServer);
 
 /**
  * Check if an OTA update is currently in progress.

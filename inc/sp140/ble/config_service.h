@@ -1,11 +1,12 @@
+#include "platform/runtime.h"
 #ifndef INC_SP140_BLE_CONFIG_SERVICE_H_
 #define INC_SP140_BLE_CONFIG_SERVICE_H_
 
 #include <string>
 
-class NimBLEServer;
+namespace platform { class BleServer; }
 
-void initConfigBleService(NimBLEServer* server, const std::string& uniqueId);
+void initConfigBleService(platform::BleServer* server, const std::string& uniqueId);
 void updateThrottleBLE(int value);
 
 // Push ESC relay status + stream the result blob over notify. Call from the

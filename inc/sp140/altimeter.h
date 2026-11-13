@@ -3,8 +3,8 @@
 
 #include "sp140/shared-config.h"
 #include "sp140/structs.h"
-#include <Arduino.h>
-#include <CircularBuffer.hpp>
+#include "platform/runtime.h"
+#include "platform/ring_buffer.h"
 #include <freertos/semphr.h>
 
 // Constants

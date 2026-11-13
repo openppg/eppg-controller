@@ -1,9 +1,10 @@
+#include "platform/runtime.h"
 #include "sp140/altimeter.h"
 #include "sp140/structs.h"
 
-#include <Adafruit_BMP3XX.h>
+#include "platform/barometer.h"
 
-Adafruit_BMP3XX bmp;
+platform::Barometer bmp;
 bool bmpPresent = false;
 float groundAltitude = 0;
 static SemaphoreHandle_t i2cMutex = nullptr;
@@ -14,7 +15,7 @@ struct AltitudeReading {
 };
 
 // Buffer to store altitude readings with timestamps
-CircularBuffer<AltitudeReading, VARIO_BUFFER_SIZE> altitudeBuffer;
+platform::RingBuffer<AltitudeReading, VARIO_BUFFER_SIZE> altitudeBuffer;
 
 // Cached values — written by the designated I2C reader (uiTask via getAltitude),
 // safe to read from any task (32-bit float reads are atomic on Xtensa).
@@ -35,7 +36,7 @@ static float computeVerticalSpeed() {
     return 0.0f;
   }
   float verticalSpeed = (newest.altitude - oldest.altitude) / timeDiff;
-  return constrain(verticalSpeed, -MAX_VERTICAL_SPEED, MAX_VERTICAL_SPEED);
+  return platform::clamp(verticalSpeed, -MAX_VERTICAL_SPEED, MAX_VERTICAL_SPEED);
 }
 
 float getAltitude(const STR_DEVICE_DATA_140_V1& deviceData) {
@@ -46,7 +47,7 @@ float getAltitude(const STR_DEVICE_DATA_140_V1& deviceData) {
       float relativeAltitude = altitude - groundAltitude;
 
       // Add new reading to buffer with timestamp
-      AltitudeReading reading = {relativeAltitude, millis()};
+      AltitudeReading reading = {relativeAltitude, platform::millis32()};
       altitudeBuffer.push(reading);
 
       // Update caches (atomic 32-bit float writes on Xtensa)
@@ -78,7 +79,7 @@ float getVerticalSpeed() {
   float verticalSpeed = (newest.altitude - oldest.altitude) / timeDiff;
 
   // Constrain to max vertical speed
-  return constrain(verticalSpeed, -MAX_VERTICAL_SPEED, MAX_VERTICAL_SPEED);
+  return platform::clamp(verticalSpeed, -MAX_VERTICAL_SPEED, MAX_VERTICAL_SPEED);
 }
 
 // set the ground altitude to the current altitude
@@ -127,35 +128,31 @@ bool setupAltimeter() {
   i2cMutex = xSemaphoreCreateMutex();
 
   // pull down pin 40 to high to set the address
-  pinMode(40, OUTPUT);
-  digitalWrite(40, HIGH);
+  eppg_gpio_config(40, true, false);
+  eppg_gpio_write(40, 1);
 
   // Give the BMP3xx time to finish powering up after cold boot.
   // Without this, the first begin_I2C() occasionally fails before the
   // sensor is ready, leaving bmpPresent=false for the whole session and
   // tripping the Baro_Init_Failure alert.
-  delay(20);
+  platform::delayMs(20);
 
   // Retry a few times — most failures here are transient I2C timing races.
   const int kInitAttempts = 4;
   bool ok = false;
   for (int i = 1; i <= kInitAttempts; i++) {
-    if (bmp.begin_I2C(BMP3XX_DEFAULT_ADDRESS, &Wire)) {
+    if (bmp.initialize()) {
       ok = true;
       if (i > 1) {
-        USBSerial.printf("BMP3xx initialized on attempt %d\n", i);
+        platform::console.format("BMP3xx initialized on attempt %d\n", i);
       }
       break;
     }
-    USBSerial.printf("BMP3xx init attempt %d/%d failed\n", i, kInitAttempts);
-    delay(50);
+    platform::console.format("BMP3xx init attempt %d/%d failed\n", i, kInitAttempts);
+    platform::delayMs(50);
   }
   if (!ok) return false;
 
-  bmp.setOutputDataRate(BMP3_ODR_25_HZ);
-  bmp.setTemperatureOversampling(BMP3_OVERSAMPLING_2X);
-  bmp.setPressureOversampling(BMP3_OVERSAMPLING_4X);
-  bmp.setIIRFilterCoeff(BMP3_IIR_FILTER_COEFF_15);
   bmp.readPressure();  // throw away first reading
   // Seed the temperature cache so monitors and telemetry don't see __FLT_MIN__
   // until the first periodic read populates it.

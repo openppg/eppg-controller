@@ -1,7 +1,9 @@
 #include "sp140/espnow_bridge.h"
 
-#include <Arduino.h>
-#include <WiFi.h>
+#include "platform/runtime.h"
+#include "esp_event.h"
+#include "esp_netif.h"
+#include "esp_random.h"
 #include <esp_now.h>
 #include <esp_wifi.h>
 #include <cstring>
@@ -60,7 +62,7 @@ bool sendPacket(const void* data, size_t length) {
   return true;
 }
 
-void onEspNowSend(const uint8_t* mac, esp_now_send_status_t status) {
+void onEspNowSend(const esp_now_send_info_t* mac, esp_now_send_status_t status) {
   (void)mac;
   (void)status;
   s_sendInFlight = false;
@@ -98,7 +100,7 @@ void receiveControl(const uint8_t* data, int length) {
   }
   s_receiverLastSequence = packet.sequence;
   s_latestControl = packet;
-  s_controlReceivedMs = millis();
+  s_controlReceivedMs = platform::millis32();
   s_hasControl = true;
   portEXIT_CRITICAL(&s_bridgeMux);
 }
@@ -114,7 +116,7 @@ void receiveAck(const uint8_t* data, int length) {
 
   portENTER_CRITICAL(&s_bridgeMux);
   s_latestAck = packet;
-  s_ackReceivedMs = millis();
+  s_ackReceivedMs = platform::millis32();
   s_ackPending = true;
   portEXIT_CRITICAL(&s_bridgeMux);
 }
@@ -130,12 +132,13 @@ void receiveTelemetry(const uint8_t* data, int length) {
 
   portENTER_CRITICAL(&s_bridgeMux);
   s_latestTelemetry = packet;
-  s_telemetryReceivedMs = millis();
+  s_telemetryReceivedMs = platform::millis32();
   s_telemetryPending = true;
   portEXIT_CRITICAL(&s_bridgeMux);
 }
 
-void onEspNowReceive(const uint8_t* mac, const uint8_t* data, int length) {
+void onEspNowReceive(const esp_now_recv_info_t* info, const uint8_t* data, int length) {
+  const uint8_t* mac = info ? info->src_addr : nullptr;
   if (!sourceIsPeer(mac) || data == nullptr || length <= 0) return;
   if (wirelessIsReceiver()) {
     receiveControl(data, length);
@@ -151,19 +154,25 @@ bool beginEspNowBridge() {
   if (wirelessSettings.role == WirelessRole::STANDALONE) return false;
   if (!wirelessSettings.peer_configured ||
       !wirelessSettings.secret_configured) {
-    USBSerial.println("[ESPNOW] Role configured without peer/key; disabled");
+    platform::console.line("[ESPNOW] Role configured without peer/key; disabled");
     return false;
   }
 
-  WiFi.mode(WIFI_STA);
-  WiFi.setSleep(false);
+  ESP_ERROR_CHECK(esp_netif_init());
+  const esp_err_t event_init = esp_event_loop_create_default();
+  if (event_init != ESP_OK && event_init != ESP_ERR_INVALID_STATE) return false;
+  wifi_init_config_t wifi = WIFI_INIT_CONFIG_DEFAULT();
+  if (esp_wifi_init(&wifi) != ESP_OK ||
+      esp_wifi_set_mode(WIFI_MODE_STA) != ESP_OK ||
+      esp_wifi_start() != ESP_OK ||
+      esp_wifi_set_ps(WIFI_PS_NONE) != ESP_OK) return false;
   if (esp_wifi_set_channel(wirelessSettings.channel,
                            WIFI_SECOND_CHAN_NONE) != ESP_OK) {
-    USBSerial.println("[ESPNOW] Failed to set Wi-Fi channel");
+    platform::console.line("[ESPNOW] Failed to set Wi-Fi channel");
     return false;
   }
   if (esp_now_init() != ESP_OK) {
-    USBSerial.println("[ESPNOW] esp_now_init failed");
+    platform::console.line("[ESPNOW] esp_now_init failed");
     return false;
   }
 
@@ -174,7 +183,7 @@ bool beginEspNowBridge() {
     lmk[i] = wirelessSettings.pairing_secret[i] ^ 0x5AU;
   }
   if (esp_now_set_pmk(pmk) != ESP_OK) {
-    USBSerial.println("[ESPNOW] Failed to configure PMK");
+    platform::console.line("[ESPNOW] Failed to configure PMK");
     esp_now_deinit();
     return false;
   }
@@ -186,7 +195,7 @@ bool beginEspNowBridge() {
   peer.ifidx = WIFI_IF_STA;
   peer.encrypt = true;
   if (esp_now_add_peer(&peer) != ESP_OK) {
-    USBSerial.println("[ESPNOW] Failed to add encrypted peer");
+    platform::console.line("[ESPNOW] Failed to add encrypted peer");
     esp_now_deinit();
     return false;
   }
@@ -199,7 +208,7 @@ bool beginEspNowBridge() {
 
   uint8_t local_mac[6] = {};
   esp_wifi_get_mac(WIFI_IF_STA, local_mac);
-  USBSerial.printf(
+  platform::console.format(
       "[ESPNOW] role=%s channel=%u local=%02X:%02X:%02X:%02X:%02X:%02X\n",
       wirelessRoleName(wirelessSettings.role), wirelessSettings.channel,
       local_mac[0], local_mac[1], local_mac[2], local_mac[3], local_mac[4],
@@ -217,7 +226,7 @@ bool espNowSendControl(uint16_t throttle_raw, DeviceState requested_state,
   wireless::ControlPacket packet = {};
   packet.session_id = s_sessionId;
   packet.sequence = ++s_txSequence;
-  packet.tx_uptime_ms = millis();
+  packet.tx_uptime_ms = platform::millis32();
   packet.throttle_raw = throttle_raw;
   packet.requested_state = static_cast<uint8_t>(requested_state);
   packet.performance_mode = performance_mode;
@@ -278,7 +287,7 @@ void espNowApplyMirroredTelemetry(
   esc.fw_version = telemetry.esc_fw_version;
   esc.bootloader_version = telemetry.esc_bootloader_version;
   esc.esc_runtime_ms = telemetry.esc_runtime_ms;
-  esc.lastUpdateMs = millis();
+  esc.lastUpdateMs = platform::millis32();
   memcpy(esc.sn_code, telemetry.esc_sn_code, sizeof(esc.sn_code));
 
   STR_BMS_TELEMETRY_140 bms = {};
@@ -314,7 +323,7 @@ void espNowApplyMirroredTelemetry(
   bms.t2_temperature = telemetry.bms_temp_sensors_C[3];
   bms.t3_temperature = telemetry.bms_temp_sensors_C[4];
   bms.t4_temperature = telemetry.bms_temp_sensors_C[5];
-  bms.lastUpdateMs = millis();
+  bms.lastUpdateMs = platform::millis32();
 
   escTelemetryData = esc;
   bmsTelemetryData = bms;
@@ -350,14 +359,14 @@ uint32_t espNowRemoteStatusAgeMs() {
   portENTER_CRITICAL(&s_bridgeMux);
   const uint32_t received_ms = s_ackReceivedMs;
   portEXIT_CRITICAL(&s_bridgeMux);
-  return received_ms == 0 ? UINT32_MAX : millis() - received_ms;
+  return received_ms == 0 ? UINT32_MAX : platform::millis32() - received_ms;
 }
 
 uint32_t espNowRemoteTelemetryAgeMs() {
   portENTER_CRITICAL(&s_bridgeMux);
   const uint32_t received_ms = s_telemetryReceivedMs;
   portEXIT_CRITICAL(&s_bridgeMux);
-  return received_ms == 0 ? UINT32_MAX : millis() - received_ms;
+  return received_ms == 0 ? UINT32_MAX : platform::millis32() - received_ms;
 }
 
 bool espNowGetLatestControl(wireless::ControlPacket* control,
@@ -367,7 +376,7 @@ bool espNowGetLatestControl(wireless::ControlPacket* control,
   const bool available = s_hasControl;
   if (available) {
     *control = s_latestControl;
-    *age_ms = millis() - s_controlReceivedMs;
+    *age_ms = platform::millis32() - s_controlReceivedMs;
   }
   portEXIT_CRITICAL(&s_bridgeMux);
   return available;
@@ -381,7 +390,7 @@ void espNowSetFailsafeLatched(bool latched) {
 
 bool espNowSendAck(DeviceState actual_state) {
   if (!wirelessIsReceiver()) return false;
-  const uint32_t now = millis();
+  const uint32_t now = platform::millis32();
   if (now - s_lastAckSendMs < 40) return false;
 
   wireless::ControlPacket control = {};
@@ -408,7 +417,7 @@ bool espNowSendAck(DeviceState actual_state) {
 
 bool espNowSendTelemetry(const BLE_FastLink_Telemetry& telemetry) {
   if (!wirelessIsReceiver()) return false;
-  const uint32_t now = millis();
+  const uint32_t now = platform::millis32();
   if (now - s_lastTelemetrySendMs < 100) return false;
   if (!sendPacket(&telemetry, sizeof(telemetry))) return false;
   s_lastTelemetrySendMs = now;

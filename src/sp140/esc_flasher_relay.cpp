@@ -1,6 +1,6 @@
 #include "sp140/esc_flasher_relay.h"
 
-#include <Arduino.h>
+#include "platform/runtime.h"
 #include <string.h>
 #include <stdlib.h>
 #include <canard.h>
@@ -23,7 +23,7 @@ static const uint8_t  FW_MAX_RETRIES  = 10;
 static const unsigned long REBOOT_WAIT_MS = 700;   // ESC reboot before bootloader answers
 static const unsigned long RX_TIMEOUT_MS  = 15000;  // abort if the app stalls mid-transfer
 static const uint32_t MAX_IMAGE_SIZE  = 256u * 1024u;  // sanity cap
-static const uint32_t HEADER_SIZE     = 32;            // firmware data starts at byte 32
+static const uint32_t HEADER_SIZE     = 32;            // firmware data starts at uint8_t 32
 
 // =============================================================================
 // Response capture (decoded on the throttle task inside processTxRxOnce).
@@ -297,9 +297,9 @@ bool escFlasherRelayBegin(uint16_t hardwareId, uint32_t totalSize) {
   s_status.phase = EscFwPhase::RECEIVING;
   s_status.progressPermille = 0;
   portEXIT_CRITICAL(&s_mux);
-  s_lastRxMs = millis();
+  s_lastRxMs = platform::millis32();
   s_hwId = hardwareId;
-  USBSerial.printf("ESC FW relay: begin hwId=0x%04X size=%u\n", hardwareId, totalSize);
+  platform::console.format("ESC FW relay: begin hwId=0x%04X size=%u\n", hardwareId, totalSize);
   return true;
 }
 
@@ -319,7 +319,7 @@ int32_t escFlasherRelayWriteChunk(uint32_t offset, const uint8_t* data, uint16_t
     s_status.progressPermille = permille;
   }
   portEXIT_CRITICAL(&s_mux);
-  if (received >= 0) s_lastRxMs = millis();
+  if (received >= 0) s_lastRxMs = platform::millis32();
   return received;
 }
 
@@ -343,12 +343,12 @@ bool escFlasherRelayEnd() {
   }
   portEXIT_CRITICAL(&s_mux);
   if (ok) {
-    s_phaseStartMs = millis();
+    s_phaseStartMs = platform::millis32();
     s_lastSendMs = 0;  // force first restart send on next tick
-    USBSerial.printf("ESC FW relay: end, flashing hwId=0x%04X sizeKb=%u chunks=%u\n",
+    platform::console.format("ESC FW relay: end, flashing hwId=0x%04X sizeKb=%u chunks=%u\n",
                      s_hwId, s_sizeKb, s_totalChunks);
   } else {
-    USBSerial.println("ESC FW relay: end rejected (incomplete image)");
+    platform::console.line("ESC FW relay: end rejected (incomplete image)");
   }
   return ok;
 }
@@ -378,12 +378,12 @@ void escFlasherRelayServiceTick() {
     return;
   }
 
-  const unsigned long now = millis();
+  const unsigned long now = platform::millis32();
 
   // RECEIVING: no CAN traffic; just guard against an app that stalls.
   if (s_phase == EscFwPhase::RECEIVING) {
     if (now - s_lastRxMs > RX_TIMEOUT_MS) {
-      USBSerial.println("ESC FW relay: receive timeout");
+      platform::console.line("ESC FW relay: receive timeout");
       finishFail(EscFwCode::TIMEOUT);
     }
     return;
@@ -508,7 +508,7 @@ void escFlasherRelayServiceTick() {
           escAdapter().setLocalNodeId(CTRL_NORMAL_NODE_ID);  // restore normal CAN identity
           setStatus(EscFwCode::SUCCESS, EscFwPhase::DONE_OK, 1000);
           s_phase = EscFwPhase::DONE_OK;
-          USBSerial.println("ESC FW relay: SUCCESS");
+          platform::console.line("ESC FW relay: SUCCESS");
         } else {
           finishFail(EscFwCode::ESC_REJECTED);  // ESC CRC/verify failed
         }

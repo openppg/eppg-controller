@@ -1,6 +1,8 @@
 // Copyright 2020 <Zach Whitehead>
 // OpenPPG
-#include "Arduino.h"
+#include "platform/runtime.h"
+#include "nvs_flash.h"
+#include "esp_system.h"
 #include "sp140/device_settings.h"
 #include "sp140/ble/ota_service.h"
 #include "esp_ota_ops.h"
@@ -10,11 +12,7 @@
 #include "../../inc/sp140/esp32s3-config.h"
 #include "../../inc/sp140/structs.h"  // data structs
 #include "../../inc/sp140/utilities.h"
-#include <Adafruit_NeoPixel.h>  // RGB LED
-#include <ArduinoJson.h>
-#include <CircularBuffer.hpp>  // smooth out readings
-#include <SPI.h>
-#include <Wire.h>
+#include "platform/ring_buffer.h"  // smooth out readings
 
 // ESP32S3 (CAN) specific libraries here
 #include "esp_task_wdt.h"
@@ -70,7 +68,7 @@ void processEspNowRemoteUpdates();
 void processEspNowReceiverState();
 
 // Global variable for shared SPI
-SPIClass *hardwareSPI = nullptr;
+
 
 // Store CS pins as globals to avoid accessing protected members
 int8_t displayCS = -1;
@@ -114,7 +112,7 @@ UnifiedBatteryData unifiedBatteryData = {0.0f, 0.0f, 0.0f, 0.0f};  // volts, amp
 
 // Throttle PWM smoothing buffer is managed in throttle.cpp
 
-Adafruit_NeoPixel pixels(1, 21, NEO_GRB + NEO_KHZ800);
+
 uint32_t led_color = STATUS_LED_RED;  // current LED color
 
 // Global variable for device state
@@ -142,7 +140,7 @@ void switchScreenPage(ScreenPage newPage) {
     // Potentially add code here to initialize the new screen if needed
     xSemaphoreGive(lvglMutex);
   } else {
-    USBSerial.println("Failed to acquire LVGL mutex for screen switch");
+    platform::console.line("Failed to acquire LVGL mutex for screen switch");
   }
 }
 
@@ -182,16 +180,16 @@ void changeDeviceState(DeviceState newState) {
   }
 
   // Side effects outside the mutex
-  USBSerial.print("Device State Changed to: ");
+  platform::console.text("Device State Changed to: ");
   switch (newState) {
   case DISARMED:
-    USBSerial.println("DISARMED");
+    platform::console.line("DISARMED");
     break;
   case ARMED:
-    USBSerial.println("ARMED");
+    platform::console.line("ARMED");
     break;
   case ARMED_CRUISING:
-    USBSerial.println("ARMED_CRUISING");
+    platform::console.line("ARMED_CRUISING");
     break;
   }
 
@@ -250,24 +248,21 @@ const char *buildDate = __DATE__ " " __TIME__;
 
 // Initialize shared SPI and chip select pins
 void setupSPI(const HardwareConfig &board_config) {
-  USBSerial.println("Setting up SPI bus");
+  platform::console.line("Setting up SPI bus");
 
   // Store CS pins
   displayCS = board_config.tft_cs;
   bmsCS = MCP_CS;
 
-  // Configure both CS pins as outputs and set HIGH (deselected)
-  pinMode(displayCS, OUTPUT);
-  digitalWrite(displayCS, HIGH);
+  // Configure both CS pins as outputs and set 1 (deselected)
+  eppg_gpio_config(displayCS, true, false);
+  eppg_gpio_write(displayCS, 1);
 
-  pinMode(bmsCS, OUTPUT);
-  digitalWrite(bmsCS, HIGH);
+  eppg_gpio_config(bmsCS, true, false);
+  eppg_gpio_write(bmsCS, 1);
 
-  // Initialize hardware SPI for use by both display and BMS
-  hardwareSPI = new SPIClass(HSPI);
-  // Use the board_config pins instead of the defines
-  hardwareSPI->begin(board_config.spi_sclk, board_config.spi_miso,
-                     board_config.spi_mosi, -1);
+  ESP_ERROR_CHECK(eppg_spi_bus_init(board_config.spi_mosi, board_config.spi_miso,
+                                   board_config.spi_sclk));
 }
 
 void watchdogTask(void *parameter) {
@@ -311,7 +306,7 @@ void throttleTask(void *pvParameters) {
   const TickType_t throttleTicks = pdMS_TO_TICKS(20);  // 50 Hz
   for (;;) {
     handleThrottle();
-    lastThrottleRunMs = millis();
+    lastThrottleRunMs = platform::millis32();
 #ifndef OPENPPG_DEBUG
     esp_task_wdt_reset();  // control loop ran this cycle — pet the watchdog
 #endif
@@ -324,14 +319,14 @@ void throttleTask(void *pvParameters) {
 // Uses CACHED barometer/CPU values — uiTask is the sole I2C reader, and
 // getCachedCpuTemperature throttles tsens access. This avoids i2cMutex
 // contention and the "tsens: Do not configure..." error that arises when
-// multiple tasks call temperatureRead() concurrently.
+// multiple tasks call eppg_cpu_temperature() concurrently.
 void ctrlSensorTask(void *pvParameters) {
   (void)pvParameters;
   TickType_t lastWake = xTaskGetTickCount();
   const TickType_t sensorTicks = pdMS_TO_TICKS(100);  // 10 Hz
 
   for (;;) {
-    const unsigned long now = millis();
+    const unsigned long now = platform::millis32();
     float alt = getCachedAltitude();
     // Direct read for baro temp (at 10Hz) — cheap I2C call, keeps the
     // cached value fresh for the Baro_Temp monitor which reads the cache.
@@ -585,11 +580,11 @@ void refreshDisplay() {
       static bool lastCriticalState = false;
       if (alertUpdate.criticalAlertsActive != lastCriticalState) {
         if (alertUpdate.criticalAlertsActive) {
-          USBSerial.println("[UI] Starting critical border flash");
+          platform::console.line("[UI] Starting critical border flash");
           startCriticalBorderFlashDirect();  // Direct control - we already have
                                             // the mutex
         } else {
-          USBSerial.println("[UI] Stopping critical border flash");
+          platform::console.line("[UI] Stopping critical border flash");
           stopCriticalBorderFlashDirect();  // Direct control - we already have
                                            // the mutex
         }
@@ -622,7 +617,7 @@ void uiTask(void *pvParameters) {
   const TickType_t uiTicks = pdMS_TO_TICKS(33);  // ~30 Hz, matches LV_DEF_REFR_PERIOD
   for (;;) {
     refreshDisplay();
-    lastUiRunMs = millis();
+    lastUiRunMs = platform::millis32();
     vTaskDelayUntil(&lastWake, uiTicks);
   }
 }
@@ -677,7 +672,7 @@ void bmsTask(void *pvParameters) {
       unifiedBatteryData.power = 0.0;
     }
 
-    lastBmsRunMs = millis();
+    lastBmsRunMs = platform::millis32();
     vTaskDelayUntil(&lastWake, bmsTicks);
   }
 }
@@ -689,23 +684,22 @@ void loadHardwareConfig() {
 }
 
 void printBootMessage() {
-  USBSerial.print(F("Booting up V"));
-  USBSerial.print(VERSION_STRING);
-  USBSerial.print(F(" git:"));
-  USBSerial.println(GIT_REV);
+  platform::console.text("Booting up V");
+  platform::console.text(VERSION_STRING);
+  platform::console.text(" git:");
+  platform::console.line(GIT_REV);
 }
 
 void setupBarometer() {
   const int bmp_enabler = 9;
-  pinMode(bmp_enabler, OUTPUT);
-  digitalWrite(bmp_enabler, HIGH);  // barometer fix for V2 board
+  eppg_gpio_config(bmp_enabler, true, false);
+  eppg_gpio_write(bmp_enabler, 1);  // barometer fix for V2 board
 }
 
 
 void setupLED() {
-  pinMode(board_config.led_sw, OUTPUT);  // set up the internal LED2 pin
+  eppg_gpio_config(board_config.led_sw, true, false);  // set up the internal LED2 pin
   if (board_config.enable_neopixel) {
-    pixels.begin();
     setLEDColor(led_color);
   }
 }
@@ -731,7 +725,11 @@ void setupWatchdog() {
   // exactly the tasks that explicitly subscribe (throttleTask + watchdogTask).
   // Otherwise any non-safety task (UI/BMS/BLE) monopolizing a core for >5 s
   // would panic-reboot a flying device — the opposite of the intent.
-  ESP_ERROR_CHECK(esp_task_wdt_init(WDT_TIMEOUT_SECONDS, true));
+  esp_task_wdt_config_t config{};
+  config.timeout_ms = WDT_TIMEOUT_SECONDS * 1000;
+  config.idle_core_mask = 0;
+  config.trigger_panic = true;
+  ESP_ERROR_CHECK(esp_task_wdt_init(&config));
 #endif  // OPENPPG_DEBUG
 }
 
@@ -742,30 +740,30 @@ void setupWatchdog() {
  * Must be called before any tasks are created
  */
 void createAllSyncPrimitives() {
-  USBSerial.println("Creating sync primitives...");
+  platform::console.line("Creating sync primitives...");
 
   // LVGL display mutex - protects all LVGL operations
   lvglMutex = xSemaphoreCreateMutex();
   if (lvglMutex == NULL) {
-    USBSerial.println("Error creating LVGL mutex");
+    platform::console.line("Error creating LVGL mutex");
   }
 
   // State mutex - protects device state transitions
   stateMutex = xSemaphoreCreateMutex();
   if (stateMutex == NULL) {
-    USBSerial.println("Error creating state mutex");
+    platform::console.line("Error creating state mutex");
   }
 
   // Create all queues
   throttleUpdateQueue = xQueueCreate(1, sizeof(uint16_t));
   if (throttleUpdateQueue == NULL) {
-    USBSerial.println("Error creating throttle update queue");
+    platform::console.line("Error creating throttle update queue");
   }
 
   // Melody queue for audio task - MUST be created before audioTask
   melodyQueue = xQueueCreate(5, sizeof(MelodyRequest));
   if (melodyQueue == NULL) {
-    USBSerial.println("Error creating melody queue");
+    platform::console.line("Error creating melody queue");
   }
 
   // Telemetry hub mutex - protects shared telemetry data between
@@ -815,13 +813,14 @@ void setupTasks() {
  * Initializes the device in deterministic phases.
  * No tasks are created until all their dependencies exist.
  */
-void setup() {
+extern "C" void app_main() {
+  ESP_ERROR_CHECK(nvs_flash_init());
   // =========================================================================
   // PHASE 1: Serial and Early Config
   // =========================================================================
-  USBSerial.begin(115200);
-  USBSerial.print("Build date/time: ");
-  USBSerial.println(buildDate);
+  platform::console.init();
+  platform::console.text("Build date/time: ");
+  platform::console.line(buildDate);
   diagnosticsInit();
 
   // Load device config from EEPROM first - may contain pin mappings
@@ -833,7 +832,7 @@ void setup() {
   const esp_partition_t* running = esp_ota_get_running_partition();
   const esp_partition_t* boot = esp_ota_get_boot_partition();
   if (running != nullptr && boot != nullptr) {
-    USBSerial.printf("OTA: Running partition %s @ 0x%06lx, boot %s @ 0x%06lx\n",
+    platform::console.format("OTA: Running partition %s @ 0x%06lx, boot %s @ 0x%06lx\n",
                      running->label, (unsigned long)running->address,
                      boot->label, (unsigned long)boot->address);
   }
@@ -846,11 +845,11 @@ void setup() {
   // =========================================================================
   // PHASE 3: Hardware Initialization
   // =========================================================================
-  USBSerial.println("Initializing hardware...");
+  platform::console.line("Initializing hardware...");
 
   // Temporary fix for BMP3xx I2C mode - TODO remove
-  digitalWrite(42, HIGH);
-  pinMode(42, OUTPUT);
+  eppg_gpio_write(42, 1);
+  eppg_gpio_config(42, true, false);
 
   // Load board-specific hardware config
   loadHardwareConfig();
@@ -858,14 +857,14 @@ void setup() {
   // I2C bus setup for altimeter
   const int SDA_PIN = 44;
   const int SCL_PIN = 41;
-  Wire.setPins(SDA_PIN, SCL_PIN);
+  ESP_ERROR_CHECK(eppg_i2c_init(SDA_PIN, SCL_PIN));
   if (!setupAltimeter()) {
-    USBSerial.println("Error initializing BMP3xx barometer");
+    platform::console.line("Error initializing BMP3xx barometer");
   }
 
   setupLED();  // Defaults to RED
   setupAnalogRead();
-  pinMode(board_config.button_top, INPUT_PULLUP);  // Button GPIO only, task created later
+  eppg_gpio_config(board_config.button_top, false, true);  // Button GPIO only, task created later
   setupWatchdog();
 
   // Buzzer and vibration motor
@@ -882,7 +881,7 @@ void setup() {
   setupSPI(board_config);
 
   // Display initialization
-  setupLvglDisplay(deviceData, board_config.tft_dc, board_config.tft_rst, hardwareSPI);
+  setupLvglDisplay(deviceData, board_config.tft_dc, board_config.tft_rst);
   initAlertDisplay();
 
   // The handheld remote mirrors both CAN buses over ESP-NOW and must never
@@ -890,7 +889,7 @@ void setup() {
   if (!wirelessIsRemote()) {
     // BMS CAN interface
 #ifndef SCREEN_DEBUG
-    initBMSCAN(hardwareSPI);
+    initBMSCAN();
 #endif
 
     // ESC interface
@@ -901,13 +900,13 @@ void setup() {
   // =========================================================================
   // PHASE 4: UI Startup (blocking - no tasks running yet)
   // =========================================================================
-  USBSerial.println("Starting UI...");
+  platform::console.line("Starting UI...");
 
   // Haptic feedback that boot is progressing
   pulseVibeMotor();
 
   // Check for performance mode activation (button held during boot)
-  if (digitalRead(board_config.button_top) == LOW) {
+  if (eppg_gpio_read(board_config.button_top) == 0) {
     perfModeSwitch();
   }
 
@@ -920,11 +919,11 @@ void setup() {
     splash_screen = lv_screen_active();
     // Keep mutex held through main screen setup
   } else {
-    USBSerial.println("Failed to acquire LVGL mutex for splash");
+    platform::console.line("Failed to acquire LVGL mutex for splash");
   }
 
   // Setup main screen after splash
-  USBSerial.println("Setting up main screen...");
+  platform::console.line("Setting up main screen...");
   if (main_screen == NULL) {
     setupMainScreen(deviceData.theme == 1);
   }
@@ -937,9 +936,9 @@ void setup() {
       lv_obj_delete(splash_screen);
       splash_screen = NULL;
     }
-    USBSerial.println("Main screen loaded");
+    platform::console.line("Main screen loaded");
   } else {
-    USBSerial.println("Error: Main screen object is NULL after setup attempt");
+    platform::console.line("Error: Main screen object is NULL after setup attempt");
   }
 
   // Release LVGL mutex
@@ -950,14 +949,19 @@ void setup() {
   // =========================================================================
   // PHASE 5: Services Initialization
   // =========================================================================
-  USBSerial.println("Initializing services...");
+  platform::console.line("Initializing services...");
 
-  // BLE stack (services created, advertising NOT started yet)
+  // QEMU executes real control/tasks and modeled peripherals. The S3 machine
+  // does not emulate the RF hardware; native radio runs only on the board.
+#ifndef EPPG_QEMU
   setupBLE();
 
   if (wirelessSettings.role != WirelessRole::STANDALONE) {
     beginEspNowBridge();
   }
+#else
+  platform::console.line("[QEMU] BLE and Wi-Fi RF unavailable; peripheral/control test build");
+#endif
 
   // Monitoring system (disabled initially)
   initSimpleMonitor();
@@ -974,11 +978,13 @@ void setup() {
   // =========================================================================
   // PHASE 7: Start External Interfaces
   // =========================================================================
-  USBSerial.println("Starting external interfaces...");
+  platform::console.line("Starting external interfaces...");
 
   // Start BLE advertising (now safe - UI is ready, tasks are running)
+#ifndef EPPG_QEMU
   restartBLEAdvertising();
-  USBSerial.println("BLE advertising started");
+  platform::console.line("BLE services initialized");
+#endif
 
   // Enable sensor monitoring
   enableMonitoring();
@@ -988,52 +994,46 @@ void setup() {
   if (esp_ota_get_state_partition(running, &ota_state) == ESP_OK) {
     if (ota_state == ESP_OTA_IMG_PENDING_VERIFY) {
       // First boot after OTA - if we made it this far, firmware is good
-      USBSerial.println("OTA: First boot after update - validating firmware");
+      platform::console.line("OTA: First boot after update - validating firmware");
       esp_ota_mark_app_valid_cancel_rollback();
-      USBSerial.println("OTA: Firmware marked valid - Rollback protection active");
+      platform::console.line("OTA: Firmware marked valid - Rollback protection active");
     }
   }
 
-  USBSerial.println("=== Boot complete ===");
+  platform::console.line("=== Boot complete ===");
 }
-
-// main loop - all work is done in tasks
-void loop() {
-  vTaskDelay(pdMS_TO_TICKS(25));
-}
-
 
 // Add new button handler task
 void buttonHandlerTask(void *parameter) {
   uint32_t lastDebounceTime = 0;
-  bool lastButtonState = HIGH;
+  bool lastButtonState = 1;
   bool buttonState;
   bool pairingHoldHandled = false;
 
   while (true) {
-    buttonState = digitalRead(board_config.button_top);
-    uint32_t currentTime = millis();
+    buttonState = eppg_gpio_read(board_config.button_top);
+    uint32_t currentTime = platform::millis32();
 
     // Debounce
     if ((currentTime - lastDebounceTime) > BUTTON_DEBOUNCE_TIME_MS) {
       if (buttonState != lastButtonState) {
         lastDebounceTime = currentTime;
 
-        if (buttonState == LOW) {  // Button pressed
+        if (buttonState == 0) {  // Button pressed
           buttonPressed = true;
           pairingHoldHandled = false;
           buttonPressStartTime = currentTime;
-          USBSerial.println("Button pressed");
-          USBSerial.print("Arm sequence state: ");
-          USBSerial.println(armSequenceStarted ? "ACTIVE" : "INACTIVE");
+          platform::console.line("Button pressed");
+          platform::console.text("Arm sequence state: ");
+          platform::console.line(armSequenceStarted ? "ACTIVE" : "INACTIVE");
         } else {  // Button released
           buttonPressed = false;
           buttonReleaseStartTime = currentTime;
 
           uint32_t holdDuration = buttonReleaseStartTime - buttonPressStartTime;
-          USBSerial.print("Button released after ");
-          USBSerial.print(holdDuration);
-          USBSerial.println("ms");
+          platform::console.text("Button released after ");
+          platform::console.text(holdDuration);
+          platform::console.line("ms");
 
           // Disarmed long hold toggles performance mode on release.
           if (currentState == DISARMED &&
@@ -1048,7 +1048,7 @@ void buttonHandlerTask(void *parameter) {
           // Only start arm sequence if it was a quick click
           if (!armSequenceStarted && holdDuration < FIRST_CLICK_MAX_HOLD_MS) {
             armSequenceStarted = true;
-            USBSerial.println("Quick click detected - arm sequence started");
+            platform::console.line("Quick click detected - arm sequence started");
           }
         }
 
@@ -1062,7 +1062,7 @@ void buttonHandlerTask(void *parameter) {
         if (!buttonPressed && (currentTime - buttonReleaseStartTime) >
                                   BUTTON_SEQUENCE_TIMEOUT_MS) {
           armSequenceStarted = false;
-          USBSerial.println("Arm sequence timed out - waiting too long between "
+          platform::console.line("Arm sequence timed out - waiting too long between "
                             "click and hold");
         }
 
@@ -1072,7 +1072,7 @@ void buttonHandlerTask(void *parameter) {
 
           // Complete arm sequence if held long enough
           if (currentHoldTime >= SECOND_HOLD_TIME_MS) {
-            USBSerial.println("Arm sequence complete - toggling arm state");
+            platform::console.line("Arm sequence complete - toggling arm state");
             toggleArm();
             armSequenceStarted = false;
             buttonPressed = false;
@@ -1088,14 +1088,14 @@ void buttonHandlerTask(void *parameter) {
             currentHoldTime >= BLE_PAIRING_HOLD_MS && !pairingHoldHandled) {
           enterBLEPairingMode();
           pulseVibeMotor();
-          USBSerial.println("[BLE] Pairing mode activated via button hold");
+          platform::console.line("[BLE] Pairing mode activated via button hold");
           pairingHoldHandled = true;
         }
 
         // Handle cruise control (when armed or cruising and held long enough)
         if ((currentState == ARMED || currentState == ARMED_CRUISING) &&
             currentHoldTime >= CRUISE_HOLD_TIME_MS) {
-          USBSerial.println("Cruise control button activated");
+          platform::console.line("Cruise control button activated");
           toggleCruise();
           buttonPressed = false;
           buttonPressStartTime = currentTime;
@@ -1108,8 +1108,8 @@ void buttonHandlerTask(void *parameter) {
 }
 
 void printTime(const char *label) {
-  USBSerial.print(label);
-  USBSerial.println(millis());
+  platform::console.text(label);
+  platform::console.line(platform::millis32());
 }
 
 void disarmESC() {
@@ -1151,7 +1151,7 @@ void disarmSystem() {
 
   // Calculate elapsed armed time in seconds before updating hour meter
   if (armedAtMillis > 0) {
-    unsigned long currentMillis = millis();
+    unsigned long currentMillis = platform::millis32();
     armedSecs = (currentMillis - armedAtMillis) / 1000;
   }
 
@@ -1160,7 +1160,7 @@ void disarmSystem() {
 
   // DISARM_COOLDOWN (500ms, checked in toggleArm) prevents immediate re-arm —
   // no need to block this task for 500ms.
-  lastDisarmTime = millis();
+  lastDisarmTime = platform::millis32();
 }
 
 void handleArmFail() {
@@ -1174,7 +1174,7 @@ void toggleArm() {
     if (currentState == DISARMED &&
         wirelessRemoteDesiredState == DISARMED) {
       if (isOtaInProgress()) {
-        USBSerial.println("Remote arm blocked: OTA update in progress");
+        platform::console.line("Remote arm blocked: OTA update in progress");
       } else if (readThrottleRaw() < POT_ENGAGEMENT_LEVEL) {
         wirelessRemoteDesiredState = ARMED;
       } else {
@@ -1189,7 +1189,7 @@ void toggleArm() {
 
   if (currentState == DISARMED) {
     if (isOtaInProgress()) {
-      USBSerial.println("Arm blocked: OTA update in progress");
+      platform::console.line("Arm blocked: OTA update in progress");
       return;
     }
 
@@ -1197,12 +1197,12 @@ void toggleArm() {
     // flight (the ESC may be mid-reboot / in the bootloader). Mirrors the OTA
     // interlock above.
     if (escConfigRelayIsActive() || escFlasherRelayIsActive()) {
-      USBSerial.println("Arm blocked: ESC config/firmware relay in progress");
+      platform::console.line("Arm blocked: ESC config/firmware relay in progress");
       return;
     }
 
     // Check if enough time has passed since last disarm
-    if (millis() - lastDisarmTime >= DISARM_COOLDOWN) {
+    if (platform::millis32() - lastDisarmTime >= DISARM_COOLDOWN) {
       if (!throttleEngaged()) {
         changeDeviceState(ARMED);
       } else {
@@ -1235,7 +1235,7 @@ void toggleCruise() {
   switch (currentState) {
   case ARMED:
     if (isOtaInProgress()) {
-      USBSerial.println("Cruise blocked: OTA update in progress");
+      platform::console.line("Cruise blocked: OTA update in progress");
       break;
     }
 
@@ -1258,7 +1258,7 @@ void toggleCruise() {
     } else {
       // Throttle not engaged enough to set level, flash the icon
       startCruiseIconFlash();
-      USBSerial.println("Cruise activation failed: Throttle not engaged.");
+      platform::console.line("Cruise activation failed: Throttle not engaged.");
     }
     break;
   case ARMED_CRUISING:
@@ -1281,7 +1281,7 @@ bool throttleSafe(int threshold = POT_ENGAGEMENT_LEVEL) {
  * @return true if cruise should be disengaged, false otherwise
  */
 bool shouldDisengageCruise(int potVal) {
-  unsigned long timeSinceCruiseStart = millis() - cruisedAtMillis;
+  unsigned long timeSinceCruiseStart = platform::millis32() - cruisedAtMillis;
 
   // Only check for disengagement *after* the grace period has passed
   if (timeSinceCruiseStart > CRUISE_DISENGAGE_GRACE_PERIOD_MS) {
@@ -1293,10 +1293,10 @@ bool shouldDisengageCruise(int potVal) {
     // If the *current raw potentiometer value* is greater than or equal to the
     // threshold
     if (potVal >= disengageThresholdPotVal) {
-      USBSerial.print("Cruise override: potVal ");
-      USBSerial.print(potVal);
-      USBSerial.print(" >= threshold ");
-      USBSerial.println(disengageThresholdPotVal);
+      platform::console.text("Cruise override: potVal ");
+      platform::console.text(potVal);
+      platform::console.text(" >= threshold ");
+      platform::console.line(disengageThresholdPotVal);
       return true;
     }
   }
@@ -1361,8 +1361,8 @@ void handleThrottle() {
   if (xQueueReceive(throttleUpdateQueue, &newPWM, 0) == pdTRUE) {
     if (currentState == ARMED_CRUISING) {
       currentCruiseThrottlePWM = newPWM;
-      USBSerial.print("Cruise PWM initialized/updated to: ");
-      USBSerial.println(currentCruiseThrottlePWM);
+      platform::console.text("Cruise PWM initialized/updated to: ");
+      platform::console.line(currentCruiseThrottlePWM);
     }
   }
 
@@ -1455,12 +1455,12 @@ bool armSystem() {
   // Throttle task handles ESC commands exclusively to avoid
   // race condition on the shared canard CAN bus instance
 
-  armedAtMillis = millis();
+  armedAtMillis = platform::millis32();
   armedSecs = 0;  // Reset armed seconds for new session
   setGroundAltitude(deviceData);
 
   vTaskSuspend(blinkLEDTaskHandle);
-  setLEDs(HIGH);  // solid LED while armed
+  setLEDs(1);  // solid LED while armed
   playMelody(arm_melody, 2);
   queueEscMotorBeepArm();
   // runVibePattern(arm_vibes, 7);
@@ -1471,7 +1471,7 @@ bool armSystem() {
 void afterCruiseStart() {
   cruisedPotVal =
       readControlThrottleRaw();  // Store raw control value at activation
-  cruisedAtMillis = millis();
+  cruisedAtMillis = platform::millis32();
 
   // Calculate cruise PWM using the same mapping as normal throttle
   // (prevents throttle drop when activating cruise in chill mode)
@@ -1535,21 +1535,21 @@ void audioTask(void *parameter) {
   }
 }
 
-bool initBMSCAN(SPIClass *spi) {
-  USBSerial.println("Initializing BMS CAN...");
+bool initBMSCAN() {
+  platform::console.line("Initializing BMS CAN...");
 
-  // Ensure Display CS is HIGH (deselected) before working with BMS
-  digitalWrite(displayCS, HIGH);
+  // Ensure Display CS is 1 (deselected) before working with BMS
+  eppg_gpio_write(displayCS, 1);
 
   // Create the BMS_CAN instance with the provided SPI
-  bms_can = new BMS_CAN(bmsCS, MCP_BAUDRATE, spi);
+  bms_can = new BMS_CAN(bmsCS, MCP_BAUDRATE);
 
   if (!bms_can->begin()) {
-    USBSerial.println("Error initializing BMS_CAN");
+    platform::console.line("Error initializing BMS_CAN");
     bmsCanInitialized = false;  // BMS initialization failed
     return false;
   }
-  USBSerial.println("BMS CAN initialized successfully");
+  platform::console.line("BMS CAN initialized successfully");
   bmsCanInitialized = true;  // BMS successfully initialized
   return true;
 }
@@ -1557,7 +1557,7 @@ bool initBMSCAN(SPIClass *spi) {
 // WebSerial command handling task
 void webSerialTask(void *pvParameters) {
   while (true) {
-    if (USBSerial.available()) {
+    if (platform::console.hasInput()) {
       // Check if we're allowed to process commands
       if (currentState == DISARMED) {
         poll_serial_commands();

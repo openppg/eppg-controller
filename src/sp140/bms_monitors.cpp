@@ -1,7 +1,7 @@
 #include "sp140/bms_monitors.h"
 #include "sp140/monitor_config.h"
 #include "sp140/device_state.h"
-#include <Arduino.h>
+#include "platform/runtime.h"
 
 // External references to core monitoring infrastructure
 extern std::vector<IMonitor*> monitors;

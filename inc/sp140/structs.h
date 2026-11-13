@@ -232,6 +232,6 @@ static_assert(offsetof(BLE_FastLink_Telemetry, bms_warning_alerts) == 214,
 static_assert(offsetof(BLE_FastLink_Telemetry, bms_critical_alerts) == 222,
               "Fast-Link v4 BMS critical alert offset changed");
 static_assert(sizeof(BLE_FastLink_Telemetry) <= 244,
-              "Fast-Link packet no longer fits a 247-byte BLE MTU");
+              "Fast-Link packet no longer fits a 247-uint8_t BLE MTU");
 
 #endif  // INC_SP140_STRUCTS_H_

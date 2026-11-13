@@ -1,0 +1,11 @@
+#pragma once
+#include <sine_esc.SetEscAddressing_req.h>
+#include <sine_esc.SetEscAddressing_res.h>
+
+#define SINE_ESC_SETESCADDRESSING_ID 208
+#define SINE_ESC_SETESCADDRESSING_SIGNATURE (0x1BDDF796A3CF4723ULL)
+
+#if defined(__cplusplus) && defined(DRONECAN_CXX_WRAPPERS)
+#include <canard/cxx_wrappers.h>
+SERVICE_MESSAGE_CXX_IFACE(sine_esc_SetEscAddressing, SINE_ESC_SETESCADDRESSING_ID, SINE_ESC_SETESCADDRESSING_SIGNATURE, SINE_ESC_SETESCADDRESSING_REQUEST_MAX_SIZE, SINE_ESC_SETESCADDRESSING_RESPONSE_MAX_SIZE);
+#endif

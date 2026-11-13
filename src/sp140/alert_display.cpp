@@ -1,5 +1,5 @@
 #include "../../inc/sp140/alert_display.h"
-#include <Arduino.h>
+#include "platform/runtime.h"
 #include <freertos/queue.h>
 #include <map>
 #include <algorithm>
@@ -94,13 +94,13 @@ void initAlertDisplay() {
   alertUIQueue = xQueueCreate(1, sizeof(AlertUIUpdate));  // Unified queue for synchronized updates
 
   if (!alertEventQueue || !alertCarouselQueue || !alertUIQueue) {
-    USBSerial.println("[AlertDisplay] Failed creating queues");
+    platform::console.line("[AlertDisplay] Failed creating queues");
     return;
   }
 
   // Create aggregation task (low priority)
   xTaskCreate(alertAggregationTask, "AlertAgg", 4096, NULL, 1, &alertAggregationTaskHandle);
-  USBSerial.println("[AlertDisplay] Init complete");
+  platform::console.line("[AlertDisplay] Init complete");
 }
 
 void sendAlertEvent(SensorID id, AlertLevel level) {
@@ -109,7 +109,7 @@ void sendAlertEvent(SensorID id, AlertLevel level) {
   // retain an ESC/BMS fault.
   updateEscBmsAlertMask(id, level);
   if (!alertEventQueue) return;
-  AlertEvent ev{ id, level, millis() };
+  AlertEvent ev{ id, level, platform::millis32() };
   xQueueSend(alertEventQueue, &ev, 0);  // best-effort, drop if full
 }
 
@@ -162,7 +162,7 @@ static void alertAggregationTask(void* parameter) {
     // Handle rotation every 2s if either list not empty
     bool hasAlerts = !g_critList.empty() || !g_warnList.empty();
     if (hasAlerts) {
-      unsigned long now = millis();
+      unsigned long now = platform::millis32();
       if (now - g_lastRotateMs >= 2000) {
         g_lastRotateMs = now;
 
@@ -241,9 +241,9 @@ static void recalcCountsAndPublish() {
       g_warnList = newWarnList;
       g_warnRotateIdx = 0;
     }
-    g_lastRotateMs = millis();
+    g_lastRotateMs = platform::millis32();
 
-    USBSerial.printf("[Alert] Sending UI update: crit=%d warn=%d critActive=%d\n",
+    platform::console.format("[Alert] Sending UI update: crit=%d warn=%d critActive=%d\n",
                      counts.criticalCount, counts.warningCount, (counts.criticalCount > 0));
 
     sendUIUpdate();

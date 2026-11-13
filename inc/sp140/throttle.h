@@ -1,7 +1,7 @@
 #ifndef INC_SP140_THROTTLE_H_
 #define INC_SP140_THROTTLE_H_
 
-#include <Arduino.h>
+#include "platform/runtime.h"
 
 /**
  * Throttle module (PWM-first pipeline)

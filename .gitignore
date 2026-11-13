@@ -12,3 +12,10 @@ test/test_screenshots/output/*.bmp
 test/test_screenshots/output/png/
 simulator/ui/node_modules/
 simulator/ui/dist/
+
+# Native ESP-IDF generated files
+build-idf*/
+build-native*/
+sdkconfig
+sdkconfig.old
+release-artifacts/

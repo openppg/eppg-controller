@@ -1,13 +1,12 @@
 #include "sp140/buzzer.h"
 
-#include <Arduino.h>
+#include "platform/runtime.h"
 
 #include "sp140/shared-config.h"
 #include "sp140/esp32s3-config.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
-#define DEBUG_SERIAL USBSerial
 
 // Buzzer PWM configuration - use different channel than vibration motor
 // PWM Channel allocation:
@@ -30,8 +29,7 @@ static bool buzzerInitialized = false;
  */
 bool initBuzz() {
   // Setup LEDC channel for buzzer
-  ledcSetup(BUZZER_PWM_CHANNEL, BUZZER_PWM_FREQUENCY, BUZZER_PWM_RESOLUTION);
-  ledcAttachPin(board_config.buzzer_pin, BUZZER_PWM_CHANNEL);
+  if (eppg_pwm_config(BUZZER_PWM_CHANNEL, board_config.buzzer_pin, BUZZER_PWM_FREQUENCY) != 0) return false;
   buzzerInitialized = true;
   return true;
 }
@@ -43,9 +41,9 @@ void startTone(uint16_t frequency) {
   if (!buzzerInitialized || !ENABLE_BUZZ) return;
 
   // Change the frequency for this channel
-  ledcChangeFrequency(BUZZER_PWM_CHANNEL, frequency, BUZZER_PWM_RESOLUTION);
+  eppg_pwm_frequency(BUZZER_PWM_CHANNEL, frequency);
   // Set 50% duty cycle (square wave)
-  ledcWrite(BUZZER_PWM_CHANNEL, 128);
+  eppg_pwm_write(BUZZER_PWM_CHANNEL, 128);
 }
 
 /**
@@ -55,7 +53,7 @@ void stopTone() {
   if (!buzzerInitialized) return;
 
   // Set duty cycle to 0 to stop the tone
-  ledcWrite(BUZZER_PWM_CHANNEL, 0);
+  eppg_pwm_write(BUZZER_PWM_CHANNEL, 0);
 }
 
 /**
@@ -84,7 +82,7 @@ bool playMelody(uint16_t melody[], int siz) {
 
   // Send to queue with timeout
   if (xQueueSend(melodyQueue, &request, pdMS_TO_TICKS(100)) != pdTRUE) {
-    DEBUG_SERIAL.println("Failed to queue melody");
+    platform::console.line("Failed to queue melody");
     return false;
   }
 

@@ -1,3 +1,4 @@
+#include "platform/runtime.h"
 #ifndef INC_SP140_ESC_CONFIG_RELAY_H_
 #define INC_SP140_ESC_CONFIG_RELAY_H_
 
@@ -18,7 +19,7 @@
 // is never touched from two tasks, so no mutex is needed on it.
 //
 // Safety: a session only starts while the device is DISARMED. The session is
-// fully non-blocking — it never calls delay()/vTaskDelay(), so it cannot stall
+// fully non-blocking — it never calls platform::delayMs()/vTaskDelay(), so it cannot stall
 // the 50 Hz control loop. Only the ESC reboots; the controller does not.
 //
 // See: powerpack-flash-qc/configs/ESC-Config-Relay-Design.md
@@ -45,7 +46,7 @@ enum class EscRelayPhase : uint8_t {
   DONE_FAIL,
 };
 
-// Status codes surfaced to the app (ESC_RELAY_STATUS notify byte 0 in the
+// Status codes surfaced to the app (ESC_RELAY_STATUS notify uint8_t 0 in the
 // design doc).
 enum class EscRelayStatusCode : uint8_t {
   IDLE            = 0x00,
@@ -66,7 +67,7 @@ struct EscRelayStatus {
   EscRelayStatusCode code;
   EscRelayPhase phase;
   uint16_t config_id;
-  uint8_t detail;          // raw ESC flag byte on failure, else 0
+  uint8_t detail;          // raw ESC flag uint8_t on failure, else 0
   uint8_t readback[8];     // verified read-back bytes (valid on VERIFIED_OK)
   uint8_t readback_len;
 };
@@ -84,7 +85,7 @@ void escConfigRelayServiceTick();
 // throttle task before the session actually starts.
 //
 // Writes a single parameter, persists it (SaveConfig), restarts the ESC, then
-// verifies the read-back across the reboot (GetConfig byte-compare).
+// verifies the read-back across the reboot (GetConfig uint8_t-compare).
 bool escConfigRelayRequestSetParam(uint16_t config_id,
                                    const uint8_t* data, uint8_t len);
 

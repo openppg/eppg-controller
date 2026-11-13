@@ -1,7 +1,7 @@
 #ifndef INC_SP140_VIBRATION_PWM_H_
 #define INC_SP140_VIBRATION_PWM_H_
 
-#include <Arduino.h>
+#include "platform/runtime.h"
 
 // Vibration patterns
 enum VibePattern {
