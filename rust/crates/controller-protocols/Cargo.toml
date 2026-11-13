@@ -2,7 +2,7 @@
 name = "controller-protocols"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
+license-file.workspace = true
 
 [dev-dependencies]
 controller-core = { path = "../controller-core" }

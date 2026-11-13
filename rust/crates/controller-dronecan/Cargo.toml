@@ -2,7 +2,7 @@
 name = "controller-dronecan"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
+license-file.workspace = true
 build = "build.rs"
 [build-dependencies]
 cc = "1"
