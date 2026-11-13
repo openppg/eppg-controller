@@ -176,7 +176,11 @@ void test_cruise_rules_and_override() {
   schedule(sim, 200, "cruise", "on");
   schedule(sim, 300, "throttle", "1000");
   schedule(sim, 400, "cruise", "on");
+  sim.run(399);
+  const int flown = sim.snapshot().throttle_pwm;
   sim.run(500);
+  require(sim.snapshot().throttle_pwm == flown,
+          "cruise changed the already-commanded output");
   require(sim.snapshot().state == eppg::sim::DeviceState::Cruising,
           "valid cruise activation was rejected");
   sim.run(2400);

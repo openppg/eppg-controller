@@ -163,14 +163,13 @@ void ControllerSim::apply_event(const Event& event) {
   } else if (event.action == "cruise") {
     const bool enabled = parse_bool(event);
     if (enabled && snapshot_.state == DeviceState::Armed) {
-      if (!isPotInCruiseActivationRange(
-              snapshot_.throttle_raw,
-              static_cast<uint16_t>(0.05 * 4095), 0.70f)) {
+      if (snapshot_.throttle_raw < static_cast<uint16_t>(0.05 * 4095) ||
+          !isCruiseOutputAllowed(static_cast<uint16_t>(previous_pwm_))) {
         log("cruise rejected: throttle is outside activation range");
       } else {
         cruised_raw_ = snapshot_.throttle_raw;
         cruised_at_ms_ = snapshot_.time_ms;
-        cruise_pwm_ = calculateCruisePwm(cruised_raw_, performance_mode_, 0.60f);
+        cruise_pwm_ = std::min<int>(previous_pwm_, CRUISE_MAX_PWM);
         snapshot_.state = DeviceState::Cruising;
         log("state -> ARMED_CRUISING");
       }
@@ -289,10 +288,9 @@ void ControllerSim::task_throttle() {
                                            performance_mode_);
     target = applyModeRampClamp(target, previous_pwm_, performance_mode_);
   } else if (snapshot_.state == DeviceState::Cruising) {
-    // Production sends the captured cruise PWM directly. The ramp/filter state
-    // remains parked until cruise exits, when the filter is seeded from the
-    // current potentiometer position.
+    // Hold the command that was flown, and resume ramping from that command.
     target = cruise_pwm_;
+    previous_pwm_ = target;
     if (snapshot_.time_ms - cruised_at_ms_ > 2000 &&
         shouldPotDisengageCruise(snapshot_.throttle_raw, cruised_raw_, 0.80f)) {
       snapshot_.state = DeviceState::Armed;

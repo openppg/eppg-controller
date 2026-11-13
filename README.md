@@ -102,7 +102,7 @@ IDF_COMPONENT_MANAGER=0 idf.py -B build-idf-qemu \
 python3 simulator/tools/merge_idf_flash.py build-idf-qemu build-idf-qemu/qemu-flash.bin
 python3 simulator/tools/qemu_smoke.py --image build-idf-qemu/qemu-flash.bin \
   --qemu /path/to/qemu-system-xtensa --timeout 30 \
-  --expect '=== Boot complete ===' --expect 'pwm_01us=16000' \
+  --expect '=== Boot complete ===' --expect 'pwm_01us=17700' \
   --report build-idf-qemu/qemu-smoke.json
 ```
 
