@@ -1,0 +1,19 @@
+[workspace]
+members = ["crates/controller-core", "crates/controller-protocols", "apps/firmware-sp140", "apps/controller-sim"]
+default-members = ["crates/controller-core", "crates/controller-protocols", "apps/controller-sim"]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+version = "8.1.0"
+
+[profile.release]
+opt-level = "s"
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+
+[profile.dev]
+opt-level = 1
+panic = "abort"

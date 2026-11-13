@@ -1,0 +1,8 @@
+[package]
+name = "controller-sim"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+[dependencies]
+controller-core = { path = "../../crates/controller-core" }
+controller-protocols = { path = "../../crates/controller-protocols" }
