@@ -1,11 +1,11 @@
-// Use the native Arduino stubs provided by the repo and the real CircularBuffer
+// Exercise the production native-IDF throttle with the host platform adapter.
 #include <gtest/gtest.h>
-#include "../native_stubs/Arduino.h"
+#include "platform/runtime.h"
 
 // Include the real implementations under test
-#include "../../inc/sp140/shared-config.h"
-#include "../../inc/sp140/throttle.h"
-#include "../../src/sp140/throttle.cpp"
+#include "sp140/shared-config.h"
+#include "sp140/throttle.h"
+#include "sp140/throttle.cpp"
 
 TEST(ThrottleTest, LimitedThrottleNoLimiting) {
     // Test cases where no limiting should occur
@@ -438,7 +438,5 @@ TEST(ThrottleTest, CruiseActivationEdgeCases) {
 
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
-    RUN_ALL_TESTS();
-    // Always return zero-code and allow PlatformIO to parse results
-    return 0;
+    return RUN_ALL_TESTS();
 }

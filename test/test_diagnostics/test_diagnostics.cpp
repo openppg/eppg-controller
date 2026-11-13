@@ -2,10 +2,10 @@
 
 #include <string>
 
-#include "../native_stubs/Arduino.h"
+#include "platform/runtime.h"
 
-#include "../../inc/sp140/diagnostics.h"
-#include "../../src/sp140/diagnostics.cpp"
+#include "sp140/diagnostics.h"
+#include "sp140/diagnostics.cpp"
 
 namespace {
 
@@ -101,17 +101,16 @@ TEST(Diagnostics, JsonRoundTripPreservesCurrentAndHistory) {
       static_cast<uint8_t>(PlannedRestartReason::BLE_UNBOND_REBOOT);
   diagPushHistory(&packet, older);
 
-  JsonDocument doc;
-  diagPacketToJson(doc, packet);
-
-  std::string json;
-  serializeJson(doc, json);
-
-  JsonDocument parsed_doc;
-  ASSERT_FALSE(deserializeJson(parsed_doc, json));
-
+  platform::json::Document doc(cJSON_CreateObject());
+  ASSERT_NE(doc, nullptr);
+  diagPacketToJson(doc.get(), packet);
+  char* json = cJSON_PrintUnformatted(doc.get());
+  ASSERT_NE(json, nullptr);
+  platform::json::Document parsed_doc(cJSON_Parse(json));
+  cJSON_free(json);
+  ASSERT_NE(parsed_doc, nullptr);
   BootDiagPacket parsed = {};
-  ASSERT_TRUE(diagPacketFromJson(parsed_doc, &parsed));
+  ASSERT_TRUE(diagPacketFromJson(parsed_doc.get(), &parsed));
   ASSERT_EQ(parsed.history_count, packet.history_count);
   EXPECT_TRUE(recordsEqual(parsed.current, packet.current));
   EXPECT_TRUE(recordsEqual(parsed.history[0], packet.history[0]));

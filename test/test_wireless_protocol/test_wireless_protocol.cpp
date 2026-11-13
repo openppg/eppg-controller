@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "sp140/wireless_protocol.h"
-#include "../../src/sp140/wireless_protocol.cpp"
+#include "sp140/wireless_protocol.cpp"
 
 TEST(WirelessProtocol, ValidatesFinalizedControlPacket) {
   wireless::ControlPacket packet = {};
