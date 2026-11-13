@@ -1,7 +1,7 @@
 use controller_core::State;
 use controller_dronecan::Transfer;
 use controller_esc::{
-    firmware::Phase as FlashPhase, relay::Phase as RelayPhase, Esc, Flasher, Relay,
+    firmware::Phase as FlashPhase, relay::Phase as RelayPhase, Esc, Flasher, Relay, TxStall,
 };
 #[test]
 fn telemetry_runtime_wrap_and_invalid_motor_are_preserved() {
@@ -50,6 +50,53 @@ fn telemetry_runtime_wrap_and_invalid_motor_are_preserved() {
     assert_eq!(
         e.telemetry.esc_status, 0,
         "unchanged ESC clock is stale despite repeated frames"
+    );
+}
+#[test]
+fn tx_stall_needs_two_control_periods_and_clears_when_idle() {
+    let mut stall = TxStall::default();
+    assert!(!stall.update(1000, false));
+    assert!(!stall.update(1010, true));
+    assert!(!stall.update(1049, true));
+    assert!(stall.update(1050, true));
+    assert!(
+        stall.update(9000, true),
+        "stays stalled while frames remain"
+    );
+    assert!(!stall.update(9010, false));
+    assert!(
+        !stall.update(9020, true),
+        "a fresh backlog starts a new window"
+    );
+    // The millisecond clock wraps after ~49 days.
+    let mut wrapped = TxStall::default();
+    assert!(!wrapped.update(u32::MAX - 10, true));
+    assert!(wrapped.update(29, true));
+}
+#[test]
+fn stalled_bus_keeps_only_the_newest_throttle_command() {
+    // Mirrors the control task: 50 Hz commands, driver reporting unsent frames, nothing
+    // leaving the transport because the ESC is not acknowledging.
+    let mut e = Esc::new().unwrap();
+    let mut stall = TxStall::default();
+    let mut now = 0;
+    for _ in 0..250 {
+        if stall.update(now, true) {
+            e.transport.clear_tx();
+        }
+        e.throttle(1900);
+        now += 20;
+    }
+    // The pilot has released the throttle by the time the ESC comes back.
+    assert!(stall.update(now, true));
+    e.transport.clear_tx();
+    e.throttle(1035);
+    let frame = e.transport.peek_frame().unwrap();
+    assert_eq!(u16::from_le_bytes([frame.data[0], frame.data[1]]), 10350);
+    e.transport.pop_frame();
+    assert!(
+        e.transport.peek_frame().is_none(),
+        "no older command is left to replay"
     );
 }
 #[test]

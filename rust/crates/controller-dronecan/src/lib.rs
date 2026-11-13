@@ -110,6 +110,16 @@ impl DroneCan {
             dc_tx_pop(self.ptr.as_ptr());
         }
     }
+    /// Discard every frame still waiting for the bus and return how many were dropped.
+    /// Transfer IDs are not rewound, so the next request is never mistaken for a repeat.
+    pub fn clear_tx(&mut self) -> usize {
+        let mut dropped = 0;
+        while self.peek_frame().is_some() {
+            self.pop_frame();
+            dropped += 1;
+        }
+        dropped
+    }
     pub fn take_transfer(&mut self) -> Option<Transfer> {
         let size = unsafe { dc_next_size(self.ptr.as_ptr()) };
         if size < 0 {
@@ -241,6 +251,23 @@ mod tests {
         // Drop also owns any queued payloads that were never taken.
         assert!(sender.request(32, 217, 0x30c3f78df78cbee5, &mut tid, &[42; 128]) > 0);
         deliver(&mut sender, &mut receiver, 610_000);
+    }
+    #[test]
+    fn clear_tx_drops_backlog_and_keeps_transfer_ids_advancing() {
+        let mut c = DroneCan::new(1).unwrap();
+        let mut tid = 0;
+        for _ in 0..5 {
+            assert!(c.request(0x20, 213, 0x81b48c174cda4c7a, &mut tid, &[0x10, 0x27]) > 0);
+        }
+        assert_eq!(c.clear_tx(), 5);
+        assert!(c.peek_frame().is_none());
+        assert_eq!(c.clear_tx(), 0);
+        assert!(c.request(0x20, 213, 0x81b48c174cda4c7a, &mut tid, &[0x98, 0x3a]) > 0);
+        let f = c.peek_frame().unwrap();
+        assert_eq!(&f.data[..2], &[0x98, 0x3a]);
+        assert_eq!(f.data[2] & 0x1f, 5, "sixth request carries transfer id 5");
+        c.pop_frame();
+        assert!(c.peek_frame().is_none());
     }
     #[test]
     fn request_frame_id_and_tail() {

@@ -297,6 +297,20 @@ pub fn can_send(f: controller_dronecan::Frame) -> bool {
         sys::twai_transmit(&m, 0) == 0
     }
 }
+/// True while the driver still holds frames that the bus has not acknowledged.
+pub fn can_tx_pending() -> bool {
+    unsafe {
+        let mut status: sys::twai_status_info_t = std::mem::zeroed();
+        sys::twai_get_status_info(&mut status) == 0 && status.msgs_to_tx > 0
+    }
+}
+/// Drop frames queued in the driver. The one frame already loaded into the controller's
+/// transmit buffer is not affected and keeps retrying.
+pub fn can_flush_tx() {
+    unsafe {
+        sys::twai_clear_transmit_queue();
+    }
+}
 pub fn can_health() {
     unsafe {
         let mut status: sys::twai_status_info_t = std::mem::zeroed();

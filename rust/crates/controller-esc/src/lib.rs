@@ -40,6 +40,30 @@ pub fn le16(d: &[u8], o: usize) -> u16 {
 pub fn i16le(d: &[u8], o: usize) -> i16 {
     i16::from_le_bytes([d[o], d[o + 1]])
 }
+/// Detects a CAN bus that has stopped accepting frames (ESC unpowered, connector open,
+/// bus-off). Throttle requests are queued FIFO and retried by the controller, so without
+/// this a stalled bus accumulates old commands and replays them, oldest first, when the
+/// ESC returns. The control task feeds it the driver's pending state every tick and, once
+/// stalled, discards the backlog before queueing each new command.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct TxStall {
+    pending_since: Option<u32>,
+}
+impl TxStall {
+    /// Two 20 ms control periods. A frame the bus accepts leaves in well under 1 ms at
+    /// 1 Mbit/s, so frames pending this long are not going to be acknowledged.
+    pub const LIMIT_MS: u32 = 40;
+    /// `pending` is true while the CAN driver still holds unsent frames. Returns true once
+    /// that has been continuously the case for [`Self::LIMIT_MS`].
+    pub fn update(&mut self, now: u32, pending: bool) -> bool {
+        if !pending {
+            self.pending_since = None;
+            return false;
+        }
+        let since = *self.pending_since.get_or_insert(now);
+        now.wrapping_sub(since) >= Self::LIMIT_MS
+    }
+}
 pub struct Esc {
     pub transport: DroneCan,
     pub telemetry: FastLink,

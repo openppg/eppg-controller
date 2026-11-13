@@ -276,6 +276,7 @@ fn main() {
                     controller_esc::Flasher::with_storage(Box::<staging::StagedImage>::default());
             }
             let mut monitors = Monitors::default();
+            let mut can_stall = controller_esc::TxStall::default();
             let mut last_monitor = 0;
             let mut old_warnings = 0;
             let mut last_health = 0;
@@ -411,7 +412,16 @@ fn main() {
                     }
                 }
                 if let Some(e) = esc.as_mut() {
+                    // Maintenance transfers legitimately keep the driver busy for many
+                    // ticks, so only normal control traffic counts towards a stall.
+                    let stalled = can_stall.update(now, !e.active() && platform::can_tx_pending());
                     if output.send_throttle {
+                        if stalled {
+                            // The bus stopped accepting frames. Keep only the newest
+                            // command so a reconnect never replays old throttle values.
+                            platform::can_flush_tx();
+                            e.transport.clear_tx();
+                        }
                         e.throttle(output.pwm);
                     }
                     for _ in 0..64 {
