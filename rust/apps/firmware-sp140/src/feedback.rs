@@ -95,9 +95,11 @@ pub fn spawn(shared: Shared) -> SyncSender<Feedback> {
                 }
                 if now.wrapping_sub(last_led) >= 500 {
                     last_led = now;
-                    let s = shared.lock().unwrap();
+                    // Copy the state out: the pixel write below blocks on the RMT
+                    // transfer, and the control task must never wait on that.
+                    let state = shared.lock().unwrap().state;
                     led = !led;
-                    let color = if s.state != controller_core::State::Disarmed || led {
+                    let color = if state != controller_core::State::Disarmed || led {
                         0x00ff00
                     } else {
                         0
