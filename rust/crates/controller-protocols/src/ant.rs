@@ -7,6 +7,7 @@ pub struct AntBms {
     pub highest_temp: f32,
     pub lowest_temp: f32,
     last_message: Option<u32>,
+    last_status: Option<u32>,
     coherent: bool,
     endian_detected: bool,
     little_endian: bool,
@@ -20,6 +21,7 @@ impl Default for AntBms {
             highest_temp: f32::NAN,
             lowest_temp: f32::NAN,
             last_message: None,
+            last_status: None,
             coherent: false,
             endian_detected: false,
             little_endian: false,
@@ -38,6 +40,11 @@ fn temp(v: u8) -> f32 {
     }
 }
 impl AntBms {
+    /// The pack-status frame (voltage, current, SOC, fault level, MOS state) must keep
+    /// arriving for the link to count as connected. Deliberately generous: the BMS's own
+    /// send interval has not been measured on a real pack, so this only catches a status
+    /// frame that has stopped while other frames keep the bus looking alive.
+    pub const STATUS_TIMEOUT_MS: u32 = 5000;
     pub fn packet(&mut self, id: u32, d: &[u8], now: u32) -> bool {
         if d.len() != 8 {
             return false;
@@ -46,6 +53,7 @@ impl AntBms {
         self.last_message = Some(now);
         match id {
             0x18ff28f4 => {
+                self.last_status = Some(now);
                 self.data.bms_charge_wire = d[0] & 1;
                 self.data.bms_is_charging = (d[0] >> 1) & 1;
                 self.data.bms_low_soc_warning = (d[0] >> 2) & 1;
@@ -138,6 +146,10 @@ impl AntBms {
                 .last_message
                 .map(|at| now.wrapping_sub(at) < 500)
                 .unwrap_or(false)
+            && self
+                .last_status
+                .map(|at| now.wrapping_sub(at) < Self::STATUS_TIMEOUT_MS)
+                .unwrap_or(false)
     }
     /// Apply the latched disconnected-probe policy before threshold monitoring.
     pub fn temperatures(&self) -> [f32; 6] {
@@ -199,6 +211,25 @@ mod tests {
         b.packet(0x18fe28f4, &[0x68, 0x10, 0, 0, 70, 60, 0, 0], 200);
         assert!(b.connected(200));
         assert!(!b.connected(700));
+    }
+    #[test]
+    fn frozen_status_frame_disconnects_while_other_frames_continue() {
+        let mut b = AntBms::default();
+        b.packet(0x18ff28f4, &[0x38, 90, 0x88, 0x13, 0xa0, 3, 0, 0], 0);
+        b.packet(0x18fe28f4, &[0x68, 0x10, 0x68, 0x10, 70, 60, 0, 0], 10);
+        assert!(b.connected(10));
+        // Cell and temperature frames keep arriving; the status frame never does again.
+        let mut now = 10;
+        while now < AntBms::STATUS_TIMEOUT_MS - 100 {
+            now += 100;
+            b.packet(0x18fe28f4, &[0x68, 0x10, 0x68, 0x10, 70, 60, 0, 0], now);
+            assert!(b.connected(now));
+        }
+        now = AntBms::STATUS_TIMEOUT_MS;
+        b.packet(0x18fe28f4, &[0x68, 0x10, 0x68, 0x10, 70, 60, 0, 0], now);
+        assert!(!b.connected(now), "voltage, SOC and fault level are stale");
+        b.packet(0x18ff28f4, &[0x38, 90, 0x88, 0x13, 0xa0, 3, 0, 0], now + 50);
+        assert!(b.connected(now + 50));
     }
     #[test]
     fn detect_both_endian_variants() {
