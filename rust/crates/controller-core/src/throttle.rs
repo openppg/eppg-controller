@@ -19,6 +19,11 @@ pub fn ramp(value: u16, last: u16, mode: u8) -> u16 {
     limited(value as i32, last as i32, if mode == 0 { 8 } else { 27 })
         .clamp(1035, if mode == 0 { 1770 } else { 1950 }) as u16
 }
+/// Middle of three ADC readings. A single outlier (the S3 ADC picks up spikes while the
+/// radio transmits) is discarded without changing the scale or adding lag.
+pub fn median3(a: u16, b: u16, c: u16) -> u16 {
+    a.max(b).min(a.min(b).max(c))
+}
 pub fn cruise_output_allowed(pwm: u16) -> bool {
     pwm <= CRUISE_MAX
 }
@@ -76,6 +81,16 @@ mod tests {
             assert_eq!(map_mode(raw, 0), 1035 + (raw as u32 * 735 / 4095) as u16);
             assert_eq!(map_full(raw), 1035 + (raw as u32 * 915 / 4095) as u16);
         }
+    }
+    #[test]
+    fn median3_rejects_one_outlier_in_any_position() {
+        for (a, b, c) in [(100, 101, 4095), (4095, 100, 101), (101, 0, 100)] {
+            let m = median3(a, b, c);
+            assert!((100..=101).contains(&m), "{a} {b} {c} -> {m}");
+        }
+        assert_eq!(median3(7, 7, 7), 7);
+        assert_eq!(median3(1, 2, 3), 2);
+        assert_eq!(median3(3, 1, 2), 2);
     }
     #[test]
     fn ramp_matches() {

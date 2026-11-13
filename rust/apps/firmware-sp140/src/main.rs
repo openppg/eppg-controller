@@ -312,7 +312,9 @@ fn main() {
                         sys::uxTaskGetStackHighWaterMark(std::ptr::null_mut())
                     }));
                 }
-                let raw = unsafe { platform::eppg_adc_read(7) }.clamp(0, 4095) as u16;
+                // Three back-to-back conversions (~0.1 ms total); see throttle::median3.
+                let read = || unsafe { platform::eppg_adc_read(7) }.clamp(0, 4095) as u16;
+                let raw = controller_core::throttle::median3(read(), read(), read());
                 for _ in 0..64 {
                     let Ok(request) = requests.try_recv() else {
                         break;
