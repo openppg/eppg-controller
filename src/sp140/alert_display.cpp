@@ -19,6 +19,8 @@ static AlertCounts g_currentCounts = {0, 0};
 static AlertCounts g_previousCounts = {0, 0};  // Track previous counts for transitions
 static uint32_t g_epoch = 0;
 static AlertCounts g_escBmsCounts = {0, 0};
+static EscBmsAlertMasks g_escBmsAlertMasks = {0, 0, 0, 0};
+static portMUX_TYPE g_escBmsStateMux = portMUX_INITIALIZER_UNLOCKED;
 
 // Rotation state for display - separate lists for warnings and criticals
 static std::vector<SensorID> g_critList;
@@ -33,10 +35,56 @@ static void recalcCountsAndPublish();
 static void handleAlertVibration(const AlertCounts& newCounts, const AlertCounts& previousCounts);
 
 static bool isEscOrBmsSensor(SensorID id) {
-  return id >= SensorID::ESC_MOS_Temp && id <= SensorID::BMS_CAN_Init_Failure;
+  return id >= SensorID::ESC_MOS_Temp && id <= SensorID::BMS_CAN_Link_Lost;
 }
 
-AlertCounts getEscBmsAlertCounts() { return g_escBmsCounts; }
+static_assert(static_cast<int>(SensorID::ESC_CAN_Link_Lost) < 64,
+              "ESC alert bitmap no longer fits in uint64_t");
+static_assert(static_cast<int>(SensorID::BMS_CAN_Link_Lost) -
+                  static_cast<int>(SensorID::BMS_MOS_Temp) < 64,
+              "BMS alert bitmap no longer fits in uint64_t");
+
+static void updateEscBmsAlertMask(SensorID id, AlertLevel level) {
+  const int sensorOrdinal = static_cast<int>(id);
+  const int firstBmsOrdinal = static_cast<int>(SensorID::BMS_MOS_Temp);
+  const bool isEsc = id >= SensorID::ESC_MOS_Temp &&
+                     id <= SensorID::ESC_CAN_Link_Lost;
+  const bool isBms = id >= SensorID::BMS_MOS_Temp &&
+                     id <= SensorID::BMS_CAN_Link_Lost;
+  if (!isEsc && !isBms) return;
+
+  const uint64_t bit = isEsc
+      ? (uint64_t{1} << sensorOrdinal)
+      : (uint64_t{1} << (sensorOrdinal - firstBmsOrdinal));
+
+  portENTER_CRITICAL(&g_escBmsStateMux);
+  uint64_t& warning = isEsc ? g_escBmsAlertMasks.escWarning
+                            : g_escBmsAlertMasks.bmsWarning;
+  uint64_t& critical = isEsc ? g_escBmsAlertMasks.escCritical
+                             : g_escBmsAlertMasks.bmsCritical;
+  warning &= ~bit;
+  critical &= ~bit;
+  if (level == AlertLevel::WARN_LOW || level == AlertLevel::WARN_HIGH) {
+    warning |= bit;
+  } else if (level == AlertLevel::CRIT_LOW || level == AlertLevel::CRIT_HIGH) {
+    critical |= bit;
+  }
+  portEXIT_CRITICAL(&g_escBmsStateMux);
+}
+
+AlertCounts getEscBmsAlertCounts() {
+  portENTER_CRITICAL(&g_escBmsStateMux);
+  const AlertCounts counts = g_escBmsCounts;
+  portEXIT_CRITICAL(&g_escBmsStateMux);
+  return counts;
+}
+
+EscBmsAlertMasks getEscBmsAlertMasks() {
+  portENTER_CRITICAL(&g_escBmsStateMux);
+  const EscBmsAlertMasks masks = g_escBmsAlertMasks;
+  portEXIT_CRITICAL(&g_escBmsStateMux);
+  return masks;
+}
 
 // ------------ Public helpers -------------
 void initAlertDisplay() {
@@ -56,6 +104,10 @@ void initAlertDisplay() {
 }
 
 void sendAlertEvent(SensorID id, AlertLevel level) {
+  // Update the telemetry snapshot synchronously. The UI queue is intentionally
+  // best-effort, but a full UI queue must never make the flight log miss or
+  // retain an ESC/BMS fault.
+  updateEscBmsAlertMask(id, level);
   if (!alertEventQueue) return;
   AlertEvent ev{ id, level, millis() };
   xQueueSend(alertEventQueue, &ev, 0);  // best-effort, drop if full
@@ -164,7 +216,9 @@ static void recalcCountsAndPublish() {
   }
 
   // Handle vibration alerts based on count changes
+  portENTER_CRITICAL(&g_escBmsStateMux);
   g_escBmsCounts = escBmsCounts;
+  portEXIT_CRITICAL(&g_escBmsStateMux);
   handleAlertVibration(counts, g_previousCounts);
   g_previousCounts = counts;
 

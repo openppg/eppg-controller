@@ -46,7 +46,7 @@
 #define MANUFACTURER_NAME_UUID "2A29"
 #define DEVICE_UNIQUE_ID_UUID "B1571560-345F-4974-A14D-66E98740232F"
 
-// Fast-Link Unified Telemetry (V1)
+// Fast-Link Unified Telemetry (packet version is the first payload byte)
 #define FAST_LINK_TELEMETRY_SERVICE_UUID "45A17001-B73B-49E1-8B39-5E9ED5E1B930"
 #define FAST_LINK_TELEMETRY_UUID "45A17002-B73B-49E1-8B39-5E9ED5E1B930"
 // App writes 0x01 here to trigger a GetHwInfo request to the ESC

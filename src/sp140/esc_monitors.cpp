@@ -1,6 +1,7 @@
 #include "sp140/esc_monitors.h"
 #include "sp140/monitor_config.h"
 #include "sp140/esc.h"  // For ESC error checking functions
+#include "sp140/device_state.h"
 #include <Arduino.h>
 
 // External references to core monitoring infrastructure
@@ -13,7 +14,25 @@ extern STR_ESC_TELEMETRY_140 monitoringEscData;
 // External reference to ESC TWAI initialization status
 extern bool escTwaiInitialized;
 
+// Armed state — selects link-loss alert severity (critical in flight)
+extern volatile DeviceState currentState;
+
 void addESCMonitors() {
+  // ESC CAN link-loss watchdog: fires when a link that had been solidly up
+  // (>= CAN_LINK_ESTABLISH_MS continuous) goes silent — the severed-cable
+  // case where ESC power/ground survive but CAN doesn't. A USB-powered bench
+  // controller whose ESC is never powered never establishes, so it stays
+  // quiet. Critical while armed, warning when disarmed.
+  static CanLinkMonitor* escCanLinkLost = new CanLinkMonitor(
+    SensorID::ESC_CAN_Link_Lost,
+    SensorCategory::ESC,
+    []() { return monitoringEscData.escState == TelemetryState::CONNECTED; },
+    []() { return currentState != DISARMED; },
+    CAN_LINK_ESTABLISH_MS,
+    CAN_LINK_LOSS_DEBOUNCE_MS,
+    &multiLogger);
+  monitors.push_back(escCanLinkLost);
+
   // ESC TWAI Initialization (Alert when failed)
   static BooleanMonitor* escTwaiInitFailure = new BooleanMonitor(
     SensorID::ESC_TWAI_Init_Failure,

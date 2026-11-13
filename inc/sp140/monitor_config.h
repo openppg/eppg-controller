@@ -30,6 +30,16 @@ static const Thresholds bmsVoltageDifferentialThresholds = {.warnLow = -1.0, .wa
 // see checkAllSensorsWithData for why re-arming it per reconnect is unsafe.
 static const uint32_t BMS_ALERT_GRACE_MS = 2000;
 
+// -- CAN link-loss watchdog (ESC + BMS) --
+// A link only becomes alert-worthy after it has been continuously up for the
+// establish window — so a bench controller on USB power with the ESC/BMS never
+// powered stays silent. Loss must then persist for the debounce window before
+// alerting (the raw ESC timeout is 50 ms; a single stale frame shouldn't
+// chirp). The same establish window is reused to clear the alert after
+// reconnect, so a chattering connector can't flicker it.
+static const uint32_t CAN_LINK_ESTABLISH_MS = 1000;
+static const uint32_t CAN_LINK_LOSS_DEBOUNCE_MS = 500;
+
 // -- Altimeter Thresholds --
 static const Thresholds baroTempThresholds = {.warnLow = 0, .warnHigh = 50, .critLow = -10, .critHigh = 80, .hysteresis = 1.0f};
 

@@ -1,0 +1,268 @@
+{
+  "date": "2026-08-23",
+  "hardware": "One SP140 ESP32-S3 controller over USB",
+  "bench_configuration": {
+    "power": "USB",
+    "esc_connected": false,
+    "propulsion_battery_connected": false,
+    "transmitting_bms_connected": false,
+    "notes": "The absent ESC and battery were intentional. Dry-cruise tests suppressed ESC transmission and automatically restored DISARMED."
+  },
+  "tested_items": [
+    {
+      "p_number": "P1",
+      "production_commit": "22ec9e7",
+      "change": "Remove duplicate cruise-mode ESC command",
+      "hardware_result": "Safe 10-second dry cruise completed and restored DISARMED with ESC transmission suppressed",
+      "measurement": "One instead of two identical setESCThrottle calls per 20 ms cruise iteration; 50% fewer calls in that branch by code path",
+      "recommendation": "Merge now"
+    },
+    {
+      "p_number": "P2",
+      "production_commit": "76d00b6",
+      "change": "Enable release build and ESP-IDF performance optimization (-O2)",
+      "hardware_result": "Idle, redraw, control, dry-cruise, and reboot behavior stable with zero control overruns",
+      "measurements": {
+        "redraw_throughput_change_percent": 9.0,
+        "flash_before_bytes": 1214593,
+        "flash_after_bytes": 1169193,
+        "static_ram_before_bytes": 141032,
+        "static_ram_after_bytes": 140672,
+        "runtime_free_heap_change_bytes_approx": 4608,
+        "control_timing": "effectively unchanged"
+      },
+      "recommendation": "Extract a clean production PR and merge"
+    },
+    {
+      "p_number": "P3",
+      "production_commits": ["fe5a859", "5f66cad", "455e471"],
+      "change": "Coherent 25 Hz barometer producer, cached consumers, and missed-period dropping",
+      "hardware_result": "Sensor telemetry, display stress, dry cruise, and reboot passed",
+      "host_result": "60/60 native tests and 34/34 screenshot regressions passed",
+      "measurements": {
+        "baseline_read_rate_hz_approx": 50,
+        "candidate_read_rate_hz_approx": 25,
+        "baseline_cpu_percent_of_one_core": 32.7,
+        "candidate_cpu_percent_of_one_core": 12.3,
+        "cpu_reduction_percent": 62.4
+      },
+      "recommendation": "Extract a clean production PR, publish the cache as a formally coherent snapshot, then merge"
+    },
+    {
+      "p_number": "P5",
+      "production_commit": "78e1840",
+      "required_fix_commit": "23c74f5",
+      "change": "ESP-IDF display DMA and MCP2515 transport on a shared SPI host",
+      "host_result": "60/60 native tests, 34/34 screenshot regressions, and ESP32-S3 target build passed",
+      "hardware_result": "P5-only passed one 30-second stress trial; unfixed P2+P3+P5 failed 3/3; P2+P5 isolation failed 1/1; fixed combined passed 3/3 redraw trials, 3/3 dry-cruise trials, and reboot",
+      "failure": "Backtrace ended in spi_device_polling_transmit inside Adafruit_MCP2515::transfer while display DMA was queued",
+      "fix": "Use spi_device_transmit so ESP-IDF serializes MCP2515 traffic with queued display DMA",
+      "recommendation": "Hold until the fix is ported and live-peripheral acceptance gates pass"
+    },
+    {
+      "p_number": "P7",
+      "production_commit": "7d8105f",
+      "change": "Remove the unused second LVGL buffer from the synchronous display path",
+      "hardware_result": "Boot, display, safe dry cruise, and reboot passed",
+      "measurements": {
+        "static_internal_ram_reclaimed_bytes": 20480,
+        "expected_speed_change_percent": 0
+      },
+      "recommendation": "Skip if P5 proceeds; otherwise merge standalone"
+    }
+  ],
+  "combined_benchmark": {
+    "baseline_commit": "58c02e9",
+    "candidate_commit": "23c74f5",
+    "candidate_items": ["P2", "P3", "P5", "P5 SPI fix"],
+    "fixed_candidate_trials": {
+      "display_stress": "3 of 3 passed at 30 seconds each",
+      "dry_cruise": "3 of 3 passed at 10 seconds each",
+      "reboot": "passed",
+      "dma_transfers": "more than 2,560",
+      "dma_failures": 0,
+      "control_overruns": 0,
+      "observed_heap_drift": false
+    },
+    "measurements": [
+      {
+        "workload": "LVGL latency under display stress",
+        "baseline": 61.65,
+        "candidate": 37.08,
+        "unit": "ms per update",
+        "relative_improvement_percent": 39.9
+      },
+      {
+        "workload": "Control execution under display stress",
+        "baseline": 1.617,
+        "candidate": 1.193,
+        "unit": "ms per 20 ms task iteration",
+        "relative_improvement_percent": 26.2
+      },
+      {
+        "workload": "Full-screen redraw throughput",
+        "baseline": 14.23,
+        "candidate": 14.23,
+        "unit": "frames per second",
+        "relative_improvement_percent": 0.0
+      },
+      {
+        "workload": "Runtime free heap",
+        "baseline": 100684,
+        "candidate": 94552,
+        "unit": "bytes",
+        "relative_change_percent": -6.1
+      },
+      {
+        "workload": "Static RAM",
+        "baseline": 141048,
+        "candidate": 140316,
+        "unit": "bytes",
+        "relative_change_percent": -0.5
+      },
+      {
+        "workload": "Flash",
+        "baseline": 1214877,
+        "candidate": 1213697,
+        "unit": "bytes",
+        "relative_change_percent": -0.1
+      }
+    ]
+  },
+  "implementation_details": [
+    {
+      "p_number": "P1",
+      "subsystem": "50 Hz throttle task",
+      "before": "ARMED_CRUISING called setESCThrottle inside handleCruisingThrottle and again after the state switch",
+      "after": "handleCruisingThrottle only evaluates cruise disengagement; the common epilogue sends finalPwm once",
+      "timing_and_placement": "20 ms throttle period, task priority 3, pinned to core 0",
+      "review_note": "The bench had no ESC, so physical CAN traffic reduction was not measured with a receiver; the call-count reduction is deterministic from the control path and the dry-cruise branch completed safely."
+    },
+    {
+      "p_number": "P2",
+      "subsystem": "PlatformIO and ESP-IDF compiler configuration",
+      "before": "PlatformIO debug build with CONFIG_COMPILER_OPTIMIZATION_DEFAULT",
+      "after": "PlatformIO build_type=release with CONFIG_COMPILER_OPTIMIZATION_PERF (-O2 equivalent)",
+      "timing_and_placement": "ESP32-S3 remains at 240 MHz; framework remains Arduino plus ESP-IDF on espressif32 6.13.0",
+      "review_note": "Assertions remain enabled at level 2 and C++ exceptions remain enabled. CONFIG_FREERTOS_TASK_FUNCTION_WRAPPER is no longer set. The HIL branch inherits OPENPPG_PERF_INSTRUMENTATION and must not be merged wholesale."
+    },
+    {
+      "p_number": "P3",
+      "subsystem": "BMP3xx producer and cached telemetry",
+      "before": "Altitude, temperature, and pressure consumers could trigger separate forced conversions, producing about 50 conversions per second",
+      "after": "One task calls bmp.performReading every 40 ms and publishes altitude, absolute altitude, temperature, pressure, vertical speed, and a timestamp",
+      "timing_and_placement": "Barometer task: 3072-byte stack, priority 1, core 1; I2C mutex timeout 20 ms; BMP3 ODR 25 Hz, temperature 2x, pressure 4x, IIR coefficient 15",
+      "review_note": "Individual 32-bit float loads/stores are naturally aligned on ESP32-S3, but the fields are not published as one atomic C++ snapshot. A sequence counter, critical section, or queue-backed snapshot would make cross-core coherence explicit. Stack high-water marks were not captured."
+    },
+    {
+      "p_number": "P3 pacing",
+      "subsystem": "FreeRTOS periodic scheduling",
+      "before": "vTaskDelayUntil could immediately run catch-up iterations after a missed period",
+      "after": "UI and barometer reset lastWake to the current tick when one full period has already been missed",
+      "timing_and_placement": "UI: 33 ms, priority 2, core 1; barometer: 40 ms, priority 1, core 1; BLE notify: 20 ms, priority 1, core 1",
+      "review_note": "This intentionally drops stale work instead of preserving every nominal slot. It improves fairness but changes overload semantics and should be retained as a deliberate scheduling policy."
+    },
+    {
+      "p_number": "P5 display",
+      "subsystem": "ST7735 ESP-IDF DMA transport",
+      "before": "Arduino ST7735 path performed synchronous register/FIFO writes under an application SPI mutex",
+      "after": "esp_lcd queues RGB565 color transfers on SPI3_HOST and calls lv_display_flush_ready from the transfer-complete callback",
+      "timing_and_placement": "32 MHz SPI mode 0; 8-bit command and parameter widths; queue depth 2; SPI_DMA_CH_AUTO; two DMA_ATTR buffers of 20,480 bytes each; bus max transfer 40,960 bytes",
+      "review_note": "RGB565 bytes are swapped in CPU before queueing. A single pendingDisplay pointer allows one outstanding LVGL color transfer, so the second buffer overlaps rendering with transfer but does not create two simultaneous queued LVGL flushes."
+    },
+    {
+      "p_number": "P5 MCP2515",
+      "subsystem": "ANT-BMS-CAN compatibility transport",
+      "before": "The first native transport used spi_device_polling_transmit while display DMA could already be queued",
+      "after": "spi_device_transmit routes MCP2515 traffic through the ESP-IDF device scheduler; receive SIDH through D7 is read as one 13-byte burst",
+      "timing_and_placement": "10 MHz SPI mode 0; device queue size 2; maximum register payload 16 bytes; MCP2515 clock default 16 MHz",
+      "review_note": "This exact polling/queued mismatch caused the reproducible assertion. ESP-IDF invokes the display completion callback from SPI interrupt context; its bundled LVGL example also signals flush-ready there. Project callback/task synchronization still relies on volatile state and naturally atomic word access, so document or strengthen memory ordering before fleet release."
+    },
+    {
+      "p_number": "P7",
+      "subsystem": "LVGL draw-buffer allocation",
+      "before": "Two 20,480-byte half-screen RGB565 buffers were allocated although the synchronous flush could not overlap render and transfer",
+      "after": "One buffer is passed to LVGL and the second 20,480-byte static allocation is removed",
+      "timing_and_placement": "160 x 128 x 2 bytes per full screen; each partial buffer holds half a screen",
+      "review_note": "Correct only for the synchronous transport. P5 deliberately restores two DMA-capable buffers, so P5 and P7 are alternative display architectures."
+    }
+  ],
+  "detailed_test_matrix": [
+    {
+      "variant": "P1",
+      "commit": "22ec9e7 plus temporary HIL probe",
+      "workload": "10-second dry cruise through the real ARMED_CRUISING control branch",
+      "repetitions": "Completed; exact count not retained",
+      "result": "Pass",
+      "coverage_gap": "ESC transmission deliberately suppressed; no receiving ESC"
+    },
+    {
+      "variant": "P2",
+      "commit": "76d00b6 plus common instrumentation",
+      "workload": "Idle, forced redraw, 50 Hz control timing, dry cruise, reboot",
+      "repetitions": "Completed; exact per-workload count not retained",
+      "result": "Pass; zero control overruns",
+      "coverage_gap": "No long thermal soak and no full peripheral load"
+    },
+    {
+      "variant": "P3",
+      "commit": "455e471 lineage",
+      "workload": "Barometer counters, display stress, dry cruise, reboot",
+      "repetitions": "Completed; exact hardware count not retained",
+      "result": "Pass; about 25 conversions per second",
+      "coverage_gap": "No flight dynamics; cache snapshot coherence not stress-verified formally"
+    },
+    {
+      "variant": "P5 only",
+      "commit": "949a488 instrumentation on 78e1840",
+      "workload": "Continuous full-screen invalidation",
+      "repetitions": "1 x 30 seconds",
+      "result": "Pass",
+      "coverage_gap": "One passing trial did not expose the latent race"
+    },
+    {
+      "variant": "P2 + P3 + P5 before SPI fix",
+      "commit": "Combined lineage before 23c74f5",
+      "workload": "Continuous full-screen invalidation",
+      "repetitions": "3 x 30-second attempts",
+      "result": "Fail 3/3 with crash/assertion",
+      "coverage_gap": "Failure occurred before duration completed"
+    },
+    {
+      "variant": "P2 + P5 isolation",
+      "commit": "7424474 lineage",
+      "workload": "Continuous full-screen invalidation",
+      "repetitions": "1 attempt",
+      "result": "Fail 1/1; reproduced without P3",
+      "coverage_gap": "Isolation was sufficient for attribution, not reliability estimation"
+    },
+    {
+      "variant": "P2 + P3 + P5 after SPI fix",
+      "commit": "23c74f5",
+      "workload": "Full-screen invalidation, dry cruise, reboot, heap/control/DMA counters",
+      "repetitions": "3 x 30-second redraw; 3 x 10-second dry cruise; 1 reboot",
+      "result": "Pass; more than 2,560 transfers, zero DMA failures, zero control overruns, no observed heap drift",
+      "coverage_gap": "No live BMS frames, ESC/battery, connected-BLE soak, OTA, or 30-minute duration"
+    },
+    {
+      "variant": "P3 and P5 host validation",
+      "commit": "P3 and P5 candidate lineages",
+      "workload": "PlatformIO native tests, screenshot regressions, target compile",
+      "repetitions": "60 native tests and 34 screenshot cases per recorded candidate validation",
+      "result": "60/60 and 34/34 pass; target builds pass",
+      "coverage_gap": "Host tests cannot validate SPI electrical timing or live MCP2515 traffic"
+    }
+  ],
+  "limitations": [
+    "No live ESC or propulsion battery",
+    "No transmitting ANT BMS",
+    "No full connected-BLE and OTA soak",
+    "One controller and short repeated trials",
+    "Temporary instrumentation changes timing and memory",
+    "Production changes must be extracted from instrumentation branches before merge"
+  ],
+  "controller_firmware_after_testing": {
+    "commit": "7d8105f",
+    "description": "Clean P7 firmware"
+  }
+}

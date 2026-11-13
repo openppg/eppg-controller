@@ -12,6 +12,7 @@
 #define LOCAL_NODE_ID 0x01  // The ID on the network of this device
 
 #define TELEMETRY_TIMEOUT_MS 50  // Threshold to determine stale ESC telemetry in ms
+#define TWAI_HEALTH_POLL_MS 250  // How often to sample driver status/alerts
 
 static CanardAdapter adapter;
 static uint8_t memory_pool[1024] __attribute__((aligned(8)));
@@ -183,6 +184,101 @@ void syncEscOutputs() {
 
 }  // namespace
 
+static TwaiBusHealth sTwaiHealth = {};
+// True from the moment we see BUS_OFF until the post-recovery restart succeeds.
+// Gates the STOPPED->start transition so we only auto-start a driver that WE
+// took down for recovery, never one something else stopped on purpose.
+static bool sTwaiRecoveryPending = false;
+
+const char* twaiBusStateName(uint8_t state) {
+  switch (static_cast<twai_state_t>(state)) {
+    case TWAI_STATE_STOPPED: return "STOPPED";
+    case TWAI_STATE_RUNNING: return "RUNNING";
+    case TWAI_STATE_BUS_OFF: return "BUS_OFF";
+    case TWAI_STATE_RECOVERING: return "RECOVERING";
+    default: return "UNKNOWN";
+  }
+}
+
+TwaiBusHealth getTwaiBusHealth() {
+  return sTwaiHealth;
+}
+
+/**
+ * Poll TWAI driver health and auto-recover from bus-off.
+ *
+ * A severed or shorted CAN pair while we're transmitting drives the TX error
+ * counter into error-passive and potentially bus-off. In bus-off the driver
+ * stops participating entirely — without recovery, fixing the cable would NOT
+ * restore comms until a reboot. Recovery sequence: initiate while BUS_OFF,
+ * the driver lands in STOPPED once it sees the required idle bus, then we
+ * restart it.
+ */
+static void serviceTwaiBusHealth() {
+  const unsigned long now = millis();
+  static unsigned long lastPollMs = 0;
+  if (now - lastPollMs < TWAI_HEALTH_POLL_MS) { return; }  // NOLINT(whitespace/newline)
+  lastPollMs = now;
+
+  // Drain latched alerts (non-blocking) so error-state edges hit the log
+  // even if the state recovers between status polls.
+  uint32_t alerts = 0;
+  if (twai_read_alerts(&alerts, 0) == ESP_OK && alerts != 0) {
+    if (alerts & TWAI_ALERT_ERR_PASS) {
+      USBSerial.println("[TWAI] Entered error-passive (CAN wiring fault or unacked TX)");
+    }
+    if (alerts & TWAI_ALERT_BUS_OFF) {
+      sTwaiHealth.bus_off_count++;
+      USBSerial.println("[TWAI] BUS-OFF");
+    }
+    if (alerts & TWAI_ALERT_BUS_RECOVERED) {
+      USBSerial.println("[TWAI] Bus recovered");
+    }
+  }
+
+  twai_status_info_t status;
+  if (twai_get_status_info(&status) != ESP_OK) { return; }  // NOLINT(whitespace/newline)
+
+  const uint8_t prevState = sTwaiHealth.state;
+  sTwaiHealth.state = static_cast<uint8_t>(status.state);
+  sTwaiHealth.bus_error_count = status.bus_error_count;
+  sTwaiHealth.tx_failed_count = status.tx_failed_count;
+  sTwaiHealth.rx_missed_count = status.rx_missed_count;
+  sTwaiHealth.arb_lost_count = status.arb_lost_count;
+  sTwaiHealth.tx_error_counter = status.tx_error_counter;
+  sTwaiHealth.rx_error_counter = status.rx_error_counter;
+
+  if (prevState != sTwaiHealth.state) {
+    USBSerial.printf("[TWAI] State %s -> %s (tec=%lu rec=%lu busErr=%lu)\n",
+                     twaiBusStateName(prevState), twaiBusStateName(sTwaiHealth.state),
+                     (unsigned long)status.tx_error_counter,
+                     (unsigned long)status.rx_error_counter,
+                     (unsigned long)status.bus_error_count);
+  }
+
+  switch (status.state) {
+    case TWAI_STATE_BUS_OFF:
+      if (!sTwaiRecoveryPending) {
+        sTwaiRecoveryPending = true;
+        USBSerial.println("[TWAI] Initiating bus-off recovery");
+        twai_initiate_recovery();
+      }
+      break;
+    case TWAI_STATE_RECOVERING:
+      break;  // Recovery in progress — wait for STOPPED
+    case TWAI_STATE_STOPPED:
+      if (sTwaiRecoveryPending && twai_start() == ESP_OK) {
+        sTwaiRecoveryPending = false;
+        sTwaiHealth.recovery_count++;
+        USBSerial.println("[TWAI] Driver restarted after bus-off recovery");
+      }
+      break;
+    case TWAI_STATE_RUNNING:
+    default:
+      sTwaiRecoveryPending = false;
+      break;
+  }
+}
 
 STR_ESC_TELEMETRY_140 escTelemetryData = {
   .escState = TelemetryState::NOT_CONNECTED,
@@ -346,6 +442,7 @@ void readESCTelemetry() {
 
   syncEscOutputs();
   adapter.processTxRxOnce();  // Process CAN messages
+  serviceTwaiBusHealth();     // Track bus errors; auto-recover from bus-off
 
   // Drive any in-flight ESC config-relay / firmware-relay session. Both run on
   // the throttle task so all CAN traffic stays single-owner. Non-blocking; only
@@ -428,7 +525,9 @@ bool setupTWAI() {
   uint32_t alerts_to_enable = TWAI_ALERT_RX_DATA
                               | TWAI_ALERT_ERR_PASS
                               | TWAI_ALERT_BUS_ERROR
-                              | TWAI_ALERT_RX_QUEUE_FULL;
+                              | TWAI_ALERT_RX_QUEUE_FULL
+                              | TWAI_ALERT_BUS_OFF
+                              | TWAI_ALERT_BUS_RECOVERED;
   if (twai_reconfigure_alerts(alerts_to_enable, NULL) == ESP_OK) {
       USBSerial.println("CAN Alerts reconfigured");
   } else {

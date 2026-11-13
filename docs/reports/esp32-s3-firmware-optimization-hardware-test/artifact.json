@@ -1,0 +1,910 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "ESP32-S3 Firmware Optimization Hardware Test Report",
+    "description": "USB-bench validation of P1, P2, P3, P5, P7, and combined P2+P3+P5 firmware on the SP140 controller.",
+    "sources": [
+      {
+        "id": "benchmark_evidence_file",
+        "label": "Hardware optimization benchmark evidence — August 23, 2026",
+        "path": "docs/hardware-optimization-benchmark-evidence-2026-08-23.json"
+      },
+      {
+        "id": "usb_benchmark",
+        "label": "SP140 USB hardware benchmark session — August 23, 2026",
+        "query": {
+          "description": "Measurements transcribed from controller USB serial performance and display counters while flashing controlled firmware variants.",
+          "language": "serial telemetry",
+          "executed_at": "2026-08-23",
+          "tables_used": [
+            "[PERF] USB counter windows",
+            "[DISPLAY] DMA counters"
+          ],
+          "filters": [
+            "One SP140 ESP32-S3 controller",
+            "USB-powered bench",
+            "ESC, propulsion battery, and transmitting BMS absent",
+            "30-second full-screen invalidation trials",
+            "10-second dry-cruise trials with ESC transmission suppressed"
+          ],
+          "metric_definitions": [
+            "Relative improvement is latency or CPU reduction versus the matching baseline; for throughput it is increase versus baseline.",
+            "LVGL update time is elapsed wall time inside the instrumented LVGL update call during display stress.",
+            "Control execution time is elapsed wall time of one 20 ms throttle-task iteration.",
+            "Barometer CPU share is accumulated sensor-conversion time divided by one CPU core's available time in the reporting window.",
+            "Full-screen throughput is completed full-screen redraws per second during continuous invalidation.",
+            "Heap drift is a sustained decline in free heap across repeated steady-state windows."
+          ]
+        }
+      },
+      {
+        "id": "git_evidence",
+        "label": "eppg-controller tested commits and instrumentation",
+        "href": "https://github.com/openppg/eppg-controller",
+        "query": {
+          "description": "Implementation diffs, branch ancestry, build settings, test probes, and the MCP2515 backtrace fix inspected from local Git history.",
+          "language": "git",
+          "executed_at": "2026-08-23",
+          "tables_used": [
+            "22ec9e7",
+            "76d00b6",
+            "fe5a859",
+            "5f66cad",
+            "455e471",
+            "78e1840",
+            "7d8105f",
+            "23c74f5",
+            "58c02e9"
+          ],
+          "filters": [
+            "Production changes separated from temporary OPENPPG_PERF_INSTRUMENTATION code"
+          ],
+          "metric_definitions": [
+            "Static RAM and flash are PlatformIO linker-reported target build sizes.",
+            "P7 reclaimed bytes equal one half-screen RGB565 LVGL buffer: 160 × 128 × 2 ÷ 2 = 20,480 bytes.",
+            "P1 call reduction comes from removing one of two identical setESCThrottle calls in each cruise-mode iteration."
+          ]
+        }
+      },
+      {
+        "id": "host_tests",
+        "label": "PlatformIO native, screenshot, and ESP32-S3 target verification",
+        "query": {
+          "description": "Local host and target verification run before or alongside hardware flashing.",
+          "language": "PlatformIO",
+          "executed_at": "2026-08-23",
+          "tables_used": [
+            "native-test",
+            "native-screenshot",
+            "OpenPPG-CESP32S3-CAN-SP140"
+          ],
+          "filters": [
+            "P3 and P5 candidates"
+          ],
+          "metric_definitions": [
+            "Native pass count is passing tests in the native suite.",
+            "Screenshot pass count is accepted LVGL visual regression cases."
+          ]
+        }
+      }
+    ],
+    "blocks": [
+      {
+        "id": "title",
+        "type": "markdown",
+        "body": "# ESP32-S3 Firmware Optimization Hardware Test Report"
+      },
+      {
+        "id": "summary",
+        "type": "markdown",
+        "body": "## Technical summary\n\n**Recommended production stack: P1 + a clean P2 + a clean P3 + a fixed P5. Do not merge P7 if P5 remains the display direction.**\n\n- **P1 is ready now.** It removes the second identical ESC command from every 20 ms cruise iteration and passed the safe hardware cruise probe.\n- **P2 and P3 should become separate clean PRs.** P2 produced a measurable release-build improvement. P3 cut barometer CPU demand by about 62%, but its multi-field cache should be changed to a formally coherent snapshot before merge.\n- **P5 should not merge as currently committed.** The initial combined build crashed in 3 of 3 display-stress trials. Isolation reproduced the failure with P2+P5, and the backtrace identified unsafe mixing of polling MCP2515 SPI transactions with queued display DMA. Replacing the polling transfer with the ESP-IDF serialized transaction path fixed the bench failure.\n- **The fixed combined build was stable on the available bench:** 3 of 3 30-second redraw trials, 3 of 3 10-second dry-cruise trials, more than 2,560 DMA transfers, a reboot check, zero DMA failures, zero control overruns, and no observed heap drift.\n- **This is not full-system release evidence.** The propulsion battery, ESC, and transmitting BMS were intentionally absent, and continuous connected-BLE/OTA testing remains open."
+      },
+      {
+        "id": "measured_heading",
+        "type": "markdown",
+        "body": "## P3 removed the largest measured CPU cost; P5 improved latency but not wire-limited frame rate\n\nThe chart expresses each result as a within-workload improvement over its matching baseline. Latency and CPU values are reductions; throughput values are increases. Because the workloads and units differ, the bars show effect size rather than interchangeable measures."
+      },
+      {
+        "id": "perf_chart_block",
+        "type": "chart",
+        "chartId": "performance_changes"
+      },
+      {
+        "id": "measured_interpretation",
+        "type": "markdown",
+        "body": "### Interpretation\n\n**P3 was the clearest efficiency win.** Redundant barometer conversions fell from roughly 50 reads per second to one coherent 25 Hz producer. Estimated sensor-conversion demand dropped from 32.7% to 12.3% of one core.\n\n**P2 improved the optimized release path without hurting control timing.** Its isolated run improved full-redraw throughput by about 9%, reduced flash by 45,400 bytes, reduced static RAM by 360 bytes, and increased free heap by roughly 4.5 KB. Control timing was effectively unchanged and no overruns were observed.\n\n**The combined P2+P3+fixed-P5 build reduced software-side latency.** LVGL stress time fell from 61.65 ms to 37.08 ms and stress-window control execution fell from 1.617 ms to 1.193 ms. Full-screen throughput remained 14.23 FPS. That result is consistent with SPI wire time and P3's missed-frame pacing bounding the workload, but this benchmark did not isolate which limit dominated.\n\n**The combined resource footprint was acceptable but not free.** Runtime free heap moved from 100,684 to 94,552 bytes, a 6,132-byte decrease (6.1%) attributable to the native display/SPI stack; repeated windows showed no continuing decline. Linker-reported static RAM moved from 141,048 to 140,316 bytes (-732 bytes), and flash moved from 1,214,877 to 1,213,697 bytes (-1,180 bytes)."
+      },
+      {
+        "id": "item_heading",
+        "type": "markdown",
+        "body": "## Hardware-tested items and merge disposition\n\nThis table is the complete tested P-number inventory. A “clean PR” means extracting only the production change and leaving USB benchmark commands and `OPENPPG_PERF_INSTRUMENTATION` behind."
+      },
+      {
+        "id": "item_table_block",
+        "type": "table",
+        "tableId": "tested_items"
+      },
+      {
+        "id": "architecture_heading",
+        "type": "markdown",
+        "sourceId": "git_evidence",
+        "body": "## The production changes alter control flow, scheduling, and bus ownership in specific ways\n\nThe next table maps each P item to the exact subsystem boundary it changes. The key review distinction is between **measured behavior** and **implementation assumptions**: P1's call reduction is deterministic from control flow; P2 changes generated code globally; P3 introduces a new cross-core cache publication boundary; P5 replaces both display and MCP2515 transports; P7 changes only static allocation."
+      },
+      {
+        "id": "implementation_table_block",
+        "type": "table",
+        "tableId": "implementation_details"
+      },
+      {
+        "id": "rtos_heading",
+        "type": "markdown",
+        "sourceId": "git_evidence",
+        "body": "## P3's CPU saving depends on a deliberate FreeRTOS topology\n\nThe throttle loop remains the highest-priority periodic application task on core 0. UI, BMS, barometer, and BLE work are concentrated on core 1 with different priorities and drop/catch-up policies. This protects the 50 Hz control path, but it means core-1 overload behavior must be reviewed as a system rather than per task."
+      },
+      {
+        "id": "rtos_table_block",
+        "type": "table",
+        "tableId": "rtos_task_map"
+      },
+      {
+        "id": "concurrency_review",
+        "type": "markdown",
+        "sourceId": "git_evidence",
+        "body": "## Concurrency issues to resolve or explicitly accept before production\n\n### P3 cache publication\n\nThe sensor values originate from one `bmp.performReading()`, so they are physically from one conversion. However, the implementation writes five independent static floats and readers fetch them through separate functions, potentially from another core. Aligned 32-bit loads/stores are naturally atomic on ESP32-S3, but that does not make the group an atomic C++ snapshot or establish a sequence boundary. Recommended production form: publish a struct behind a sequence counter, critical section, or single-slot queue and let consumers copy one validated snapshot.\n\n### P5 display callback ownership\n\nESP-IDF executes the SPI device post-transaction callback in interrupt context. Its bundled LVGL example calls flush-ready from that callback, and the installed LVGL 9.5 implementation of `lv_display_flush_ready()` only clears the display's `flushing` flag, so the basic completion pattern is supported. The remaining project-specific concern is memory ordering: the callback clears `pendingDisplay` and increments counters while task context sets/reads them, `LV_USE_OS` is `LV_OS_NONE`, and the shared variables are only `volatile`. Document the single-writer/single-reader assumption or use explicit atomics/critical sections for the cross-context state.\n\n### P5 queue depth versus in-flight state\n\nThe ESP-LCD device queue depth is 2 and LVGL has two DMA buffers, but a single `pendingDisplay` slot rejects a second outstanding flush. The architecture still overlaps CPU rendering into buffer B while DMA owns buffer A; it does not maintain two concurrent LVGL color transactions. This is consistent with the unchanged 14.23 FPS result and should be documented so future optimization work does not assume a two-deep color pipeline.\n\n### P2 diagnostics\n\nRelease optimization kept assertions enabled, which was valuable: the optimized build exposed the P5 SPI misuse as a deterministic assertion instead of silent corruption. ESP-IDF documents `spi_device_transmit()` as queue-plus-wait, whereas polling and interrupt transactions must not be mixed while unfinished. Preserve assertions and coredump/backtrace support in the production release profile until the new transport has completed its peripheral soak."
+      },
+      {
+        "id": "code_review_guide",
+        "type": "markdown",
+        "sourceId": "git_evidence",
+        "body": "## Code review guide by commit and file\n\n### P1 — duplicate cruise command\n\n- Production commit: `22ec9e7`\n- Primary file: `src/sp140/main.cpp`\n- Review functions: `handleCruisingThrottle()` and `handleThrottle()`\n- Invariant to verify: every throttle iteration reaches at most one common `setESCThrottle(finalPwm)` call unless a relay session suppresses it.\n\n### P2 — release optimization\n\n- Candidate commit: `76d00b6`\n- Primary files: `platformio.ini` and `sdkconfig.OpenPPG-CESP32S3-CAN-SP140`\n- Intended production delta: `build_type=release`, `CONFIG_COMPILER_OPTIMIZATION_PERF=y`, default/debug optimization disabled.\n- Explicitly retain: assertion level 2, watchdog panic/coredump configuration, current 240 MHz CPU setting.\n- Exclude: inherited `OPENPPG_PERF_INSTRUMENTATION=1`.\n\n### P3 — coherent barometer producer and pacing\n\n- Candidate commits: `fe5a859`, production scheduling portions of `5f66cad`, and `455e471`\n- Primary files: `inc/sp140/altimeter.h`, `src/sp140/altimeter.cpp`, `src/sp140/main.cpp`\n- Review functions: `sampleBarometer()`, cached getters, `barometerTask()`, `ctrlSensorTask()`, `uiTask()`, and `setupTasks()`\n- Required revision: replace separate cross-core float getters with one copied snapshot and explicit publication protocol.\n- Cleanup: remove `perf_zero_altitude`, `perfRecordBarometer*`, and instrumentation-only includes/flags.\n- Minor issue found: the BMS task comment says “20 Hz” while its 100 ms delay configures 10 Hz; correct the comment or the period intentionally.\n\n### P5 — native shared SPI and DMA display\n\n- Base production commit: `78e1840`\n- Required fix: `23c74f5`\n- Primary files: `inc/sp140/shared_spi.h`, `src/sp140/shared_spi.cpp`, `src/sp140/lvgl/lvgl_core.cpp`, `src/sp140/native_mcp2515.cpp`, `src/sp140/main.cpp`\n- Review boundaries: bus initialization, ST7735 command sequence/rotation, DMA buffer lifecycle, ISR-to-task state, MCP2515 register/error propagation, teardown, and BMS absent/reattach behavior.\n- Required invariant: no polling SPI transaction may start outside the same arbitration model while queued color DMA is outstanding.\n\n### P7 — synchronous-path memory reclaim\n\n- Production commit: `7d8105f`\n- Primary file: `src/sp140/lvgl/lvgl_core.cpp`\n- Review invariant: the transport must remain synchronous before the second buffer is removed.\n- Integration rule: do not combine with P5; P5's two DMA buffers are intentional."
+      },
+      {
+        "id": "failure_heading",
+        "type": "markdown",
+        "body": "## P2 exposed a latent P5 SPI race; it did not conflict with P5 conceptually\n\nThe unfixed combined P2+P3+P5 firmware crashed during all 3 redraw-stress trials. A P2+P5 isolation build reproduced the crash in its first trial, excluding P3 as the necessary trigger. The decoded backtrace ended in `spi_device_polling_transmit()` inside `Adafruit_MCP2515::transfer()` while the display had queued DMA work on the same host.\n\nP2's optimized timing made the unsafe overlap easier to reproduce. The fix changes the MCP2515 compatibility transport to `spi_device_transmit()`, allowing ESP-IDF's bus scheduler to serialize it with display DMA. Afterward, all 3 redraw trials, all 3 dry-cruise trials, and the reboot check passed. Therefore **P2 and P5 can coexist**, but P5 must carry `23c74f5` or an equivalent fix."
+      },
+      {
+        "id": "scope_heading",
+        "type": "markdown",
+        "body": "## Scope and metric definitions\n\n**Hardware population:** one current SP140 ESP32-S3 controller connected over USB.\n\n**Control workload:** the throttle task's real 50 Hz state-processing path. The dry-cruise probe entered `ARMED_CRUISING` without arming side effects, forced the override threshold outside the ADC range, suppressed ESC transmissions, ran for 10 seconds, and restored `DISARMED` automatically.\n\n**Display workload:** continuous full-screen LVGL invalidation for 30 seconds. Counters recorded LVGL elapsed time, queued/completed/failed DMA transfers, maximum transfer duration, control-loop execution, and heap state.\n\n**Barometer workload:** accumulated BMP3xx conversion time and read count in five-second windows. P3 replaced separate altitude, temperature, and pressure conversions with one coherent 25 Hz conversion and cached snapshot.\n\n**Build metrics:** PlatformIO target-linker output for static RAM and flash. Runtime heap came from ESP32 heap counters. P7's 20,480-byte saving is exactly one removed half-screen RGB565 buffer."
+      },
+      {
+        "id": "method_heading",
+        "type": "markdown",
+        "body": "## Test method and validation coverage\n\n1. Instrumented branches recorded five-second USB windows for heap, throttle cycles and commands, 20 ms scheduler timing, display work, and barometer work where applicable.\n2. Each candidate was built, flashed, boot-observed, exercised with its relevant stress command, and rebooted when the risk justified it.\n3. P1 and P7 used the safe 10-second dry-cruise probe so the real cruise branch could execute without an ESC or battery.\n4. P2 used idle/control and forced redraw workloads to compare default/debug behavior with release `-O2`.\n5. P3 was checked with sensor telemetry, display stress, dry cruise, and reboot. It also passed 60/60 native tests and 34/34 screenshot regressions.\n6. P5 passed 60/60 native tests, 34/34 screenshot regressions, and an ESP32-S3 target build before hardware testing. Combined and isolation builds then diagnosed its crash.\n7. The controlled combined comparison used baseline `58c02e9` and fixed combined `23c74f5`, followed by repeated stress and dry-cruise trials.\n\nThe controller was restored to clean P7 firmware (`7d8105f`) after testing; it was not left running the combined benchmark build."
+      },
+      {
+        "id": "instrumentation_heading",
+        "type": "markdown",
+        "sourceId": "benchmark_evidence_file",
+        "body": "## Instrumentation and acceptance logic\n\n**Reporting cadence:** common performance counters were exchanged and reset every five seconds using atomic built-ins. P5 DMA counters were cumulative, allowing queued and completed totals to converge after stress.\n\n**Control timing:** every throttle iteration recorded start-to-start interval, minimum and maximum interval, maximum absolute deviation from the expected 20,000 µs period, average and maximum execution time, and an overrun when execution exceeded 20,000 µs.\n\n**Display timing:** synchronous variants recorded flush count, pixel count, elapsed flush time, maximum flush time, skipped flushes, LVGL call count, and LVGL elapsed time. P5 recorded queued, completed, failed, and maximum DMA completion latency.\n\n**Barometer timing:** P3 instrumentation recorded conversion count, accumulated/average/maximum conversion time, failed conversions, cached sample age, and the latest temperature/pressure/altitude values. “CPU share” was conversion time divided by one core's available time, not total dual-core CPU utilization.\n\n**Heap:** reports included free heap, minimum-ever free heap, free internal 8-bit memory, and largest internal block. “No drift” means repeated steady windows did not continue declining; it is not a proof of leak freedom.\n\n**Dry cruise:** the probe directly set `currentState=ARMED_CRUISING`, set `cruisedPotVal=10000` so the ADC could not trigger override, suppressed the ESC command at the transport boundary, then automatically restored `DISARMED`. It validated the real cruise calculation/scheduler branch without validating physical ESC behavior.\n\n**Display stress:** the active LVGL screen was invalidated continuously for 30 seconds. Under P3 pacing, a frame that exceeded its 33 ms budget was dropped rather than immediately retried. No attempt was made to subtract instrumentation overhead, so only matched instrumented comparisons should be treated quantitatively."
+      },
+      {
+        "id": "test_matrix_heading",
+        "type": "markdown",
+        "body": "## Reproduction matrix distinguishes strong failures from limited passes\n\nThe unfixed crash evidence is stronger than the original P5-only pass: failure repeated 3/3 in the combined build and 1/1 after removing P3, while the first P5-only result was just one passing trial. The fixed build then passed the same stress class three times. Exact counts that were not retained are explicitly marked instead of inferred."
+      },
+      {
+        "id": "test_matrix_table_block",
+        "type": "table",
+        "tableId": "detailed_test_matrix"
+      },
+      {
+        "id": "limitations_heading",
+        "type": "markdown",
+        "body": "## The USB bench closes firmware-timing risk, not full propulsion-system risk\n\n- **No live ESC or propulsion battery:** throttle scheduling and cruise state logic ran, but real CAN command/telemetry behavior and motor safety were not exercised.\n- **No transmitting ANT BMS:** the MCP2515 initialized and was polled, enough to expose the SPI race, but sustained real CAN frames, hot-plug behavior, and telemetry coherence remain untested.\n- **BLE was not a complete soak workload:** P3 includes BLE-starvation protection, but a phone-connected telemetry session and OTA flow were not run for the full P5 soak.\n- **Short duration and one controller:** three 30-second trials strongly validate the specific race fix but do not establish fleet or thermal reliability.\n- **Instrumentation changes timing and memory:** comparisons used matching probes where possible, but production PRs must remove them and receive a final release-build smoke test."
+      },
+      {
+        "id": "next_steps_heading",
+        "type": "markdown",
+        "body": "## Recommended landing and release sequence\n\n1. **Merge P1** through [PR #123](https://github.com/openppg/eppg-controller/pull/123).\n2. **Create and merge a clean P2 PR** containing only release/`-O2` configuration.\n3. **Create a clean P3 PR** containing the 25 Hz barometer task and missed-period dropping; replace the independent cached floats with a sequence-validated, locked, or queue-backed snapshot; remove benchmark-only commands and counters; then merge.\n4. **Port `23c74f5` onto standalone P5**, rebase after P2/P3, and rerun the P5 acceptance matrix.\n5. **Do not merge P7 if P5 proceeds.** P7 removes the second LVGL buffer asynchronous P5 DMA uses. Close [PR #122](https://github.com/openppg/eppg-controller/pull/122) as superseded once P5 is ready. If P5 is deferred, P7 remains a safe standalone 20 KB RAM win.\n6. **Keep P4 and P6 on hold.** They were not implemented and hardware-tested into mergeable candidates in this pass.\n\nKeep P1, P2, P3, and P5 separate for rollback and bisectability. The combined branch proves compatibility; it should not become a production mega-PR."
+      },
+      {
+        "id": "p5_gates_heading",
+        "type": "markdown",
+        "body": "## P5 acceptance gates before fleet release\n\n- Cold boot and repeated reset across both display rotations; verify colors, orientation, splash, and no uninitialized pixels.\n- Exercise idle, armed, cruise, alerts, theme changes, and rapid full-screen invalidation.\n- Repeat stress with a transmitting BMS; require coherent telemetry, no false link loss, and zero display failures.\n- Test BMS absent at boot, attached after boot, disconnected, and reattached.\n- Run at least a 30-minute soak with connected BLE, normal ESC traffic, and live BMS traffic; require no watchdog reset, control overrun, stack regression, DMA failure, or heap decline.\n- Perform a propulsion-safe arm/cruise/disarm sequence with ESC and battery in an appropriate setup.\n- Complete a power cycle and OTA/update flow.\n- Ship first to one or two controllers with DMA counters enabled, review logs, then expand."
+      },
+      {
+        "id": "questions_heading",
+        "type": "markdown",
+        "body": "## Further questions\n\n- Does fixed P5 remain stable under simultaneous maximum-rate BMS CAN, ESC traffic, BLE notifications, and full-screen redraws?\n- Does P3's 25 Hz coherent sampling preserve vario responsiveness and noise behavior in flight?\n- Does release `-O2` remain stable over a longer thermal and OTA soak with all peripherals?\n- Once P5 is stable, is RGB565 byte swapping the next meaningful display CPU cost, or is the planned touchscreen UI already panel-wire-time limited?"
+      }
+    ],
+    "charts": [
+      {
+        "id": "performance_changes",
+        "title": "Relative performance change by measured workload",
+        "subtitle": "Within-test improvement versus matching baseline; reductions for CPU/latency and increases for throughput",
+        "type": "bar",
+        "dataset": "performance_changes",
+        "encodings": {
+          "x": {
+            "field": "workload",
+            "type": "nominal",
+            "title": "Workload"
+          },
+          "y": {
+            "field": "improvement_pct",
+            "type": "quantitative",
+            "title": "Improvement (%)"
+          }
+        },
+        "source": {
+          "id": "benchmark_chart_source",
+          "label": "Reviewed benchmark metrics from hardware evidence file",
+          "path": "docs/hardware-optimization-benchmark-evidence-2026-08-23.json",
+          "query": {
+            "engine": "DuckDB",
+            "language": "sql",
+            "description": "Normalize the reviewed benchmark measurements into a common within-workload improvement scale for the report chart.",
+            "tables_used": [
+              "docs/hardware-optimization-benchmark-evidence-2026-08-23.json"
+            ],
+            "executed_at": "2026-08-23",
+            "filters": [
+              "Only hardware-measured workloads with a matching baseline"
+            ],
+            "metric_definitions": [
+              "improvement_pct is reduction for latency/CPU metrics and increase for throughput metrics."
+            ],
+            "sql": "SELECT * FROM (VALUES\n('P2 redraw throughput','P2','Isolated run',NULL,NULL,'FPS',9.0),\n('P3 barometer CPU','P3','Isolated baseline vs coherent cache',32.7,12.3,'% of one core',62.4),\n('Combined LVGL latency','P2+P3+fixed P5','Controlled combined benchmark',61.65,37.08,'ms/update',39.9),\n('Combined control latency','P2+P3+fixed P5','Controlled combined benchmark',1.617,1.193,'ms/iteration',26.2),\n('Combined full-screen FPS','P2+P3+fixed P5','Controlled combined benchmark',14.23,14.23,'FPS',0.0)\n) AS t(workload,p_items,benchmark_scope,baseline_value,candidate_value,unit,improvement_pct)"
+          }
+        },
+        "options": {
+          "orientation": "horizontal"
+        }
+      }
+    ],
+    "tables": [
+      {
+        "id": "tested_items",
+        "title": "Tested P-number decision matrix",
+        "subtitle": "Results on the available SP140 USB bench and the action supported by that evidence",
+        "dataset": "tested_items",
+        "columns": [
+          {
+            "field": "p_number",
+            "label": "Item",
+            "type": "text"
+          },
+          {
+            "field": "production_commit",
+            "label": "Production commit",
+            "type": "text"
+          },
+          {
+            "field": "change",
+            "label": "Change",
+            "type": "text"
+          },
+          {
+            "field": "hardware_result",
+            "label": "Hardware result",
+            "type": "text"
+          },
+          {
+            "field": "quantitative_result",
+            "label": "Key measurement",
+            "type": "text"
+          },
+          {
+            "field": "merge_action",
+            "label": "Action",
+            "type": "text"
+          },
+          {
+            "field": "dependency",
+            "label": "Dependency / caveat",
+            "type": "text"
+          }
+        ],
+        "defaultSort": {
+          "field": "p_number",
+          "direction": "asc"
+        },
+        "source": {
+          "id": "tested_items_source",
+          "label": "Reviewed P-number results from hardware evidence file",
+          "path": "docs/hardware-optimization-benchmark-evidence-2026-08-23.json",
+          "query": {
+            "engine": "DuckDB",
+            "language": "sql",
+            "description": "Select the tested P-number decision rows preserved in the benchmark evidence file.",
+            "tables_used": [
+              "docs/hardware-optimization-benchmark-evidence-2026-08-23.json"
+            ],
+            "executed_at": "2026-08-23",
+            "filters": [
+              "P1, P2, P3, P5, and P7 only; P4 and P6 were not hardware-tested"
+            ],
+            "metric_definitions": [
+              "merge_action records the action supported by the observed bench evidence and known dependencies."
+            ],
+            "sql": "SELECT * FROM (VALUES\n('P1','22ec9e7','Remove duplicate cruise-mode ESC command','Safe 10 s dry cruise completed and restored DISARMED with ESC TX suppressed','One instead of two identical setESCThrottle calls per 20 ms cruise iteration; 50% fewer calls in that branch by code path','Merge now','PR #123; independent of other items'),\n('P2','76d00b6','Enable release build and ESP-IDF performance optimization (-O2)','Idle, redraw, control, dry-cruise, and reboot stable; zero control overruns','Redraw about +9%; flash -45,400 B; static RAM -360 B; free heap about +4.5 KB; control timing unchanged','Extract clean PR and merge','Do not merge instrumentation inherited by HIL branch'),\n('P3','fe5a859 + production portions of 5f66cad and 455e471','Coherent 25 Hz barometer producer, cached consumers, missed-period dropping','Sensor telemetry, display stress, dry cruise, and reboot passed; host suites 60/60 native and 34/34 screenshot','About 50 to 25 conversions/s; barometer demand 32.7% to 12.3% of one core (about -62%)','Extract clean PR, formalize snapshot, then merge','Replace independent cross-core floats with a coherent snapshot; remove perf commands; retain BLE-safe pacing'),\n('P5','78e1840; required fix 23c74f5','ESP-IDF display DMA and MCP2515 on shared SPI host','P5-only passed once; unfixed combined failed 3/3 and P2+P5 failed 1/1; fixed combined passed 3/3 redraw, 3/3 dry cruise, and reboot','Standalone target: 140,508 B RAM / 1,260,161 B flash; fixed combined >2,560 DMA transfers, zero failures, LVGL 61.65 to 37.08 ms, control 1.617 to 1.193 ms, 14.23 FPS unchanged','Hold until fix and peripheral gates pass','Supersedes P7; needs live BMS, ESC/battery, BLE, OTA, and longer soak'),\n('P7','7d8105f','Remove unused second LVGL buffer from synchronous path','Boot, display, safe dry cruise, and reboot passed','20,480 B static internal RAM reclaimed; no speed gain expected','Skip if P5 proceeds; otherwise merge','Mutually exclusive with P5 two-buffer DMA; PR #122')\n) AS t(p_number,production_commit,change,hardware_result,quantitative_result,merge_action,dependency)\nORDER BY p_number"
+          }
+        }
+      },
+      {
+        "id": "implementation_details",
+        "title": "Implementation-level change map",
+        "subtitle": "Production behavior, timing placement, and code-review concerns for every hardware-tested item",
+        "dataset": "implementation_details",
+        "columns": [
+          {
+            "field": "p_number",
+            "label": "Item",
+            "type": "text"
+          },
+          {
+            "field": "subsystem",
+            "label": "Subsystem",
+            "type": "text"
+          },
+          {
+            "field": "before",
+            "label": "Before",
+            "type": "text"
+          },
+          {
+            "field": "after",
+            "label": "After",
+            "type": "text"
+          },
+          {
+            "field": "timing_and_placement",
+            "label": "Timing / placement",
+            "type": "text"
+          },
+          {
+            "field": "engineer_review",
+            "label": "Engineer review",
+            "type": "text"
+          }
+        ],
+        "defaultSort": {
+          "field": "p_number",
+          "direction": "asc"
+        },
+        "source": {
+          "id": "implementation_details_source",
+          "label": "Implementation details preserved in benchmark evidence",
+          "path": "docs/hardware-optimization-benchmark-evidence-2026-08-23.json",
+          "query": {
+            "engine": "DuckDB",
+            "language": "sql",
+            "description": "Expose code-derived before/after architecture details for the hardware-tested P items.",
+            "tables_used": [
+              "docs/hardware-optimization-benchmark-evidence-2026-08-23.json"
+            ],
+            "executed_at": "2026-08-23",
+            "filters": [
+              "Hardware-tested P1, P2, P3, P5, P7 plus P3 pacing"
+            ],
+            "metric_definitions": [
+              "Timing placement records configured FreeRTOS period, priority, affinity, stack, bus clock, or buffer size where applicable."
+            ],
+            "sql": "WITH src AS (SELECT * FROM read_json_auto('docs/hardware-optimization-benchmark-evidence-2026-08-23.json', maximum_object_size=1000000))\nSELECT d.p_number, d.subsystem, d.before, d.after, d.timing_and_placement, d.review_note AS engineer_review\nFROM src, UNNEST(src.implementation_details) AS u(d)\nORDER BY d.p_number"
+          }
+        }
+      },
+      {
+        "id": "rtos_task_map",
+        "title": "Relevant FreeRTOS task topology after P3",
+        "subtitle": "Configured periods, stacks, priorities, and affinities in the tested P3 lineage",
+        "dataset": "rtos_task_map",
+        "columns": [
+          {
+            "field": "task",
+            "label": "Task",
+            "type": "text"
+          },
+          {
+            "field": "period_ms",
+            "label": "Period (ms)",
+            "type": "number"
+          },
+          {
+            "field": "stack_bytes",
+            "label": "Stack (B)",
+            "type": "number"
+          },
+          {
+            "field": "priority",
+            "label": "Priority",
+            "type": "number"
+          },
+          {
+            "field": "core",
+            "label": "Core",
+            "type": "text"
+          },
+          {
+            "field": "responsibility",
+            "label": "Responsibility",
+            "type": "text"
+          },
+          {
+            "field": "review_note",
+            "label": "Review note",
+            "type": "text"
+          }
+        ],
+        "defaultSort": {
+          "field": "priority",
+          "direction": "desc"
+        },
+        "source": {
+          "id": "rtos_task_source",
+          "label": "FreeRTOS task creation and loop constants in P3 lineage",
+          "path": "docs/hardware-optimization-benchmark-evidence-2026-08-23.json",
+          "query": {
+            "engine": "DuckDB",
+            "language": "sql",
+            "description": "Normalize the task constants inspected in commit 455e471.",
+            "tables_used": [
+              "src/sp140/main.cpp at 455e471"
+            ],
+            "executed_at": "2026-08-23",
+            "filters": [
+              "Tasks directly relevant to control, display, barometer, BMS, BLE, and watchdog behavior"
+            ],
+            "metric_definitions": [
+              "period_ms is the configured vTaskDelayUntil interval; null means the periodic value was not part of the captured review."
+            ],
+            "sql": "SELECT * FROM (VALUES\n('Throttle',20,4352,3,'0','Control/ESC path','Task watchdog; 20 ms overrun threshold'),\n('Barometer',40,3072,1,'1','BMP3xx producer','Drops missed slots; watermark not captured'),\n('UI',33,5888,2,'1','LVGL refresh','Drops missed frames'),\n('BMS',100,2304,2,'1','MCP2515/ANT BMS poll','Comment says 20 Hz; constant is 10 Hz'),\n('CtrlSensor',100,4096,2,'Unpinned','Cached sensors to TelemetryHub','Reads cache fields separately'),\n('BLENotify',20,8192,1,'1','FastLink publish','Connected soak missing'),\n('Watchdog',NULL,1536,3,'0','Control liveness','Only safety-critical tasks watched')\n) AS t(task,period_ms,stack_bytes,priority,core,responsibility,review_note)"
+          }
+        }
+      },
+      {
+        "id": "detailed_test_matrix",
+        "title": "Detailed hardware and host test matrix",
+        "subtitle": "Exact retained trial counts are shown; unretained repetition counts are labeled rather than reconstructed",
+        "dataset": "detailed_test_matrix",
+        "columns": [
+          {
+            "field": "variant",
+            "label": "Variant",
+            "type": "text"
+          },
+          {
+            "field": "commit",
+            "label": "Commit / lineage",
+            "type": "text"
+          },
+          {
+            "field": "workload",
+            "label": "Workload",
+            "type": "text"
+          },
+          {
+            "field": "repetitions",
+            "label": "Repetitions",
+            "type": "text"
+          },
+          {
+            "field": "result",
+            "label": "Result",
+            "type": "text"
+          },
+          {
+            "field": "coverage_gap",
+            "label": "Coverage gap",
+            "type": "text"
+          }
+        ],
+        "defaultSort": {
+          "field": "variant",
+          "direction": "asc"
+        },
+        "source": {
+          "id": "test_matrix_source",
+          "label": "Retained USB benchmark trial matrix",
+          "path": "docs/hardware-optimization-benchmark-evidence-2026-08-23.json",
+          "query": {
+            "engine": "DuckDB",
+            "language": "sql",
+            "description": "Expose the retained hardware and host test matrix without inventing missing trial counts.",
+            "tables_used": [
+              "docs/hardware-optimization-benchmark-evidence-2026-08-23.json"
+            ],
+            "executed_at": "2026-08-23",
+            "filters": [
+              "Hardware-tested variants and directly associated host gates"
+            ],
+            "metric_definitions": [
+              "Pass/fail counts are exact only where a repetition count was retained in the benchmark record."
+            ],
+            "sql": "WITH src AS (SELECT * FROM read_json_auto('docs/hardware-optimization-benchmark-evidence-2026-08-23.json', maximum_object_size=1000000))\nSELECT d.variant, d.commit, d.workload, d.repetitions, d.result, d.coverage_gap\nFROM src, UNNEST(src.detailed_test_matrix) AS u(d)\nORDER BY d.variant"
+          }
+        }
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "status": "ready",
+    "datasets": {
+      "performance_changes": [
+        {
+          "workload": "P2 redraw throughput",
+          "p_items": "P2",
+          "benchmark_scope": "Isolated run",
+          "baseline_value": null,
+          "candidate_value": null,
+          "unit": "FPS",
+          "improvement_pct": 9,
+          "calculation": "Reported increase; absolute isolated FPS not retained",
+          "trials": "Instrumented USB redraw workload"
+        },
+        {
+          "workload": "P3 barometer CPU",
+          "p_items": "P3",
+          "benchmark_scope": "Isolated baseline vs coherent cache",
+          "baseline_value": 32.7,
+          "candidate_value": 12.3,
+          "unit": "% of one core",
+          "improvement_pct": 62.4,
+          "calculation": "(32.7 - 12.3) / 32.7",
+          "trials": "Five-second counter windows"
+        },
+        {
+          "workload": "Combined LVGL latency",
+          "p_items": "P2+P3+fixed P5",
+          "benchmark_scope": "Controlled combined benchmark",
+          "baseline_value": 61.65,
+          "candidate_value": 37.08,
+          "unit": "ms/update",
+          "improvement_pct": 39.9,
+          "calculation": "(61.65 - 37.08) / 61.65",
+          "trials": "Repeated 30-second stress"
+        },
+        {
+          "workload": "Combined control latency",
+          "p_items": "P2+P3+fixed P5",
+          "benchmark_scope": "Controlled combined benchmark",
+          "baseline_value": 1.617,
+          "candidate_value": 1.193,
+          "unit": "ms/iteration",
+          "improvement_pct": 26.2,
+          "calculation": "(1.617 - 1.193) / 1.617",
+          "trials": "Repeated 30-second stress"
+        },
+        {
+          "workload": "Combined full-screen FPS",
+          "p_items": "P2+P3+fixed P5",
+          "benchmark_scope": "Controlled combined benchmark",
+          "baseline_value": 14.23,
+          "candidate_value": 14.23,
+          "unit": "FPS",
+          "improvement_pct": 0,
+          "calculation": "(14.23 - 14.23) / 14.23",
+          "trials": "Repeated 30-second stress"
+        }
+      ],
+      "tested_items": [
+        {
+          "p_number": "P1",
+          "production_commit": "22ec9e7",
+          "change": "Remove duplicate cruise-mode ESC command",
+          "hardware_result": "Safe 10 s dry cruise completed and restored DISARMED with ESC TX suppressed",
+          "quantitative_result": "One instead of two identical setESCThrottle calls per 20 ms cruise iteration; 50% fewer calls in that branch by code path",
+          "merge_action": "Merge now",
+          "dependency": "PR #123; independent of other items"
+        },
+        {
+          "p_number": "P2",
+          "production_commit": "76d00b6",
+          "change": "Enable release build and ESP-IDF performance optimization (-O2)",
+          "hardware_result": "Idle, redraw, control, dry-cruise, and reboot stable; zero control overruns",
+          "quantitative_result": "Redraw about +9%; flash -45,400 B; static RAM -360 B; free heap about +4.5 KB; control timing unchanged",
+          "merge_action": "Extract clean PR and merge",
+          "dependency": "Do not merge instrumentation inherited by HIL branch"
+        },
+        {
+          "p_number": "P3",
+          "production_commit": "fe5a859 + production portions of 5f66cad and 455e471",
+          "change": "Coherent 25 Hz barometer producer, cached consumers, missed-period dropping",
+          "hardware_result": "Sensor telemetry, display stress, dry cruise, and reboot passed; host suites 60/60 native and 34/34 screenshot",
+          "quantitative_result": "About 50 to 25 conversions/s; barometer demand 32.7% to 12.3% of one core (about -62%)",
+          "merge_action": "Extract clean PR, formalize snapshot, then merge",
+          "dependency": "Replace independent cross-core floats with a sequence-validated/locked snapshot; remove perf commands; retain BLE-safe pacing"
+        },
+        {
+          "p_number": "P5",
+          "production_commit": "78e1840; required fix 23c74f5",
+          "change": "ESP-IDF display DMA and MCP2515 on shared SPI host",
+          "hardware_result": "P5-only passed once; unfixed combined failed 3/3 and P2+P5 failed 1/1; fixed combined passed 3/3 redraw, 3/3 dry cruise, and reboot",
+          "quantitative_result": "Standalone target build: 140,508 B static RAM and 1,260,161 B flash. Fixed combined: >2,560 DMA transfers, zero failures; LVGL 61.65→37.08 ms; control 1.617→1.193 ms; throughput 14.23 FPS unchanged",
+          "merge_action": "Hold until fix and peripheral gates pass",
+          "dependency": "Supersedes P7; needs live BMS, ESC/battery, BLE, OTA, and longer soak"
+        },
+        {
+          "p_number": "P7",
+          "production_commit": "7d8105f",
+          "change": "Remove unused second LVGL buffer from synchronous path",
+          "hardware_result": "Boot, display, safe dry cruise, and reboot passed",
+          "quantitative_result": "20,480 B static internal RAM reclaimed; no speed gain expected",
+          "merge_action": "Skip if P5 proceeds; otherwise merge",
+          "dependency": "Mutually exclusive with P5 two-buffer DMA; PR #122"
+        }
+      ],
+      "implementation_details": [
+        {
+          "p_number": "P1",
+          "subsystem": "50 Hz throttle task",
+          "before": "Cruise branch sent currentCruiseThrottlePWM inside handleCruisingThrottle, then common epilogue sent finalPwm again",
+          "after": "Cruise helper only evaluates override; common epilogue sends finalPwm once",
+          "timing_and_placement": "20 ms period; priority 3; core 0",
+          "engineer_review": "Physical CAN reduction not observed because ESC TX was suppressed; code path deterministically falls from 2 calls to 1"
+        },
+        {
+          "p_number": "P2",
+          "subsystem": "Build/compiler configuration",
+          "before": "PlatformIO debug build; ESP-IDF default optimization",
+          "after": "build_type=release; CONFIG_COMPILER_OPTIMIZATION_PERF",
+          "timing_and_placement": "240 MHz ESP32-S3; Arduino+ESP-IDF; espressif32 6.13.0",
+          "engineer_review": "Assertions level 2 and C++ exceptions stay enabled; task wrapper no longer set; extract without inherited perf flag"
+        },
+        {
+          "p_number": "P3",
+          "subsystem": "BMP3xx sampling/cache",
+          "before": "Altitude, temperature, and pressure consumers could cause separate forced conversions",
+          "after": "One 40 ms producer performs a conversion and updates altitude, absolute altitude, temperature, pressure, vertical speed, timestamp",
+          "timing_and_placement": "3072 B stack; priority 1; core 1; I2C timeout 20 ms; ODR 25 Hz; temp 2x; pressure 4x; IIR 15",
+          "engineer_review": "Aligned float accesses worked, but the multi-field cache is not a formal atomic C++ snapshot; use seqlock/critical section/queue"
+        },
+        {
+          "p_number": "P3 pacing",
+          "subsystem": "FreeRTOS periodic overload policy",
+          "before": "vTaskDelayUntil could immediately catch up after missed periods",
+          "after": "UI/barometer reset lastWake after a full missed period, dropping stale slots",
+          "timing_and_placement": "UI 33 ms P2 core 1; barometer 40 ms P1 core 1; BLE notify 20 ms P1 core 1",
+          "engineer_review": "Fairness improves, but overload semantics intentionally change from catch-up to drop"
+        },
+        {
+          "p_number": "P5 display",
+          "subsystem": "ST7735 transport",
+          "before": "Arduino synchronous SPI/FIFO path under application mutex",
+          "after": "esp_lcd color DMA on SPI3_HOST; flush_ready from completion callback",
+          "timing_and_placement": "32 MHz mode 0; queue depth 2; 2 × 20,480 B DMA buffers; max transfer 40,960 B",
+          "engineer_review": "CPU still swaps RGB565 bytes; single pendingDisplay means one outstanding LVGL color transfer"
+        },
+        {
+          "p_number": "P5 MCP2515",
+          "subsystem": "ANT-BMS-CAN transport",
+          "before": "spi_device_polling_transmit could overlap queued display DMA",
+          "after": "spi_device_transmit uses ESP-IDF scheduler; RX frame read as one 13-byte burst",
+          "timing_and_placement": "10 MHz mode 0; queue size 2; max register payload 16 B; MCP clock 16 MHz",
+          "engineer_review": "Fix addresses reproduced assertion; IDF callback is interrupt-context and its LVGL example uses flush-ready there, but project volatile state still needs explicit ownership/memory-order review"
+        },
+        {
+          "p_number": "P7",
+          "subsystem": "LVGL buffer allocation",
+          "before": "2 × 20,480 B buffers despite synchronous flush",
+          "after": "One 20,480 B half-screen RGB565 buffer",
+          "timing_and_placement": "160 × 128 RGB565; half-screen partial buffer",
+          "engineer_review": "Valid only for synchronous transport; incompatible with P5 render/transfer overlap"
+        }
+      ],
+      "rtos_task_map": [
+        {
+          "task": "Throttle",
+          "period_ms": 20,
+          "stack_bytes": 4352,
+          "priority": 3,
+          "core": "0",
+          "responsibility": "Read throttle, run state machine, send ESC command, sync ESC telemetry",
+          "review_note": "Task watchdog subscriber; benchmark overrun threshold equals full 20 ms period"
+        },
+        {
+          "task": "Barometer",
+          "period_ms": 40,
+          "stack_bytes": 3072,
+          "priority": 1,
+          "core": "1",
+          "responsibility": "Sole BMP3xx I2C producer and vario cache updater",
+          "review_note": "Drops missed slots; stack high-water mark not captured"
+        },
+        {
+          "task": "UI",
+          "period_ms": 33,
+          "stack_bytes": 5888,
+          "priority": 2,
+          "core": "1",
+          "responsibility": "Refresh LVGL from telemetry snapshots",
+          "review_note": "Drops missed frames; shares core with BMS and barometer"
+        },
+        {
+          "task": "BMS",
+          "period_ms": 100,
+          "stack_bytes": 2304,
+          "priority": 2,
+          "core": "1",
+          "responsibility": "Poll MCP2515/ANT BMS and publish unified battery data",
+          "review_note": "Source comment says 20 Hz, but pdMS_TO_TICKS(100) is 10 Hz"
+        },
+        {
+          "task": "CtrlSensor",
+          "period_ms": 100,
+          "stack_bytes": 4096,
+          "priority": 2,
+          "core": "Unpinned",
+          "responsibility": "Read cached controller sensors and publish TelemetryHub snapshot",
+          "review_note": "Reads P3 cache fields separately, so whole-snapshot atomicity is not guaranteed"
+        },
+        {
+          "task": "BLENotify",
+          "period_ms": 20,
+          "stack_bytes": 8192,
+          "priority": 1,
+          "core": "1",
+          "responsibility": "Publish FastLink telemetry and edge-triggered state changes",
+          "review_note": "8 KB stack selected for deep NimBLE notify path; connected soak still missing"
+        },
+        {
+          "task": "Watchdog",
+          "period_ms": null,
+          "stack_bytes": 1536,
+          "priority": 3,
+          "core": "0",
+          "responsibility": "Supervise safety-critical control liveness",
+          "review_note": "Only control/watchdog are watched so stalled UI/BMS does not reboot a flying device"
+        }
+      ],
+      "detailed_test_matrix": [
+        {
+          "variant": "P1",
+          "commit": "22ec9e7 + HIL probe",
+          "workload": "Real cruise branch with ESC TX suppressed",
+          "repetitions": "Completed; count not retained",
+          "result": "Pass",
+          "coverage_gap": "No physical ESC/CAN receiver"
+        },
+        {
+          "variant": "P2",
+          "commit": "76d00b6 + common instrumentation",
+          "workload": "Idle, redraw, 50 Hz control, dry cruise, reboot",
+          "repetitions": "Completed; per-workload count not retained",
+          "result": "Pass; 0 control overruns",
+          "coverage_gap": "No thermal/full-peripheral soak"
+        },
+        {
+          "variant": "P3",
+          "commit": "455e471 lineage",
+          "workload": "Barometer counters, display stress, dry cruise, reboot",
+          "repetitions": "Completed; count not retained",
+          "result": "Pass; ~25 conversions/s",
+          "coverage_gap": "No flight dynamics; no formal cache-coherence stress"
+        },
+        {
+          "variant": "P5 only",
+          "commit": "949a488 on 78e1840",
+          "workload": "Continuous full-screen invalidation",
+          "repetitions": "1 × 30 s",
+          "result": "Pass",
+          "coverage_gap": "Single trial missed latent race"
+        },
+        {
+          "variant": "Unfixed P2+P3+P5",
+          "commit": "Combined lineage before 23c74f5",
+          "workload": "Continuous full-screen invalidation",
+          "repetitions": "3 attempts",
+          "result": "Fail 3/3",
+          "coverage_gap": "Crashed before completing 30 s"
+        },
+        {
+          "variant": "P2+P5 isolation",
+          "commit": "7424474 lineage",
+          "workload": "Continuous full-screen invalidation",
+          "repetitions": "1 attempt",
+          "result": "Fail 1/1",
+          "coverage_gap": "Enough for attribution, not a rate estimate"
+        },
+        {
+          "variant": "Fixed P2+P3+P5",
+          "commit": "23c74f5",
+          "workload": "Full-screen invalidation, dry cruise, reboot, heap/control/DMA counters",
+          "repetitions": "3 × 30 s; 3 × 10 s; 1 reboot",
+          "result": "Pass; >2,560 DMA, 0 failures, 0 overruns, no heap drift",
+          "coverage_gap": "No live BMS, ESC/battery, BLE soak, OTA, or 30 min duration"
+        },
+        {
+          "variant": "P3/P5 host gates",
+          "commit": "Candidate lineages",
+          "workload": "Native tests, screenshot regressions, target builds",
+          "repetitions": "60 native; 34 screenshots",
+          "result": "60/60 and 34/34; builds pass",
+          "coverage_gap": "Cannot validate electrical timing or live MCP2515 traffic"
+        }
+      ]
+    }
+  },
+  "sources": [
+    {
+      "id": "benchmark_evidence_file",
+      "label": "Hardware optimization benchmark evidence — August 23, 2026",
+      "path": "docs/hardware-optimization-benchmark-evidence-2026-08-23.json"
+    },
+    {
+      "id": "usb_benchmark",
+      "label": "SP140 USB hardware benchmark session — August 23, 2026",
+      "query": {
+        "description": "Measurements transcribed from controller USB serial performance and display counters while flashing controlled firmware variants.",
+        "language": "serial telemetry",
+        "executed_at": "2026-08-23",
+        "tables_used": [
+          "[PERF] USB counter windows",
+          "[DISPLAY] DMA counters"
+        ],
+        "filters": [
+          "One SP140 ESP32-S3 controller",
+          "USB-powered bench",
+          "ESC, propulsion battery, and transmitting BMS absent",
+          "30-second full-screen invalidation trials",
+          "10-second dry-cruise trials with ESC transmission suppressed"
+        ],
+        "metric_definitions": [
+          "Relative improvement is latency or CPU reduction versus the matching baseline; for throughput it is increase versus baseline.",
+          "LVGL update time is elapsed wall time inside the instrumented LVGL update call during display stress.",
+          "Control execution time is elapsed wall time of one 20 ms throttle-task iteration.",
+          "Barometer CPU share is accumulated sensor-conversion time divided by one CPU core's available time in the reporting window.",
+          "Full-screen throughput is completed full-screen redraws per second during continuous invalidation.",
+          "Heap drift is a sustained decline in free heap across repeated steady-state windows."
+        ]
+      }
+    },
+    {
+      "id": "git_evidence",
+      "label": "eppg-controller tested commits and instrumentation",
+      "href": "https://github.com/openppg/eppg-controller",
+      "query": {
+        "description": "Implementation diffs, branch ancestry, build settings, test probes, and the MCP2515 backtrace fix inspected from local Git history.",
+        "language": "git",
+        "executed_at": "2026-08-23",
+        "tables_used": [
+          "22ec9e7",
+          "76d00b6",
+          "fe5a859",
+          "5f66cad",
+          "455e471",
+          "78e1840",
+          "7d8105f",
+          "23c74f5",
+          "58c02e9"
+        ],
+        "filters": [
+          "Production changes separated from temporary OPENPPG_PERF_INSTRUMENTATION code"
+        ],
+        "metric_definitions": [
+          "Static RAM and flash are PlatformIO linker-reported target build sizes.",
+          "P7 reclaimed bytes equal one half-screen RGB565 LVGL buffer: 160 × 128 × 2 ÷ 2 = 20,480 bytes.",
+          "P1 call reduction comes from removing one of two identical setESCThrottle calls in each cruise-mode iteration."
+        ]
+      }
+    },
+    {
+      "id": "host_tests",
+      "label": "PlatformIO native, screenshot, and ESP32-S3 target verification",
+      "query": {
+        "description": "Local host and target verification run before or alongside hardware flashing.",
+        "language": "PlatformIO",
+        "executed_at": "2026-08-23",
+        "tables_used": [
+          "native-test",
+          "native-screenshot",
+          "OpenPPG-CESP32S3-CAN-SP140"
+        ],
+        "filters": [
+          "P3 and P5 candidates"
+        ],
+        "metric_definitions": [
+          "Native pass count is passing tests in the native suite.",
+          "Screenshot pass count is accepted LVGL visual regression cases."
+        ]
+      }
+    }
+  ]
+}
+

@@ -46,6 +46,7 @@ enum class SensorID {
   ESC_SwHwIncompat_Error,     // Bit 13: sw_hw_incompatible
   ESC_BootloaderBad_Error,    // Bit 14: bootloader_unsupported
   ESC_TWAI_Init_Failure,      // TWAI/CAN bus initialization failure
+  ESC_CAN_Link_Lost,          // Established ESC CAN link went silent (severed cable, etc.)
 
   // BMS
   BMS_MOS_Temp,
@@ -62,6 +63,7 @@ enum class SensorID {
   BMS_Charge_MOS,
   BMS_Discharge_MOS,
   BMS_CAN_Init_Failure,
+  BMS_CAN_Link_Lost,          // Established BMS CAN link went silent
 
   // Altimeter
   Baro_Temp,
@@ -124,6 +126,11 @@ struct IMonitor {
   virtual SensorID getSensorID() const = 0;
   virtual SensorCategory getCategory() const = 0;  // Each monitor knows its category
   virtual void resetState() = 0;  // Reset internal alert state to OK
+  // Monitors that watch the connection itself must keep running while their
+  // device is disconnected — checkAllSensorsWithData() exempts them from the
+  // disconnect gating, the disconnect alert-clear sweep, and the reconnect
+  // state reset (they manage their own lifecycle across link transitions).
+  virtual bool runsWhenDisconnected() const { return false; }
 };
 
 // Sensor monitor for analog values
@@ -281,6 +288,87 @@ struct BooleanMonitor : public IMonitor {
     void resetState() override {
         lastState = !alertOnTrue;  // Reset to the non-alerting state
     }
+};
+
+// Watches a CAN telemetry link and alerts when a previously-established link
+// goes silent — the severed-cable case where power/ground survive but CAN
+// doesn't. Two-stage logic keeps bench setups quiet:
+//  - Establish: the link must be continuously up for establishMs before loss
+//    is alert-worthy. A USB-powered controller whose ESC/BMS is never powered
+//    never qualifies, so it never alerts.
+//  - Debounce: loss must persist for lossDebounceMs before alerting, so one
+//    stale telemetry frame doesn't chirp.
+// Severity tracks the armed state while active: critical (red border + vibe)
+// in flight, warning on the ground — and re-logs on arm/disarm transitions so
+// landing downgrades the alert instead of leaving the border flashing.
+// Clears only after the link has been back up continuously for establishMs,
+// so a chattering connector can't flicker the alert on and off.
+struct CanLinkMonitor : public IMonitor {
+  SensorID id;
+  SensorCategory category;
+  std::function<bool()> connected;  // current link state
+  std::function<bool()> armed;      // true selects critical severity
+  uint32_t establishMs;             // continuous uptime to qualify (and to clear)
+  uint32_t lossDebounceMs;          // sustained loss before alerting
+  ILogger* logger;
+
+  bool linkEstablished;
+  bool upTiming;
+  uint32_t upSinceMs;
+  bool lostTiming;
+  uint32_t lostSinceMs;
+  AlertLevel last;
+
+  CanLinkMonitor(SensorID i, SensorCategory cat,
+                 std::function<bool()> conn, std::function<bool()> isArmed,
+                 uint32_t estMs, uint32_t debounceMs, ILogger* l)
+      : id(i), category(cat), connected(conn), armed(isArmed),
+        establishMs(estMs), lossDebounceMs(debounceMs), logger(l),
+        linkEstablished(false), upTiming(false), upSinceMs(0),
+        lostTiming(false), lostSinceMs(0), last(AlertLevel::OK) {}
+
+  void check() override {
+    const uint32_t now = millis();
+    if (connected()) {
+      lostTiming = false;
+      if (!upTiming) {
+        upTiming = true;
+        upSinceMs = now;
+      }
+      if ((now - upSinceMs) >= establishMs) {
+        linkEstablished = true;
+        if (last != AlertLevel::OK) {
+          logger->log(id, AlertLevel::OK, false);
+          last = AlertLevel::OK;
+        }
+      }
+    } else {
+      upTiming = false;
+      if (!linkEstablished) return;  // Never had a solid link this boot — stay silent
+      if (!lostTiming) {
+        lostTiming = true;
+        lostSinceMs = now;
+      }
+      if ((now - lostSinceMs) >= lossDebounceMs) {
+        const AlertLevel lvl = armed() ? AlertLevel::CRIT_HIGH : AlertLevel::WARN_HIGH;
+        if (last != lvl) {
+          logger->log(id, lvl, true);
+          last = lvl;
+        }
+      }
+    }
+  }
+
+  SensorID getSensorID() const override { return id; }
+  SensorCategory getCategory() const override { return category; }
+  bool runsWhenDisconnected() const override { return true; }
+
+  void resetState() override {
+    linkEstablished = false;
+    upTiming = false;
+    lostTiming = false;
+    last = AlertLevel::OK;
+  }
 };
 
 // Global monitor registry

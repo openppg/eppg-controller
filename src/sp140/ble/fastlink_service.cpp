@@ -3,6 +3,7 @@
 #include <cmath>
 #include <limits>
 
+#include "sp140/alert_display.h"
 #include "sp140/ble.h"  // For deviceConnected
 #include "sp140/ble/ble_ids.h"
 #include "sp140/ble/ota_service.h"
@@ -140,6 +141,15 @@ BLE_FastLink_Telemetry buildFastLinkTelemetry(const TelemetryHub &hub,
   fastLink.bms_temp_sensors_C[4] = toI8(scaled(hub.bms.t3_temperature, 1.0f));
   fastLink.bms_temp_sensors_C[5] = toI8(scaled(hub.bms.t4_temperature, 1.0f));
 
+  // Firmware-generated monitor alerts complement the raw ESC/BMS error fields
+  // above. They include threshold faults, MOS faults, CAN init failures, and
+  // established-link loss alerts that do not originate in a device CAN frame.
+  const EscBmsAlertMasks alertMasks = getEscBmsAlertMasks();
+  fastLink.esc_warning_alerts = alertMasks.escWarning;
+  fastLink.esc_critical_alerts = alertMasks.escCritical;
+  fastLink.bms_warning_alerts = alertMasks.bmsWarning;
+  fastLink.bms_critical_alerts = alertMasks.bmsCritical;
+
   return fastLink;
 }
 
@@ -257,6 +267,10 @@ void initFastLinkBleService(NimBLEServer *pServer) {
 }
 
 void publishFastLinkTelemetry(const TelemetryHub &hub, DeviceState deviceState) {
-  updateFastLinkTelemetry(
-      buildFastLinkTelemetry(hub, deviceState));
+  updateFastLinkTelemetry(buildFastLinkTelemetryPacket(hub, deviceState));
+}
+
+BLE_FastLink_Telemetry buildFastLinkTelemetryPacket(
+    const TelemetryHub &hub, DeviceState deviceState) {
+  return buildFastLinkTelemetry(hub, deviceState);
 }

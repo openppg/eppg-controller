@@ -2,6 +2,7 @@
 #ifndef INC_SP140_STRUCTS_H_
 #define INC_SP140_STRUCTS_H_
 
+#include <cstddef>
 #include <cstdint>
 
 #pragma pack(push, 1)
@@ -138,16 +139,16 @@ struct MelodyRequest {
   uint16_t duration;
 };
 
-static constexpr uint8_t FASTLINK_PROTOCOL_VERSION = 3;
+static constexpr uint8_t FASTLINK_PROTOCOL_VERSION = 4;
 static constexpr int16_t kNoTempSensorDC = INT16_MIN;  // Sentinel: NaN / disconnected
 
 #pragma pack(push, 1)
 
-// Fast-Link Unified Telemetry Struct (V3 - Fixed-Point Compressed)
+// Fast-Link Unified Telemetry Struct (V4 - Fixed-Point Compressed)
 // Designed for High-Bandwidth BLE 5.0 (2M PHY, DLE)
 // All float fields converted to fixed-point integers matching native sensor resolution
 typedef struct {
-  uint8_t version;     // Protocol version (3)
+  uint8_t version;     // Protocol version (4)
   uint32_t packet_id;  // Sequential packet ID for drop detection
   uint32_t uptime_ms;  // Time since boot (ms)
 
@@ -208,11 +209,29 @@ typedef struct {
   // Extended BMS arrays (compressed)
   uint16_t bms_cell_voltages_mV[BMS_CELLS_NUM];  // 24 cell voltages (mV, native resolution)
   int8_t bms_temp_sensors_C[8];    // 8 temps (C, MOS/BAL/T1-T4/unused/unused)
+
+  // Controller-generated ESC/BMS alerts. Bits are category-relative SensorID
+  // ordinals (ESC_MOS_Temp/BMS_MOS_Temp = bit 0). Raw device-reported errors
+  // remain available above in esc_error, esc_selfcheck, and bms_fail_level.
+  uint64_t esc_warning_alerts;
+  uint64_t esc_critical_alerts;
+  uint64_t bms_warning_alerts;
+  uint64_t bms_critical_alerts;
 } BLE_FastLink_Telemetry;
 
 #pragma pack(pop)
 
-static_assert(sizeof(BLE_FastLink_Telemetry) == 198,
-              "BLE_FastLink_Telemetry V3 size mismatch - update if struct changes");
+static_assert(sizeof(BLE_FastLink_Telemetry) == 230,
+              "BLE_FastLink_Telemetry V4 size mismatch - update if struct changes");
+static_assert(offsetof(BLE_FastLink_Telemetry, esc_warning_alerts) == 198,
+              "Fast-Link v4 must preserve the complete v3 payload prefix");
+static_assert(offsetof(BLE_FastLink_Telemetry, esc_critical_alerts) == 206,
+              "Fast-Link v4 ESC critical alert offset changed");
+static_assert(offsetof(BLE_FastLink_Telemetry, bms_warning_alerts) == 214,
+              "Fast-Link v4 BMS warning alert offset changed");
+static_assert(offsetof(BLE_FastLink_Telemetry, bms_critical_alerts) == 222,
+              "Fast-Link v4 BMS critical alert offset changed");
+static_assert(sizeof(BLE_FastLink_Telemetry) <= 244,
+              "Fast-Link packet no longer fits a 247-byte BLE MTU");
 
 #endif  // INC_SP140_STRUCTS_H_

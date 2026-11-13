@@ -1,5 +1,6 @@
 #include "sp140/bms_monitors.h"
 #include "sp140/monitor_config.h"
+#include "sp140/device_state.h"
 #include <Arduino.h>
 
 // External references to core monitoring infrastructure
@@ -11,6 +12,9 @@ extern STR_BMS_TELEMETRY_140 monitoringBmsData;
 
 // External reference to BMS CAN initialization status
 extern bool bmsCanInitialized;
+
+// Armed state — selects link-loss alert severity (critical in flight)
+extern volatile DeviceState currentState;
 
 // A freshly-connected BMS reports zero-initialized fields (soc=0, all voltages
 // 0, discharge-MOS=false) until its first data frames are parsed — which looks
@@ -30,6 +34,21 @@ static inline bool bmsDataValid() {
 }
 
 void addBMSMonitors() {
+  // BMS CAN link-loss watchdog: same latch/debounce scheme as the ESC one —
+  // only fires if the BMS link was solidly up and then went silent, so bench
+  // setups without a battery stay quiet. Critical while armed, warning when
+  // disarmed. Note bmsState only reports CONNECTED after the coherent-snapshot
+  // gate in bmsTask, so "established" here also implies real data had arrived.
+  static CanLinkMonitor* bmsCanLinkLost = new CanLinkMonitor(
+    SensorID::BMS_CAN_Link_Lost,
+    SensorCategory::BMS,
+    []() { return monitoringBmsData.bmsState == TelemetryState::CONNECTED; },
+    []() { return currentState != DISARMED; },
+    CAN_LINK_ESTABLISH_MS,
+    CAN_LINK_LOSS_DEBOUNCE_MS,
+    &multiLogger);
+  monitors.push_back(bmsCanLinkLost);
+
   // BMS MOSFET Temperature (Warning: 50°C, Critical: 60°C) - with hysteresis
   static HysteresisSensorMonitor* bmsMosTemp = new HysteresisSensorMonitor(
     SensorID::BMS_MOS_Temp,

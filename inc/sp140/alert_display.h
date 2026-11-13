@@ -16,6 +16,17 @@ struct AlertCounts {
   uint8_t criticalCount;
 };
 
+// Active ESC/BMS monitor alerts exported to Fast-Link telemetry. Bits are
+// category-relative SensorID ordinals: ESC_MOS_Temp is ESC bit 0 and
+// BMS_MOS_Temp is BMS bit 0. Keeping warning and critical masks separate lets
+// the phone record both the fault identity and its current severity.
+struct EscBmsAlertMasks {
+  uint64_t escWarning;
+  uint64_t escCritical;
+  uint64_t bmsWarning;
+  uint64_t bmsCritical;
+};
+
 // Structure passed over the queue for each alert event
 struct AlertEvent {
   SensorID sensorId;
@@ -75,6 +86,9 @@ void sendAlertEvent(SensorID id, AlertLevel level);
 
 // Current active alert counts limited to ESC and BMS categories.
 AlertCounts getEscBmsAlertCounts();
+
+// Thread-safe snapshot of all active ESC/BMS monitor alerts for BLE telemetry.
+EscBmsAlertMasks getEscBmsAlertMasks();
 
 // ILogger sink that pushes events to the alert queue (for UI)
 struct AlertUILogger : ILogger {

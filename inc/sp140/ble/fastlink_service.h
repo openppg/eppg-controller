@@ -6,6 +6,8 @@
 #include <NimBLEServer.h>
 
 void initFastLinkBleService(NimBLEServer *pServer);
+BLE_FastLink_Telemetry buildFastLinkTelemetryPacket(
+    const TelemetryHub &hub, DeviceState deviceState);
 void publishFastLinkTelemetry(const TelemetryHub &hub, DeviceState deviceState);
 
 #endif  // INC_SP140_BLE_FASTLINK_SERVICE_H_

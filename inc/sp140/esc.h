@@ -30,6 +30,24 @@ void setESCThrottle(int throttlePWM);
 void readESCTelemetry();
 bool setupTWAI();
 
+// TWAI (CAN) bus health — updated by the ESC telemetry loop.
+// Error counters distinguish a wiring/bus fault (TX errors climbing into
+// error-passive/bus-off while transmitting into a severed or shorted pair)
+// from an ESC that is simply unpowered (bus idle, counters flat).
+struct TwaiBusHealth {
+  uint32_t bus_error_count;   // cumulative bus errors (driver status)
+  uint32_t tx_failed_count;   // frames that exhausted retries
+  uint32_t rx_missed_count;   // frames lost to full RX queue
+  uint32_t arb_lost_count;    // arbitration losses
+  uint32_t tx_error_counter;  // current TEC (>=128 = error-passive)
+  uint32_t rx_error_counter;  // current REC
+  uint32_t bus_off_count;     // times the controller entered bus-off
+  uint32_t recovery_count;    // successful automatic bus-off recoveries
+  uint8_t  state;             // last observed twai_state_t
+};
+TwaiBusHealth getTwaiBusHealth();
+const char* twaiBusStateName(uint8_t state);
+
 // Accessor to the single shared CanardAdapter (the controller's sole CAN owner).
 // Used by the ESC config relay so its requests go out on the same adapter the
 // throttle task drives — keeping all CAN traffic on one task, no mutex needed.

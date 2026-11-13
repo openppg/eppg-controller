@@ -46,6 +46,8 @@
 #include "../../inc/sp140/mode.h"
 #include "../../inc/sp140/throttle.h"
 #include "../../inc/sp140/vibration_pwm.h"
+#include "sp140/espnow_bridge.h"
+#include "sp140/wireless_settings.h"
 
 // FreeRTOS task utilities for stack watermark logging
 #include <freertos/FreeRTOS.h>
@@ -63,6 +65,9 @@ void webSerialTask(void* parameter);
 void toggleArm();
 void toggleCruise();
 void syncESCTelemetry();
+uint16_t readControlThrottleRaw();
+void processEspNowRemoteUpdates();
+void processEspNowReceiverState();
 
 // Global variable for shared SPI
 SPIClass *hardwareSPI = nullptr;
@@ -114,6 +119,12 @@ uint32_t led_color = STATUS_LED_RED;  // current LED color
 
 // Global variable for device state
 volatile DeviceState currentState = DISARMED;
+volatile DeviceState wirelessRemoteDesiredState = DISARMED;
+
+// A radio-loss disarm changes the control state synchronously on the 50 Hz
+// throttle task. Slow feedback/NVS side effects are deferred to bleNotifyTask.
+portMUX_TYPE wirelessDisarmMux = portMUX_INITIALIZER_UNLOCKED;
+bool wirelessDisarmSideEffectsPending = false;
 
 SemaphoreHandle_t stateMutex;
 SemaphoreHandle_t lvglMutex;
@@ -328,9 +339,126 @@ void ctrlSensorTask(void *pvParameters) {
     float bp = getBaroPressure();
     float vs = getCachedVerticalSpeed();
     float mt = getCachedCpuTemperature();
-    uint16_t pr = getLastThrottleRaw();
+    uint16_t pr = wirelessIsReceiver()
+        ? readControlThrottleRaw()
+        : getLastThrottleRaw();
     telemetryHubWriteController(alt, bt, bp, vs, mt, pr, now);
     vTaskDelayUntil(&lastWake, sensorTicks);
+  }
+}
+
+uint16_t readControlThrottleRaw() {
+  if (!wirelessIsReceiver()) return readThrottleRaw();
+
+  wireless::ControlPacket control = {};
+  uint32_t age_ms = UINT32_MAX;
+  if (!espNowGetLatestControl(&control, &age_ms) ||
+      age_ms > ESPNOW_CONTROL_TIMEOUT_MS) {
+    return 0;
+  }
+  return control.throttle_raw;
+}
+
+void forceImmediateWirelessDisarm(bool failsafe) {
+  bool changed = false;
+  if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
+    changed = currentState != DISARMED;
+    currentState = DISARMED;
+    xSemaphoreGive(stateMutex);
+  }
+
+  espNowSetFailsafeLatched(failsafe);
+  if (changed) {
+    portENTER_CRITICAL(&wirelessDisarmMux);
+    wirelessDisarmSideEffectsPending = true;
+    portEXIT_CRITICAL(&wirelessDisarmMux);
+  }
+}
+
+bool takeWirelessDisarmSideEffects() {
+  portENTER_CRITICAL(&wirelessDisarmMux);
+  const bool pending = wirelessDisarmSideEffectsPending;
+  wirelessDisarmSideEffectsPending = false;
+  portEXIT_CRITICAL(&wirelessDisarmMux);
+  return pending;
+}
+
+void processEspNowReceiverState() {
+  if (!wirelessIsReceiver() || !espNowBridgeActive()) return;
+
+  static uint32_t active_session = 0;
+  static DeviceState last_requested = DISARMED;
+  static bool ready_for_arm = false;
+
+  wireless::ControlPacket control = {};
+  uint32_t age_ms = UINT32_MAX;
+  if (!espNowGetLatestControl(&control, &age_ms) ||
+      age_ms > ESPNOW_CONTROL_TIMEOUT_MS) {
+    ready_for_arm = false;
+    return;
+  }
+
+  const DeviceState requested =
+      static_cast<DeviceState>(control.requested_state);
+  if (control.session_id != active_session) {
+    active_session = control.session_id;
+    last_requested = DISARMED;
+    ready_for_arm = false;
+  }
+
+  deviceData.performance_mode = control.performance_mode;
+  if (requested == DISARMED) {
+    // An explicit, fresh DISARMED command is the only action that clears the
+    // reboot/link-loss latch and permits a later rising arm request.
+    ready_for_arm = true;
+    last_requested = DISARMED;
+    espNowSetFailsafeLatched(false);
+    return;
+  }
+
+  if (!ready_for_arm || requested == last_requested) return;
+
+  if (requested == ARMED) {
+    if (currentState == DISARMED) {
+      toggleArm();
+    } else if (currentState == ARMED_CRUISING) {
+      toggleCruise();
+    }
+  } else if (requested == ARMED_CRUISING && currentState == ARMED) {
+    toggleCruise();
+  }
+  last_requested = requested;
+}
+
+void processEspNowRemoteUpdates() {
+  if (!wirelessIsRemote() || !espNowBridgeActive()) return;
+
+  static bool telemetry_marked_lost = false;
+  BLE_FastLink_Telemetry telemetry = {};
+  if (espNowTakeTelemetry(&telemetry)) {
+    espNowApplyMirroredTelemetry(telemetry);
+    telemetry_marked_lost = false;
+  }
+
+  wireless::AckPacket ack = {};
+  if (espNowTakeAck(&ack)) {
+    const DeviceState actual = static_cast<DeviceState>(ack.actual_state);
+    if ((ack.flags & wireless::ACK_FAILSAFE_LATCHED) != 0) {
+      wirelessRemoteDesiredState = DISARMED;
+    } else if (actual != wirelessRemoteDesiredState) {
+      // The receiver is authoritative (arm rejection, cruise override, etc.).
+      wirelessRemoteDesiredState = actual;
+    }
+    if (actual != currentState) changeDeviceState(actual);
+  }
+
+  if (espNowRemoteStatusAgeMs() > ESPNOW_REMOTE_STATUS_TIMEOUT_MS) {
+    wirelessRemoteDesiredState = DISARMED;
+    if (currentState != DISARMED) changeDeviceState(DISARMED);
+  }
+  if (!telemetry_marked_lost && espNowRemoteTelemetryAgeMs() > 500) {
+    espNowMarkMirroredTelemetryDisconnected();
+    telemetry_marked_lost = true;
   }
 }
 
@@ -345,9 +473,19 @@ void bleNotifyTask(void *pvParameters) {
   uint8_t lastNotifiedState = 0xFF;
 
   for (;;) {
+    processEspNowRemoteUpdates();
+    processEspNowReceiverState();
+    if (takeWirelessDisarmSideEffects()) disarmSystem();
+
     TelemetryHub hub = {};
     if (telemetryHubRead(&hub, pdMS_TO_TICKS(2))) {
       publishFastLinkTelemetry(hub, currentState);
+      if (wirelessIsReceiver()) {
+        // ACK is deliberately queued first so command/state confirmation wins
+        // if the single ESP-NOW transmit slot is busy.
+        espNowSendAck(currentState);
+        espNowSendTelemetry(buildFastLinkTelemetryPacket(hub, currentState));
+      }
     }
 
     // Push ESC config-relay status + result blob over notify (config-service
@@ -381,7 +519,7 @@ void refreshDisplay() {
   if (rawAltitude != __FLT_MIN__) {
     lastGoodAltitude = rawAltitude;
   }
-  const float currentRelativeAltitude =
+  float currentRelativeAltitude =
       (rawAltitude != __FLT_MIN__) ? rawAltitude : lastGoodAltitude;
 
   // Atomic snapshot of ESC/BMS telemetry from the hub. Reading the live globals
@@ -391,6 +529,9 @@ void refreshDisplay() {
   // this never blocks the UI task and never shows a half-updated struct.
   static TelemetryHub uiHub = {};
   telemetryHubRead(&uiHub, pdMS_TO_TICKS(5));
+  if (wirelessIsRemote()) {
+    currentRelativeAltitude = uiHub.altitude;
+  }
 
   if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(40)) == pdTRUE) {
     // Determine the altitude to show on the display
@@ -642,9 +783,11 @@ void setupTasks() {
   xTaskCreatePinnedToCore(throttleTask, "throttle", 4352, NULL, 3,
                           &throttleTaskHandle, 0);
   xTaskCreatePinnedToCore(uiTask, "UI", 5888, NULL, 2, &uiTaskHandle, 1);
-  xTaskCreatePinnedToCore(bmsTask, "BMS", 2304, NULL, 2, &bmsTaskHandle, 1);
-  xTaskCreate(ctrlSensorTask, "CtrlSensor", 4096, NULL, 2,
-              &ctrlSensorTaskHandle);
+  if (!wirelessIsRemote()) {
+    xTaskCreatePinnedToCore(bmsTask, "BMS", 2304, NULL, 2, &bmsTaskHandle, 1);
+    xTaskCreate(ctrlSensorTask, "CtrlSensor", 4096, NULL, 2,
+                &ctrlSensorTaskHandle);
+  }
   // 8 KB stack: bleNotifyTask calls notify() (deep NimBLE GATT/ATT/L2CAP/HCI
   // path) for telemetry and device-state; a smaller stack overflows on notify.
   xTaskCreatePinnedToCore(bleNotifyTask, "BLENotify", 8192, NULL, 1,
@@ -683,6 +826,7 @@ void setup() {
 
   // Load device config from EEPROM first - may contain pin mappings
   refreshDeviceData();
+  loadWirelessSettings();
   printBootMessage();
 
   // Log OTA partition info
@@ -741,14 +885,18 @@ void setup() {
   setupLvglDisplay(deviceData, board_config.tft_dc, board_config.tft_rst, hardwareSPI);
   initAlertDisplay();
 
-  // BMS CAN interface
-  #ifndef SCREEN_DEBUG
+  // The handheld remote mirrors both CAN buses over ESP-NOW and must never
+  // initialize or transmit on its unused local ESC/BMS interfaces.
+  if (!wirelessIsRemote()) {
+    // BMS CAN interface
+#ifndef SCREEN_DEBUG
     initBMSCAN(hardwareSPI);
-  #endif
+#endif
 
-  // ESC interface
-  initESC();
-  setESCThrottle(ESC_DISARMED_PWM);
+    // ESC interface
+    initESC();
+    setESCThrottle(ESC_DISARMED_PWM);
+  }
 
   // =========================================================================
   // PHASE 4: UI Startup (blocking - no tasks running yet)
@@ -806,6 +954,10 @@ void setup() {
 
   // BLE stack (services created, advertising NOT started yet)
   setupBLE();
+
+  if (wirelessSettings.role != WirelessRole::STANDALONE) {
+    beginEspNowBridge();
+  }
 
   // Monitoring system (disabled initially)
   initSimpleMonitor();
@@ -1018,6 +1170,23 @@ void handleArmFail() {
 }
 
 void toggleArm() {
+  if (wirelessIsRemote()) {
+    if (currentState == DISARMED &&
+        wirelessRemoteDesiredState == DISARMED) {
+      if (isOtaInProgress()) {
+        USBSerial.println("Remote arm blocked: OTA update in progress");
+      } else if (readThrottleRaw() < POT_ENGAGEMENT_LEVEL) {
+        wirelessRemoteDesiredState = ARMED;
+      } else {
+        handleArmFail();
+      }
+    } else {
+      // Disarm is always accepted locally and transmitted as a repeated level.
+      wirelessRemoteDesiredState = DISARMED;
+    }
+    return;
+  }
+
   if (currentState == DISARMED) {
     if (isOtaInProgress()) {
       USBSerial.println("Arm blocked: OTA update in progress");
@@ -1047,6 +1216,22 @@ void toggleArm() {
 }
 
 void toggleCruise() {
+  if (wirelessIsRemote()) {
+    if (currentState == ARMED) {
+      const uint16_t pot = readThrottleRaw();
+      const uint16_t max_activation = static_cast<uint16_t>(
+          POT_MAX_VALUE * CRUISE_ACTIVATION_MAX_POT_PERCENTAGE);
+      if (pot >= POT_ENGAGEMENT_LEVEL && pot <= max_activation) {
+        wirelessRemoteDesiredState = ARMED_CRUISING;
+      } else {
+        startCruiseIconFlash();
+      }
+    } else if (currentState == ARMED_CRUISING) {
+      wirelessRemoteDesiredState = ARMED;
+    }
+    return;
+  }
+
   switch (currentState) {
   case ARMED:
     if (isOtaInProgress()) {
@@ -1057,7 +1242,7 @@ void toggleCruise() {
     // Check if throttle is engaged (not at zero)
     if (throttleEngaged()) {
       // Check if throttle is too high to activate cruise
-      int currentPotVal = readThrottleRaw();
+      int currentPotVal = readControlThrottleRaw();
       const int activationThreshold =
           (int)(4095 * CRUISE_ACTIVATION_MAX_POT_PERCENTAGE);  // Calculate 70%
                                                               // threshold
@@ -1087,7 +1272,7 @@ void toggleCruise() {
 }
 
 bool throttleSafe(int threshold = POT_ENGAGEMENT_LEVEL) {
-  return readThrottleRaw() < threshold;
+  return readControlThrottleRaw() < threshold;
 }
 
 /**
@@ -1150,6 +1335,28 @@ void handleThrottle() {
   static int prevPwm = ESC_MIN_PWM;  // Previous PWM for ramping
   uint16_t newPWM;
 
+  if (wirelessIsRemote()) {
+    const uint16_t local_throttle = readThrottleRaw();
+    espNowSendControl(local_throttle, wirelessRemoteDesiredState,
+                      deviceData.performance_mode);
+    return;
+  }
+
+  uint16_t control_throttle = readControlThrottleRaw();
+  if (wirelessIsReceiver()) {
+    wireless::ControlPacket control = {};
+    uint32_t age_ms = UINT32_MAX;
+    const bool fresh = espNowGetLatestControl(&control, &age_ms) &&
+                       age_ms <= ESPNOW_CONTROL_TIMEOUT_MS;
+    if (!fresh) {
+      forceImmediateWirelessDisarm(true);
+      control_throttle = 0;
+    } else if (control.requested_state == DISARMED) {
+      forceImmediateWirelessDisarm(false);
+      control_throttle = control.throttle_raw;
+    }
+  }
+
   // Check for throttle updates from cruise activation
   if (xQueueReceive(throttleUpdateQueue, &newPWM, 0) == pdTRUE) {
     if (currentState == ARMED_CRUISING) {
@@ -1164,18 +1371,20 @@ void handleThrottle() {
   // Handle throttle based on current device state
   switch (currentState) {
   case DISARMED:
-    readThrottleRaw();  // Keep pot_raw updated for telemetry even when disarmed
     resetThrottleState(prevPwm);
     finalPwm = ESC_DISARMED_PWM;
     break;
 
   case ARMED_CRUISING:
-    handleCruisingThrottle(currentCruiseThrottlePWM, readThrottleRaw());
+    handleCruisingThrottle(currentCruiseThrottlePWM, control_throttle);
     finalPwm = currentCruiseThrottlePWM;  // Use cruise PWM
     break;
 
   case ARMED:
-    int smoothedPwm = getSmoothedThrottlePwm(deviceData.performance_mode);
+    int smoothedPwm = wirelessIsReceiver()
+        ? getSmoothedThrottlePwmFromRaw(control_throttle,
+                                        deviceData.performance_mode)
+        : getSmoothedThrottlePwm(deviceData.performance_mode);
     finalPwm =
         applyModeRampClamp(smoothedPwm, prevPwm, deviceData.performance_mode);
     break;
@@ -1261,7 +1470,7 @@ bool armSystem() {
 
 void afterCruiseStart() {
   cruisedPotVal =
-      readThrottleRaw();  // Store the raw pot value (0-4095) at activation
+      readControlThrottleRaw();  // Store raw control value at activation
   cruisedAtMillis = millis();
 
   // Calculate cruise PWM using the same mapping as normal throttle
@@ -1281,7 +1490,7 @@ void afterCruiseEnd() {
   // Instead of clearing the buffer which causes throttle to drop to 0,
   // pre-populate it with the current throttle position to ensure smooth
   // transition
-  int currentPotVal = readThrottleRaw();
+  int currentPotVal = readControlThrottleRaw();
   int currentPwmVal =
       potRawToModePwm(currentPotVal, deviceData.performance_mode);
 

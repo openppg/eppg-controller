@@ -1,8 +1,14 @@
 .pio
+.tools/
 .vscode/*
 eppg-controller.ino.cpp
 src/sp140/sp140.ino.cpp
 diagnostics-logs/
+qemu-instructions.log
 build-screenshot/
+build-simulator/
+build-host-*/
 test/test_screenshots/output/*.bmp
 test/test_screenshots/output/png/
+simulator/ui/node_modules/
+simulator/ui/dist/

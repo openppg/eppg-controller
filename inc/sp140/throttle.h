@@ -107,6 +107,9 @@ bool throttleEngaged();
  */
 int getSmoothedThrottlePwm(uint8_t performance_mode);
 
+/** Process a supplied raw value through the normal mode mapping/filter. */
+int getSmoothedThrottlePwmFromRaw(uint16_t raw, uint8_t performance_mode);
+
 /**
  * Reset throttle state for clean startup/disarm.
  * Clears smoothing buffer and resets previous PWM tracking.

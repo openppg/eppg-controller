@@ -13,6 +13,7 @@ Arduino based logic for OpenPPG SP140 Throttle Controller
 - Multiple flight modes (manual, cruise)
 - Real-time sensor monitoring with hysteresis-based alerting
 - Web-based configuration via [config.openppg.com](https://config.openppg.com) (no firmware flash needed)
+- Optional encrypted ESP-NOW controller-to-controller control and mirrored telemetry; see [WIRELESS_CONTROL.md](WIRELESS_CONTROL.md)
 
 #### This master branch is only for testing the latest firmware for the SP140 controllers running the ESP32-S3 processor.
 

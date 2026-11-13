@@ -10,6 +10,15 @@ set(STUBS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../screenshot_stubs)
 set(LVGL_DIR "" CACHE PATH "Path to LVGL source (e.g., /tmp/lvgl)")
 set(GTEST_DIR "" CACHE PATH "Path to GoogleTest source (e.g., /tmp/googletest)")
 
+# Prefer PlatformIO's already-downloaded dependencies. This keeps the local
+# screenshot emulator usable offline after its CMake build directory is reset.
+if(NOT LVGL_DIR AND EXISTS ${PROJECT_ROOT}/.pio/libdeps/native-screenshot/lvgl/CMakeLists.txt)
+  set(LVGL_DIR ${PROJECT_ROOT}/.pio/libdeps/native-screenshot/lvgl)
+endif()
+if(NOT GTEST_DIR AND EXISTS ${PROJECT_ROOT}/.pio/libdeps/native-screenshot/googletest/googletest/src/gtest-all.cc)
+  set(GTEST_DIR ${PROJECT_ROOT}/.pio/libdeps/native-screenshot/googletest)
+endif()
+
 if(NOT LVGL_DIR OR NOT EXISTS ${LVGL_DIR}/CMakeLists.txt)
   # Try FetchContent as fallback
   include(FetchContent)
@@ -26,7 +35,18 @@ if(NOT LVGL_DIR OR NOT EXISTS ${LVGL_DIR}/CMakeLists.txt)
   endif()
 endif()
 
-if(NOT GTEST_DIR OR NOT EXISTS ${GTEST_DIR}/CMakeLists.txt)
+if(GTEST_DIR AND EXISTS ${GTEST_DIR}/googletest/src/gtest-all.cc)
+  # PlatformIO packages omit upstream's CMake metadata, so compile the two
+  # canonical amalgamated translation units directly.
+  add_library(gtest STATIC ${GTEST_DIR}/googletest/src/gtest-all.cc)
+  target_include_directories(gtest
+    PUBLIC ${GTEST_DIR}/googletest/include
+    PRIVATE ${GTEST_DIR}/googletest
+  )
+  add_library(gtest_main STATIC ${GTEST_DIR}/googletest/src/gtest_main.cc)
+  target_include_directories(gtest_main PUBLIC ${GTEST_DIR}/googletest/include)
+  target_link_libraries(gtest_main PUBLIC gtest)
+elseif(NOT GTEST_DIR OR NOT EXISTS ${GTEST_DIR}/CMakeLists.txt)
   include(FetchContent)
   FetchContent_Declare(
     googletest
@@ -82,6 +102,12 @@ add_executable(screenshot_tests
   ${TEST_SOURCES}
 )
 
+add_executable(framebuffer_renderer
+  ${UI_SOURCES}
+  ${EMULATOR_SOURCES}
+  ${CMAKE_CURRENT_SOURCE_DIR}/framebuffer_renderer.cpp
+)
+
 target_include_directories(screenshot_tests PRIVATE
   ${STUBS_DIR}              # Stubs FIRST (Arduino.h, SPI.h, etc.)
   ${PROJECT_ROOT}/inc       # Project headers (sp140/structs.h, etc.)
@@ -90,7 +116,22 @@ target_include_directories(screenshot_tests PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}  # emulator_display.h
 )
 
+target_include_directories(framebuffer_renderer PRIVATE
+  ${STUBS_DIR}
+  ${PROJECT_ROOT}/inc
+  ${PROJECT_ROOT}/inc/sp140/lvgl
+  ${LVGL_DIR}
+  ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
 target_compile_definitions(screenshot_tests PRIVATE
+  LV_CONF_INCLUDE_SIMPLE
+  LV_LVGL_H_INCLUDE_SIMPLE
+  ARDUINO=1
+  NATIVE_SCREENSHOT_TEST=1
+)
+
+target_compile_definitions(framebuffer_renderer PRIVATE
   LV_CONF_INCLUDE_SIMPLE
   LV_LVGL_H_INCLUDE_SIMPLE
   ARDUINO=1
@@ -102,6 +143,8 @@ target_link_libraries(screenshot_tests PRIVATE
   gtest
   gtest_main
 )
+
+target_link_libraries(framebuffer_renderer PRIVATE lvgl)
 
 # Suppress warnings in UI sources (they may use Arduino idioms)
 set_source_files_properties(${UI_SOURCES} PROPERTIES COMPILE_FLAGS "-w")

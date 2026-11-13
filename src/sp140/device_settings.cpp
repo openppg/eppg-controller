@@ -12,6 +12,7 @@
 #include "freertos/semphr.h"
 #include "../../inc/sp140/throttle.h"
 #include "../../inc/sp140/diagnostics.h"
+#include "sp140/wireless_settings.h"
 
 /**
  * WebSerial Protocol Documentation
@@ -319,6 +320,18 @@ void parse_serial_command_line(const char* json_line) {
     writeDeviceData();
     send_device_data();
   }
+
+  if (!doc["wireless"].isNull()) {
+    const JsonObjectConst wireless = doc["wireless"].as<JsonObjectConst>();
+    if (!wireless.isNull() && applyWirelessSettingsJson(wireless)) {
+      USBSerial.println(
+          "Wireless settings saved; reboot required to apply role/radio changes");
+      send_device_data();
+    } else {
+      USBSerial.println(
+          "Invalid wireless settings (role, peer, 32-hex key, channel 1..13 required)");
+    }
+  }
 }
 
 void poll_serial_commands() {
@@ -380,6 +393,15 @@ void send_device_data() {
   doc["prf"] = deviceData.performance_mode;
   doc["sea_p"] = deviceData.sea_pressure;
   doc["thm"] = deviceData.theme;
+  char peer_mac[18] = {};
+  char local_mac[18] = {};
+  formatWirelessPeerMac(peer_mac, sizeof(peer_mac));
+  formatWirelessLocalMac(local_mac, sizeof(local_mac));
+  doc["wireless_role"] = wirelessRoleName(wirelessSettings.role);
+  doc["wireless_mac"] = local_mac;
+  doc["wireless_peer"] = peer_mac;
+  doc["wireless_channel"] = wirelessSettings.channel;
+  doc["wireless_key_set"] = wirelessSettings.secret_configured;
 
   // Send the JSON document over the USBSerial connection
   serializeJson(doc, USBSerial);

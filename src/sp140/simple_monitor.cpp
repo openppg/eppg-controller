@@ -109,6 +109,7 @@ const char* sensorIDToString(SensorID id) {
     case SensorID::ESC_SwHwIncompat_Error: return "ESC_SwHwIncompat_Error";
     case SensorID::ESC_BootloaderBad_Error: return "ESC_BootloaderBad_Error";
     case SensorID::ESC_TWAI_Init_Failure: return "ESC_TWAI_Init_Failure";
+    case SensorID::ESC_CAN_Link_Lost: return "ESC_CAN_Link_Lost";
 
     // BMS
     case SensorID::BMS_MOS_Temp: return "BMS_MOS_Temp";
@@ -125,6 +126,7 @@ const char* sensorIDToString(SensorID id) {
     case SensorID::BMS_Charge_MOS: return "BMS_Charge_MOS";
     case SensorID::BMS_Discharge_MOS: return "BMS_Discharge_MOS";
     case SensorID::BMS_CAN_Init_Failure: return "BMS_CAN_Init_Failure";
+    case SensorID::BMS_CAN_Link_Lost: return "BMS_CAN_Link_Lost";
 
     // Altimeter
     case SensorID::Baro_Temp: return "Baro_Temp";
@@ -169,6 +171,7 @@ const char* sensorIDToAbbreviation(SensorID id) {
     case SensorID::ESC_SwHwIncompat_Error: return "MC-SE-13";   // Bit 13
     case SensorID::ESC_BootloaderBad_Error: return "MC-SE-14";  // Bit 14
     case SensorID::ESC_TWAI_Init_Failure: return "MC-CAN";      // CAN/TWAI init failure
+    case SensorID::ESC_CAN_Link_Lost: return "MC-LINK";         // ESC CAN link lost
 
     // BMS (Battery Management System)
     case SensorID::BMS_MOS_Temp:            return "BC-F";
@@ -185,6 +188,7 @@ const char* sensorIDToAbbreviation(SensorID id) {
     case SensorID::BMS_Charge_MOS:          return "BC-CHG";
     case SensorID::BMS_Discharge_MOS:       return "BC-DSG";
     case SensorID::BMS_CAN_Init_Failure:   return "BC-CAN";
+    case SensorID::BMS_CAN_Link_Lost:       return "BC-LINK";
 
     // Altimeter
     case SensorID::Baro_Temp: return "BARO-T";
@@ -335,11 +339,16 @@ void checkAllSensorsWithData(const STR_ESC_TELEMETRY_140& escData,
   static bool prevEscConnected = false;
   static bool prevBmsConnected = false;
 
-  // If a device disconnected, clear all its alerts
+  // If a device disconnected, clear all its alerts.
+  // Link-loss monitors (runsWhenDisconnected) are exempt from this sweep and
+  // from the reconnect resets below: the disconnect edge is exactly what they
+  // alert on, so force-clearing or resetting them here would silence the one
+  // alert that must survive a disconnect. They manage their own lifecycle.
   if (prevEscConnected && !escConnected) {
     // ESC just disconnected - send OK alerts for all ESC sensors to clear them
     for (auto* monitor : monitors) {
-      if (monitor && monitor->getCategory() == SensorCategory::ESC) {
+      if (monitor && monitor->getCategory() == SensorCategory::ESC &&
+          !monitor->runsWhenDisconnected()) {
         // Force clear this alert by sending OK - this will clear it from the UI
         sendAlertEvent(monitor->getSensorID(), AlertLevel::OK);
       }
@@ -349,7 +358,8 @@ void checkAllSensorsWithData(const STR_ESC_TELEMETRY_140& escData,
   if (prevBmsConnected && !bmsConnected) {
     // BMS just disconnected - send OK alerts for all BMS sensors to clear them
     for (auto* monitor : monitors) {
-      if (monitor && monitor->getCategory() == SensorCategory::BMS) {
+      if (monitor && monitor->getCategory() == SensorCategory::BMS &&
+          !monitor->runsWhenDisconnected()) {
         // Force clear this alert by sending OK - this will clear it from the UI
         sendAlertEvent(monitor->getSensorID(), AlertLevel::OK);
       }
@@ -360,7 +370,8 @@ void checkAllSensorsWithData(const STR_ESC_TELEMETRY_140& escData,
   if (!prevEscConnected && escConnected) {
     USBSerial.println("[MONITOR] ESC reconnected - resetting ESC monitor states");
     for (auto* monitor : monitors) {
-      if (monitor && monitor->getCategory() == SensorCategory::ESC) {
+      if (monitor && monitor->getCategory() == SensorCategory::ESC &&
+          !monitor->runsWhenDisconnected()) {
         monitor->resetState();
       }
     }
@@ -387,7 +398,8 @@ void checkAllSensorsWithData(const STR_ESC_TELEMETRY_140& escData,
       bmsGraceStarted = true;
     }
     for (auto* monitor : monitors) {
-      if (monitor && monitor->getCategory() == SensorCategory::BMS) {
+      if (monitor && monitor->getCategory() == SensorCategory::BMS &&
+          !monitor->runsWhenDisconnected()) {
         monitor->resetState();
       }
     }
@@ -425,6 +437,14 @@ void checkAllSensorsWithData(const STR_ESC_TELEMETRY_140& escData,
         default:
           shouldRun = true;  // Always check altimeter and internal sensors
           break;
+      }
+
+      // Link-loss monitors must run precisely when their device is
+      // disconnected — that's the condition they exist to report. They read
+      // only the connection state (never sensor payloads), so running them
+      // through the BMS boot grace period is also safe.
+      if (monitor->runsWhenDisconnected()) {
+        shouldRun = true;
       }
 
       if (shouldRun) {

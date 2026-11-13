@@ -126,9 +126,11 @@ int throttleFilterAverage() {
  * @return Smoothed PWM value from throttle input
  */
 int getSmoothedThrottlePwm(uint8_t performance_mode) {
-  // Read and convert raw pot to mode-specific PWM range
-  int potValRaw = readThrottleRaw();
-  int targetPwm = potRawToModePwm(potValRaw, performance_mode);
+  return getSmoothedThrottlePwmFromRaw(readThrottleRaw(), performance_mode);
+}
+
+int getSmoothedThrottlePwmFromRaw(uint16_t raw, uint8_t performance_mode) {
+  int targetPwm = potRawToModePwm(raw, performance_mode);
 
   // Smooth in PWM domain using ring buffer
   throttleFilterPush(targetPwm);
