@@ -17,9 +17,15 @@
 HardwareConfig s3_config = {};
 
 // --- BLE globals ---
+#ifdef EPPG_NATIVE_IDF
+platform::BleCharacteristic* pThrottleCharacteristic = nullptr;
+platform::BleCharacteristic* pDeviceStateCharacteristic = nullptr;
+platform::BleServer* pServer = nullptr;
+#else
 NimBLECharacteristic* pThrottleCharacteristic = nullptr;
 NimBLECharacteristic* pDeviceStateCharacteristic = nullptr;
 NimBLEServer* pServer = nullptr;
+#endif
 volatile uint16_t connectedHandle = 0;
 volatile bool deviceConnected = false;
 
@@ -136,6 +142,10 @@ bool isBLEPairingModeActive() { return false; }
 
 // --- BMS stubs ---
 BMS_CAN* bms_can = nullptr;
+#ifdef EPPG_NATIVE_IDF
+bool initBMSCAN() { return false; }
+#else
 bool initBMSCAN(SPIClass*) { return false; }
+#endif
 void updateBMSData() {}
 void printBMSData() {}

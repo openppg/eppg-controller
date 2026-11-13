@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <cmath>
@@ -14,6 +15,28 @@
 
 // Helper: path to reference screenshots (relative to project root)
 static const char* REFERENCE_DIR = "test/test_screenshots/reference";
+
+
+// Goldens are reviewable inputs. An absent golden must fail CI rather than
+// quietly blessing the current renderer's output as its own expected result.
+static bool create_reference_if_requested(const char* output, const char* reference) {
+  const char* update = std::getenv("EPPG_UPDATE_REFERENCES");
+  if (update == nullptr || std::strcmp(update, "1") != 0) return false;
+  FILE* src = fopen(output, "rb");
+  if (src == nullptr) return false;
+  FILE* dst = fopen(reference, "wb");
+  if (dst == nullptr) { fclose(src); return false; }
+  char buffer[4096];
+  size_t length;
+  bool ok = true;
+  while ((length = fread(buffer, 1, sizeof(buffer), src)) > 0) {
+    if (fwrite(buffer, 1, length, dst) != length) { ok = false; break; }
+  }
+  ok = ok && !ferror(src);
+  fclose(src);
+  if (fclose(dst) != 0) ok = false;
+  return ok;
+}
 static const char* OUTPUT_DIR = "test/test_screenshots/output";
 
 static bool file_exists(const char* path) {
@@ -154,19 +177,10 @@ class ScreenshotTest : public ::testing::Test {
       }
     } else {
       // No reference yet - copy output as new reference
-      printf("  [INFO] No reference for '%s' - generating initial reference\n", name);
-      FILE* src = fopen(out_path, "rb");
-      FILE* dst = fopen(ref_path, "wb");
-      if (src && dst) {
-        char buf[4096];
-        size_t n;
-        while ((n = fread(buf, 1, sizeof(buf), src)) > 0) {
-          fwrite(buf, 1, n, dst);
-        }
-      }
-      if (src) fclose(src);
-      if (dst) fclose(dst);
-    }
+      ASSERT_TRUE(create_reference_if_requested(out_path, ref_path))
+      << "Missing screenshot reference: " << ref_path
+      << ". Generate it explicitly with EPPG_UPDATE_REFERENCES=1 and review the image.";
+  }
   }
 };
 
@@ -500,12 +514,9 @@ static void save_and_compare(const char* name) {
       EXPECT_EQ(0, diff) << "Screenshot regression: " << name << " has " << diff << " differing pixels";
     }
   } else {
-    printf("  [INFO] No reference for '%s' - generating initial reference\n", name);
-    FILE* src = fopen(out_path, "rb");
-    FILE* dst = fopen(ref_path, "wb");
-    if (src && dst) { char buf[4096]; size_t n; while ((n = fread(buf, 1, sizeof(buf), src)) > 0) fwrite(buf, 1, n, dst); }
-    if (src) fclose(src);
-    if (dst) fclose(dst);
+    ASSERT_TRUE(create_reference_if_requested(out_path, ref_path))
+      << "Missing screenshot reference: " << ref_path
+      << ". Generate it explicitly with EPPG_UPDATE_REFERENCES=1 and review the image.";
   }
 }
 
@@ -688,12 +699,9 @@ static void render_splash(const char* name, bool darkMode) {
       EXPECT_EQ(0, diff) << "Screenshot regression: " << name << " has " << diff << " differing pixels";
     }
   } else {
-    printf("  [INFO] No reference for '%s' - generating initial reference\n", name);
-    FILE* src = fopen(out_path, "rb");
-    FILE* dst = fopen(ref_path, "wb");
-    if (src && dst) { char buf[4096]; size_t n; while ((n = fread(buf, 1, sizeof(buf), src)) > 0) fwrite(buf, 1, n, dst); }
-    if (src) fclose(src);
-    if (dst) fclose(dst);
+    ASSERT_TRUE(create_reference_if_requested(out_path, ref_path))
+      << "Missing screenshot reference: " << ref_path
+      << ". Generate it explicitly with EPPG_UPDATE_REFERENCES=1 and review the image.";
   }
 
   lv_obj_delete(splash_screen);

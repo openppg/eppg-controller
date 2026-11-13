@@ -127,6 +127,7 @@ mkdir -p test/test_screenshots/reference
 
 if [ "$UPDATE_REFS" = 1 ]; then
   echo "Updating reference screenshots..."
+  export EPPG_UPDATE_REFERENCES=1
   rm -rf test/test_screenshots/reference/*.bmp
 fi
 

@@ -19,7 +19,11 @@ static uint8_t lvgl_buf1[SCREEN_WIDTH * SCREEN_HEIGHT * 2] __attribute__((aligne
 // Define globals declared in lvgl_core.h
 lv_display_t* main_display = nullptr;
 int8_t displayCS = -1;
+#ifdef EPPG_NATIVE_IDF
+platform::St7735* tft_driver = nullptr;
+#else
 Adafruit_ST7735* tft_driver = nullptr;
+#endif
 SemaphoreHandle_t spiBusMutex = nullptr;
 
 // Define lvglMutex from lvgl_updates.h
