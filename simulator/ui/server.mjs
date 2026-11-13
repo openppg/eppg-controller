@@ -134,6 +134,8 @@ async function simulate(req, res) {
       String(snapshot.bms.temp_c),
       String(snapshot.barometer.altitude_m),
       String(snapshot.barometer.vertical_speed_mps),
+      String(snapshot.bms.lowest_cell_v || 0),
+      String(snapshot.bms.highest_cell_v || 0),
     ], { cwd: projectRoot, maxBuffer: 2_000_000 })
     }
     snapshot.backend ||= backend === 'rust' ? 'rust-production-core' : 'native-reference'

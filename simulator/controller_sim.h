@@ -37,6 +37,8 @@ struct Snapshot {
   float esc_amps = 0.0f;
   float esc_mos_temp_c = 25.0f;
   float bms_voltage_v = 97.2f;
+  float bms_lowest_cell_v = 0.0f;
+  float bms_highest_cell_v = 0.0f;
   float bms_current_a = 0.0f;
   float bms_soc_pct = 90.0f;
   float bms_temp_c = 25.0f;

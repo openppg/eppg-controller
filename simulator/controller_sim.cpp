@@ -341,6 +341,8 @@ void ControllerSim::task_bms() {
   snapshot_.bms_connected = bms.connected;
   if (bms.connected) {
     snapshot_.bms_voltage_v = bms.voltage_v;
+    snapshot_.bms_lowest_cell_v = bms.lowest_cell_v;
+    snapshot_.bms_highest_cell_v = bms.highest_cell_v;
     snapshot_.bms_current_a = bms.current_a;
     snapshot_.bms_soc_pct = bms.soc_pct;
     snapshot_.bms_temp_c = bms.temperature_c;
@@ -480,6 +482,8 @@ std::string ControllerSim::snapshot_json() const {
       << ",\"mos_temp_c\":" << snapshot_.esc_mos_temp_c << "}"
       << ",\"bms\":{\"connected\":" << (snapshot_.bms_connected ? "true" : "false")
       << ",\"voltage_v\":" << snapshot_.bms_voltage_v
+      << ",\"lowest_cell_v\":" << snapshot_.bms_lowest_cell_v
+      << ",\"highest_cell_v\":" << snapshot_.bms_highest_cell_v
       << ",\"current_a\":" << snapshot_.bms_current_a
       << ",\"soc_pct\":" << snapshot_.bms_soc_pct
       << ",\"temp_c\":" << snapshot_.bms_temp_c << "}"

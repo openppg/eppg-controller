@@ -47,6 +47,7 @@ test('hardware lab executes production controller and renders a live framebuffer
   const result = await response.json()
   assert.equal(result.state, 'ARMED')
   assert.equal(result.esc.connected, true)
+  if (backend === 'native') assert.ok(result.bms.lowest_cell_v > 3)
   assert.ok(result.esc.rpm > 1000)
   assert.ok(result.io.can_rx_frames > 0)
   assert.equal(result.framebuffer.width, 160)

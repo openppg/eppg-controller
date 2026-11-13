@@ -23,12 +23,12 @@ float number(const char* value) {
 }  // namespace
 
 int main(int argc, char** argv) {
-  if (argc != 17) {
+  if (argc != 17 && argc != 19) {
     std::fprintf(stderr,
                  "usage: framebuffer_renderer output.bmp state mode time_ms "
                  "esc_connected esc_volts esc_rpm esc_amps esc_temp "
                  "bms_connected bms_volts bms_current bms_soc bms_temp "
-                 "altitude vertical_speed\n");
+                 "altitude vertical_speed [bms_lowest_cell_v bms_highest_cell_v]\n");
     return 2;
   }
 
@@ -61,6 +61,10 @@ int main(int argc, char** argv) {
   bms.bmsState = connected(argv[10]) ? TelemetryState::CONNECTED
                                     : TelemetryState::NOT_CONNECTED;
   bms.battery_voltage = number(argv[11]);
+  if (argc == 19) {
+    bms.lowest_cell_voltage = number(argv[17]);
+    bms.highest_cell_voltage = number(argv[18]);
+  }
   bms.battery_current = number(argv[12]);
   bms.soc = number(argv[13]);
   bms.highest_temperature = number(argv[14]);
