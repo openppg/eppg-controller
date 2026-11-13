@@ -174,10 +174,23 @@ fn main() {
             shared.lock().unwrap().bms_initialized = can.is_some();
             let mut bms = AntBms::default();
             let mut last = unsafe { sys::xTaskGetTickCount() };
+            // The MCP2515 holds only two received frames and has no interrupt line here, so
+            // it is drained every tick: at 250 kbit/s a third back-to-back frame finishes
+            // ~1.1 ms after the first. An empty poll is one 4-byte SPI transfer. Decoded
+            // data is still published to the rest of the system at 10 Hz. The emulator
+            // polls slower to keep its CPU budget; it models the same two-frame buffer.
+            let poll_ms = if can.is_none() {
+                100
+            } else if cfg!(feature = "qemu") {
+                10
+            } else {
+                1
+            };
+            let mut published = 0u32.wrapping_sub(100);
             loop {
                 let now = platform::now();
                 if let Some(ref mut can) = can {
-                    for _ in 0..128 {
+                    for _ in 0..8 {
                         if let Some((id, data, n)) = can.receive() {
                             bms.packet(id, &data[..n], now);
                         } else {
@@ -185,14 +198,17 @@ fn main() {
                         }
                     }
                 }
-                let data = bms.snapshot(now);
-                let temps = bms.temperatures();
-                let mut s = shared.lock().unwrap();
-                copy_bms(&mut s.telemetry, &data);
-                s.bms_temperatures = temps;
-                s.last_bms = now;
-                drop(s);
-                periodic(&mut last, 100);
+                if now.wrapping_sub(published) >= 100 {
+                    published = now;
+                    let data = bms.snapshot(now);
+                    let temps = bms.temperatures();
+                    let mut s = shared.lock().unwrap();
+                    copy_bms(&mut s.telemetry, &data);
+                    s.bms_temperatures = temps;
+                    s.last_bms = now;
+                    drop(s);
+                }
+                periodic(&mut last, poll_ms);
             }
         });
     }

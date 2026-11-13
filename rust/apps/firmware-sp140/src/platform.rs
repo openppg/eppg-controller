@@ -80,6 +80,11 @@ impl Spi {
         }
     }
 }
+/// The SPI bus uses DMA, which receives directly only into buffers that are word aligned
+/// and a multiple of four bytes long. Anything else makes the driver allocate a bounce
+/// buffer for every transfer, so the BMS poll uses these.
+#[repr(align(4))]
+struct Dma<const N: usize>([u8; N]);
 pub struct Mcp2515 {
     spi: Spi,
 }
@@ -98,7 +103,9 @@ impl Mcp2515 {
         m.write(0x2a, &[0x41]);
         m.write(0x29, &[0xf1]);
         m.write(0x28, &[0x85]);
-        m.write(0x60, &[0x60]);
+        // Accept every frame in both buffers. BUKT (0x04) lets a frame that arrives while
+        // RXB0 is still unread roll over into RXB1 instead of being dropped.
+        m.write(0x60, &[0x64]);
         m.write(0x70, &[0x60]);
         m.write(0x2b, &[3]);
         m.write(0x2c, &[0]);
@@ -106,9 +113,11 @@ impl Mcp2515 {
         Some(m)
     }
     fn read(&mut self, reg: u8) -> u8 {
-        let mut rx = [0; 3];
-        self.spi.transfer(&[3, reg, 0], &mut rx);
-        rx[2]
+        // One spare byte keeps the transfer DMA-sized; it reads the next register, which
+        // has no side effects for the registers polled here.
+        let mut rx = Dma([0; 4]);
+        self.spi.transfer(&[3, reg, 0, 0], &mut rx.0);
+        rx.0[2]
     }
     fn write(&mut self, reg: u8, data: &[u8]) {
         let mut tx = Vec::with_capacity(2 + data.len());
@@ -118,19 +127,21 @@ impl Mcp2515 {
     }
     pub fn receive(&mut self) -> Option<(u32, [u8; 8], usize)> {
         let status = self.read(0x2c);
-        let (cmd, mask) = if status & 1 != 0 {
-            (0x90, 1)
+        let cmd = if status & 1 != 0 {
+            0x90
         } else if status & 2 != 0 {
-            (0x94, 2)
+            0x94
         } else {
             return None;
         };
-        let mut rx = [0; 14];
-        let mut tx = [0; 14];
+        // READ RX BUFFER clears that buffer's RXnIF flag itself when CS rises. Clearing it
+        // again with a separate BIT MODIFY would discard a frame that landed in between.
+        // The two bytes past the frame read CANSTAT/CANCTRL and are ignored.
+        let mut rx = Dma([0; 16]);
+        let mut tx = [0; 16];
         tx[0] = cmd;
-        self.spi.transfer(&tx, &mut rx);
-        self.spi.write(&[5, 0x2c, mask, 0]);
-        let h = &rx[1..];
+        self.spi.transfer(&tx, &mut rx.0);
+        let h = &rx.0[1..];
         let id = if h[1] & 8 != 0 {
             ((h[0] as u32) << 21)
                 | ((h[1] as u32 & 0xe0) << 13)
