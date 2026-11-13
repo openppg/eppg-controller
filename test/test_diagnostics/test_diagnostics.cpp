@@ -191,3 +191,42 @@ int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
+
+namespace {
+size_t diag_active_allocations = 0;
+size_t diag_peak_allocations = 0;
+void* diagCountedMalloc(size_t size) {
+  void* p = malloc(size);
+  if (p) diag_peak_allocations = std::max(diag_peak_allocations, ++diag_active_allocations);
+  return p;
+}
+void diagCountedFree(void* p) {
+  if (p) --diag_active_allocations;
+  free(p);
+}
+}
+TEST(Diagnostics, StreamedFullHistoryUsesOneRecordOfJsonMemory) {
+  BootDiagPacket packet = {};
+  packet.current.boot_counter = 42;
+  packet.current.coredump = makeCoreDump();
+  for (unsigned i = 0; i < DIAG_HISTORY_CAPACITY; ++i) diagPushHistory(&packet, packet.current);
+  diagnosticsSetPacketForTest(packet);
+  std::string output;
+  platform::Console stream;
+  stream.capture = &output;
+  diag_active_allocations = diag_peak_allocations = 0;
+  cJSON_Hooks hooks{diagCountedMalloc, diagCountedFree};
+  cJSON_InitHooks(&hooks);
+  diagnosticsSendJson(stream);
+  cJSON_InitHooks(nullptr);
+  EXPECT_EQ(diag_active_allocations, 0u);
+  EXPECT_LT(diag_peak_allocations, 128u);
+  platform::json::Document parsed_doc(cJSON_Parse(output.c_str()));
+  ASSERT_NE(parsed_doc, nullptr) << output;
+  BootDiagPacket parsed = {};
+  ASSERT_TRUE(diagPacketFromJson(parsed_doc.get(), &parsed));
+  ASSERT_EQ(parsed.history_count, DIAG_HISTORY_CAPACITY);
+  EXPECT_TRUE(recordsEqual(parsed.current, packet.current));
+  for (unsigned i = 0; i < DIAG_HISTORY_CAPACITY; ++i)
+    EXPECT_TRUE(recordsEqual(parsed.history[i], packet.history[i]));
+}

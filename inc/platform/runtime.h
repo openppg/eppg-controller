@@ -11,6 +11,7 @@
 #include "esp_rom_sys.h"
 #include "esp_heap_caps.h"
 #include <type_traits>
+#include <mutex>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -35,9 +36,15 @@ inline T clamp(T value, A low, B high) {
 // Application console; actual IO uses the ESP32-S3 USB Serial/JTAG driver.
 // No Arduino Stream/Print or Arduino USB device runtime is linked.
 class Console {
+  std::recursive_mutex output_mutex_;
  public:
+  // A response owns the output until complete. Background logs remain best effort
+  // so a USB diagnostic request cannot block the throttle task on console output.
+  auto transaction() { return std::unique_lock<std::recursive_mutex>(output_mutex_); }
   void init() { eppg_usb_init(); }
   size_t write(const uint8_t* data, size_t length) {
+    std::unique_lock<std::recursive_mutex> lock(output_mutex_, std::try_to_lock);
+    if (!lock.owns_lock()) return 0;
     const int count = eppg_usb_write(data, length);
     return count > 0 ? static_cast<size_t>(count) : 0;
   }

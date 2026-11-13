@@ -30,11 +30,17 @@ template<class T,class A,class B> inline T clamp(T v,A low,B high) {
 }
 class Console {
  public:
+  struct Transaction {};
+  auto transaction() { return Transaction{}; }
+  std::string* capture = nullptr;
   void init() {}
   template<class...Args> void text(Args&&...) {}
   template<class...Args> void line(Args&&...) {}
   template<class...Args> void format(Args&&...) {}
-  size_t write(const uint8_t*,size_t length) { return length; }
+  size_t write(const uint8_t* data,size_t length) {
+    if (capture) capture->append(reinterpret_cast<const char*>(data), length);
+    return length;
+  }
   size_t write(const char* text) { return text ? std::strlen(text) : 0; }
   bool hasInput() { return false; }
   int readByte() { return -1; }
