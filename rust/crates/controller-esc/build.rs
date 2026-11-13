@@ -1,4 +1,31 @@
 fn main() {
+    // A host-only independent oracle: tests compare Rust application requests
+    // against the pinned vendor's generated encoders, including TAO arrays.
+    // No oracle object or generated request encoder enters the ESP32 image.
+    if std::env::var("CARGO_CFG_TARGET_OS").unwrap() != "espidf" {
+        let source = std::env::var_os("EPPG_COMPONENTS")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from("../../../components"))
+            .join("dronecan/src");
+        let mut oracle = cc::Build::new();
+        oracle
+            .file("tests/codec_oracle.c")
+            .include(&source)
+            .warnings(false);
+        for name in [
+            "sine_esc.SetMotorSound_req.c",
+            "sine_esc.SetLedControl_req.c",
+            "sine_esc.StartFwUpgrade_req.c",
+            "sine_esc.SendFwData_req.c",
+            "uavcan.protocol.RestartNode_req.c",
+        ] {
+            oracle.file(source.join(name));
+        }
+        oracle.compile("eppg_esc_codec_oracle");
+        println!("cargo:rerun-if-changed=tests/codec_oracle.c");
+        println!("cargo:rerun-if-changed={}", source.display());
+        println!("cargo:rerun-if-env-changed=EPPG_COMPONENTS");
+    }
     let root = std::path::Path::new("../../..");
     // Keep the vendor's established unlock contract without duplicating it in logs or manifests.
     let text = std::fs::read_to_string(root.join("src/sp140/esc_config_relay.cpp"))

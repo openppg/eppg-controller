@@ -55,10 +55,13 @@ edges, maintenance exclusion and wireless session packets; see
 
 `simulator/verify.sh --host-only` runs native regression, controller/device,
 wire-protocol, screenshot and HTTP-lab tests. Add `--rust` to include the Rust
-production-core tests and renderer. Without `--host-only` it also builds the
-selected real ESP32-S3 firmware; source ESP-IDF's environment (or the Rust Xtensa
-toolchain for `--rust`) first. `--qemu` additionally builds/runs the native QEMU
-variant. The checks fail on missing screenshot goldens rather than creating
+production-core tests, strict lint and renderer. Without `--host-only` it also builds
+and validates the selected real ESP32-S3 firmware; source ESP-IDF's environment
+and the Rust Xtensa environment for `--rust` first. `--qemu` additionally builds/runs
+that selected application's QEMU variant; `--rust --qemu` verifies Rust control,
+CAN/display progress and full-size flash staging. Set `QEMU_BIN` or install the
+pinned binary with `bash simulator/tools/install_qemu.sh` first. The checks fail
+on missing screenshot goldens rather than creating
 new expectations silently.
 
 ## Interactive browser lab

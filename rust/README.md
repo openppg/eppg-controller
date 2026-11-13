@@ -18,7 +18,7 @@ bash rust/tools/build.sh
 
 Run the build from any directory. `IDF_PATH` must identify the pinned SDK. `EPPG_COMPONENTS` is an optional external components directory for development against the first branch; a normal checkout uses its own vendored components.
 
-`rust/tools/build.sh` builds the complete release image and exports `rust/target/xtensa-esp32s3-espidf/release/images/`. `firmware.bin` is app-only for the existing OTA slots. `recovery.bin` includes bootloader, unchanged partition table, initial OTA selection, and app0; flashing it can replace OTA selection metadata. The exporter checks the firmware discovery marker, slot size, installed partition geometry, and linked-object exclusions, and writes `release-check.json` and a link map. Existing NVS and radio namespaces remain unchanged.
+`rust/tools/build.sh` builds the complete release image and exports `rust/target/xtensa-esp32s3-espidf/release/images/`. `firmware.bin` is app-only for the existing OTA slots. `recovery.bin` includes bootloader, unchanged partition table, initial OTA selection, and app0; flashing this contiguous image at offset 0 erases settings, BLE bonds, radio configuration and OTA selection in the covered flash range. Use the app-only image for normal updates. The exporter checks the firmware discovery marker, slot size, installed partition geometry, and linked-object exclusions, and writes `release-check.json` and a link map. App-only updates retain the existing NVS and radio namespaces.
 
 ## Native verification and emulator
 

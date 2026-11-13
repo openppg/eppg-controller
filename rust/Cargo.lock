@@ -296,6 +296,7 @@ dependencies = [
 name = "controller-esc"
 version = "8.1.0"
 dependencies = [
+ "cc",
  "controller-core",
  "controller-dronecan",
  "controller-protocols",

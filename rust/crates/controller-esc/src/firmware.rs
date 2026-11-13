@@ -72,6 +72,8 @@ pub struct Flasher {
     pub progress: u16,
     image: Box<dyn ImageStorage>,
     received: usize,
+    requested_hw: u16,
+    finish_pending: bool,
     last_rx: u32,
     last_send: u32,
     read_pending: bool,
@@ -94,6 +96,8 @@ impl Flasher {
             progress: 0,
             image,
             received: 0,
+            requested_hw: 0,
+            finish_pending: false,
             last_rx: 0,
             last_send: 0,
             read_pending: false,
@@ -117,6 +121,8 @@ impl Flasher {
         ]
     }
     fn fail(&mut self, code: u8) {
+        self.finish_pending = false;
+        self.read_pending = false;
         self.image.clear();
         self.code = code;
         self.phase = Phase::Failed;
@@ -157,6 +163,8 @@ impl Flasher {
             return false;
         }
         self.received = 0;
+        self.requested_hw = hw;
+        self.finish_pending = false;
         self.code = 1;
         self.phase = Phase::Receiving;
         self.progress = 0;
@@ -195,6 +203,19 @@ impl Flasher {
         self.progress = (self.received * 500 / self.image.len()) as u16;
         Some(self.received)
     }
+    pub fn end_for_hardware(&mut self, now: u32, connected_hw: u16) -> bool {
+        if self.phase != Phase::Receiving
+            || self.received != self.image.len()
+            || self.image.len() < 32
+        {
+            return false;
+        }
+        if connected_hw != self.requested_hw {
+            self.fail(0x83);
+            return false;
+        }
+        self.end(now)
+    }
     pub fn end(&mut self, now: u32) -> bool {
         if self.phase != Phase::Receiving
             || self.received != self.image.len()
@@ -206,6 +227,22 @@ impl Flasher {
             self.fail(0x80);
             return false;
         }
+        self.finish_pending = true;
+        self.complete_upload(now)
+    }
+    fn complete_upload(&mut self, now: u32) -> bool {
+        let mut hw = [0; 2];
+        if !self.image.read(0, &mut hw) {
+            if !self.image.read_retryable() {
+                self.fail(0x80);
+            }
+            return false;
+        }
+        if u16::from_le_bytes(hw) != self.requested_hw {
+            self.fail(0x83);
+            return false;
+        }
+        self.finish_pending = false;
         self.chunks = ((self.image.len() - 32).div_ceil(256)) as u16;
         self.index = 0;
         self.retries = 0;
@@ -275,6 +312,12 @@ impl Flasher {
         })
     }
     pub fn tick(&mut self, now: u32, state: State) -> Vec<Request> {
+        if !self.active() {
+            return vec![];
+        }
+        if self.finish_pending {
+            self.complete_upload(now);
+        }
         if !self.active() {
             return vec![];
         }

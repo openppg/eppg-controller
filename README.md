@@ -74,7 +74,8 @@ Artifacts are written to `rust/target/xtensa-esp32s3-espidf/release/images/`:
 
 The exporter verifies the installed 8 MB partition geometry and excludes Arduino
 and the legacy C++ application. Existing NVS keys/types, BLE UUIDs and wire formats
-are retained. A full recovery write replaces OTA selection metadata; normal app
+are retained. A contiguous full recovery write at offset 0 erases settings, BLE bonds, radio
+configuration and OTA selection in the covered flash range; normal app
 OTA uses the inactive slot and preserves settings. ESC uploads retain the full
 256 KiB limit using bounded buffers and the reserved scratch partition. Unknown
 pre-existing scratch-partition data is rejected without erasure.
@@ -126,7 +127,7 @@ bash rust/tools/build.sh --qemu
 python3 simulator/tools/qemu_smoke.py \
   --image rust/target/qemu/xtensa-esp32s3-espidf/release/images/qemu-flash.bin \
   --qemu /path/to/qemu-system-xtensa --timeout 30 --control-proof \
-  --expect '=== Boot complete ===' --expect 'pwm_01us=16000' \
+  --expect 'Rust controller boot complete' --expect 'pwm_01us=16000' \
   --report rust/target/qemu/smoke.json
 ```
 

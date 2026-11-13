@@ -361,7 +361,7 @@ fn main() {
                         }
                         Request::FlashEnd => {
                             if let Some(e) = esc.as_mut() {
-                                e.flasher.end(now);
+                                e.flasher.end_for_hardware(now, e.telemetry.esc_hardware_id);
                             }
                         }
                         Request::FlashAbort => {

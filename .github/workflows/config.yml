@@ -194,8 +194,15 @@ jobs:
           python3 simulator/tools/qemu_smoke.py \
             --image rust/target/qemu/xtensa-esp32s3-espidf/release/images/qemu-flash.bin \
             --qemu .tools/qemu/bin/qemu-system-xtensa --timeout 30 --control-proof \
-            --expect '=== Boot complete ===' --expect 'pwm_01us=16000' \
+            --expect 'Rust controller boot complete' --expect 'pwm_01us=16000' \
             --report rust/target/qemu/smoke.json
+          python3 simulator/tools/qemu_smoke.py \
+            --image rust/target/qemu/xtensa-esp32s3-espidf/release/images/qemu-flash.bin \
+            --qemu .tools/qemu/bin/qemu-system-xtensa --timeout 35 \
+            --send '{"emulator":{"stage_test":true}}' \
+            --expect 'Rust controller boot complete' \
+            --expect 'EPPG_QEMU_STAGE size=262144 verified=1 scratch=4096' \
+            --report rust/target/qemu/max-stage.json
       - name: Preserve canonical OTA and recovery artifact names
         if: matrix.profile == 'physical'
         shell: bash
@@ -218,4 +225,5 @@ jobs:
           name: rust-esp32s3-qemu-evidence
           path: |
             rust/target/qemu/smoke.json
+            rust/target/qemu/max-stage.json
             rust/target/qemu/xtensa-esp32s3-espidf/release/images/

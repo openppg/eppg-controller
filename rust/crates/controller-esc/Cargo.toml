@@ -8,3 +8,5 @@ build = "build.rs"
 controller-dronecan = { path = "../controller-dronecan" }
 controller-protocols = { path = "../controller-protocols" }
 controller-core = { path = "../controller-core" }
+[build-dependencies]
+cc = "1"

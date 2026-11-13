@@ -336,7 +336,7 @@ impl Relay {
                     }
                 }
             }
-            Phase::WaitReboot => {
+            Phase::WaitReboot | Phase::Verify => {
                 let elapsed = now.wrapping_sub(self.phase_start);
                 if elapsed < 5000 {
                     return vec![];
@@ -365,7 +365,7 @@ impl Relay {
                     return vec![self.request(now)];
                 }
                 self.status.code = 2;
-                self.status.phase = Phase::WaitReboot;
+                self.status.phase = Phase::Verify;
                 if let Some((reply_id, d)) = response {
                     if reply_id == 221 && d.len() >= 3 && le16(&d, 0) == id && d[2] == 0 {
                         if d[3..].starts_with(&self.work[0].1) {
@@ -383,7 +383,6 @@ impl Relay {
                 if now.wrapping_sub(self.last_probe) > 400 {
                     self.last_probe = now;
                     let r = self.request(now);
-                    self.status.phase = Phase::WaitReboot;
                     return vec![r];
                 }
                 return vec![];
