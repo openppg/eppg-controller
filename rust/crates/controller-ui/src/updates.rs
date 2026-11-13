@@ -271,13 +271,13 @@ impl Ui {
                     0
                 };
                 if self.temperature_levels[i] != level {
-                    lv_obj_remove_style(tile, &self.style_warning, 0);
-                    lv_obj_remove_style(tile, &self.style_critical, 0);
+                    lv_obj_remove_style(tile, &*self.style_warning, 0);
+                    lv_obj_remove_style(tile, &*self.style_critical, 0);
                     if level != 0 {
                         let style = if level == 2 {
-                            &mut self.style_critical
+                            &mut *self.style_critical
                         } else {
-                            &mut self.style_warning
+                            &mut *self.style_warning
                         };
                         lv_obj_add_style(tile, style, 0);
                     }

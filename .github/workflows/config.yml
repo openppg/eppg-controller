@@ -71,6 +71,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      - name: Trust the checked-out workspace inside the IDF container
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Build, validate and export firmware
         shell: bash
         run: |
@@ -98,6 +100,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      - name: Trust the checked-out workspace inside the IDF container
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Install the verified Espressif QEMU release
         run: bash simulator/tools/install_qemu.sh
       - name: Execute real control tasks and verify maximum NOR staging
@@ -127,7 +131,7 @@ jobs:
           cache: npm
           cache-dependency-path: simulator/ui/package-lock.json
       - name: Native build dependencies
-        run: sudo apt-get update && sudo apt-get install -y clang libclang-dev cmake ninja-build g++
+        run: sudo apt-get update && sudo apt-get install -y clang libclang-dev cmake ninja-build g++ gdb
       - name: Pinned host Rust
         run: rustup toolchain install 1.100.0 --profile minimal --component rustfmt --component clippy
       - name: Format every Rust source, including included UI modules
@@ -136,7 +140,14 @@ jobs:
         working-directory: rust
         run: |
           unset LIBCLANG_PATH
-          cargo +1.100.0 test --locked --workspace --exclude firmware-sp140
+          if ! cargo +1.100.0 test --locked --workspace --exclude firmware-sp140; then
+            executable=$(cargo +1.100.0 test --locked -p controller-ui --test golden --no-run --message-format=json |
+              jq -r 'select(.reason == "compiler-artifact" and .target.name == "golden") | .executable // empty' | tail -n 1)
+            if [[ -n "$executable" ]]; then
+              gdb --batch -ex run -ex 'thread apply all bt' --args "$executable" --nocapture || true
+            fi
+            exit 1
+          fi
           cargo +1.100.0 clippy --locked --workspace --exclude firmware-sp140 --all-targets -- -D warnings
           cargo +1.100.0 build --locked -p controller-sim
       - name: Browser lab build and live controller API
@@ -163,6 +174,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      - name: Trust the checked-out workspace inside the IDF container
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Pinned Espressif Rust toolchains
         shell: bash
         run: |

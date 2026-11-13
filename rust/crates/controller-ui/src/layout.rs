@@ -6,8 +6,8 @@ impl Ui {
             lv_obj_delete(self.w.main_screen);
         }
         if self.styles_initialized {
-            lv_style_reset(&mut self.style_warning);
-            lv_style_reset(&mut self.style_critical);
+            lv_style_reset(&mut *self.style_warning);
+            lv_style_reset(&mut *self.style_critical);
         }
         self.w = Widgets::default();
         self.keepalive_points.clear();

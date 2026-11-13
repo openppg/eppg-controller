@@ -1,11 +1,14 @@
 #pragma once
 
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <string>
+
+using std::isnan;
 
 class SPIClass {};
 

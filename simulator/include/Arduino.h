@@ -2,10 +2,14 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <string>
+
+// Match the global math helpers supplied by the real Arduino headers.
+using std::isnan;
 
 // Host compatibility surface used by the production throttle module.  Time is
 // supplied by the deterministic simulator rather than wall-clock time.

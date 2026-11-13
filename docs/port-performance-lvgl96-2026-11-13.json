@@ -1,0 +1,1571 @@
+{
+  "date": "2026-11-13",
+  "upstream_master": "59cbe4da202b5ab4e99db9e7a178759befc666b4",
+  "lvgl_version": "9.6.0",
+  "host": {
+    "os": "macOS-26.7.1-arm64-arm-64bit",
+    "architecture": "arm64",
+    "jobs": 4,
+    "cpu": "Apple M4",
+    "memory_bytes": 25769803776
+  },
+  "compile_method": "Sequential builds; dependency downloads/tool installation excluded; fresh project object/cache directories; warm downloaded source/toolchain caches. Three no-op and three main-file comment-edit rebuilds after one clean build per variant. The interrupted process was resumed only for unfinished samples; no partial measurement was included. Four jobs were requested per tool; Cargo build scripts and their C builders can overlap.",
+  "compile": [
+    {
+      "variant": "arduino",
+      "source_commit": "59cbe4da202b5ab4e99db9e7a178759befc666b4",
+      "configuration": "PlatformIO debug/-Og; Arduino over ESP-IDF 4.4.7",
+      "summary": {
+        "clean": {
+          "samples": [
+            70.374
+          ],
+          "median_seconds": 70.374
+        },
+        "noop": {
+          "samples": [
+            7.523,
+            6.083,
+            6.173
+          ],
+          "median_seconds": 6.173
+        },
+        "edit": {
+          "samples": [
+            9.165,
+            8.977,
+            9.245
+          ],
+          "median_seconds": 9.165
+        }
+      },
+      "runs": [
+        {
+          "phase": "clean",
+          "seconds": 70.374,
+          "exit_code": 0
+        },
+        {
+          "phase": "noop-1",
+          "seconds": 7.523,
+          "exit_code": 0
+        },
+        {
+          "phase": "noop-2",
+          "seconds": 6.083,
+          "exit_code": 0
+        },
+        {
+          "phase": "noop-3",
+          "seconds": 6.173,
+          "exit_code": 0
+        },
+        {
+          "phase": "edit-1",
+          "seconds": 9.165,
+          "exit_code": 0
+        },
+        {
+          "phase": "edit-2",
+          "seconds": 8.977,
+          "exit_code": 0
+        },
+        {
+          "phase": "edit-3",
+          "seconds": 9.245,
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "variant": "native",
+      "source_commit": "4913a5170e3bf47882b27c976bf69adeb47130f0",
+      "configuration": "Native C++ ESP-IDF 5.5.3 debug/-Og",
+      "summary": {
+        "clean": {
+          "samples": [
+            67.146
+          ],
+          "median_seconds": 67.146
+        },
+        "noop": {
+          "samples": [
+            0.691,
+            0.487,
+            0.478
+          ],
+          "median_seconds": 0.487
+        },
+        "edit": {
+          "samples": [
+            11.963,
+            10.783,
+            10.626
+          ],
+          "median_seconds": 10.783
+        }
+      },
+      "runs": [
+        {
+          "phase": "clean",
+          "seconds": 67.146,
+          "exit_code": 0
+        },
+        {
+          "phase": "noop-1",
+          "seconds": 0.691,
+          "exit_code": 0
+        },
+        {
+          "phase": "noop-2",
+          "seconds": 0.487,
+          "exit_code": 0
+        },
+        {
+          "phase": "noop-3",
+          "seconds": 0.478,
+          "exit_code": 0
+        },
+        {
+          "phase": "edit-1",
+          "seconds": 11.963,
+          "exit_code": 0
+        },
+        {
+          "phase": "edit-2",
+          "seconds": 10.783,
+          "exit_code": 0
+        },
+        {
+          "phase": "edit-3",
+          "seconds": 10.626,
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "variant": "rust",
+      "source_commit": "1cbc3f3e43bbedefa20d043c447aaec3b1bde93f",
+      "configuration": "Rust application on ESP-IDF 5.5.3; release opt-level=s, thin LTO; C dependencies built for size",
+      "summary": {
+        "clean": {
+          "samples": [
+            97.156
+          ],
+          "median_seconds": 97.156
+        },
+        "noop": {
+          "samples": [
+            0.428,
+            0.176,
+            0.182
+          ],
+          "median_seconds": 0.182
+        },
+        "edit": {
+          "samples": [
+            10.551,
+            6.92,
+            6.521
+          ],
+          "median_seconds": 6.92
+        }
+      },
+      "runs": [
+        {
+          "phase": "clean",
+          "seconds": 97.156,
+          "exit_code": 0
+        },
+        {
+          "phase": "noop-1",
+          "seconds": 0.428,
+          "exit_code": 0
+        },
+        {
+          "phase": "noop-2",
+          "seconds": 0.176,
+          "exit_code": 0
+        },
+        {
+          "phase": "noop-3",
+          "seconds": 0.182,
+          "exit_code": 0
+        },
+        {
+          "phase": "edit-1",
+          "seconds": 10.551,
+          "exit_code": 0
+        },
+        {
+          "phase": "edit-2",
+          "seconds": 6.92,
+          "exit_code": 0
+        },
+        {
+          "phase": "edit-3",
+          "seconds": 6.521,
+          "exit_code": 0
+        }
+      ]
+    }
+  ],
+  "runtime_method": "One physical SP140 ESP32-S3 v0.2; USB power only; ESC/motor disconnected. Existing settings retained. 10-second warmup, three ~9.5-second normal disarmed UI windows, three ~9.5-second forced full-screen redraw windows. Count actual final LVGL flushes and SPI pixels for the 160x128 RGB565 panel. No synthetic motor commands or arming. No intentional BLE client traffic. All production tasks and physical BLE initialization retained.",
+  "runtime": [
+    {
+      "profile": "arduino-32",
+      "manifest": {
+        "profile": "arduino-32",
+        "variant": "arduino",
+        "instrumented": true,
+        "spi_mhz": 32,
+        "files": {
+          "bootloader.bin": {
+            "bytes": 22624,
+            "sha256": "904f5bf2c7a0e4dddfa52280c5cb56624d500fd575b22f499e00e52908676b58"
+          },
+          "partitions.bin": {
+            "bytes": 3072,
+            "sha256": "1d9cca96de0fe07ad7fc0648b9878ddecd9ce565e38b589ad20fea698ed4c80c"
+          },
+          "otadata.bin": {
+            "bytes": 8192,
+            "sha256": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f"
+          },
+          "app.bin": {
+            "bytes": 1257152,
+            "sha256": "7fdf362c01d14597ccbfb4ffde37f9bb42f81904dc0151fa64add244b4c626d9"
+          }
+        },
+        "source_base_commit": "59cbe4da202b5ab4e99db9e7a178759befc666b4",
+        "source_changes": "Shared display/control counters; explicit SPI override only for matched-clock profiles. Exact image hashes below. Instrumentation and worktree patches retained locally in .tools/performance/2026-11-13/master-compare."
+      },
+      "full_redraw_fps": 12.93323489120398,
+      "full_redraw_mean_ui_wall_ms": 77.27659620596206,
+      "mean_spi_flush_ms_per_full_frame": 14.942116531165311,
+      "minimum_heap_bytes": 110352,
+      "control_overruns": 0,
+      "samples": [
+        {
+          "variant": "arduino",
+          "mode": "idle",
+          "sample": 1,
+          "window_us": 9512320,
+          "ui_count": 288,
+          "ui_total_us": 1942508,
+          "ui_max_us": 20303,
+          "ui_p95_ms_upper_bound": 16,
+          "flushes": 0,
+          "frames": 0,
+          "pixels": 0,
+          "flush_total_us": 0,
+          "flush_max_us": 0,
+          "skipped_flushes": 0,
+          "control_count": 475,
+          "control_total_us": 500695,
+          "control_max_us": 1138,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 475,
+          "control_interval_total_us": 9500000,
+          "control_interval_max_us": 20039,
+          "free_heap": 120528,
+          "minimum_heap": 120156,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "arduino",
+          "mode": "idle",
+          "sample": 2,
+          "window_us": 9504697,
+          "ui_count": 288,
+          "ui_total_us": 1889071,
+          "ui_max_us": 19228,
+          "ui_p95_ms_upper_bound": 15,
+          "flushes": 0,
+          "frames": 0,
+          "pixels": 0,
+          "flush_total_us": 0,
+          "flush_max_us": 0,
+          "skipped_flushes": 0,
+          "control_count": 476,
+          "control_total_us": 501942,
+          "control_max_us": 1197,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 476,
+          "control_interval_total_us": 9520008,
+          "control_interval_max_us": 20038,
+          "free_heap": 120528,
+          "minimum_heap": 119436,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "arduino",
+          "mode": "idle",
+          "sample": 3,
+          "window_us": 9500289,
+          "ui_count": 288,
+          "ui_total_us": 1919030,
+          "ui_max_us": 20365,
+          "ui_p95_ms_upper_bound": 16,
+          "flushes": 0,
+          "frames": 0,
+          "pixels": 0,
+          "flush_total_us": 0,
+          "flush_max_us": 0,
+          "skipped_flushes": 0,
+          "control_count": 475,
+          "control_total_us": 500674,
+          "control_max_us": 1109,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 475,
+          "control_interval_total_us": 9499993,
+          "control_interval_max_us": 20040,
+          "free_heap": 120528,
+          "minimum_heap": 110352,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "arduino",
+          "mode": "full_redraw",
+          "sample": 4,
+          "window_us": 9514680,
+          "ui_count": 123,
+          "ui_total_us": 9510563,
+          "ui_max_us": 83657,
+          "ui_p95_ms_upper_bound": 82,
+          "flushes": 246,
+          "frames": 123,
+          "pixels": 2519040,
+          "flush_total_us": 1837681,
+          "flush_max_us": 7875,
+          "skipped_flushes": 0,
+          "control_count": 476,
+          "control_total_us": 823944,
+          "control_max_us": 2261,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 476,
+          "control_interval_total_us": 9520001,
+          "control_interval_max_us": 20010,
+          "free_heap": 120528,
+          "minimum_heap": 110352,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "arduino",
+          "mode": "full_redraw",
+          "sample": 5,
+          "window_us": 9508551,
+          "ui_count": 123,
+          "ui_total_us": 9502331,
+          "ui_max_us": 86329,
+          "ui_p95_ms_upper_bound": 81,
+          "flushes": 246,
+          "frames": 123,
+          "pixels": 2519040,
+          "flush_total_us": 1837672,
+          "flush_max_us": 7864,
+          "skipped_flushes": 0,
+          "control_count": 475,
+          "control_total_us": 823042,
+          "control_max_us": 2249,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 475,
+          "control_interval_total_us": 9500000,
+          "control_interval_max_us": 20071,
+          "free_heap": 120528,
+          "minimum_heap": 110352,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "arduino",
+          "mode": "full_redraw",
+          "sample": 6,
+          "window_us": 9507914,
+          "ui_count": 123,
+          "ui_total_us": 9502170,
+          "ui_max_us": 82299,
+          "ui_p95_ms_upper_bound": 81,
+          "flushes": 246,
+          "frames": 123,
+          "pixels": 2519040,
+          "flush_total_us": 1838288,
+          "flush_max_us": 7877,
+          "skipped_flushes": 0,
+          "control_count": 476,
+          "control_total_us": 824922,
+          "control_max_us": 2262,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 476,
+          "control_interval_total_us": 9519990,
+          "control_interval_max_us": 20067,
+          "free_heap": 120528,
+          "minimum_heap": 110352,
+          "barometer_ok": 1
+        }
+      ],
+      "diagnostics": {
+        "hist_n": 16,
+        "received_records": 16,
+        "current_present": true
+      }
+    },
+    {
+      "profile": "native-16",
+      "manifest": {
+        "profile": "native-16",
+        "variant": "native",
+        "instrumented": true,
+        "spi_mhz": 16,
+        "files": {
+          "bootloader.bin": {
+            "bytes": 22368,
+            "sha256": "f5f88b65f5c4fbf30beb029792cd23985095870d3c92233297feb2529b2a6528"
+          },
+          "partitions.bin": {
+            "bytes": 3072,
+            "sha256": "1d9cca96de0fe07ad7fc0648b9878ddecd9ce565e38b589ad20fea698ed4c80c"
+          },
+          "otadata.bin": {
+            "bytes": 8192,
+            "sha256": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f"
+          },
+          "app.bin": {
+            "bytes": 1629168,
+            "sha256": "275002f6cfacecc8d13bd789374a8d8d5b231abcec376e20ee0ec25b2115f6cf"
+          }
+        },
+        "source_base_commit": "4913a5170e3bf47882b27c976bf69adeb47130f0",
+        "source_changes": "Shared display/control counters; explicit SPI override only for matched-clock profiles. Exact image hashes below. Instrumentation and worktree patches retained locally in .tools/performance/2026-11-13/master-compare."
+      },
+      "full_redraw_fps": 12.478084708369334,
+      "full_redraw_mean_ui_wall_ms": 80.10558263305322,
+      "mean_spi_flush_ms_per_full_frame": 22.896831932773107,
+      "minimum_heap_bytes": 32516,
+      "control_overruns": 0,
+      "samples": [
+        {
+          "variant": "native",
+          "mode": "idle",
+          "sample": 1,
+          "window_us": 9515542,
+          "ui_count": 288,
+          "ui_total_us": 1967111,
+          "ui_max_us": 20165,
+          "ui_p95_ms_upper_bound": 16,
+          "flushes": 0,
+          "frames": 0,
+          "pixels": 0,
+          "flush_total_us": 0,
+          "flush_max_us": 0,
+          "skipped_flushes": 0,
+          "control_count": 476,
+          "control_total_us": 508481,
+          "control_max_us": 1281,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 476,
+          "control_interval_total_us": 9519998,
+          "control_interval_max_us": 20013,
+          "free_heap": 41844,
+          "minimum_heap": 32516,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "native",
+          "mode": "idle",
+          "sample": 2,
+          "window_us": 9525047,
+          "ui_count": 289,
+          "ui_total_us": 1953627,
+          "ui_max_us": 20188,
+          "ui_p95_ms_upper_bound": 16,
+          "flushes": 0,
+          "frames": 0,
+          "pixels": 0,
+          "flush_total_us": 0,
+          "flush_max_us": 0,
+          "skipped_flushes": 0,
+          "control_count": 476,
+          "control_total_us": 508409,
+          "control_max_us": 1231,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 476,
+          "control_interval_total_us": 9520001,
+          "control_interval_max_us": 20013,
+          "free_heap": 41560,
+          "minimum_heap": 32516,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "native",
+          "mode": "idle",
+          "sample": 3,
+          "window_us": 9503929,
+          "ui_count": 288,
+          "ui_total_us": 1956731,
+          "ui_max_us": 20220,
+          "ui_p95_ms_upper_bound": 17,
+          "flushes": 0,
+          "frames": 0,
+          "pixels": 0,
+          "flush_total_us": 0,
+          "flush_max_us": 0,
+          "skipped_flushes": 0,
+          "control_count": 475,
+          "control_total_us": 507422,
+          "control_max_us": 1216,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 475,
+          "control_interval_total_us": 9500000,
+          "control_interval_max_us": 20012,
+          "free_heap": 41560,
+          "minimum_heap": 32516,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "native",
+          "mode": "full_redraw",
+          "sample": 4,
+          "window_us": 9519079,
+          "ui_count": 119,
+          "ui_total_us": 9515727,
+          "ui_max_us": 84185,
+          "ui_p95_ms_upper_bound": 83,
+          "flushes": 238,
+          "frames": 119,
+          "pixels": 2437120,
+          "flush_total_us": 2723375,
+          "flush_max_us": 11514,
+          "skipped_flushes": 0,
+          "control_count": 476,
+          "control_total_us": 892075,
+          "control_max_us": 2256,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 475,
+          "control_interval_total_us": 9499995,
+          "control_interval_max_us": 20036,
+          "free_heap": 41560,
+          "minimum_heap": 32516,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "native",
+          "mode": "full_redraw",
+          "sample": 5,
+          "window_us": 9560807,
+          "ui_count": 119,
+          "ui_total_us": 9556532,
+          "ui_max_us": 86992,
+          "ui_p95_ms_upper_bound": 84,
+          "flushes": 238,
+          "frames": 119,
+          "pixels": 2437120,
+          "flush_total_us": 2724666,
+          "flush_max_us": 11718,
+          "skipped_flushes": 0,
+          "control_count": 478,
+          "control_total_us": 834368,
+          "control_max_us": 2245,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 478,
+          "control_interval_total_us": 9560000,
+          "control_interval_max_us": 20068,
+          "free_heap": 41560,
+          "minimum_heap": 32516,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "native",
+          "mode": "full_redraw",
+          "sample": 6,
+          "window_us": 9530274,
+          "ui_count": 119,
+          "ui_total_us": 9525434,
+          "ui_max_us": 84176,
+          "ui_p95_ms_upper_bound": 83,
+          "flushes": 238,
+          "frames": 119,
+          "pixels": 2437120,
+          "flush_total_us": 2726128,
+          "flush_max_us": 11525,
+          "skipped_flushes": 0,
+          "control_count": 477,
+          "control_total_us": 761071,
+          "control_max_us": 2233,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 477,
+          "control_interval_total_us": 9539992,
+          "control_interval_max_us": 20075,
+          "free_heap": 41560,
+          "minimum_heap": 32516,
+          "barometer_ok": 1
+        }
+      ],
+      "diagnostics": {
+        "hist_n": 16,
+        "received_records": 16,
+        "current_present": true
+      }
+    },
+    {
+      "profile": "rust-40",
+      "manifest": {
+        "profile": "rust-40",
+        "variant": "rust",
+        "instrumented": true,
+        "spi_mhz": 40,
+        "files": {
+          "bootloader.bin": {
+            "bytes": 22368,
+            "sha256": "5e0a80e7cc09956afc7b0a9e853b766eca2a85399f5eb2cc0093edcfc098d4bd"
+          },
+          "partitions.bin": {
+            "bytes": 3072,
+            "sha256": "1d9cca96de0fe07ad7fc0648b9878ddecd9ce565e38b589ad20fea698ed4c80c"
+          },
+          "otadata.bin": {
+            "bytes": 8192,
+            "sha256": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f"
+          },
+          "app.bin": {
+            "bytes": 1823968,
+            "sha256": "1e5b5d6c70a67cebc472a302740f3dfaba436c4f5a6d910b2fc4612a0c92d2c6"
+          }
+        },
+        "source_base_commit": "1cbc3f3e43bbedefa20d043c447aaec3b1bde93f",
+        "source_changes": "Shared display/control counters; explicit SPI override only for matched-clock profiles. Exact image hashes below. Instrumentation and worktree patches retained locally in .tools/performance/2026-11-13/master-compare."
+      },
+      "full_redraw_fps": 9.998395345252309,
+      "full_redraw_mean_ui_wall_ms": 99.98514385964913,
+      "mean_spi_flush_ms_per_full_frame": 11.297350877192983,
+      "minimum_heap_bytes": 15180,
+      "control_overruns": 0,
+      "samples": [
+        {
+          "variant": "rust",
+          "mode": "idle",
+          "sample": 1,
+          "window_us": 9503995,
+          "ui_count": 288,
+          "ui_total_us": 246226,
+          "ui_max_us": 1234,
+          "ui_p95_ms_upper_bound": 2,
+          "flushes": 0,
+          "frames": 0,
+          "pixels": 0,
+          "flush_total_us": 0,
+          "flush_max_us": 0,
+          "skipped_flushes": 0,
+          "control_count": 951,
+          "control_total_us": 306352,
+          "control_max_us": 911,
+          "control_overruns": 0,
+          "control_period_us": 10000,
+          "control_intervals": 951,
+          "control_interval_total_us": 9510003,
+          "control_interval_max_us": 10021,
+          "free_heap": 19864,
+          "minimum_heap": 19768,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "rust",
+          "mode": "idle",
+          "sample": 2,
+          "window_us": 9504049,
+          "ui_count": 288,
+          "ui_total_us": 246092,
+          "ui_max_us": 1179,
+          "ui_p95_ms_upper_bound": 2,
+          "flushes": 0,
+          "frames": 0,
+          "pixels": 0,
+          "flush_total_us": 0,
+          "flush_max_us": 0,
+          "skipped_flushes": 0,
+          "control_count": 950,
+          "control_total_us": 306387,
+          "control_max_us": 904,
+          "control_overruns": 0,
+          "control_period_us": 10000,
+          "control_intervals": 950,
+          "control_interval_total_us": 9499997,
+          "control_interval_max_us": 10036,
+          "free_heap": 19864,
+          "minimum_heap": 17560,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "rust",
+          "mode": "idle",
+          "sample": 3,
+          "window_us": 9503947,
+          "ui_count": 288,
+          "ui_total_us": 245986,
+          "ui_max_us": 1203,
+          "ui_p95_ms_upper_bound": 2,
+          "flushes": 0,
+          "frames": 0,
+          "pixels": 0,
+          "flush_total_us": 0,
+          "flush_max_us": 0,
+          "skipped_flushes": 0,
+          "control_count": 951,
+          "control_total_us": 307568,
+          "control_max_us": 924,
+          "control_overruns": 0,
+          "control_period_us": 10000,
+          "control_intervals": 951,
+          "control_interval_total_us": 9510002,
+          "control_interval_max_us": 10037,
+          "free_heap": 19864,
+          "minimum_heap": 15180,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "rust",
+          "mode": "full_redraw",
+          "sample": 4,
+          "window_us": 9504529,
+          "ui_count": 95,
+          "ui_total_us": 9501832,
+          "ui_max_us": 101913,
+          "ui_p95_ms_upper_bound": 101,
+          "flushes": 760,
+          "frames": 95,
+          "pixels": 1945600,
+          "flush_total_us": 1072998,
+          "flush_max_us": 1444,
+          "skipped_flushes": 0,
+          "control_count": 951,
+          "control_total_us": 725148,
+          "control_max_us": 1111,
+          "control_overruns": 0,
+          "control_period_us": 10000,
+          "control_intervals": 951,
+          "control_interval_total_us": 9509991,
+          "control_interval_max_us": 10022,
+          "free_heap": 19864,
+          "minimum_heap": 15180,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "rust",
+          "mode": "full_redraw",
+          "sample": 5,
+          "window_us": 9500020,
+          "ui_count": 95,
+          "ui_total_us": 9496958,
+          "ui_max_us": 100362,
+          "ui_p95_ms_upper_bound": 101,
+          "flushes": 760,
+          "frames": 95,
+          "pixels": 1945600,
+          "flush_total_us": 1073357,
+          "flush_max_us": 1449,
+          "skipped_flushes": 0,
+          "control_count": 950,
+          "control_total_us": 723693,
+          "control_max_us": 1115,
+          "control_overruns": 0,
+          "control_period_us": 10000,
+          "control_intervals": 950,
+          "control_interval_total_us": 9500000,
+          "control_interval_max_us": 10035,
+          "free_heap": 19864,
+          "minimum_heap": 15180,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "rust",
+          "mode": "full_redraw",
+          "sample": 6,
+          "window_us": 9500025,
+          "ui_count": 95,
+          "ui_total_us": 9496976,
+          "ui_max_us": 100401,
+          "ui_p95_ms_upper_bound": 101,
+          "flushes": 760,
+          "frames": 95,
+          "pixels": 1945600,
+          "flush_total_us": 1073390,
+          "flush_max_us": 1445,
+          "skipped_flushes": 0,
+          "control_count": 950,
+          "control_total_us": 724032,
+          "control_max_us": 1122,
+          "control_overruns": 0,
+          "control_period_us": 10000,
+          "control_intervals": 950,
+          "control_interval_total_us": 9500000,
+          "control_interval_max_us": 10021,
+          "free_heap": 19864,
+          "minimum_heap": 15180,
+          "barometer_ok": 1
+        }
+      ],
+      "diagnostics": {
+        "hist_n": 16,
+        "received_records": 16,
+        "current_present": true
+      }
+    },
+    {
+      "profile": "arduino-16",
+      "manifest": {
+        "profile": "arduino-16",
+        "variant": "arduino",
+        "instrumented": true,
+        "spi_mhz": 16,
+        "files": {
+          "bootloader.bin": {
+            "bytes": 22624,
+            "sha256": "904f5bf2c7a0e4dddfa52280c5cb56624d500fd575b22f499e00e52908676b58"
+          },
+          "partitions.bin": {
+            "bytes": 3072,
+            "sha256": "1d9cca96de0fe07ad7fc0648b9878ddecd9ce565e38b589ad20fea698ed4c80c"
+          },
+          "otadata.bin": {
+            "bytes": 8192,
+            "sha256": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f"
+          },
+          "app.bin": {
+            "bytes": 1257200,
+            "sha256": "737fada77e06d25d3000c45097210384f3cbd2f9fc810b89108ba8c90049fe3a"
+          }
+        },
+        "source_base_commit": "59cbe4da202b5ab4e99db9e7a178759befc666b4",
+        "source_changes": "Shared display/control counters; explicit SPI override only for matched-clock profiles. Exact image hashes below. Instrumentation and worktree patches retained locally in .tools/performance/2026-11-13/master-compare."
+      },
+      "full_redraw_fps": 11.830061687315766,
+      "full_redraw_mean_ui_wall_ms": 84.48097345132743,
+      "mean_spi_flush_ms_per_full_frame": 23.12959587020649,
+      "minimum_heap_bytes": 110348,
+      "control_overruns": 0,
+      "samples": [
+        {
+          "variant": "arduino",
+          "mode": "idle",
+          "sample": 1,
+          "window_us": 9512383,
+          "ui_count": 288,
+          "ui_total_us": 1925216,
+          "ui_max_us": 19159,
+          "ui_p95_ms_upper_bound": 15,
+          "flushes": 0,
+          "frames": 0,
+          "pixels": 0,
+          "flush_total_us": 0,
+          "flush_max_us": 0,
+          "skipped_flushes": 0,
+          "control_count": 475,
+          "control_total_us": 500807,
+          "control_max_us": 1104,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 475,
+          "control_interval_total_us": 9500000,
+          "control_interval_max_us": 20093,
+          "free_heap": 120492,
+          "minimum_heap": 120116,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "arduino",
+          "mode": "idle",
+          "sample": 2,
+          "window_us": 9504766,
+          "ui_count": 288,
+          "ui_total_us": 1893235,
+          "ui_max_us": 19198,
+          "ui_p95_ms_upper_bound": 15,
+          "flushes": 0,
+          "frames": 0,
+          "pixels": 0,
+          "flush_total_us": 0,
+          "flush_max_us": 0,
+          "skipped_flushes": 0,
+          "control_count": 476,
+          "control_total_us": 501832,
+          "control_max_us": 1102,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 476,
+          "control_interval_total_us": 9520003,
+          "control_interval_max_us": 20133,
+          "free_heap": 120492,
+          "minimum_heap": 119400,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "arduino",
+          "mode": "idle",
+          "sample": 3,
+          "window_us": 9500235,
+          "ui_count": 288,
+          "ui_total_us": 1906539,
+          "ui_max_us": 19228,
+          "ui_p95_ms_upper_bound": 16,
+          "flushes": 0,
+          "frames": 0,
+          "pixels": 0,
+          "flush_total_us": 0,
+          "flush_max_us": 0,
+          "skipped_flushes": 0,
+          "control_count": 475,
+          "control_total_us": 500983,
+          "control_max_us": 1107,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 475,
+          "control_interval_total_us": 9500000,
+          "control_interval_max_us": 20004,
+          "free_heap": 120492,
+          "minimum_heap": 110348,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "arduino",
+          "mode": "full_redraw",
+          "sample": 4,
+          "window_us": 9535667,
+          "ui_count": 113,
+          "ui_total_us": 9531232,
+          "ui_max_us": 95176,
+          "ui_p95_ms_upper_bound": 91,
+          "flushes": 226,
+          "frames": 113,
+          "pixels": 2314240,
+          "flush_total_us": 2614091,
+          "flush_max_us": 11995,
+          "skipped_flushes": 0,
+          "control_count": 476,
+          "control_total_us": 792882,
+          "control_max_us": 2223,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 476,
+          "control_interval_total_us": 9520010,
+          "control_interval_max_us": 20014,
+          "free_heap": 120492,
+          "minimum_heap": 110348,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "arduino",
+          "mode": "full_redraw",
+          "sample": 5,
+          "window_us": 9565631,
+          "ui_count": 113,
+          "ui_total_us": 9558671,
+          "ui_max_us": 95948,
+          "ui_p95_ms_upper_bound": 93,
+          "flushes": 226,
+          "frames": 113,
+          "pixels": 2314240,
+          "flush_total_us": 2613878,
+          "flush_max_us": 11946,
+          "skipped_flushes": 0,
+          "control_count": 479,
+          "control_total_us": 805740,
+          "control_max_us": 2257,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 479,
+          "control_interval_total_us": 9579991,
+          "control_interval_max_us": 20012,
+          "free_heap": 120492,
+          "minimum_heap": 110348,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "arduino",
+          "mode": "full_redraw",
+          "sample": 6,
+          "window_us": 9554512,
+          "ui_count": 113,
+          "ui_total_us": 9549147,
+          "ui_max_us": 94994,
+          "ui_p95_ms_upper_bound": 92,
+          "flushes": 226,
+          "frames": 113,
+          "pixels": 2314240,
+          "flush_total_us": 2612964,
+          "flush_max_us": 12005,
+          "skipped_flushes": 0,
+          "control_count": 477,
+          "control_total_us": 803849,
+          "control_max_us": 2221,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 477,
+          "control_interval_total_us": 9540009,
+          "control_interval_max_us": 20011,
+          "free_heap": 120492,
+          "minimum_heap": 110348,
+          "barometer_ok": 1
+        }
+      ],
+      "diagnostics": {
+        "hist_n": 16,
+        "received_records": 16,
+        "current_present": true
+      }
+    },
+    {
+      "profile": "rust-16",
+      "manifest": {
+        "profile": "rust-16",
+        "variant": "rust",
+        "instrumented": true,
+        "spi_mhz": 16,
+        "files": {
+          "bootloader.bin": {
+            "bytes": 22368,
+            "sha256": "5e0a80e7cc09956afc7b0a9e853b766eca2a85399f5eb2cc0093edcfc098d4bd"
+          },
+          "partitions.bin": {
+            "bytes": 3072,
+            "sha256": "1d9cca96de0fe07ad7fc0648b9878ddecd9ce565e38b589ad20fea698ed4c80c"
+          },
+          "otadata.bin": {
+            "bytes": 8192,
+            "sha256": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f"
+          },
+          "app.bin": {
+            "bytes": 1823968,
+            "sha256": "99a7dd9fb0d073ecb2806ce118e3221c696a6aa6114a490ecf21944c3ee43568"
+          }
+        },
+        "source_base_commit": "1cbc3f3e43bbedefa20d043c447aaec3b1bde93f",
+        "source_changes": "Shared display/control counters; explicit SPI override only for matched-clock profiles. Exact image hashes below. Instrumentation and worktree patches retained locally in .tools/performance/2026-11-13/master-compare."
+      },
+      "full_redraw_fps": 8.816230708722793,
+      "full_redraw_mean_ui_wall_ms": 113.39363888888889,
+      "mean_spi_flush_ms_per_full_frame": 23.702809523809524,
+      "minimum_heap_bytes": 15180,
+      "control_overruns": 0,
+      "samples": [
+        {
+          "variant": "rust",
+          "mode": "idle",
+          "sample": 1,
+          "window_us": 9504000,
+          "ui_count": 288,
+          "ui_total_us": 246549,
+          "ui_max_us": 1227,
+          "ui_p95_ms_upper_bound": 2,
+          "flushes": 0,
+          "frames": 0,
+          "pixels": 0,
+          "flush_total_us": 0,
+          "flush_max_us": 0,
+          "skipped_flushes": 0,
+          "control_count": 951,
+          "control_total_us": 305207,
+          "control_max_us": 768,
+          "control_overruns": 0,
+          "control_period_us": 10000,
+          "control_intervals": 951,
+          "control_interval_total_us": 9510000,
+          "control_interval_max_us": 10075,
+          "free_heap": 19868,
+          "minimum_heap": 19772,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "rust",
+          "mode": "idle",
+          "sample": 2,
+          "window_us": 9504024,
+          "ui_count": 288,
+          "ui_total_us": 246010,
+          "ui_max_us": 1154,
+          "ui_p95_ms_upper_bound": 2,
+          "flushes": 0,
+          "frames": 0,
+          "pixels": 0,
+          "flush_total_us": 0,
+          "flush_max_us": 0,
+          "skipped_flushes": 0,
+          "control_count": 950,
+          "control_total_us": 304516,
+          "control_max_us": 744,
+          "control_overruns": 0,
+          "control_period_us": 10000,
+          "control_intervals": 950,
+          "control_interval_total_us": 9499998,
+          "control_interval_max_us": 10087,
+          "free_heap": 19868,
+          "minimum_heap": 17560,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "rust",
+          "mode": "idle",
+          "sample": 3,
+          "window_us": 9503973,
+          "ui_count": 288,
+          "ui_total_us": 246721,
+          "ui_max_us": 1153,
+          "ui_p95_ms_upper_bound": 2,
+          "flushes": 0,
+          "frames": 0,
+          "pixels": 0,
+          "flush_total_us": 0,
+          "flush_max_us": 0,
+          "skipped_flushes": 0,
+          "control_count": 950,
+          "control_total_us": 305657,
+          "control_max_us": 757,
+          "control_overruns": 0,
+          "control_period_us": 10000,
+          "control_intervals": 950,
+          "control_interval_total_us": 9500001,
+          "control_interval_max_us": 10064,
+          "free_heap": 19868,
+          "minimum_heap": 15180,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "rust",
+          "mode": "full_redraw",
+          "sample": 4,
+          "window_us": 9522954,
+          "ui_count": 84,
+          "ui_total_us": 9520147,
+          "ui_max_us": 116277,
+          "ui_p95_ms_upper_bound": 116,
+          "flushes": 672,
+          "frames": 84,
+          "pixels": 1720320,
+          "flush_total_us": 1991232,
+          "flush_max_us": 3529,
+          "skipped_flushes": 0,
+          "control_count": 952,
+          "control_total_us": 736115,
+          "control_max_us": 1280,
+          "control_overruns": 0,
+          "control_period_us": 10000,
+          "control_intervals": 953,
+          "control_interval_total_us": 9529993,
+          "control_interval_max_us": 10047,
+          "free_heap": 19868,
+          "minimum_heap": 15180,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "rust",
+          "mode": "full_redraw",
+          "sample": 5,
+          "window_us": 9532951,
+          "ui_count": 84,
+          "ui_total_us": 9530036,
+          "ui_max_us": 116463,
+          "ui_p95_ms_upper_bound": 116,
+          "flushes": 672,
+          "frames": 84,
+          "pixels": 1720320,
+          "flush_total_us": 1990878,
+          "flush_max_us": 3514,
+          "skipped_flushes": 0,
+          "control_count": 954,
+          "control_total_us": 746064,
+          "control_max_us": 1325,
+          "control_overruns": 0,
+          "control_period_us": 10000,
+          "control_intervals": 953,
+          "control_interval_total_us": 9530007,
+          "control_interval_max_us": 10089,
+          "free_heap": 19868,
+          "minimum_heap": 15180,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "rust",
+          "mode": "full_redraw",
+          "sample": 6,
+          "window_us": 9527739,
+          "ui_count": 84,
+          "ui_total_us": 9525014,
+          "ui_max_us": 116319,
+          "ui_p95_ms_upper_bound": 117,
+          "flushes": 672,
+          "frames": 84,
+          "pixels": 1720320,
+          "flush_total_us": 1990998,
+          "flush_max_us": 3556,
+          "skipped_flushes": 0,
+          "control_count": 953,
+          "control_total_us": 739141,
+          "control_max_us": 1304,
+          "control_overruns": 0,
+          "control_period_us": 10000,
+          "control_intervals": 953,
+          "control_interval_total_us": 9529992,
+          "control_interval_max_us": 10105,
+          "free_heap": 19868,
+          "minimum_heap": 15180,
+          "barometer_ok": 1
+        }
+      ],
+      "diagnostics": {
+        "hist_n": 16,
+        "received_records": 16,
+        "current_present": true
+      }
+    }
+  ],
+  "production_board_checks": {
+    "profiles": [
+      {
+        "profile": "native-master-16",
+        "boot": true,
+        "barometer_marker": false,
+        "settings_match": true,
+        "diagnostics": [
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          }
+        ],
+        "passed": true,
+        "image_manifest": {
+          "instrumented": false,
+          "files": {
+            "bootloader.bin": {
+              "bytes": 22368,
+              "sha256": "d6bd03e5a3438c9570a0686e3900e4f9aaa8cb0eff72f264c33ad95e3ec7b372"
+            },
+            "partitions.bin": {
+              "bytes": 3072,
+              "sha256": "1d9cca96de0fe07ad7fc0648b9878ddecd9ce565e38b589ad20fea698ed4c80c"
+            },
+            "otadata.bin": {
+              "bytes": 8192,
+              "sha256": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f"
+            },
+            "app.bin": {
+              "bytes": 1626608,
+              "sha256": "7b327c4796c96322ef97c39958d7ccf55e62e68ac5ca9e2e07686f8b8dd1a085"
+            }
+          }
+        }
+      },
+      {
+        "profile": "rust-master-40",
+        "boot": true,
+        "barometer_marker": true,
+        "settings_match": true,
+        "diagnostics": [
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          },
+          {
+            "hist_n": 16,
+            "received_records": 16
+          }
+        ],
+        "passed": true,
+        "image_manifest": {
+          "instrumented": false,
+          "files": {
+            "bootloader.bin": {
+              "bytes": 22368,
+              "sha256": "e129b854b14638b79a6134900cf4bfaaeea7a63a89a98649f58ec6b1fbbef8b3"
+            },
+            "partitions.bin": {
+              "bytes": 3072,
+              "sha256": "1d9cca96de0fe07ad7fc0648b9878ddecd9ce565e38b589ad20fea698ed4c80c"
+            },
+            "otadata.bin": {
+              "bytes": 8192,
+              "sha256": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f"
+            },
+            "app.bin": {
+              "bytes": 1821536,
+              "sha256": "e29142ecef30d2b2c4c43c67c3946e717e2f8ec97b3a5b66ea85484a0b65ee9f"
+            }
+          }
+        }
+      }
+    ],
+    "restoration": true
+  },
+  "original_flash_restored_and_byte_verified": true,
+  "validation": {
+    "native_host_suites": 8,
+    "native_device_and_controller_suites": 2,
+    "native_screenshots": 34,
+    "rust_screenshots": 34,
+    "rust_tests": "workspace tests and focused cruise/receiver tests passed locally",
+    "native_qemu_control": "passed",
+    "rust_qemu_control": "passed",
+    "rust_maximum_staging": "262144 bytes; 4096-byte scratch; passed",
+    "linux_ci": "Portability fixes are under validation; see GitHub Actions for final status."
+  },
+  "limits": [
+    "These compare the actual implementations and configurations, not an isolated causal language speedup. SDK/compiler/optimization settings differ.",
+    "C++ and Arduino use one 64-row synchronous LVGL buffer; Rust uses one 16-row buffer to preserve internal RAM for its services.",
+    "SPI clocks in profile names are requested settings. The matched 16 MHz profiles control this variable; the two default drivers request different clocks.",
+    "Idle UI-loop frequency is not FPS: an unchanged screen can produce no flushes. Full-redraw results above transfer exactly 20480 pixels per counted frame.",
+    "UI/control measurements are elapsed wall time, including blocking waits, not CPU utilization. The Rust control worker is 100 Hz with a 50 Hz ESC command cadence; C++ throttle tasks are 50 Hz.",
+    "Clean builds are single samples with warm downloaded dependencies; no-op and main-file comment-edit rebuilds are medians of three.",
+    "Ported source also retains the feature work from the original checkout. The Arduino comparator is latest master.",
+    "The measured images predate CI-only fixes and the stable-storage correction for retained Rust LVGL style pointers; exact measured source bases and binary hashes are preserved.",
+    "The bench does not establish connected ESC/BMS, RF pairing, OTA under load, motor timing, or flight qualification. ESP-IDF, LVGL, Bosch and libcanard C code remain in the Rust-built image."
+  ]
+}

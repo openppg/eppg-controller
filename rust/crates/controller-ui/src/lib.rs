@@ -141,8 +141,9 @@ pub struct Ui {
     _buffers: [Box<[u8]>; 1],
     keepalive_points: Vec<Box<[lv_point_precise_t]>>,
     climb_points: Box<[[lv_point_precise_t; 2]; 13]>,
-    style_warning: lv_style_t,
-    style_critical: lv_style_t,
+    // LVGL retains these addresses; moving Ui must not move its styles.
+    style_warning: Box<lv_style_t>,
+    style_critical: Box<lv_style_t>,
     styles_initialized: bool,
     splash: *mut lv_obj_t,
     splash_started: Option<u32>,
@@ -235,8 +236,8 @@ impl Ui {
                 _buffers: buffers,
                 keepalive_points: Vec::new(),
                 climb_points: Box::new(std::mem::zeroed()),
-                style_warning: std::mem::zeroed(),
-                style_critical: std::mem::zeroed(),
+                style_warning: Box::new(std::mem::zeroed()),
+                style_critical: Box::new(std::mem::zeroed()),
                 styles_initialized: false,
                 splash: null_mut(),
                 splash_started: None,
@@ -365,14 +366,14 @@ impl Ui {
     }
     unsafe fn init_temp_styles(&mut self) {
         self.styles_initialized = true;
-        lv_style_init(&mut self.style_warning);
-        lv_style_set_bg_color(&mut self.style_warning, LVGL_YELLOW());
-        lv_style_set_text_color(&mut self.style_warning, LVGL_BLACK());
-        lv_style_set_bg_opa(&mut self.style_warning, 255);
-        lv_style_init(&mut self.style_critical);
-        lv_style_set_bg_color(&mut self.style_critical, LVGL_RED());
-        lv_style_set_text_color(&mut self.style_critical, LVGL_BLACK());
-        lv_style_set_bg_opa(&mut self.style_critical, 255);
+        lv_style_init(&mut *self.style_warning);
+        lv_style_set_bg_color(&mut *self.style_warning, LVGL_YELLOW());
+        lv_style_set_text_color(&mut *self.style_warning, LVGL_BLACK());
+        lv_style_set_bg_opa(&mut *self.style_warning, 255);
+        lv_style_init(&mut *self.style_critical);
+        lv_style_set_bg_color(&mut *self.style_critical, LVGL_RED());
+        lv_style_set_text_color(&mut *self.style_critical, LVGL_BLACK());
+        lv_style_set_bg_opa(&mut *self.style_critical, 255);
     }
 }
 include!("layout.rs");
@@ -383,8 +384,8 @@ impl Drop for Ui {
     fn drop(&mut self) {
         unsafe {
             lv_display_delete(self.display);
-            lv_style_reset(&mut self.style_warning);
-            lv_style_reset(&mut self.style_critical);
+            lv_style_reset(&mut *self.style_warning);
+            lv_style_reset(&mut *self.style_critical);
             lv_deinit();
             INITIALIZED.store(false, Ordering::Release);
         }
@@ -395,6 +396,44 @@ impl Drop for Ui {
 #[cfg(test)]
 mod tests {
     use super::*;
+    static UI_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    #[test]
+    fn moving_an_active_ui_preserves_styles_retained_by_lvgl() {
+        let _guard = UI_TEST_LOCK.lock().unwrap();
+        let settings = Settings::default();
+        let packet = FastLink {
+            esc_status: 1,
+            esc_temp_mos_dC: 1500,
+            ..FastLink::default()
+        };
+        let mut ui = Ui::with_settings(&settings);
+        ui.update(&packet, &settings, false, 1000);
+        unsafe {
+            assert!(lv_color_eq(
+                lv_obj_get_style_bg_color(ui.w.esc_temp_bg, 0),
+                LVGL_RED()
+            ));
+        }
+        #[inline(never)]
+        fn relocate(ui: Ui) -> Box<Ui> {
+            std::hint::black_box(Box::new(ui))
+        }
+        let mut moved = relocate(ui);
+        moved.render_at(1033);
+        unsafe {
+            assert!(lv_color_eq(
+                lv_obj_get_style_bg_color(moved.w.esc_temp_bg, 0),
+                LVGL_RED()
+            ));
+        }
+        moved.update(&packet, &settings, false, 1066);
+        unsafe {
+            assert!(lv_color_eq(
+                lv_obj_get_style_bg_color(moved.w.esc_temp_bg, 0),
+                LVGL_RED()
+            ));
+        }
+    }
     #[test]
     fn production_abbreviations_preserve_sensor_id_and_direction() {
         assert_eq!(abbreviation(0, Level::WarnHigh), "MC-FT-H");
@@ -405,6 +444,7 @@ mod tests {
     }
     #[test]
     fn timed_feedback_missing_probes_and_rebuild_use_real_widgets() {
+        let _guard = UI_TEST_LOCK.lock().unwrap();
         let mut settings = Settings::default();
         let mut packet = FastLink {
             bms_status: 1,
