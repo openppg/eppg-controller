@@ -68,6 +68,8 @@ fn main() {
     files.sort();
     cc.files(files);
     cc.file(out.join("lvgl_inlines.c"));
+    cc.file("c/abi.c");
+    println!("cargo:rerun-if-changed=c/abi.c");
     for name in [
         "img/cruise-control-340255-30.c",
         "img/energy-539741-26.c",

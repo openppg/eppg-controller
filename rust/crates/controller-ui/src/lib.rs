@@ -27,6 +27,50 @@ mod sys {
     include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 }
 use sys::*;
+unsafe extern "C" {
+    fn eppg_lvgl_size(kind: u32) -> usize;
+    fn eppg_lvgl_align(kind: u32) -> usize;
+    fn eppg_lvgl_start_animation(
+        object: *mut c_void,
+        start: i32,
+        end: i32,
+        duration: u32,
+        callback: lv_anim_exec_xcb_t,
+    );
+}
+fn assert_native_layouts() {
+    let layouts = [
+        (
+            std::mem::size_of::<lv_style_t>(),
+            std::mem::align_of::<lv_style_t>(),
+        ),
+        (
+            std::mem::size_of::<lv_point_precise_t>(),
+            std::mem::align_of::<lv_point_precise_t>(),
+        ),
+        (
+            std::mem::size_of::<lv_area_t>(),
+            std::mem::align_of::<lv_area_t>(),
+        ),
+        (
+            std::mem::size_of::<lv_color_t>(),
+            std::mem::align_of::<lv_color_t>(),
+        ),
+    ];
+    for (kind, (size, alignment)) in layouts.into_iter().enumerate() {
+        assert_eq!(
+            size,
+            unsafe { eppg_lvgl_size(kind as u32) },
+            "LVGL type {kind} size mismatch"
+        );
+        assert_eq!(
+            alignment,
+            unsafe { eppg_lvgl_align(kind as u32) },
+            "LVGL type {kind} alignment mismatch"
+        );
+    }
+}
+
 include!("widgets.rs");
 const LV_ANIM_OFF: bool = false;
 const LV_OPA_TRANSP: u8 = 0;
@@ -189,6 +233,7 @@ impl Ui {
         Self::with_settings(&Settings::default())
     }
     pub fn with_settings(settings: &Settings) -> Self {
+        assert_native_layouts();
         unsafe {
             assert!(
                 !LIVE.swap(true, Ordering::AcqRel),
@@ -433,6 +478,9 @@ mod tests {
                 LVGL_RED()
             ));
         }
+        moved.show_splash(&settings, 1100);
+        moved.render_at(1350);
+        assert!(moved.framebuffer().iter().any(|pixel| *pixel != 0));
     }
     #[test]
     fn production_abbreviations_preserve_sensor_id_and_direction() {

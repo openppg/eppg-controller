@@ -23,13 +23,7 @@ impl Ui {
             lv_obj_set_style_text_font(title, addr_of!(lv_font_montserrat_28), 0);
             text_color(title, fg);
             lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 15);
-            let mut animation: lv_anim_t = std::mem::zeroed();
-            lv_anim_init(&mut animation);
-            lv_anim_set_var(&mut animation, title.cast());
-            lv_anim_set_values(&mut animation, 0, 255);
-            lv_anim_set_duration(&mut animation, 500);
-            lv_anim_set_exec_cb(&mut animation, Some(title_opacity));
-            lv_anim_start(&animation);
+            eppg_lvgl_start_animation(title.cast(), 0, 255, 500, Some(title_opacity));
             let version = lv_label_create(self.splash);
             text(
                 version,
