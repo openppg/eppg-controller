@@ -1,0 +1,1825 @@
+{
+  "date": "2026-11-13",
+  "host": {
+    "os": "macOS-26.7.1-arm64-arm-64bit",
+    "architecture": "arm64",
+    "jobs": 4,
+    "cpu": "Apple M4",
+    "memory_bytes": 25769803776
+  },
+  "compile_method": "Sequential builds; dependency downloads/tool installation excluded; fresh project object/cache directories; warm downloaded source/toolchain caches. Three no-op and three main-file comment-edit rebuilds after one clean build per variant.",
+  "compile": [
+    {
+      "variant": "arduino",
+      "source_commit_before_board_fixes": "f117d51",
+      "config": "PlatformIO/Arduino, ESP-IDF 4.4.7, debug/-Og",
+      "runs": [
+        {
+          "phase": "clean",
+          "seconds": 63.531,
+          "exit_code": 0
+        },
+        {
+          "phase": "noop-1",
+          "seconds": 8.193,
+          "exit_code": 0
+        },
+        {
+          "phase": "noop-2",
+          "seconds": 6.957,
+          "exit_code": 0
+        },
+        {
+          "phase": "noop-3",
+          "seconds": 6.914,
+          "exit_code": 0
+        },
+        {
+          "phase": "edit-1",
+          "seconds": 11.378,
+          "exit_code": 0
+        },
+        {
+          "phase": "edit-2",
+          "seconds": 11.258,
+          "exit_code": 0
+        },
+        {
+          "phase": "edit-3",
+          "seconds": 11.289,
+          "exit_code": 0
+        }
+      ],
+      "clean_s": 63.531,
+      "noop_median_s": 6.957,
+      "edit_median_s": 11.289
+    },
+    {
+      "variant": "native",
+      "source_commit_before_board_fixes": "2828413",
+      "config": "ESP-IDF 5.5.3 native C++, debug/-Og",
+      "runs": [
+        {
+          "phase": "clean",
+          "seconds": 49.13,
+          "exit_code": 0
+        },
+        {
+          "phase": "noop-1",
+          "seconds": 0.557,
+          "exit_code": 0
+        },
+        {
+          "phase": "noop-2",
+          "seconds": 0.397,
+          "exit_code": 0
+        },
+        {
+          "phase": "noop-3",
+          "seconds": 0.4,
+          "exit_code": 0
+        },
+        {
+          "phase": "edit-1",
+          "seconds": 9.424,
+          "exit_code": 0
+        },
+        {
+          "phase": "edit-2",
+          "seconds": 9.432,
+          "exit_code": 0
+        },
+        {
+          "phase": "edit-3",
+          "seconds": 9.403,
+          "exit_code": 0
+        }
+      ],
+      "clean_s": 49.13,
+      "noop_median_s": 0.4,
+      "edit_median_s": 9.424
+    },
+    {
+      "variant": "rust",
+      "source_commit_before_board_fixes": "a084154",
+      "config": "Rust application on ESP-IDF 5.5.3; release opt-level=s, thin LTO; C SDK size/-Os",
+      "runs": [
+        {
+          "phase": "clean",
+          "seconds": 72.396,
+          "exit_code": 0
+        },
+        {
+          "phase": "noop-1",
+          "seconds": 0.287,
+          "exit_code": 0
+        },
+        {
+          "phase": "noop-2",
+          "seconds": 0.128,
+          "exit_code": 0
+        },
+        {
+          "phase": "noop-3",
+          "seconds": 0.12,
+          "exit_code": 0
+        },
+        {
+          "phase": "edit-1",
+          "seconds": 5.978,
+          "exit_code": 0
+        },
+        {
+          "phase": "edit-2",
+          "seconds": 6.049,
+          "exit_code": 0
+        },
+        {
+          "phase": "edit-3",
+          "seconds": 6.083,
+          "exit_code": 0
+        }
+      ],
+      "clean_s": 72.396,
+      "noop_median_s": 0.128,
+      "edit_median_s": 6.049
+    }
+  ],
+  "runtime_method": "One physical ESP32-S3 v0.2 SP140, USB only, ESC/motor disconnected. 10 s warmup, three ~9.5 s disarmed idle windows, then three ~9.5 s forced whole-screen redraw windows. Counts actual LVGL final flushes and SPI pixels; screen is 160x128 RGB565. Idle UI-loop rate is not FPS. SPI values are configured clocks. No intentional BLE client traffic. All application tasks and physical BLE initialization enabled.",
+  "runtime": [
+    {
+      "profile": "arduino-32",
+      "image_manifest": {
+        "profile": "arduino-32",
+        "variant": "arduino",
+        "instrumented": true,
+        "spi_mhz": 32,
+        "files": {
+          "bootloader.bin": {
+            "bytes": 22624,
+            "sha256": "afe385123ad556250d49d643e9a3c4311fcfe991731ca4a75a055df4ada350d7"
+          },
+          "partitions.bin": {
+            "bytes": 3072,
+            "sha256": "1d9cca96de0fe07ad7fc0648b9878ddecd9ce565e38b589ad20fea698ed4c80c"
+          },
+          "otadata.bin": {
+            "bytes": 8192,
+            "sha256": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f"
+          },
+          "app.bin": {
+            "bytes": 1649184,
+            "sha256": "48d5bfbfd0de77a11f76e9d036d67879abf03a1e2fbd801e75c53151a81b96a3"
+          }
+        },
+        "source_base_commit": "f117d51",
+        "source_changes": "Counter hooks and board fixes listed in board_fixes; full instrumented worktree patches retained in .tools/performance/2026-11-13."
+      },
+      "samples": [
+        {
+          "variant": "arduino",
+          "mode": "idle",
+          "sample": 1,
+          "window_us": 9510889,
+          "ui_count": 288,
+          "ui_total_us": 1905695,
+          "ui_max_us": 16052,
+          "ui_p95_ms_upper_bound": 14,
+          "flushes": 0,
+          "frames": 0,
+          "pixels": 0,
+          "flush_total_us": 0,
+          "flush_max_us": 0,
+          "skipped_flushes": 0,
+          "control_count": 475,
+          "control_total_us": 505255,
+          "control_max_us": 1222,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 475,
+          "control_interval_total_us": 9499998,
+          "control_interval_max_us": 20008,
+          "free_heap": 69340,
+          "minimum_heap": 68964,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "arduino",
+          "mode": "idle",
+          "sample": 2,
+          "window_us": 9504496,
+          "ui_count": 288,
+          "ui_total_us": 1905140,
+          "ui_max_us": 19047,
+          "ui_p95_ms_upper_bound": 14,
+          "flushes": 0,
+          "frames": 0,
+          "pixels": 0,
+          "flush_total_us": 0,
+          "flush_max_us": 0,
+          "skipped_flushes": 0,
+          "control_count": 476,
+          "control_total_us": 506048,
+          "control_max_us": 1146,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 476,
+          "control_interval_total_us": 9520001,
+          "control_interval_max_us": 20025,
+          "free_heap": 69340,
+          "minimum_heap": 68192,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "arduino",
+          "mode": "idle",
+          "sample": 3,
+          "window_us": 9500066,
+          "ui_count": 288,
+          "ui_total_us": 1902415,
+          "ui_max_us": 15590,
+          "ui_p95_ms_upper_bound": 14,
+          "flushes": 0,
+          "frames": 0,
+          "pixels": 0,
+          "flush_total_us": 0,
+          "flush_max_us": 0,
+          "skipped_flushes": 0,
+          "control_count": 475,
+          "control_total_us": 504766,
+          "control_max_us": 1142,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 475,
+          "control_interval_total_us": 9500003,
+          "control_interval_max_us": 20045,
+          "free_heap": 69340,
+          "minimum_heap": 68192,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "arduino",
+          "mode": "full_redraw",
+          "sample": 4,
+          "window_us": 9540593,
+          "ui_count": 140,
+          "ui_total_us": 9535269,
+          "ui_max_us": 77124,
+          "ui_p95_ms_upper_bound": 73,
+          "flushes": 280,
+          "frames": 140,
+          "pixels": 2867200,
+          "flush_total_us": 2094802,
+          "flush_max_us": 7987,
+          "skipped_flushes": 0,
+          "control_count": 477,
+          "control_total_us": 790897,
+          "control_max_us": 2239,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 477,
+          "control_interval_total_us": 9540001,
+          "control_interval_max_us": 20064,
+          "free_heap": 69340,
+          "minimum_heap": 68192,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "arduino",
+          "mode": "full_redraw",
+          "sample": 5,
+          "window_us": 9544129,
+          "ui_count": 140,
+          "ui_total_us": 9537265,
+          "ui_max_us": 74073,
+          "ui_p95_ms_upper_bound": 73,
+          "flushes": 280,
+          "frames": 140,
+          "pixels": 2867200,
+          "flush_total_us": 2094656,
+          "flush_max_us": 7891,
+          "skipped_flushes": 0,
+          "control_count": 477,
+          "control_total_us": 776919,
+          "control_max_us": 2270,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 477,
+          "control_interval_total_us": 9540007,
+          "control_interval_max_us": 20054,
+          "free_heap": 69340,
+          "minimum_heap": 68192,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "arduino",
+          "mode": "full_redraw",
+          "sample": 6,
+          "window_us": 9556137,
+          "ui_count": 140,
+          "ui_total_us": 9548631,
+          "ui_max_us": 73815,
+          "ui_p95_ms_upper_bound": 73,
+          "flushes": 280,
+          "frames": 140,
+          "pixels": 2867200,
+          "flush_total_us": 2095539,
+          "flush_max_us": 7971,
+          "skipped_flushes": 0,
+          "control_count": 478,
+          "control_total_us": 790745,
+          "control_max_us": 2249,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 478,
+          "control_interval_total_us": 9559993,
+          "control_interval_max_us": 20061,
+          "free_heap": 69340,
+          "minimum_heap": 68192,
+          "barometer_ok": 1
+        }
+      ],
+      "full_redraw_fps": 14.664364640739302,
+      "full_redraw_mean_ui_wall_ms": 68.14563095238094,
+      "full_redraw_mean_spi_flush_ms_per_frame": 14.96427857142857,
+      "control_overruns": 0,
+      "diagnostic_history": null
+    },
+    {
+      "profile": "arduino-16",
+      "image_manifest": {
+        "profile": "arduino-16",
+        "variant": "arduino",
+        "instrumented": true,
+        "spi_mhz": 16,
+        "files": {
+          "bootloader.bin": {
+            "bytes": 22624,
+            "sha256": "afe385123ad556250d49d643e9a3c4311fcfe991731ca4a75a055df4ada350d7"
+          },
+          "partitions.bin": {
+            "bytes": 3072,
+            "sha256": "1d9cca96de0fe07ad7fc0648b9878ddecd9ce565e38b589ad20fea698ed4c80c"
+          },
+          "otadata.bin": {
+            "bytes": 8192,
+            "sha256": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f"
+          },
+          "app.bin": {
+            "bytes": 1649216,
+            "sha256": "d9651cb36dc3b6613db9c2972b5d70ee0f43e93aca3e7503f870f1009713e7db"
+          }
+        },
+        "source_base_commit": "f117d51",
+        "source_changes": "Counter hooks and board fixes listed in board_fixes; full instrumented worktree patches retained in .tools/performance/2026-11-13."
+      },
+      "samples": [
+        {
+          "variant": "arduino",
+          "mode": "idle",
+          "sample": 1,
+          "window_us": 9515191,
+          "ui_count": 288,
+          "ui_total_us": 1950222,
+          "ui_max_us": 20076,
+          "ui_p95_ms_upper_bound": 16,
+          "flushes": 0,
+          "frames": 0,
+          "pixels": 0,
+          "flush_total_us": 0,
+          "flush_max_us": 0,
+          "skipped_flushes": 0,
+          "control_count": 476,
+          "control_total_us": 505291,
+          "control_max_us": 1201,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 476,
+          "control_interval_total_us": 9520002,
+          "control_interval_max_us": 20034,
+          "free_heap": 69292,
+          "minimum_heap": 68916,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "arduino",
+          "mode": "idle",
+          "sample": 2,
+          "window_us": 9524593,
+          "ui_count": 289,
+          "ui_total_us": 1955908,
+          "ui_max_us": 20110,
+          "ui_p95_ms_upper_bound": 15,
+          "flushes": 0,
+          "frames": 0,
+          "pixels": 0,
+          "flush_total_us": 0,
+          "flush_max_us": 0,
+          "skipped_flushes": 0,
+          "control_count": 476,
+          "control_total_us": 505273,
+          "control_max_us": 1201,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 476,
+          "control_interval_total_us": 9520002,
+          "control_interval_max_us": 20029,
+          "free_heap": 69292,
+          "minimum_heap": 68144,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "arduino",
+          "mode": "idle",
+          "sample": 3,
+          "window_us": 9503766,
+          "ui_count": 288,
+          "ui_total_us": 1967356,
+          "ui_max_us": 20094,
+          "ui_p95_ms_upper_bound": 16,
+          "flushes": 0,
+          "frames": 0,
+          "pixels": 0,
+          "flush_total_us": 0,
+          "flush_max_us": 0,
+          "skipped_flushes": 0,
+          "control_count": 475,
+          "control_total_us": 503947,
+          "control_max_us": 1179,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 475,
+          "control_interval_total_us": 9500029,
+          "control_interval_max_us": 20037,
+          "free_heap": 69292,
+          "minimum_heap": 68144,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "arduino",
+          "mode": "full_redraw",
+          "sample": 4,
+          "window_us": 9567362,
+          "ui_count": 124,
+          "ui_total_us": 9560925,
+          "ui_max_us": 87071,
+          "ui_p95_ms_upper_bound": 82,
+          "flushes": 248,
+          "frames": 124,
+          "pixels": 2539520,
+          "flush_total_us": 2868742,
+          "flush_max_us": 12114,
+          "skipped_flushes": 0,
+          "control_count": 479,
+          "control_total_us": 748093,
+          "control_max_us": 2234,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 479,
+          "control_interval_total_us": 9579994,
+          "control_interval_max_us": 20061,
+          "free_heap": 69292,
+          "minimum_heap": 68144,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "arduino",
+          "mode": "full_redraw",
+          "sample": 5,
+          "window_us": 9551423,
+          "ui_count": 124,
+          "ui_total_us": 9543567,
+          "ui_max_us": 84691,
+          "ui_p95_ms_upper_bound": 82,
+          "flushes": 248,
+          "frames": 124,
+          "pixels": 2539520,
+          "flush_total_us": 2869246,
+          "flush_max_us": 12067,
+          "skipped_flushes": 0,
+          "control_count": 477,
+          "control_total_us": 761279,
+          "control_max_us": 2267,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 477,
+          "control_interval_total_us": 9540010,
+          "control_interval_max_us": 20114,
+          "free_heap": 69292,
+          "minimum_heap": 68144,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "arduino",
+          "mode": "full_redraw",
+          "sample": 6,
+          "window_us": 9568625,
+          "ui_count": 124,
+          "ui_total_us": 9561162,
+          "ui_max_us": 86344,
+          "ui_p95_ms_upper_bound": 82,
+          "flushes": 248,
+          "frames": 124,
+          "pixels": 2539520,
+          "flush_total_us": 2869170,
+          "flush_max_us": 12060,
+          "skipped_flushes": 0,
+          "control_count": 479,
+          "control_total_us": 761069,
+          "control_max_us": 2254,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 479,
+          "control_interval_total_us": 9579990,
+          "control_interval_max_us": 20011,
+          "free_heap": 69292,
+          "minimum_heap": 68144,
+          "barometer_ok": 1
+        }
+      ],
+      "full_redraw_fps": 12.967360943354594,
+      "full_redraw_mean_ui_wall_ms": 77.05820967741934,
+      "full_redraw_mean_spi_flush_ms_per_frame": 23.137521505376345,
+      "control_overruns": 0,
+      "diagnostic_history": null
+    },
+    {
+      "profile": "native-final-16",
+      "image_manifest": {
+        "profile": "native-final-16",
+        "variant": "native",
+        "instrumented": true,
+        "spi_mhz": 16,
+        "files": {
+          "bootloader.bin": {
+            "bytes": 22368,
+            "sha256": "6d06612e0f2afdbe9a9402cfd68a8ed7262e57b38ff1db7e385fe3a437ca1332"
+          },
+          "partitions.bin": {
+            "bytes": 3072,
+            "sha256": "1d9cca96de0fe07ad7fc0648b9878ddecd9ce565e38b589ad20fea698ed4c80c"
+          },
+          "otadata.bin": {
+            "bytes": 8192,
+            "sha256": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f"
+          },
+          "app.bin": {
+            "bytes": 1606448,
+            "sha256": "eae669476d59e005281e883e873adfeb6d211ea7faa2ec4af29f38e981e60e5c"
+          }
+        },
+        "source_base_commit": "2828413",
+        "source_changes": "Counter hooks and board fixes listed in board_fixes; full instrumented worktree patches retained in .tools/performance/2026-11-13."
+      },
+      "samples": [
+        {
+          "variant": "native",
+          "mode": "idle",
+          "sample": 1,
+          "window_us": 9510920,
+          "ui_count": 288,
+          "ui_total_us": 1879116,
+          "ui_max_us": 15630,
+          "ui_p95_ms_upper_bound": 14,
+          "flushes": 0,
+          "frames": 0,
+          "pixels": 0,
+          "flush_total_us": 0,
+          "flush_max_us": 0,
+          "skipped_flushes": 0,
+          "control_count": 475,
+          "control_total_us": 503183,
+          "control_max_us": 1153,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 475,
+          "control_interval_total_us": 9499992,
+          "control_interval_max_us": 20013,
+          "free_heap": 21452,
+          "minimum_heap": 12124,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "native",
+          "mode": "idle",
+          "sample": 2,
+          "window_us": 9504960,
+          "ui_count": 288,
+          "ui_total_us": 1878014,
+          "ui_max_us": 15591,
+          "ui_p95_ms_upper_bound": 14,
+          "flushes": 0,
+          "frames": 0,
+          "pixels": 0,
+          "flush_total_us": 0,
+          "flush_max_us": 0,
+          "skipped_flushes": 0,
+          "control_count": 476,
+          "control_total_us": 504241,
+          "control_max_us": 1142,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 476,
+          "control_interval_total_us": 9520000,
+          "control_interval_max_us": 20014,
+          "free_heap": 21168,
+          "minimum_heap": 12124,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "native",
+          "mode": "idle",
+          "sample": 3,
+          "window_us": 9528799,
+          "ui_count": 289,
+          "ui_total_us": 1893058,
+          "ui_max_us": 15697,
+          "ui_p95_ms_upper_bound": 14,
+          "flushes": 0,
+          "frames": 0,
+          "pixels": 0,
+          "flush_total_us": 0,
+          "flush_max_us": 0,
+          "skipped_flushes": 0,
+          "control_count": 476,
+          "control_total_us": 504216,
+          "control_max_us": 1145,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 476,
+          "control_interval_total_us": 9520000,
+          "control_interval_max_us": 20013,
+          "free_heap": 21168,
+          "minimum_heap": 12124,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "native",
+          "mode": "full_redraw",
+          "sample": 4,
+          "window_us": 9508062,
+          "ui_count": 128,
+          "ui_total_us": 9502466,
+          "ui_max_us": 81113,
+          "ui_p95_ms_upper_bound": 80,
+          "flushes": 256,
+          "frames": 128,
+          "pixels": 2621440,
+          "flush_total_us": 2932940,
+          "flush_max_us": 11518,
+          "skipped_flushes": 0,
+          "control_count": 476,
+          "control_total_us": 765392,
+          "control_max_us": 2305,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 476,
+          "control_interval_total_us": 9519992,
+          "control_interval_max_us": 20028,
+          "free_heap": 21168,
+          "minimum_heap": 12124,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "native",
+          "mode": "full_redraw",
+          "sample": 5,
+          "window_us": 9573449,
+          "ui_count": 128,
+          "ui_total_us": 9567412,
+          "ui_max_us": 81582,
+          "ui_p95_ms_upper_bound": 80,
+          "flushes": 256,
+          "frames": 128,
+          "pixels": 2621440,
+          "flush_total_us": 2933675,
+          "flush_max_us": 11651,
+          "skipped_flushes": 0,
+          "control_count": 478,
+          "control_total_us": 750167,
+          "control_max_us": 2279,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 478,
+          "control_interval_total_us": 9560007,
+          "control_interval_max_us": 20026,
+          "free_heap": 21168,
+          "minimum_heap": 12124,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "native",
+          "mode": "full_redraw",
+          "sample": 6,
+          "window_us": 9547865,
+          "ui_count": 128,
+          "ui_total_us": 9542432,
+          "ui_max_us": 81766,
+          "ui_p95_ms_upper_bound": 80,
+          "flushes": 256,
+          "frames": 128,
+          "pixels": 2621440,
+          "flush_total_us": 2932739,
+          "flush_max_us": 11640,
+          "skipped_flushes": 0,
+          "control_count": 478,
+          "control_total_us": 770110,
+          "control_max_us": 2295,
+          "control_overruns": 0,
+          "control_period_us": 20000,
+          "control_intervals": 478,
+          "control_interval_total_us": 9559997,
+          "control_interval_max_us": 20029,
+          "free_heap": 21148,
+          "minimum_heap": 12124,
+          "barometer_ok": 1
+        }
+      ],
+      "full_redraw_fps": 13.412796702240383,
+      "full_redraw_mean_ui_wall_ms": 74.51122395833333,
+      "full_redraw_mean_spi_flush_ms_per_frame": 22.914984375,
+      "control_overruns": 0,
+      "diagnostic_history": {
+        "hist_n": 16,
+        "received_records": 16,
+        "current_present": true
+      }
+    },
+    {
+      "profile": "rust-final-16",
+      "image_manifest": {
+        "profile": "rust-final-16",
+        "variant": "rust",
+        "instrumented": true,
+        "spi_mhz": 16,
+        "files": {
+          "bootloader.bin": {
+            "bytes": 22368,
+            "sha256": "1deca0d91e291fd580da3733fd8109d5abe4376f0378da02a11eb57da3f04652"
+          },
+          "partitions.bin": {
+            "bytes": 3072,
+            "sha256": "1d9cca96de0fe07ad7fc0648b9878ddecd9ce565e38b589ad20fea698ed4c80c"
+          },
+          "otadata.bin": {
+            "bytes": 8192,
+            "sha256": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f"
+          },
+          "app.bin": {
+            "bytes": 1802688,
+            "sha256": "880e5d5d88adfabaf54b47d00e3d32c3cc8adf4b9d087b3dd8fc211e61e7466a"
+          }
+        },
+        "source_base_commit": "a084154",
+        "source_changes": "Counter hooks and board fixes listed in board_fixes; full instrumented worktree patches retained in .tools/performance/2026-11-13."
+      },
+      "samples": [
+        {
+          "variant": "rust",
+          "mode": "idle",
+          "sample": 1,
+          "window_us": 9504002,
+          "ui_count": 288,
+          "ui_total_us": 221119,
+          "ui_max_us": 1002,
+          "ui_p95_ms_upper_bound": 1,
+          "flushes": 0,
+          "frames": 0,
+          "pixels": 0,
+          "flush_total_us": 0,
+          "flush_max_us": 0,
+          "skipped_flushes": 0,
+          "control_count": 951,
+          "control_total_us": 331139,
+          "control_max_us": 832,
+          "control_overruns": 0,
+          "control_period_us": 10000,
+          "control_intervals": 951,
+          "control_interval_total_us": 9510000,
+          "control_interval_max_us": 10027,
+          "free_heap": 19948,
+          "minimum_heap": 19852,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "rust",
+          "mode": "idle",
+          "sample": 2,
+          "window_us": 9504043,
+          "ui_count": 288,
+          "ui_total_us": 221150,
+          "ui_max_us": 972,
+          "ui_p95_ms_upper_bound": 1,
+          "flushes": 0,
+          "frames": 0,
+          "pixels": 0,
+          "flush_total_us": 0,
+          "flush_max_us": 0,
+          "skipped_flushes": 0,
+          "control_count": 950,
+          "control_total_us": 330702,
+          "control_max_us": 847,
+          "control_overruns": 0,
+          "control_period_us": 10000,
+          "control_intervals": 950,
+          "control_interval_total_us": 9500001,
+          "control_interval_max_us": 10048,
+          "free_heap": 19948,
+          "minimum_heap": 17640,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "rust",
+          "mode": "idle",
+          "sample": 3,
+          "window_us": 9504100,
+          "ui_count": 288,
+          "ui_total_us": 220766,
+          "ui_max_us": 978,
+          "ui_p95_ms_upper_bound": 1,
+          "flushes": 0,
+          "frames": 0,
+          "pixels": 0,
+          "flush_total_us": 0,
+          "flush_max_us": 0,
+          "skipped_flushes": 0,
+          "control_count": 950,
+          "control_total_us": 330827,
+          "control_max_us": 975,
+          "control_overruns": 0,
+          "control_period_us": 10000,
+          "control_intervals": 951,
+          "control_interval_total_us": 9510014,
+          "control_interval_max_us": 10070,
+          "free_heap": 19948,
+          "minimum_heap": 15260,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "rust",
+          "mode": "full_redraw",
+          "sample": 4,
+          "window_us": 9559704,
+          "ui_count": 89,
+          "ui_total_us": 9556794,
+          "ui_max_us": 109985,
+          "ui_p95_ms_upper_bound": 110,
+          "flushes": 712,
+          "frames": 89,
+          "pixels": 1822720,
+          "flush_total_us": 2103148,
+          "flush_max_us": 3268,
+          "skipped_flushes": 0,
+          "control_count": 956,
+          "control_total_us": 745294,
+          "control_max_us": 1203,
+          "control_overruns": 0,
+          "control_period_us": 10000,
+          "control_intervals": 956,
+          "control_interval_total_us": 9560000,
+          "control_interval_max_us": 10097,
+          "free_heap": 19948,
+          "minimum_heap": 15260,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "rust",
+          "mode": "full_redraw",
+          "sample": 5,
+          "window_us": 9560472,
+          "ui_count": 89,
+          "ui_total_us": 9557454,
+          "ui_max_us": 109705,
+          "ui_p95_ms_upper_bound": 110,
+          "flushes": 712,
+          "frames": 89,
+          "pixels": 1822720,
+          "flush_total_us": 2104061,
+          "flush_max_us": 3289,
+          "skipped_flushes": 0,
+          "control_count": 956,
+          "control_total_us": 746501,
+          "control_max_us": 1207,
+          "control_overruns": 0,
+          "control_period_us": 10000,
+          "control_intervals": 956,
+          "control_interval_total_us": 9560000,
+          "control_interval_max_us": 10091,
+          "free_heap": 19948,
+          "minimum_heap": 15260,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "rust",
+          "mode": "full_redraw",
+          "sample": 6,
+          "window_us": 9565663,
+          "ui_count": 89,
+          "ui_total_us": 9562776,
+          "ui_max_us": 109714,
+          "ui_p95_ms_upper_bound": 110,
+          "flushes": 712,
+          "frames": 89,
+          "pixels": 1822720,
+          "flush_total_us": 2104482,
+          "flush_max_us": 3281,
+          "skipped_flushes": 0,
+          "control_count": 956,
+          "control_total_us": 747048,
+          "control_max_us": 1242,
+          "control_overruns": 0,
+          "control_period_us": 10000,
+          "control_intervals": 956,
+          "control_interval_total_us": 9560008,
+          "control_interval_max_us": 10090,
+          "free_heap": 19948,
+          "minimum_heap": 15260,
+          "barometer_ok": 1
+        }
+      ],
+      "full_redraw_fps": 9.307728457933546,
+      "full_redraw_mean_ui_wall_ms": 107.40458426966292,
+      "full_redraw_mean_spi_flush_ms_per_frame": 23.63929213483146,
+      "control_overruns": 0,
+      "diagnostic_history": {
+        "hist_n": 16,
+        "received_records": 16,
+        "current_present": true
+      }
+    },
+    {
+      "profile": "rust-final-40",
+      "image_manifest": {
+        "profile": "rust-final-40",
+        "variant": "rust",
+        "instrumented": true,
+        "spi_mhz": 40,
+        "files": {
+          "bootloader.bin": {
+            "bytes": 22368,
+            "sha256": "1deca0d91e291fd580da3733fd8109d5abe4376f0378da02a11eb57da3f04652"
+          },
+          "partitions.bin": {
+            "bytes": 3072,
+            "sha256": "1d9cca96de0fe07ad7fc0648b9878ddecd9ce565e38b589ad20fea698ed4c80c"
+          },
+          "otadata.bin": {
+            "bytes": 8192,
+            "sha256": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f"
+          },
+          "app.bin": {
+            "bytes": 1802688,
+            "sha256": "eb3830219ba1b5751ff83c6a14c23601f3c4cd8e596d8fca19d760ba82881389"
+          }
+        },
+        "source_base_commit": "a084154",
+        "source_changes": "Counter hooks and board fixes listed in board_fixes; full instrumented worktree patches retained in .tools/performance/2026-11-13."
+      },
+      "samples": [
+        {
+          "variant": "rust",
+          "mode": "idle",
+          "sample": 1,
+          "window_us": 9504142,
+          "ui_count": 288,
+          "ui_total_us": 221104,
+          "ui_max_us": 1082,
+          "ui_p95_ms_upper_bound": 1,
+          "flushes": 0,
+          "frames": 0,
+          "pixels": 0,
+          "flush_total_us": 0,
+          "flush_max_us": 0,
+          "skipped_flushes": 0,
+          "control_count": 950,
+          "control_total_us": 336185,
+          "control_max_us": 746,
+          "control_overruns": 0,
+          "control_period_us": 10000,
+          "control_intervals": 951,
+          "control_interval_total_us": 9510008,
+          "control_interval_max_us": 10090,
+          "free_heap": 19944,
+          "minimum_heap": 19864,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "rust",
+          "mode": "idle",
+          "sample": 2,
+          "window_us": 9503892,
+          "ui_count": 288,
+          "ui_total_us": 221029,
+          "ui_max_us": 1076,
+          "ui_p95_ms_upper_bound": 1,
+          "flushes": 0,
+          "frames": 0,
+          "pixels": 0,
+          "flush_total_us": 0,
+          "flush_max_us": 0,
+          "skipped_flushes": 0,
+          "control_count": 951,
+          "control_total_us": 336485,
+          "control_max_us": 714,
+          "control_overruns": 0,
+          "control_period_us": 10000,
+          "control_intervals": 950,
+          "control_interval_total_us": 9499992,
+          "control_interval_max_us": 10086,
+          "free_heap": 19944,
+          "minimum_heap": 17624,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "rust",
+          "mode": "idle",
+          "sample": 3,
+          "window_us": 9503968,
+          "ui_count": 288,
+          "ui_total_us": 220863,
+          "ui_max_us": 1093,
+          "ui_p95_ms_upper_bound": 1,
+          "flushes": 0,
+          "frames": 0,
+          "pixels": 0,
+          "flush_total_us": 0,
+          "flush_max_us": 0,
+          "skipped_flushes": 0,
+          "control_count": 950,
+          "control_total_us": 336190,
+          "control_max_us": 895,
+          "control_overruns": 0,
+          "control_period_us": 10000,
+          "control_intervals": 950,
+          "control_interval_total_us": 9500005,
+          "control_interval_max_us": 10019,
+          "free_heap": 19944,
+          "minimum_heap": 15260,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "rust",
+          "mode": "full_redraw",
+          "sample": 4,
+          "window_us": 9593738,
+          "ui_count": 101,
+          "ui_total_us": 9590536,
+          "ui_max_us": 96408,
+          "ui_p95_ms_upper_bound": 96,
+          "flushes": 808,
+          "frames": 101,
+          "pixels": 2068480,
+          "flush_total_us": 1144195,
+          "flush_max_us": 1737,
+          "skipped_flushes": 0,
+          "control_count": 960,
+          "control_total_us": 788028,
+          "control_max_us": 1202,
+          "control_overruns": 0,
+          "control_period_us": 10000,
+          "control_intervals": 960,
+          "control_interval_total_us": 9599994,
+          "control_interval_max_us": 10024,
+          "free_heap": 19944,
+          "minimum_heap": 15260,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "rust",
+          "mode": "full_redraw",
+          "sample": 5,
+          "window_us": 9500060,
+          "ui_count": 100,
+          "ui_total_us": 9496913,
+          "ui_max_us": 96380,
+          "ui_p95_ms_upper_bound": 97,
+          "flushes": 800,
+          "frames": 100,
+          "pixels": 2048000,
+          "flush_total_us": 1132773,
+          "flush_max_us": 1705,
+          "skipped_flushes": 0,
+          "control_count": 950,
+          "control_total_us": 781024,
+          "control_max_us": 1193,
+          "control_overruns": 0,
+          "control_period_us": 10000,
+          "control_intervals": 950,
+          "control_interval_total_us": 9499999,
+          "control_interval_max_us": 10124,
+          "free_heap": 19944,
+          "minimum_heap": 15260,
+          "barometer_ok": 1
+        },
+        {
+          "variant": "rust",
+          "mode": "full_redraw",
+          "sample": 6,
+          "window_us": 9588736,
+          "ui_count": 101,
+          "ui_total_us": 9585249,
+          "ui_max_us": 96731,
+          "ui_p95_ms_upper_bound": 97,
+          "flushes": 808,
+          "frames": 101,
+          "pixels": 2068480,
+          "flush_total_us": 1144266,
+          "flush_max_us": 1754,
+          "skipped_flushes": 0,
+          "control_count": 958,
+          "control_total_us": 787722,
+          "control_max_us": 1208,
+          "control_overruns": 0,
+          "control_period_us": 10000,
+          "control_intervals": 958,
+          "control_interval_total_us": 9580008,
+          "control_interval_max_us": 10025,
+          "free_heap": 19944,
+          "minimum_heap": 15260,
+          "barometer_ok": 1
+        }
+      ],
+      "full_redraw_fps": 10.529055766132798,
+      "full_redraw_mean_ui_wall_ms": 94.94270860927152,
+      "full_redraw_mean_spi_flush_ms_per_frame": 11.32858940397351,
+      "control_overruns": 0,
+      "diagnostic_history": {
+        "hist_n": 16,
+        "received_records": 16,
+        "current_present": true
+      }
+    }
+  ],
+  "limitations": [
+    "Clean builds are single samples with warm downloaded dependencies; no-op and comment-only main-file edit times are medians of three.",
+    "SDK/compiler/optimization settings and display buffer sizes differ; these compare current implementations, not an isolated Rust-language speedup.",
+    "Rust uses one 16-row synchronous draw buffer to fit physical internal RAM; C++ uses two 64-row buffers.",
+    "Rust control worker runs at 100 Hz with a 50 Hz ESC throttle cadence; C++ control task is 50 Hz. Wall time includes blocking waits and is not CPU utilization.",
+    "Disarmed bench measurements do not validate connected ESC/BMS traffic, motor timing, radio pairing/OTA under load, or flight readiness."
+  ],
+  "board_fixes": {
+    "native": [
+      "Handle the IDF 5.5 not-installed TWAI status code and guard throttle before initialization.",
+      "Serialize diagnostic history one record at a time; prevent background console logs interleaving it without blocking the throttle task.",
+      "Use the current IDF I2C master driver after a physical legacy-I2C interrupt watchdog was captured.",
+      "Route SDK stdio through the installed USB interrupt driver."
+    ],
+    "rust": [
+      "Set the Bosch callback context required by its API.",
+      "Release the startup task after spawning workers.",
+      "Use a bounded single display buffer for the synchronous panel.",
+      "Allocate completed CAN payloads on demand without reducing queue/payload limits; avoid allocations when polling an empty queue.",
+      "Stream diagnostic history one record at a time.",
+      "Match ST7735 rotation commands to the retained driver.",
+      "Release the diagnostics mutex before serial output so USB backpressure cannot delay the watchdog snapshot."
+    ]
+  },
+  "validation": {
+    "physical_production": {
+      "profiles": [
+        {
+          "profile": "native-production-16",
+          "boot": true,
+          "barometer_marker": false,
+          "settings_match": true,
+          "diagnostics": [
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            }
+          ],
+          "passed": true,
+          "image_manifest": {
+            "instrumented": false,
+            "source_commit": "30297f966f9668dbcdb34254661603bf47947a9a",
+            "files": {
+              "bootloader.bin": {
+                "bytes": 22368,
+                "sha256": "d6bd03e5a3438c9570a0686e3900e4f9aaa8cb0eff72f264c33ad95e3ec7b372"
+              },
+              "partitions.bin": {
+                "bytes": 3072,
+                "sha256": "1d9cca96de0fe07ad7fc0648b9878ddecd9ce565e38b589ad20fea698ed4c80c"
+              },
+              "otadata.bin": {
+                "bytes": 8192,
+                "sha256": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f"
+              },
+              "app.bin": {
+                "bytes": 1603904,
+                "sha256": "cb9f28b059f64ab003976c7b9ed5a9c0b1ed14de6e13d3f342e365a764ca9960"
+              }
+            }
+          }
+        },
+        {
+          "profile": "rust-production-40",
+          "boot": true,
+          "barometer_marker": true,
+          "settings_match": true,
+          "diagnostics": [
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            }
+          ],
+          "passed": true,
+          "image_manifest": {
+            "instrumented": false,
+            "files": {
+              "bootloader.bin": {
+                "bytes": 22368,
+                "sha256": "e129b854b14638b79a6134900cf4bfaaeea7a63a89a98649f58ec6b1fbbef8b3"
+              },
+              "partitions.bin": {
+                "bytes": 3072,
+                "sha256": "1d9cca96de0fe07ad7fc0648b9878ddecd9ce565e38b589ad20fea698ed4c80c"
+              },
+              "otadata.bin": {
+                "bytes": 8192,
+                "sha256": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f"
+              },
+              "app.bin": {
+                "bytes": 1800048,
+                "sha256": "343d7f62244552ec159bd5fc8d9a68a47766e0bc1ea7dba2f2377f88a718dd16"
+              }
+            }
+          }
+        },
+        {
+          "profile": "rust-production-40-reset",
+          "boot": true,
+          "barometer_marker": true,
+          "settings_match": true,
+          "diagnostics": [
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            },
+            {
+              "hist_n": 16,
+              "received_records": 16
+            }
+          ],
+          "passed": true,
+          "image_manifest": {
+            "instrumented": false,
+            "files": {
+              "bootloader.bin": {
+                "bytes": 22368,
+                "sha256": "e129b854b14638b79a6134900cf4bfaaeea7a63a89a98649f58ec6b1fbbef8b3"
+              },
+              "partitions.bin": {
+                "bytes": 3072,
+                "sha256": "1d9cca96de0fe07ad7fc0648b9878ddecd9ce565e38b589ad20fea698ed4c80c"
+              },
+              "otadata.bin": {
+                "bytes": 8192,
+                "sha256": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f"
+              },
+              "app.bin": {
+                "bytes": 1800048,
+                "sha256": "343d7f62244552ec159bd5fc8d9a68a47766e0bc1ea7dba2f2377f88a718dd16"
+              }
+            }
+          }
+        }
+      ],
+      "restoration": true
+    },
+    "original_flash_restored_and_byte_verified": true,
+    "rust_host_tests": 77,
+    "cpp_host_tests": 73,
+    "rust_golden_screens": 34,
+    "strict_clippy": "passed",
+    "native_qemu": {
+      "passed": true
+    },
+    "rust_qemu": {
+      "passed": true,
+      "image_sha256": "e754f22d6be96c649fb9f6e09b11a6e1985fce72369806517f84ab7e73635c3d",
+      "expected": [
+        "Rust controller boot complete",
+        "pwm_01us=16000",
+        "Barometer initialized"
+      ],
+      "missing": [],
+      "control_proof": {
+        "passed": true,
+        "checks": {
+          "armed_on_s3": true,
+          "throttle_task_fresh": true,
+          "spi_screen_changed": true,
+          "raw_can_bidirectional": true,
+          "raw_can_throttle_above_idle": true
+        },
+        "model_reports": 7,
+        "can_reports": 6
+      },
+      "fidelity": "ESP32-S3 CPU/RTOS/flash; application peripheral models selected by image build"
+    },
+    "rust_qemu_maximum_staging": {
+      "passed": true,
+      "image_sha256": "e754f22d6be96c649fb9f6e09b11a6e1985fce72369806517f84ab7e73635c3d",
+      "expected": [
+        "Rust controller boot complete",
+        "EPPG_QEMU_STAGE size=262144 verified=1 scratch=4096"
+      ],
+      "missing": [],
+      "control_proof": {
+        "passed": false,
+        "checks": {
+          "armed_on_s3": false,
+          "throttle_task_fresh": false,
+          "spi_screen_changed": false,
+          "raw_can_bidirectional": true,
+          "raw_can_throttle_above_idle": false
+        },
+        "model_reports": 2,
+        "can_reports": 1
+      },
+      "fidelity": "ESP32-S3 CPU/RTOS/flash; application peripheral models selected by image build"
+    }
+  },
+  "source_heads": {
+    "native": "30297f966f9668dbcdb34254661603bf47947a9a",
+    "rust": "ab92d3cf90e313b462d3bc585294d60f3dcc9bef"
+  },
+  "source_notes": "Compile timings were captured before physical-board fixes. Runtime images include counter hooks and the final source fixes, built from retained temporary worktrees. Production image hashes record the exact uninstrumented binaries that passed board testing before the fix commit; CI rebuilds embed the resulting commit count."
+}
