@@ -25,6 +25,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: simulator/ui/package-lock.json
       - name: Install native test tools
         run: sudo apt-get update && sudo apt-get install -y cmake ninja-build g++ libgtest-dev
       - name: Controller regressions
@@ -44,6 +49,12 @@ jobs:
           cmake -S tools/host-screenshot-offline -B build-host-screenshots -DGTEST_DIR=/usr/src/googletest
           cmake --build build-host-screenshots --parallel
           ctest --test-dir build-host-screenshots --output-on-failure
+      - name: Browser lab build and live API tests
+        run: |
+          npm ci --prefix simulator/ui
+          npm run build --prefix simulator/ui
+          EPPG_SIM_BACKEND=native node --test simulator/ui/server.test.mjs
+          python3 -m unittest discover -s simulator/tools -p test_qemu_smoke.py
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
@@ -58,6 +69,8 @@ jobs:
       IDF_COMPONENT_MANAGER: '0'
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - name: Build, validate and export firmware
         shell: bash
         run: |
@@ -74,3 +87,31 @@ jobs:
         with:
           name: OpenPPG-CESP32S3-CAN-SP140-firmware
           path: release-artifacts/
+
+  qemu-control:
+    name: Actual ESP32-S3 control and maximum image staging
+    runs-on: ubuntu-latest
+    container: espressif/idf:v5.5.3
+    env:
+      IDF_COMPONENT_MANAGER: '0'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Install the verified Espressif QEMU release
+        run: bash simulator/tools/install_qemu.sh
+      - name: Execute real control tasks and verify maximum NOR staging
+        shell: bash
+        run: |
+          . /opt/esp/idf/export.sh
+          QEMU_BIN="$PWD/.tools/qemu/bin/qemu-system-xtensa" ./simulator/tools/run_qemu.sh --build --smoke
+          python3 simulator/tools/qemu_smoke.py \
+            --image build-idf-qemu/qemu-flash-8mb.bin --qemu .tools/qemu/bin/qemu-system-xtensa \
+            --timeout 35 --send '{"emulator":{"stage_test":true}}' \
+            --expect 'EPPG_QEMU_STAGE size=262144 verified=1 scratch=4096' \
+            --report build-idf-qemu/qemu-max-stage.json
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ESP32-S3-QEMU-evidence
+          path: build-idf-qemu/qemu-*.json

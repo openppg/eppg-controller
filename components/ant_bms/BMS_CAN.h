@@ -17,6 +17,8 @@ public:
 
   bool begin();
   void update();
+  // Transport-independent parser seam used by native protocol regression tests.
+  void ingestFrame(uint32_t id, const uint8_t* data, uint8_t length);
 
   // Add connection status methods
   bool isConnected(unsigned long timeout_ms = 100);
@@ -94,7 +96,6 @@ private:
   // Add timestamp tracking
   unsigned long lastMessageTime;
 
-  void parsePacket(uint32_t id, uint8_t* data, uint8_t len);
 
   void initializeMembers();
 

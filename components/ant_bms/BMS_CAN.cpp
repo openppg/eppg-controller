@@ -52,11 +52,15 @@ bool BMS_CAN::begin() {
 void BMS_CAN::update() {
   platform::CanFrame frame;
   while (mcp->receive(&frame)) {
-    if (frame.extended) parsePacket(frame.id, frame.data, frame.length);
+    if (frame.extended) ingestFrame(frame.id, frame.data, frame.length);
   }
 }
 
-void BMS_CAN::parsePacket(uint32_t id, uint8_t* data, uint8_t len) {
+void BMS_CAN::ingestFrame(uint32_t id, const uint8_t* data, uint8_t len) {
+  if (!data || len > 8 ||
+      (id == 0x18FF28F4 && len < 7) ||
+      (id == 0x18FE28F4 && len < 6) ||
+      (id == 0x18A328F4 && len != 8)) return;
 #ifdef FREERTOS_H
   xSemaphoreTake(dataMutex, portMAX_DELAY);
 #endif
@@ -129,9 +133,11 @@ void BMS_CAN::parsePacket(uint32_t id, uint8_t* data, uint8_t len) {
 #ifdef FREERTOS_H
     xSemaphoreGive(dataMutex);
 #endif
-  } else if (id >= 0x18A028F4 && id <= 0x18A328F4 && len == 8) {
+  } else if ((id == 0x18A028F4 || id == 0x18A128F4 || id == 0x18A228F4) && len == 8) {
     // Battery ID parsing (Type B/newer only; receiving this confirms BMS type)
-    int offset = (id - 0x18A028F4) * 8;
+    // PF changes in bits16..23. Subtracting the complete CAN identifier
+    // produced offsets524288/1048576 and dropped the final16 identity bytes.
+    int offset = (static_cast<int>((id >> 16) & 0xff) - 0xa0) * 8;
     if (offset >= 0 && offset < 24) { // Ensure we don't overflow our buffer
 #ifdef FREERTOS_H
       xSemaphoreTake(dataMutex, portMAX_DELAY);

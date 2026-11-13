@@ -47,12 +47,16 @@ uint32_t application_throttle_time() {
   return lastThrottleRunMs;
 #endif
 }
-TaskHandle_t application_bms_task() {
+TaskHandle_t application_task(int kind) {
 #ifdef EPPG_RUST
-  return static_cast<TaskHandle_t>(eppg_qemu_task_handle(2));
+  return static_cast<TaskHandle_t>(eppg_qemu_task_handle(kind));
 #else
-  return bmsTaskHandle;
+  return kind == 0 ? throttleTaskHandle : kind == 1 ? uiTaskHandle : bmsTaskHandle;
 #endif
+}
+unsigned free_stack(int kind) {
+  const TaskHandle_t handle = application_task(kind);
+  return handle ? static_cast<unsigned>(uxTaskGetStackHighWaterMark(handle)) : 0;
 }
 St7735 display;
 Mcp2515 mcp;
@@ -110,12 +114,13 @@ void report() {
     hash = (hash ^ uint8_t(pixel >> 8)) * 16777619u;
   }
   std::printf("EPPG_QEMU {\"time_ms\":%lu,\"pixels\":%llu,\"screen_fnv1a\":%lu,\"mcp_overruns\":%llu,"
-      "\"state\":%u,\"throttle_age_ms\":%lu,\"bms_stack_free\":%u,\"largest_heap\":%u,"
+      "\"state\":%u,\"throttle_age_ms\":%lu,\"throttle_stack_free\":%u,\"ui_stack_free\":%u,"
+      "\"bms_stack_free\":%u,\"largest_heap\":%u,"
       "\"buzzer_hz\":%lu,\"buzzer_duty\":%lu,\"vibe_duty\":%lu,\"pixel_rgb\":%lu}\n",
       static_cast<unsigned long>(now), static_cast<unsigned long long>(display.pixel_writes()),
       static_cast<unsigned long>(hash), static_cast<unsigned long long>(mcp.overruns()),
       static_cast<unsigned>(application_state()), static_cast<unsigned long>(now-application_throttle_time()),
-      application_bms_task() ? static_cast<unsigned>(uxTaskGetStackHighWaterMark(application_bms_task())) : 0,
+      free_stack(0), free_stack(1), free_stack(2),
       static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)),
       static_cast<unsigned long>(pwm_frequency[1]), static_cast<unsigned long>(pwm_duty[1]),
       static_cast<unsigned long>(pwm_duty[0]), static_cast<unsigned long>(pixel_rgb));

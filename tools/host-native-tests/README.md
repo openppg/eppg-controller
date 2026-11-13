@@ -15,7 +15,7 @@ ESP-IDF v5.5.3 (`test/vendor/cjson`, MIT license) so diagnostic JSON executes th
 same serializer/parser used by the firmware. `test/native_stubs/platform` mocks
 only hardware/time/console boundaries; the code under test is production code.
 
-The seven executables contain 69 tests covering throttle response/filter/cruise,
+The eight executables contain 72 tests covering throttle response/filter/cruise,
 monitor thresholds/hysteresis and BMS validity helpers, logger fan-out,
 diagnostic history/reset classification/JSON round trips, and wireless packet
 CRC/range/sequence behavior. The six staging tests run the production C flash
@@ -29,3 +29,7 @@ nonzero exit codes; CI must use CTest's result.
 `PROJECT_ROOT` can point to another controller source checkout while keeping
 `HOST_TEST_ROOT` at this checkout, which supports before/after migration
 comparisons. It defaults to the current repository.
+
+The production ANT parser has three additional tests for complete 24-byte identity,
+exact CAN identifiers, and short-frame rejection. This is a documented correction
+of the inherited identity-index bug, not an assertion of byte-for-byte bug parity.

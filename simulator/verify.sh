@@ -43,4 +43,5 @@ else
     node --test simulator/ui/server.test.mjs
 fi
 if [[ "$qemu" = 1 ]]; then ./simulator/tools/run_qemu.sh --build --smoke; fi
+python3 -m unittest discover -s simulator/tools -p test_qemu_smoke.py
 echo "All requested build/emulator checks passed."

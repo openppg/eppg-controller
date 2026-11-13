@@ -8,7 +8,7 @@ SPI, I2C, PWM, pixel, Wi-Fi and BLE services use native ESP-IDF drivers.
 | --- | --- | --- |
 | `lvgl` | LVGL 9.5.0, formerly pinned by PlatformIO | Original library sources/configuration; native IDF CMake registration |
 | `dronecan` | OpenPPG SINE-ESC-CAN `2ab56a4e5b52e4456317c8ee3e3d802b232c6148` | Original libcanard v0 C and generated DSDL C codecs; C++ adapter/client use native platform clock, console and TWAI |
-| `ant_bms` | OpenPPG ANT-BMS-CAN `fd54852bc6f1c9608e37af9ca7c13ea4135c095b` | Existing parser preserved; native MCP2515 frame input, standard C++ strings/time |
+| `ant_bms` | OpenPPG ANT-BMS-CAN `fd54852bc6f1c9608e37af9ca7c13ea4135c095b` | Native MCP2515 frame input, standard C++ strings/time; corrected three-frame identity indexing and short-frame guards |
 | `bmp3` | Bosch BMP3 Sensor API 2.0.1 from the previously pinned BMP3XX dependency | Original C compensation/API, native I2C callbacks and calibration CRC check |
 | `controller_platform` | This repository | Native USB, GPIO, ADC, SPI, I2C, ST7735, MCP2515, BMP3, LEDC/RMT and NimBLE GAP/GATT integration |
 | `image_staging` | This repository | Portable NOR image store with one 4 KiB scratch sector and offset/retry semantics |
@@ -17,6 +17,11 @@ Upstream notices/licenses remain alongside the vendored code. `dronecan/src/cana
 and related files carry their original licenses, independently of the SINE wrapper.
 The exact old Arduino-dependent wrappers remain only in `simulator/reference-can`
 as test oracles. Their host transport stubs are not part of a firmware image.
+
+One intended-behavior correction differs from the pinned ANT reference: the
+three battery identity IDs differ in PF bits16..23. The previous full-ID
+subtraction discarded the second/third eight-byte sections. Native regression
+tests now require the complete 24-byte identity and reject lookalike/short IDs.
 
 ESP-IDF's C components, LVGL, Bosch compensation and libcanard/codecs remain C.
 This branch removes Arduino while preserving the C++ application language.

@@ -34,6 +34,13 @@ foreach(suite throttle diagnostics hysteresis simplemonitor multilogger wireless
   target_compile_definitions(test_${suite} PRIVATE PIO_UNIT_TESTING=1 EPPG_NATIVE_IDF=1)
   add_test(NAME ${suite} COMMAND test_${suite})
 endforeach()
+
+add_executable(test_bms_parser
+  "${HOST_TEST_ROOT}/test/test_bms_parser/test_bms_parser.cpp"
+  "${PROJECT_ROOT}/components/ant_bms/BMS_CAN.cpp")
+target_include_directories(test_bms_parser PRIVATE "${PROJECT_ROOT}/components/ant_bms")
+target_link_libraries(test_bms_parser PRIVATE gtest eppg_test_platform)
+add_test(NAME bms_parser COMMAND test_bms_parser)
 if(EXISTS "${PROJECT_ROOT}/components/image_staging/image_staging.c")
   add_executable(test_image_staging
     "${HOST_TEST_ROOT}/test/test_image_staging/test_image_staging.cpp"
