@@ -468,8 +468,12 @@ fn main() {
                     copy_esc(&mut s.telemetry, &e.telemetry);
                     s.relay = e.active();
                     s.transfer_quiet = e.quiet(now);
-                    s.esc_status = e.relay.status.encode();
-                    s.esc_result = e.relay.result.clone();
+                    // Published every tick: reuse the snapshot's buffers and copy the
+                    // result blob only when it changed, so this path does not allocate.
+                    e.relay.status.encode_into(&mut s.esc_status);
+                    if s.esc_result != e.relay.result {
+                        s.esc_result.clone_from(&e.relay.result);
+                    }
                     s.esc_fw_status = e.flasher.status();
                 }
                 {

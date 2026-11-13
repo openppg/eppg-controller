@@ -98,22 +98,18 @@ impl Esc {
         })
     }
     pub fn send(&mut self, r: Request) {
-        if let Some(signature) = signature(r.id) {
-            self.transport.request(
-                0x20,
-                r.id,
-                signature,
-                &mut self.tids[r.id as usize],
-                &r.payload,
-            );
+        self.send_bytes(r.id, &r.payload);
+    }
+    fn send_bytes(&mut self, id: u16, payload: &[u8]) {
+        if let Some(signature) = signature(id) {
+            self.transport
+                .request(0x20, id, signature, &mut self.tids[id as usize], payload);
         }
     }
     pub fn throttle(&mut self, pwm: u16) {
         if (1000..=2000).contains(&pwm) && !self.active() {
-            self.send(Request {
-                id: 213,
-                payload: (pwm * 10).to_le_bytes().to_vec(),
-            });
+            // Sent every control period: encode on the stack rather than the heap.
+            self.send_bytes(213, &(pwm * 10).to_le_bytes());
         }
     }
     pub fn request_hardware(&mut self) {

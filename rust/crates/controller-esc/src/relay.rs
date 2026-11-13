@@ -29,7 +29,15 @@ pub struct Status {
 }
 impl Status {
     pub fn encode(&self) -> Vec<u8> {
-        let mut out = vec![
+        let mut out = Vec::new();
+        self.encode_into(&mut out);
+        out
+    }
+    /// Same bytes as [`Self::encode`], written into a caller-owned buffer so a task that
+    /// publishes the status every tick does not allocate each time.
+    pub fn encode_into(&self, out: &mut Vec<u8>) {
+        out.clear();
+        out.extend_from_slice(&[
             self.code,
             self.id as u8,
             (self.id >> 8) as u8,
@@ -37,9 +45,8 @@ impl Status {
             self.detail,
             0,
             0,
-        ];
+        ]);
         out.extend_from_slice(&self.readback[..self.readback.len().min(8)]);
-        out
     }
 }
 #[derive(Clone, Debug)]

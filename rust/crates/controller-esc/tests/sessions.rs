@@ -295,3 +295,15 @@ fn esc_hardware_change_during_upload_is_rejected_before_restart() {
     assert_eq!(f.code, 0x83);
     assert!(f.tick(130, State::Disarmed).is_empty());
 }
+#[test]
+fn relay_status_encode_into_matches_encode_and_reuses_the_buffer() {
+    let mut r = Relay::default();
+    assert!(r.command(0x10, &[0x80, 0, 2, 1, 0], false));
+    let _ = r.tick(500, State::Disarmed);
+    let mut out = vec![0xaa; 32];
+    let capacity = out.capacity();
+    r.status.encode_into(&mut out);
+    assert_eq!(out, r.status.encode());
+    assert_eq!(out.capacity(), capacity);
+    assert_eq!(Relay::default().status.encode().len(), 7);
+}
