@@ -11,4 +11,4 @@ inline void timeDelay(uint32_t ms) {
   platform::delayMs(ms);
 #endif
 }
-#endif
+#endif  // INC_SP140_TIME_UTILS_H_

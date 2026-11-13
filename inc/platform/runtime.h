@@ -37,6 +37,7 @@ inline T clamp(T value, A low, B high) {
 // No Arduino Stream/Print or Arduino USB device runtime is linked.
 class Console {
   std::recursive_mutex output_mutex_;
+
  public:
   // A response owns the output until complete. Background logs remain best effort
   // so a USB diagnostic request cannot block the throttle task on console output.

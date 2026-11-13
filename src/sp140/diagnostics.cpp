@@ -744,7 +744,7 @@ void diagnosticsSendJson(platform::Console& stream) {
   diagWriteStreamChunked(stream, reinterpret_cast<const uint8_t*>(",\"hist\":["), 9);
   for (uint8_t i = 0; i < count; ++i) {
     if (i) diagWriteStreamChunked(stream, reinterpret_cast<const uint8_t*>(","), 1);
-    if (!encode(gDiagPacket.history[i])) strcpy(output, "null");
+    if (!encode(gDiagPacket.history[i])) snprintf(output, sizeof(output), "null");
     diagWriteStreamChunked(stream, reinterpret_cast<const uint8_t*>(output), strlen(output));
   }
   diagWriteStreamChunked(stream, reinterpret_cast<const uint8_t*>("]}"), 2);
