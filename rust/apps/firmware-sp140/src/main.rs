@@ -250,7 +250,7 @@ fn main() {
             }
         });
     }
-    configure_thread(b"control\0", 32768, 3, Core::Core0);
+    configure_thread(b"control\0", 14336, 3, Core::Core0);
     {
         let shared = shared.clone();
         let feedback = feedback.clone();

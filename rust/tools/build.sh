@@ -12,6 +12,7 @@ if [[ "${1:-}" == --qemu ]]; then
   export CARGO_TARGET_DIR="$PWD/target/qemu"
   args+=(--features qemu)
 else
+  export ESP_IDF_SDKCONFIG_DEFAULTS=sdkconfig.defaults
   unset EPPG_QEMU
 fi
 cargo +esp build "${args[@]}"
