@@ -1,0 +1,10 @@
+[package]
+name = "controller-esc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+build = "build.rs"
+[dependencies]
+controller-dronecan = { path = "../controller-dronecan" }
+controller-protocols = { path = "../controller-protocols" }
+controller-core = { path = "../controller-core" }

@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/controller-core", "crates/controller-protocols", "apps/firmware-sp140", "apps/controller-sim"]
+members = ["crates/controller-core", "crates/controller-protocols", "crates/controller-dronecan", "crates/controller-ui", "crates/controller-esc", "apps/firmware-sp140", "apps/controller-sim"]
 default-members = ["crates/controller-core", "crates/controller-protocols", "apps/controller-sim"]
 resolver = "2"
 

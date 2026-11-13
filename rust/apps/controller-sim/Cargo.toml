@@ -3,6 +3,14 @@ name = "controller-sim"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+
 [dependencies]
 controller-core = { path = "../../crates/controller-core" }
 controller-protocols = { path = "../../crates/controller-protocols" }
+controller-dronecan = { path = "../../crates/controller-dronecan" }
+controller-esc = { path = "../../crates/controller-esc" }
+controller-ui = { path = "../../crates/controller-ui" }
+serde_json = "1"
+
+[build-dependencies]
+cc = "1"

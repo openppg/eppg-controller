@@ -4,9 +4,15 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 build = "build.rs"
+[features]
+qemu = []
+
 [dependencies]
 controller-core = { path = "../../crates/controller-core" }
 controller-protocols = { path = "../../crates/controller-protocols" }
+controller-dronecan = { path = "../../crates/controller-dronecan" }
+controller-esc = { path = "../../crates/controller-esc" }
+controller-ui = { path = "../../crates/controller-ui" }
 esp-idf-svc = "0.53.0"
 esp32-nimble = "0.13.0"
 serde = { version = "1", features = ["derive"] }
@@ -15,3 +21,10 @@ libm = "0.2"
 [build-dependencies]
 embuild = "0.33"
 cc = "1"
+
+[package.metadata.esp-idf-sys]
+esp_idf_version = "v5.5.3"
+esp_idf_sdkconfig_defaults = ["sdkconfig.defaults"]
+
+[[package.metadata.esp-idf-sys.extra_components]]
+component_dirs = ["../../components/platform-rust"]
