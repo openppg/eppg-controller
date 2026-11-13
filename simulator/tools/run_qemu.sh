@@ -41,7 +41,7 @@ if [[ -z "$image" ]]; then
 fi
 if [[ "$smoke" = 1 ]]; then
   exec python3 "$script_dir/qemu_smoke.py" --qemu "$qemu_binary" --image "$image" \
-    --expect '=== Boot complete ===' --expect 'pwm_01us=16000' \
+    --control-proof --expect '=== Boot complete ===' --expect 'pwm_01us=16000' \
     --reject 'Error initializing BMP3xx' \
     --report "$build_dir/qemu-smoke.json"
 fi

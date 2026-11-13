@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import selectors
 import shutil
@@ -26,6 +27,29 @@ def find_qemu(explicit: str | None) -> str:
     if local.is_file():
         return str(local)
     raise ValueError("Set --qemu or QEMU_BIN to Espressif's qemu-system-xtensa")
+
+
+def control_evidence(log: str) -> dict:
+    reports = []
+    for line in log.splitlines():
+        if line.startswith("EPPG_QEMU {"):
+            try:
+                reports.append(json.loads(line[len("EPPG_QEMU "):]))
+            except json.JSONDecodeError:
+                pass
+    armed = [item for item in reports if item.get("state") in (1, 2)]
+    screens = [item for item in reports if item.get("pixels", 0) > 0]
+    can = [tuple(map(int, match)) for match in re.findall(
+        r"EPPG_QEMU_CAN tx=(\d+) rx=(\d+) pwm_01us=(\d+)", log)]
+    checks = {
+        "armed_on_s3": bool(armed),
+        "throttle_task_fresh": any(0 <= item.get("throttle_age_ms", 1000) <= 100 for item in armed),
+        "spi_screen_changed": len({item.get("screen_fnv1a") for item in screens}) >= 2,
+        "raw_can_bidirectional": any(tx > 0 and rx > 0 for tx, rx, _ in can),
+        "raw_can_throttle_above_idle": any(pwm > 10000 for _, _, pwm in can),
+    }
+    return {"passed": all(checks.values()), "checks": checks,
+            "model_reports": len(reports), "can_reports": len(can)}
 
 
 def run(args: argparse.Namespace) -> dict:
@@ -61,6 +85,7 @@ def run(args: argparse.Namespace) -> dict:
         selector = selectors.DefaultSelector()
         selector.register(process.stdout, selectors.EVENT_READ)
         sent = False
+        decoded = ""
         try:
             while time.monotonic() - started < args.timeout:
                 for key, _ in selector.select(timeout=0.1):
@@ -82,10 +107,12 @@ def run(args: argparse.Namespace) -> dict:
                 if rejected:
                     failure = f"failure marker observed: {rejected}"
                     break
-                if not missing:
+                if not missing and (not args.control_proof or control_evidence(decoded)["passed"]):
                     break
                 if failure:
                     break
+            if not failure and args.control_proof and not control_evidence(decoded)["passed"]:
+                failure = "timeout waiting for production control/SPI/CAN proof"
             if missing and not failure:
                 failure = f"timeout after {args.timeout}s waiting for application markers"
         finally:
@@ -109,6 +136,7 @@ def run(args: argparse.Namespace) -> dict:
         "expected": args.expect,
         "missing": missing,
         "failure": failure,
+        "control_proof": control_evidence(output.decode("utf-8", errors="replace")),
         "qemu_exit_code": result_code,
         "uart_log": output.decode("utf-8", errors="replace"),
         "fidelity": "ESP32-S3 CPU/RTOS/flash; application peripheral models selected by image build",
@@ -122,6 +150,7 @@ def main() -> int:
     parser.add_argument("--qemu")
     parser.add_argument("--timeout", type=float, default=30)
     parser.add_argument("--flash-size", type=int, default=8 * 1024 * 1024)
+    parser.add_argument("--control-proof", action="store_true", help="require armed state, fresh task, changing SPI screen, and bidirectional non-idle CAN")
     parser.add_argument("--expect", action="append", default=[])
     parser.add_argument("--reject", action="append", default=[
         "Guru Meditation Error", "assert failed", "ABORTED", "stack overflow",
