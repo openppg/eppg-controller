@@ -37,7 +37,7 @@ pub fn spawn(
     platform::console(
         "EPPG_QEMU ESP-NOW RF unsupported; encrypted transport modeled by native Rust lab\n",
     );
-    std::thread::spawn(move || while rx.recv().is_ok() {});
+    crate::spawn_task(move || while rx.recv().is_ok() {});
     tx
 }
 #[cfg(not(feature = "qemu"))]

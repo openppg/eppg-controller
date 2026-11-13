@@ -4,16 +4,15 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 export CARGO_WORKSPACE_DIR="$PWD"
 profile=physical
-extra=()
+args=(--locked --release -Zbuild-std=std,panic_abort -p firmware-sp140 --target xtensa-esp32s3-espidf)
 if [[ "${1:-}" == --qemu ]]; then
   profile=qemu
   export EPPG_QEMU=1
   export ESP_IDF_SDKCONFIG_DEFAULTS='sdkconfig.defaults;sdkconfig.qemu.defaults'
   export CARGO_TARGET_DIR="$PWD/target/qemu"
-  extra=(--features qemu)
+  args+=(--features qemu)
 else
   unset EPPG_QEMU
 fi
-cargo +esp build --locked --release -Zbuild-std=std,panic_abort -p firmware-sp140 \
-  --target xtensa-esp32s3-espidf "${extra[@]}"
+cargo +esp build "${args[@]}"
 python3 tools/export_image.py "${CARGO_TARGET_DIR:-$PWD/target}/xtensa-esp32s3-espidf/release" --profile "$profile"

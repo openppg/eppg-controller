@@ -13,7 +13,6 @@ pub struct Snapshot {
     pub telemetry: FastLink,
     pub levels: [Level; 44],
     pub state: State,
-    pub role: Role,
     pub accepted_session: u32,
     pub accepted_sequence: u32,
     pub control_age: u32,
@@ -37,14 +36,13 @@ pub struct Snapshot {
     pub cpu_temperature: f32,
 }
 impl Snapshot {
-    pub fn new(settings: Settings, role: Role) -> Self {
+    pub fn new(settings: Settings, _role: Role) -> Self {
         Self {
             bms_temperatures: [f32::NAN; 6],
             settings,
             telemetry: FastLink::default(),
             levels: [Level::Ok; 44],
             state: State::Disarmed,
-            role,
             accepted_session: 0,
             accepted_sequence: 0,
             control_age: u32::MAX,

@@ -1,4 +1,5 @@
 //! Arduino-free ESP32-S3 application: controller, services and UI are native Rust.
+#![cfg_attr(feature = "qemu", allow(dead_code, unused_imports))]
 mod altimeter;
 mod app;
 mod ble;
@@ -48,6 +49,19 @@ fn configure_thread(name: &'static [u8], stack: usize, priority: u8, core: Core)
         ..Default::default()
     };
     c.set().expect("task affinity/priority");
+}
+// std::thread::spawn initializes pthread attributes with IDF's 3 KiB default,
+// overriding esp_pthread_cfg.stack_size. Always pass the configured size explicitly.
+fn spawn_task<F, T>(f: F) -> std::thread::JoinHandle<T>
+where
+    F: FnOnce() -> T + Send + 'static,
+    T: Send + 'static,
+{
+    let config = ThreadSpawnConfiguration::get().expect("configured thread");
+    std::thread::Builder::new()
+        .stack_size(config.stack_size)
+        .spawn(f)
+        .expect("task allocation")
 }
 fn periodic(last: &mut u32, ms: u32) {
     unsafe {
@@ -113,7 +127,7 @@ fn main() {
     configure_thread(b"sensors\0", 6000, 2, Core::Core1);
     if role != Role::Remote {
         let shared = shared.clone();
-        std::thread::spawn(move || {
+        crate::spawn_task(move || {
             let mut alt = altimeter::Altimeter::new();
             shared.lock().unwrap().baro_initialized = alt.is_some();
             let mut last = unsafe { sys::xTaskGetTickCount() };
@@ -147,7 +161,7 @@ fn main() {
     configure_thread(b"bms\0", 6000, 2, Core::Core1);
     if role != Role::Remote {
         let shared = shared.clone();
-        std::thread::spawn(move || {
+        crate::spawn_task(move || {
             #[cfg(feature = "qemu")]
             qemu::set_handle(2);
             let mut can = platform::Mcp2515::new();
@@ -180,7 +194,7 @@ fn main() {
     {
         let shared = shared.clone();
         let feedback = feedback.clone();
-        std::thread::spawn(move || {
+        crate::spawn_task(move || {
             let settings = shared.lock().unwrap().settings.clone();
             PANEL.with(|p| *p.borrow_mut() = platform::Panel::new(settings.screen_rotation));
             #[cfg(feature = "qemu")]
@@ -236,11 +250,11 @@ fn main() {
             }
         });
     }
-    configure_thread(b"control\0", 14000, 3, Core::Core0);
+    configure_thread(b"control\0", 32768, 3, Core::Core0);
     {
         let shared = shared.clone();
         let feedback = feedback.clone();
-        std::thread::spawn(move || {
+        crate::spawn_task(move || {
             #[cfg(feature = "qemu")]
             qemu::set_handle(0);
             let mut controller = Controller::new(role);
@@ -257,6 +271,8 @@ fn main() {
             let mut last_monitor = 0;
             let mut old_warnings = 0;
             let mut last_health = 0;
+            #[cfg(feature = "qemu")]
+            let mut stack_reported = false;
             let mut last_mirrored = 0;
             let mut last = unsafe { sys::xTaskGetTickCount() };
             unsafe {
@@ -264,6 +280,13 @@ fn main() {
             }
             loop {
                 let now = platform::now();
+                #[cfg(feature = "qemu")]
+                if now >= 5000 && !stack_reported {
+                    stack_reported = true;
+                    platform::console(&format!("Rust control stack free_bytes={}\n", unsafe {
+                        sys::uxTaskGetStackHighWaterMark(std::ptr::null_mut())
+                    }));
+                }
                 let raw = unsafe { platform::eppg_adc_read(7) }.clamp(0, 4095) as u16;
                 for _ in 0..64 {
                     let Ok(request) = requests.try_recv() else {
@@ -511,7 +534,7 @@ fn main() {
         });
     }
     configure_thread(b"watchdog\0", 5000, 3, Core::Core0);
-    std::thread::spawn(move || {
+    crate::spawn_task(move || {
         unsafe {
             sys::esp_task_wdt_add(std::ptr::null_mut());
         }

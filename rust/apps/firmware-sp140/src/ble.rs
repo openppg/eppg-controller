@@ -130,7 +130,7 @@ pub fn spawn(shared: Shared, _commands: Commands) -> Ble {
     platform::console(
         "EPPG_QEMU BLE hardware unsupported; service boundary modeled by native Rust lab\n",
     );
-    std::thread::spawn(move || {
+    crate::spawn_task(move || {
         while pending.recv().is_ok() {
             shared.lock().unwrap().pairing = true;
             platform::sleep(60000);

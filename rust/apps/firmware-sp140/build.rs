@@ -18,6 +18,7 @@ fn main() {
     for args in [
         vec!["rev-parse", "--git-path", "HEAD"],
         vec!["rev-parse", "--git-path", "refs/heads/codex/rust-port"],
+        vec!["rev-parse", "--git-path", "packed-refs"],
     ] {
         if let Ok(path) = std::process::Command::new("git").args(args).output() {
             if path.status.success() {
