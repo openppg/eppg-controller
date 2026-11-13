@@ -104,9 +104,10 @@ IDF `flasher_args.json`, so bootloader, partition table and application offsets
 come from the actual build rather than guessed constants. Each QEMU run owns a
 writable copy and preserves the input release image.
 
-`--smoke` is bounded and requires application boot plus successful CAN-frame
-exchange markers. It writes `build-idf-qemu/qemu-smoke.json` with the exact image
-hash, UART log, expected/missing markers and pass/fail result. A ROM banner alone
+`--smoke` is bounded and requires application boot, an armed state with a
+fresh throttle task, changing ST7735 pixels, bidirectional CAN frames and
+throttle commands above idle. It writes `build-idf-qemu/qemu-smoke.json` with the exact image
+hash, UART log, expected/missing markers, individual control checks and pass/fail result. A ROM banner alone
 cannot pass. `--image FILE` accepts an already-merged image. `--trace` records
 executed instructions; stop the interactive run when enough evidence is captured.
 

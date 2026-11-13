@@ -15,10 +15,15 @@ ESP-IDF v5.5.3 (`test/vendor/cjson`, MIT license) so diagnostic JSON executes th
 same serializer/parser used by the firmware. `test/native_stubs/platform` mocks
 only hardware/time/console boundaries; the code under test is production code.
 
-The six executables contain 63 tests covering throttle response/filter/cruise,
+The seven executables contain 69 tests covering throttle response/filter/cruise,
 monitor thresholds/hysteresis and BMS validity helpers, logger fan-out,
 diagnostic history/reset classification/JSON round trips, and wireless packet
-CRC/range/sequence behavior. All test executables propagate failed assertions as
+CRC/range/sequence behavior. The six staging tests run the production C flash
+staging code against NOR program/erase rules: full 256 KiB image, sector-boundary
+retries and duplicate wear, holes/bounds, partial ownership programming, power
+cuts during image writes/erase/rewrite, restart, and preservation of unknown
+partition contents. The image staging object is bounded to one 4 KiB sector
+plus metadata, rather than a full image in RAM. All test executables propagate failed assertions as
 nonzero exit codes; CI must use CTest's result.
 
 `PROJECT_ROOT` can point to another controller source checkout while keeping
