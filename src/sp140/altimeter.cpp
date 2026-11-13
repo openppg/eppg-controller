@@ -1,6 +1,7 @@
 #include "platform/runtime.h"
 #include "sp140/altimeter.h"
 #include "sp140/structs.h"
+#include "sp140/time_utils.h"
 
 #include "platform/barometer.h"
 

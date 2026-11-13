@@ -2,6 +2,7 @@
 #include "sp140/simple_monitor.h"
 #include <vector>
 #include "sp140/monitor_config.h"
+#include "sp140/time_utils.h"
 #include "sp140/globals.h"
 #include "sp140/altimeter.h"
 #include "sp140/utilities.h"

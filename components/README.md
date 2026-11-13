@@ -6,7 +6,7 @@ SPI, I2C, PWM, pixel, Wi-Fi and BLE services use native ESP-IDF drivers.
 
 | Component | Source/version | Local changes |
 | --- | --- | --- |
-| `lvgl` | LVGL 9.5.0, formerly pinned by PlatformIO | Original library sources/configuration; native IDF CMake registration |
+| `lvgl` | LVGL 9.6.0, formerly pinned by PlatformIO | Upstream tag `v9.6.0` (`80ca777e37a2b176770726a02e07a6fb79ef0b39`); native IDF CMake registration |
 | `dronecan` | OpenPPG SINE-ESC-CAN `2ab56a4e5b52e4456317c8ee3e3d802b232c6148` | Original libcanard v0 C and generated DSDL C codecs; C++ adapter/client use native platform clock, console and TWAI |
 | `ant_bms` | OpenPPG ANT-BMS-CAN `fd54852bc6f1c9608e37af9ca7c13ea4135c095b` | Native MCP2515 frame input, standard C++ strings/time; corrected three-frame identity indexing and short-frame guards |
 | `bmp3` | Bosch BMP3 Sensor API 2.0.1 from the previously pinned BMP3XX dependency | Original C compensation/API, native I2C callbacks and calibration CRC check |
@@ -51,3 +51,5 @@ allocation/erase runs on a separate maintenance worker, and `RECEIVING` is
 published only when storage is ready. Flash writes run outside spinlocks; the
 control owner reads small CAN payloads with a non-waiting store mutex. The
 matching Rust application uses the same low-level C ABI in `platform/staging.h`.
+
+LVGL 9.6.0 archive SHA-256: `b20ee3acc1bba13c62d854f9ebd62e4c51e0b443b1e0225892e86442defa84df`. Public `include/` and implementation `src/` are retained unchanged from that tag.

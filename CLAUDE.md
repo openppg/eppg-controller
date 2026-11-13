@@ -14,7 +14,7 @@ python3 tools/check_native_release.py build-idf
 
 Host regressions are documented in `tools/host-native-tests/README.md`; build with
 CMake and run CTest. `./simulator/verify.sh` runs all firmware/host gates.
-`tools/host-screenshot-offline` compares production LVGL 9.5 screens with existing
+`tools/host-screenshot-offline` compares production LVGL 9.6 screens with existing
 references and fails on missing/different references. QEMU instructions are in README.
 
 Preserve both CAN buses (TWAI ESC 1 Mbps; SPI MCP2515 BMS 250 kbps), the 50 Hz
