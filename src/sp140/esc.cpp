@@ -322,6 +322,8 @@ void initESC() {
  * Important: The ESC requires messages at least every 300ms or it will reset
  */
 void setESCThrottle(int throttlePWM) {
+  // libcanard has no instance until esc.begin succeeds.
+  if (!escTwaiInitialized) return;
   // Input validation
   if (throttlePWM < 1000 || throttlePWM > 2000) {
     return;  // Ignore invalid throttle values
@@ -490,12 +492,14 @@ bool setupTWAI() {
     // If it's stopped, maybe we need to start it? For now, assume it's okay.
     // if (status_info.state == TWAI_STATE_STOPPED) { twai_start(); }
     return true;  // Already initialized
-  } else if (status_result != ESP_ERR_INVALID_STATE) {
+  } else if (status_result != ESP_ERR_INVALID_STATE &&
+             status_result != ESP_ERR_INVALID_ARG) {
     // An error other than "not installed" occurred
     platform::console.format("Error checking TWAI status: %s\n", esp_err_to_name(status_result));
     return false;  // Don't proceed if status check failed unexpectedly
   }
-  // If status_result was ESP_ERR_INVALID_STATE, proceed with installation
+  // IDF 5.5 reports INVALID_ARG for the null legacy driver handle before install.
+  // Both not-installed results must proceed with installation.
 
   twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(
                                       (gpio_num_t)ESC_TX_PIN,

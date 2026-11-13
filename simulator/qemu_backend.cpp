@@ -460,7 +460,8 @@ extern "C" esp_err_t __wrap_twai_receive(twai_message_t* message, TickType_t) {
 }
 extern "C" esp_err_t __wrap_twai_get_status_info(twai_status_info_t* status) {
   Lock lock;
-  if (!can_installed) return ESP_ERR_INVALID_STATE;
+  // IDF 5.5 passes a null v2 driver handle before the legacy driver is installed.
+  if (!can_installed) return ESP_ERR_INVALID_ARG;
   if (!status) return ESP_ERR_INVALID_ARG;
   *status = {}; status->state = can_state;
   status->msgs_to_rx = ready_can_frames();
