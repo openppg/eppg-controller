@@ -165,6 +165,15 @@ Bmp3xx::Bmp3xx() {
     0x70,0x6b,0x43,0x67,0x03,0x67,0x46,0x50,0x4a,0x0c,0x00,
     0xf4,0x35,0x8b,0x0c,0x00,0x00,0x10,0x00,0x00,0x00};
   std::copy_n(calibration, 21, registers_.begin() + 0x31);
+  uint8_t crc = 0xff;
+  for (uint8_t byte : calibration) {
+    for (unsigned bit = 0; bit < 8; ++bit) {
+      const bool carry = (crc ^ byte) & 0x80;
+      crc <<= 1; byte <<= 1;
+      if (carry) crc ^= 0x1d;
+    }
+  }
+  registers_[0x30] = crc ^ 0xff;
   raw_sample(8000000, 8000000);
 }
 bool Bmp3xx::read(uint8_t address, uint8_t* data, size_t length) const {

@@ -77,6 +77,14 @@ static void test_bmp_register_fixture() {
   Bmp3xx bmp;
   uint8_t bytes[6]{};
   check(bmp.read(0,bytes,1)&&bytes[0]==0x50,"BMP chip ID missing");
+  std::array<uint8_t, 21> trim{};
+  check(bmp.read(0x31,trim.data(),trim.size()),"BMP calibration fixture missing");
+  uint8_t crc = 0xff;
+  for (uint8_t byte : trim) for (unsigned bit=0;bit<8;++bit) {
+    const bool carry=(crc^byte)&0x80;crc<<=1;byte<<=1;if(carry)crc^=0x1d;
+  }
+  check(bmp.read(0x30,bytes,1)&&bytes[0]==uint8_t(crc^0xff),
+        "BMP OTP calibration CRC does not match production validation");
   bmp.raw_sample(0x123456,0xabcdef);
   check(bmp.read(4,bytes,6)&&bytes[0]==0x56&&bytes[2]==0x12&&
         bytes[3]==0xef&&bytes[5]==0xab,"BMP raw ADC byte order wrong");
