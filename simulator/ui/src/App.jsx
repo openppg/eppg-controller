@@ -229,14 +229,14 @@ function NumberField({ label, value, onChange, min, max, step = '0.1', unit }) {
 function TelemetryModal({ snapshot, onClose, onApply }) {
   const [form, setForm] = useState(() => ({
     escRpm: String(Math.round(snapshot?.esc?.rpm || 0)),
-    escAmps: String(snapshot?.esc?.amps ?? 0),
-    escVoltage: String(snapshot?.esc?.voltage_v ?? 100.8),
-    escTemp: String(snapshot?.esc?.mos_temp_c ?? 25),
+    escAmps: (snapshot?.esc?.amps ?? 0).toFixed(1),
+    escVoltage: (snapshot?.esc?.voltage_v ?? 100.8).toFixed(1),
+    escTemp: (snapshot?.esc?.mos_temp_c ?? 25).toFixed(1),
     escLink: snapshot?.esc?.connected !== false,
-    bmsVoltage: String(snapshot?.bms?.voltage_v ?? 97.9),
-    bmsCurrent: String(snapshot?.bms?.current_a ?? 0),
-    bmsSoc: String(snapshot?.bms?.soc_pct ?? 90),
-    bmsTemp: String(snapshot?.bms?.temp_c ?? 25),
+    bmsVoltage: (snapshot?.bms?.voltage_v ?? 97.9).toFixed(1),
+    bmsCurrent: (snapshot?.bms?.current_a ?? 0).toFixed(1),
+    bmsSoc: String(Math.round(snapshot?.bms?.soc_pct ?? 90)),
+    bmsTemp: (snapshot?.bms?.temp_c ?? 25).toFixed(1),
     bmsLink: snapshot?.bms?.connected !== false,
   }))
   const update = (name) => (value) => setForm((current) => ({ ...current, [name]: value }))

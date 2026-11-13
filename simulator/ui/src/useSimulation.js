@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { runSimulation } from './simulatorApi.js'
 
-const baselineEvents = [{ at_ms: 0, action: 'throttle', value: '0' }]
+const baselineEvents = [
+  { at_ms: 0, action: 'mode', value: 'sport' },
+  { at_ms: 0, action: 'throttle', value: '0' },
+]
 
 export function useSimulation() {
   const [snapshot, setSnapshot] = useState(null)

@@ -34,3 +34,13 @@ foreach(suite throttle diagnostics hysteresis simplemonitor multilogger wireless
   target_compile_definitions(test_${suite} PRIVATE PIO_UNIT_TESTING=1 EPPG_NATIVE_IDF=1)
   add_test(NAME ${suite} COMMAND test_${suite})
 endforeach()
+if(EXISTS "${PROJECT_ROOT}/components/image_staging/image_staging.c")
+  add_executable(test_image_staging
+    "${HOST_TEST_ROOT}/test/test_image_staging/test_image_staging.cpp"
+    "${HOST_TEST_ROOT}/simulator/devices/peripherals.cpp"
+    "${PROJECT_ROOT}/components/image_staging/image_staging.c")
+  target_include_directories(test_image_staging PRIVATE
+    "${HOST_TEST_ROOT}/simulator" "${PROJECT_ROOT}/components/image_staging")
+  target_link_libraries(test_image_staging PRIVATE gtest)
+  add_test(NAME image_staging COMMAND test_image_staging)
+endif()
