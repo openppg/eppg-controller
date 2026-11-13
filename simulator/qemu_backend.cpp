@@ -11,9 +11,49 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "freertos/queue.h"
+#include "freertos/task.h"
+#include "driver/uart.h"
+#include "cJSON.h"
+#include "sp140/device_state.h"
+#include "esp_heap_caps.h"
+#include "platform/staging.h"
+
+#ifdef EPPG_RUST
+extern "C" uint32_t eppg_qemu_state();
+extern "C" uint32_t eppg_qemu_last_throttle();
+extern "C" void* eppg_qemu_task_handle(int kind);
+#else
+extern TaskHandle_t throttleTaskHandle;
+extern TaskHandle_t uiTaskHandle;
+extern TaskHandle_t bmsTaskHandle;
+extern volatile uint32_t lastThrottleRunMs;
+extern volatile DeviceState currentState;
+#endif
 
 namespace {
 using namespace eppg::sim::devices;
+uint32_t application_state() {
+#ifdef EPPG_RUST
+  return eppg_qemu_state();
+#else
+  return static_cast<uint32_t>(currentState);
+#endif
+}
+uint32_t application_throttle_time() {
+#ifdef EPPG_RUST
+  return eppg_qemu_last_throttle();
+#else
+  return lastThrottleRunMs;
+#endif
+}
+TaskHandle_t application_bms_task() {
+#ifdef EPPG_RUST
+  return static_cast<TaskHandle_t>(eppg_qemu_task_handle(2));
+#else
+  return bmsTaskHandle;
+#endif
+}
 St7735 display;
 Mcp2515 mcp;
 Bmp3xx barometer;
@@ -22,6 +62,18 @@ SemaphoreHandle_t mutex = nullptr;
 uint32_t bms_sequence = 0;
 uint32_t previous_bms_poll = 0;
 uint32_t previous_report = 0;
+bool automatic_inputs = true;
+bool boot_complete = false;
+uint32_t control_started_ms = 0;
+uint16_t manual_throttle = 0;
+bool manual_button = false;
+bool bms_link = true;
+bool esc_fault = false;
+uint32_t pixel_rgb = 0;
+std::array<uint32_t, 4> pwm_frequency{};
+std::array<uint32_t, 4> pwm_duty{};
+QueueHandle_t console_input = nullptr;
+void set_can_fault(bool active);
 uint32_t now_ms() { return uint32_t(esp_timer_get_time() / 1000); }
 
 class Lock {
@@ -57,9 +109,16 @@ void report() {
     hash = (hash ^ uint8_t(pixel)) * 16777619u;
     hash = (hash ^ uint8_t(pixel >> 8)) * 16777619u;
   }
-  std::printf("EPPG_QEMU {\"time_ms\":%lu,\"pixels\":%llu,\"screen_fnv1a\":%lu,\"mcp_overruns\":%llu}\n",
+  std::printf("EPPG_QEMU {\"time_ms\":%lu,\"pixels\":%llu,\"screen_fnv1a\":%lu,\"mcp_overruns\":%llu,"
+      "\"state\":%u,\"throttle_age_ms\":%lu,\"bms_stack_free\":%u,\"largest_heap\":%u,"
+      "\"buzzer_hz\":%lu,\"buzzer_duty\":%lu,\"vibe_duty\":%lu,\"pixel_rgb\":%lu}\n",
       static_cast<unsigned long>(now), static_cast<unsigned long long>(display.pixel_writes()),
-      static_cast<unsigned long>(hash), static_cast<unsigned long long>(mcp.overruns()));
+      static_cast<unsigned long>(hash), static_cast<unsigned long long>(mcp.overruns()),
+      static_cast<unsigned>(application_state()), static_cast<unsigned long>(now-application_throttle_time()),
+      application_bms_task() ? static_cast<unsigned>(uxTaskGetStackHighWaterMark(application_bms_task())) : 0,
+      static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)),
+      static_cast<unsigned long>(pwm_frequency[1]), static_cast<unsigned long>(pwm_duty[1]),
+      static_cast<unsigned long>(pwm_duty[0]), static_cast<unsigned long>(pixel_rgb));
 }
 }
 
@@ -69,8 +128,10 @@ extern "C" int eppg_qemu_gpio_read(int pin) {
   // Automatic smoke scenario exercises the real button debounce/gesture task.
   // First click 4.0-4.1s, second hold 4.4-6.7s, after the 2s boot splash.
   if (pin == 1) {
-    const uint32_t now = now_ms();
-    return ((now >= 4000 && now < 4100) || (now >= 4400 && now < 6700)) ? 0 : 1;
+    if (!automatic_inputs) return manual_button ? 0 : 1;
+    if (!boot_complete) return 1;
+    const uint32_t elapsed = now_ms() - control_started_ms;
+    return ((elapsed >= 200 && elapsed < 300) || (elapsed >= 600 && elapsed < 2900)) ? 0 : 1;
   }
   return gpio[size_t(pin)];
 }
@@ -80,9 +141,11 @@ extern "C" void eppg_qemu_gpio_write(int pin, int value) {
 }
 extern "C" int eppg_qemu_adc_read(int) {
   Lock lock;
-  const uint32_t now = now_ms();
+  if (!automatic_inputs) return manual_throttle;
+  if (!boot_complete) return 0;
+  const uint32_t now = now_ms() - control_started_ms;
   // Raw 12-bit input stays released until the arm gesture completes.
-  return now < 7200 ? 0 : int(std::min<uint32_t>(4095, (now - 7200) * 2));
+  return now < 3400 ? 0 : int(std::min<uint32_t>(4095, (now - 3400) * 2));
 }
 extern "C" int eppg_qemu_spi_transfer(void* handle, const uint8_t* tx, uint8_t* rx, size_t length) {
   Lock lock;
@@ -92,7 +155,7 @@ extern "C" int eppg_qemu_spi_transfer(void* handle, const uint8_t* tx, uint8_t* 
     display.transfer(gpio[14] != 0, tx, length);
   } else if (cs == 5) {
     const uint32_t now = now_ms();
-    if (now - previous_bms_poll >= 20) {
+    if (bms_link && now - previous_bms_poll >= 20) {
       previous_bms_poll = now;
       mcp.receive(battery_frame(bms_sequence++));
     }
@@ -110,6 +173,113 @@ extern "C" int eppg_qemu_i2c_write(uint8_t address, uint8_t reg, const uint8_t* 
   Lock lock;
   if (address != 0x77 && address != 0x76) return -1;
   return barometer.write(reg, data, length) ? 0 : -1;
+}
+
+extern "C" void eppg_qemu_boot_complete() {
+  Lock lock;
+  boot_complete = true;
+  control_started_ms = now_ms();
+}
+extern "C" void eppg_qemu_pwm_config(int channel, int, uint32_t hz) {
+  Lock lock;
+  if (channel >= 0 && channel < int(pwm_frequency.size())) pwm_frequency[channel] = hz;
+}
+extern "C" void eppg_qemu_pwm_frequency(int channel, uint32_t hz) {
+  Lock lock;
+  if (channel >= 0 && channel < int(pwm_frequency.size())) pwm_frequency[channel] = hz;
+}
+extern "C" void eppg_qemu_pwm_write(int channel, uint32_t duty) {
+  Lock lock;
+  if (channel >= 0 && channel < int(pwm_duty.size())) pwm_duty[channel] = std::min<uint32_t>(255, duty);
+}
+extern "C" void eppg_qemu_pixel_write(int, uint32_t rgb) {
+  Lock lock;
+  pixel_rgb = rgb;
+}
+
+namespace {
+void staging_self_test() {
+  constexpr uint32_t size = 256u * 1024u;
+  uint8_t bytes[512], actual[512];
+  bool ok = application_state() == 0 && eppg_stage_begin(size) == 0;
+  for (uint32_t offset = 0; ok && offset < size; offset += sizeof(bytes)) {
+    for (size_t i = 0; i < sizeof(bytes); ++i) bytes[i] = static_cast<uint8_t>((offset + i) * 37u + ((offset + i) >> 8));
+    ok = eppg_stage_write(offset, bytes, sizeof(bytes)) == static_cast<int32_t>(offset + sizeof(bytes));
+  }
+  ok = ok && eppg_stage_finish() == 0;
+  for (uint32_t offset = 0; ok && offset < size; offset += sizeof(actual)) {
+    ok = eppg_stage_read(offset, actual, sizeof(actual)) == 0;
+    for (size_t i = 0; ok && i < sizeof(actual); ++i)
+      ok = actual[i] == static_cast<uint8_t>((offset + i) * 37u + ((offset + i) >> 8));
+  }
+  eppg_stage_abort();
+  std::printf("EPPG_QEMU_STAGE size=%lu verified=%u scratch=4096\n", static_cast<unsigned long>(size), ok ? 1 : 0);
+}
+bool emulator_command(const char* text) {
+  cJSON* document = cJSON_Parse(text);
+  if (!document) return false;
+  const cJSON* command = cJSON_GetObjectItemCaseSensitive(document, "emulator");
+  if (!cJSON_IsObject(command)) { cJSON_Delete(document); return false; }
+  bool stage_test = false;
+  {
+    Lock lock;
+    const cJSON* value = cJSON_GetObjectItemCaseSensitive(command, "auto");
+    if (cJSON_IsBool(value)) automatic_inputs = cJSON_IsTrue(value);
+    value = cJSON_GetObjectItemCaseSensitive(command, "throttle");
+    if (cJSON_IsNumber(value) && value->valuedouble >= 0 && value->valuedouble <= 4095) {
+      manual_throttle = value->valuedouble;
+      automatic_inputs = false;
+    }
+    value = cJSON_GetObjectItemCaseSensitive(command, "button");
+    if (cJSON_IsBool(value)) { manual_button = cJSON_IsTrue(value); automatic_inputs = false; }
+    value = cJSON_GetObjectItemCaseSensitive(command, "bms_link");
+    if (cJSON_IsBool(value)) bms_link = cJSON_IsTrue(value);
+    value = cJSON_GetObjectItemCaseSensitive(command, "barometer_link");
+    if (cJSON_IsBool(value)) barometer.set_connected(cJSON_IsTrue(value));
+    value = cJSON_GetObjectItemCaseSensitive(command, "esc_bus_off");
+    if (cJSON_IsBool(value)) set_can_fault(cJSON_IsTrue(value));
+    value = cJSON_GetObjectItemCaseSensitive(command, "stage_test");
+    if (cJSON_IsTrue(value) && application_state() == 0) {
+      stage_test = true;
+      automatic_inputs = false;
+      manual_throttle = 0;
+      manual_button = false;
+    }
+  }
+  cJSON_Delete(document);
+  std::printf("EPPG_QEMU_INPUT accepted\n");
+  if (stage_test) staging_self_test();
+  return true;
+}
+void console_task(void*) {
+  char line[1024];
+  size_t used = 0;
+  bool overflow = false;
+  for (;;) {
+    uint8_t byte = 0;
+    if (uart_read_bytes(UART_NUM_0, &byte, 1, pdMS_TO_TICKS(50)) != 1) continue;
+    if (byte == '\n') {
+      line[used] = '\0';
+      if (!overflow && !emulator_command(line)) {
+        for (size_t i = 0; i < used; ++i) xQueueSend(console_input, &line[i], 0);
+        xQueueSend(console_input, &byte, 0);
+      }
+      used = 0;
+      overflow = false;
+    } else if (used + 1 < sizeof(line)) line[used++] = byte;
+    else overflow = true;
+  }
+}
+}
+extern "C" void eppg_qemu_console_start() {
+  console_input = xQueueCreate(2048, 1);
+  configASSERT(console_input);
+  configASSERT(xTaskCreate(console_task, "QemuConsole", 6144, nullptr, 1, nullptr) == pdPASS);
+}
+extern "C" int eppg_qemu_usb_read(uint8_t* data, size_t length) {
+  size_t count = 0;
+  while (console_input && count < length && xQueueReceive(console_input, data + count, 0) == pdTRUE) ++count;
+  return count;
 }
 
 // The S3 machine includes TWAI emulation, but a real ESC is external hardware.
@@ -137,6 +307,18 @@ uint32_t can_transmitted = 0;
 uint32_t can_dropped = 0;
 uint64_t can_available_us = 0;
 uint16_t esc_pwm_01us = 10000;
+
+void set_can_fault(bool active) {
+  esc_fault = active;
+  if (active) {
+    can_state = TWAI_STATE_BUS_OFF;
+    can_rx_count = 0;
+    can_pending_alerts |= TWAI_ALERT_BUS_OFF | TWAI_ALERT_ERR_PASS;
+  } else if (can_state == TWAI_STATE_RECOVERING) {
+    can_state = TWAI_STATE_STOPPED;
+    can_pending_alerts |= TWAI_ALERT_BUS_RECOVERED;
+  }
+}
 
 bool accept_esc(const CanardInstance*, uint64_t* signature, uint16_t id,
                 CanardTransferType type, uint8_t) {
@@ -278,6 +460,7 @@ extern "C" esp_err_t __wrap_twai_get_status_info(twai_status_info_t* status) {
   *status = {}; status->state = can_state;
   status->msgs_to_rx = ready_can_frames();
   status->rx_missed_count = can_dropped;
+  status->tx_error_counter = esc_fault ? 256 : 0;
   return ESP_OK;
 }
 extern "C" esp_err_t __wrap_twai_read_alerts(uint32_t* alerts, TickType_t) {
@@ -296,6 +479,7 @@ extern "C" esp_err_t __wrap_twai_reconfigure_alerts(uint32_t enabled, uint32_t* 
 extern "C" esp_err_t __wrap_twai_initiate_recovery() {
   Lock lock;
   if (can_state != TWAI_STATE_BUS_OFF) return ESP_ERR_INVALID_STATE;
-  can_state = TWAI_STATE_STOPPED; can_pending_alerts |= TWAI_ALERT_BUS_RECOVERED;
+  can_state = esc_fault ? TWAI_STATE_RECOVERING : TWAI_STATE_STOPPED;
+  if (!esc_fault) can_pending_alerts |= TWAI_ALERT_BUS_RECOVERED;
   return ESP_OK;
 }

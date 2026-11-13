@@ -59,8 +59,9 @@ class Console {
   }
   bool hasInput();
   int readByte();
+
  private:
   int pending_ = -1;
 };
 extern Console console;
-}
+}  // namespace platform

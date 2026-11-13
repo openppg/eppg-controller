@@ -1,6 +1,6 @@
 # OpenPPG controller emulator
 
-This directory is a macOS-local, deterministic controller simulation. It is
+This directory contains native deterministic controller/device simulations and an ESP32-S3 QEMU backend. It is
 the executable hardware-aware layer beneath the existing LVGL screenshot
 emulator. It runs the **production `src/sp140/throttle.cpp` pipeline**, the
 unmodified SINE ESC/libcanard stack, and the unmodified ANT BMS parser. It also
@@ -83,7 +83,7 @@ probe remains useful as a fast isolated vendor-library check.
 The real ESP32-S3 build remains authoritative. Build it and inspect its ELF:
 
 ```bash
-pio run -e OpenPPG-CESP32S3-CAN-SP140
+IDF_COMPONENT_MANAGER=0 idf.py -B build-idf build
 python3 simulator/tools/inspect_firmware.py
 python3 simulator/tools/inspect_firmware.py \
   --disassembly /tmp/eppg-controller.disassembly.txt
@@ -93,7 +93,7 @@ The inspector reports the SHA-256, Xtensa sections/addresses and important
 firmware task symbols. The optional output is a complete source-interleaved
 Xtensa disassembly.
 
-Espressif's instruction-level QEMU can also consume the merged flash image:
+The explicit QEMU build executes native production tasks with modeled SPI/I2C/ADC/CAN peripherals. See the root README for bounded smoke tests. Interactive/debug launch:
 
 ```bash
 QEMU_BIN=/path/to/qemu-system-xtensa ./simulator/tools/run_qemu.sh

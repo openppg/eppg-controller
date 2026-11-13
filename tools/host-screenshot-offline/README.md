@@ -1,13 +1,12 @@
 # Offline host screenshot build probe
 
 This is an isolated macOS/native build of the existing LVGL screenshot test.
-It reuses dependencies already cached by PlatformIO, so CMake does not need to
-download LVGL or GoogleTest.
+It uses the exact vendored production LVGL 9.5.0 source. Set GTEST_DIR for an
+offline GoogleTest build, or CMake fetches the pinned GoogleTest 1.15.2.
 
 From the repository root:
 
 ```sh
-pio pkg install -e native-screenshot
 cmake -S tools/host-screenshot-offline -B build-host-screenshot \
   -DCMAKE_BUILD_TYPE=RelWithDebInfo
 cmake --build build-host-screenshot --parallel

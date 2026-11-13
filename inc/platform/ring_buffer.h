@@ -18,9 +18,10 @@ template<class T, size_t Capacity> class RingBuffer {
   T& operator[](size_t index) { return values_[(start_ + index) % Capacity]; }
   const T& first() const { return (*this)[0]; }
   const T& last() const { return (*this)[size_ - 1]; }
+
  private:
   std::array<T, Capacity> values_{};
   size_t start_ = 0;
   size_t size_ = 0;
 };
-}
+}  // namespace platform

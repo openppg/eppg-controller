@@ -175,7 +175,7 @@ void refreshDeviceData() {
 // transaction that, together with s_prefsMutex, removes any window in which a
 // concurrent writer could observe or produce a torn/partial save. The key names
 // and NVS value types here MATCH exactly what the platform::NvsStore getters in
-// refreshDeviceData() expect (u8/u16/i32, and a 4-uint8_t blob for the float), so
+// refreshDeviceData() expect (u8/u16/i32, and a 4-byte blob for the float), so
 // data written by older firmware remains fully readable.
 void writeDeviceData() {
   prefsEnsureMutex();
@@ -258,7 +258,12 @@ void parse_serial_command_line(const char* json_line) {
     return;
   }
 
-  using namespace platform::json;
+  using platform::json::Document;
+  using platform::json::field;
+  using platform::json::get;
+  using platform::json::has;
+  using platform::json::set;
+  using platform::json::string;
   Document doc(cJSON_Parse(json_line));
   if (!doc || !cJSON_IsObject(doc.get())) return;
   const char* command = string(doc.get(), "command");
@@ -293,7 +298,9 @@ void parse_serial_command_line(const char* json_line) {
     if (cJSON_IsObject(wireless) && applyWirelessSettingsJson(wireless)) {
       platform::console.line("Wireless settings saved; reboot required to apply role/radio changes");
       send_device_data();
-    } else platform::console.line("Invalid wireless settings (role, peer, 32-hex key, channel 1..13 required)");
+    } else {
+      platform::console.line("Invalid wireless settings (role, peer, 32-hex key, channel 1..13 required)");
+    }
   }
 }
 
@@ -343,7 +350,12 @@ void poll_serial_commands() {
  * Contains current device settings and state
  */
 void send_device_data() {
-  using namespace platform::json;
+  using platform::json::Document;
+  using platform::json::field;
+  using platform::json::get;
+  using platform::json::has;
+  using platform::json::set;
+  using platform::json::string;
   Document doc(cJSON_CreateObject());
   if (!doc) return;
 

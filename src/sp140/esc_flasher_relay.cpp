@@ -3,16 +3,20 @@
 #include "platform/runtime.h"
 #include <string.h>
 #include <stdlib.h>
+#include <atomic>
 #include <canard.h>
 #include <CanardAdapter.h>
 #include <dronecan_msgs.h>
 #include "esp_heap_caps.h"
+#include "platform/staging.h"
+#include "sp140/ble/ble_core.h"
 
 #include "sp140/esc.h"               // escAdapter(), escTelemetryData
 #include "sp140/device_state.h"      // DeviceState
 #include "sp140/esc_config_relay.h"  // escConfigRelayIsActive() cross-gate
 
 extern volatile DeviceState currentState;
+extern SemaphoreHandle_t stateMutex;
 
 static const uint8_t  ESC_CAN_NODE_ID = 0x20;
 static const uint8_t  CONFIG_HOST_NODE_ID = 0x40;  // ESC restricts bootloader/config to host 0x40
@@ -106,11 +110,13 @@ static EscFlasherRelayNode* s_node = nullptr;
 static portMUX_TYPE s_mux = portMUX_INITIALIZER_UNLOCKED;
 
 static uint8_t* s_buf = nullptr;
+static std::atomic<bool> s_flashStaged{false};
+static std::atomic<bool> s_preparing{false};
 static uint32_t s_bufSize = 0;       // total image size (header + firmware)
 static uint32_t s_received = 0;      // contiguous bytes received from offset 0
-static volatile bool s_abortRequested = false;
+static std::atomic<bool> s_abortRequested{false};
 
-static EscFwPhase s_phase = EscFwPhase::IDLE;
+static std::atomic<EscFwPhase> s_phase{EscFwPhase::IDLE};
 static EscFwStatus s_status = { EscFwCode::IDLE, EscFwPhase::IDLE, 0 };
 
 // Parsed header / flash progress (throttle task).
@@ -127,21 +133,28 @@ static void setStatus(EscFwCode code, EscFwPhase phase, uint16_t permille) {
 
 // Free the buffer. Only ever called on the throttle task (in the tick) or by
 // Begin's own failure path before any throttle access.
-static void freeBuffer() {
+static bool freeBuffer() {
+  // The BLE owner may still be writing a flash chunk when an abort arrives.
+  // Never wait for its mutex on the control owner; retry cleanup next tick.
+  if (s_flashStaged && eppg_stage_abort() != 0) return false;
   portENTER_CRITICAL(&s_mux);
   uint8_t* p = s_buf;
   s_buf = nullptr;
+  s_flashStaged = false;
+  s_preparing = false;
   s_bufSize = 0;
   s_received = 0;
   portEXIT_CRITICAL(&s_mux);
   if (p) free(p);
+  return true;
 }
 
-static void finishFail(EscFwCode code) {
-  freeBuffer();
+static bool finishFail(EscFwCode code) {
+  if (s_preparing || !freeBuffer()) return false;
   setStatus(code, EscFwPhase::DONE_FAIL, s_status.progressPermille);
-  escAdapter().setLocalNodeId(CTRL_NORMAL_NODE_ID);  // restore normal CAN identity
+  escAdapter().setLocalNodeId(CTRL_NORMAL_NODE_ID);
   s_phase = EscFwPhase::DONE_FAIL;
+  return true;
 }
 
 // =============================================================================
@@ -205,10 +218,16 @@ static void sendFwDataChunk(uint16_t index) {
   req.index = index;
   memset(req.data, 0xFF, FW_CHUNK_SIZE);
   uint32_t off = HEADER_SIZE + (uint32_t)index * FW_CHUNK_SIZE;
-  if (s_buf && off < s_bufSize) {
+  if ((s_buf || s_flashStaged) && off < s_bufSize) {
     uint32_t remaining = s_bufSize - off;
     uint32_t copyLen = (remaining < FW_CHUNK_SIZE) ? remaining : FW_CHUNK_SIZE;
-    memcpy(req.data, s_buf + off, copyLen);
+    if (s_flashStaged) {
+      const int result = eppg_stage_read(off, req.data, copyLen);
+      if (result == -2) return;  // Retry the request without blocking control.
+      if (result != 0) { finishFail(EscFwCode::FAILED); return; }
+    } else {
+      memcpy(req.data, s_buf + off, copyLen);
+    }
   }
   uint8_t buffer[SINE_ESC_SENDFWDATA_REQUEST_MAX_SIZE];
   uint32_t len = sine_esc_SendFwDataRequest_encode(&req, buffer);
@@ -258,6 +277,34 @@ bool escFlasherRelayIsActive() {
          s_phase != EscFwPhase::DONE_FAIL;
 }
 
+// Allocation and partition erase are deliberately outside both the NimBLE host
+// and control owners. START returns promptly; RECEIVING is published only when
+// the image store is ready, so existing status-driven clients can start upload.
+static void prepareImageStoreTask(void*) {
+  const uint32_t totalSize = s_bufSize;
+  vTaskDelay(pdMS_TO_TICKS(50));  // Let the GAP connection update be serviced.
+  uint8_t* buf = static_cast<uint8_t*>(heap_caps_malloc(totalSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+  if (!buf) buf = static_cast<uint8_t*>(malloc(totalSize));
+  const bool staged = !buf && eppg_stage_begin(totalSize) == 0;
+  requestNormalConnParams();
+  portENTER_CRITICAL(&s_mux);
+  s_buf = buf;
+  s_flashStaged = staged;
+  s_preparing = false;
+  if (buf || staged) {
+    s_lastRxMs = platform::millis32();
+    s_status.code = EscFwCode::RECEIVING;
+    s_status.phase = EscFwPhase::RECEIVING;
+    s_status.progressPermille = 0;
+  } else {
+    s_phase = EscFwPhase::DONE_FAIL;
+    s_status.code = EscFwCode::REJECTED_BUSY;
+    s_status.phase = EscFwPhase::DONE_FAIL;
+  }
+  portEXIT_CRITICAL(&s_mux);
+  vTaskDelete(nullptr);
+}
+
 bool escFlasherRelayBegin(uint16_t hardwareId, uint32_t totalSize) {
   if (!s_node) return false;
   if (escFlasherRelayIsActive() || escConfigRelayIsActive()) {
@@ -280,43 +327,61 @@ bool escFlasherRelayBegin(uint16_t hardwareId, uint32_t totalSize) {
     return false;
   }
 
-  uint8_t* buf = static_cast<uint8_t*>(heap_caps_malloc(totalSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-  if (!buf) buf = static_cast<uint8_t*>(malloc(totalSize));
-  if (!buf) {
+  // Reserve maintenance authority before allocation/erase. Button arming must
+  // not race a multi-sector flash erase, even though the BLE owner performs it.
+  if (xSemaphoreTake(stateMutex, portMAX_DELAY) != pdTRUE) return false;
+  if (currentState != DISARMED || escFlasherRelayIsActive() || escConfigRelayIsActive()) {
+    xSemaphoreGive(stateMutex);
     setStatus(EscFwCode::REJECTED_BUSY, EscFwPhase::DONE_FAIL, 0);
     return false;
   }
-
   portENTER_CRITICAL(&s_mux);
-  s_buf = buf;
+  s_preparing = true;
+  s_abortRequested = false;
   s_bufSize = totalSize;
   s_received = 0;
-  s_abortRequested = false;
+  s_hwId = hardwareId;
   s_phase = EscFwPhase::RECEIVING;
-  s_status.code = EscFwCode::RECEIVING;
+  s_status.code = EscFwCode::IDLE;
   s_status.phase = EscFwPhase::RECEIVING;
   s_status.progressPermille = 0;
   portEXIT_CRITICAL(&s_mux);
+  xSemaphoreGive(stateMutex);
   s_lastRxMs = platform::millis32();
-  s_hwId = hardwareId;
-  platform::console.format("ESC FW relay: begin hwId=0x%04X size=%u\n", hardwareId, totalSize);
+  requestFastConnParams();
+  if (xTaskCreate(prepareImageStoreTask, "EscImagePrepare", 4096, nullptr, 1, nullptr) != pdPASS) {
+    s_preparing = false;
+    s_phase = EscFwPhase::DONE_FAIL;
+    setStatus(EscFwCode::REJECTED_BUSY, EscFwPhase::DONE_FAIL, 0);
+    requestNormalConnParams();
+    return false;
+  }
+  platform::console.format("ESC FW relay: preparing hwId=0x%04X size=%u\n", hardwareId, totalSize);
   return true;
 }
 
 int32_t escFlasherRelayWriteChunk(uint32_t offset, const uint8_t* data, uint16_t len) {
   if (!data) return -1;
-  int32_t received = -1;
   portENTER_CRITICAL(&s_mux);
-  if (s_phase == EscFwPhase::RECEIVING && s_buf && !s_abortRequested &&
-      offset <= s_bufSize && (uint64_t)offset + len <= s_bufSize) {
-    memcpy(s_buf + offset, data, len);
-    // Track contiguous-from-zero progress (the app writes sequentially).
-    if (offset <= s_received && offset + len > s_received) {
-      s_received = offset + len;
-    }
-    received = (int32_t)s_received;
-    uint16_t permille = s_bufSize ? (uint16_t)((uint64_t)s_received * 500 / s_bufSize) : 0;  // receive = first 50%
-    s_status.progressPermille = permille;
+  const bool valid = s_phase == EscFwPhase::RECEIVING && !s_preparing &&
+      (s_buf || s_flashStaged) && !s_abortRequested &&
+      offset <= s_bufSize && static_cast<uint64_t>(offset) + len <= s_bufSize;
+  const bool staged = s_flashStaged;
+  if (valid && !staged) memcpy(s_buf + offset, data, len);
+  portEXIT_CRITICAL(&s_mux);
+  if (!valid) return -1;
+  // Flash writes may erase/rewrite a sector for an offset retry. They execute
+  // on the BLE maintenance owner, never under a spinlock or on throttleTask.
+  if (staged && eppg_stage_write(offset, data, len) < 0) {
+    s_abortRequested = true;
+    return -1;
+  }
+  portENTER_CRITICAL(&s_mux);
+  int32_t received = -1;
+  if (s_phase == EscFwPhase::RECEIVING && !s_abortRequested) {
+    if (offset <= s_received && offset + len > s_received) s_received = offset + len;
+    received = static_cast<int32_t>(s_received);
+    s_status.progressPermille = s_bufSize ? static_cast<uint16_t>(static_cast<uint64_t>(s_received) * 500 / s_bufSize) : 0;
   }
   portEXIT_CRITICAL(&s_mux);
   if (received >= 0) s_lastRxMs = platform::millis32();
@@ -324,33 +389,44 @@ int32_t escFlasherRelayWriteChunk(uint32_t offset, const uint8_t* data, uint16_t
 }
 
 bool escFlasherRelayEnd() {
-  bool ok = false;
+  uint8_t header[HEADER_SIZE]{};
   portENTER_CRITICAL(&s_mux);
-  if (s_phase == EscFwPhase::RECEIVING && s_buf && s_received >= s_bufSize && s_bufSize >= HEADER_SIZE) {
-    // Parse header (little-endian): hwId[0..1], sizeKb[4..5], crc[6..7].
-    s_hwId = s_buf[0] | ((uint16_t)s_buf[1] << 8);
-    s_sizeKb = s_buf[4] | ((uint16_t)s_buf[5] << 8);
-    s_crc = s_buf[6] | ((uint16_t)s_buf[7] << 8);
-    uint32_t fwBytes = s_bufSize - HEADER_SIZE;
-    s_totalChunks = (uint16_t)((fwBytes + FW_CHUNK_SIZE - 1) / FW_CHUNK_SIZE);
-    s_curChunk = 0;
-    s_retries = 0;
-    s_gotResponse = false;
-    s_phase = EscFwPhase::RESTARTING;
-    s_status.code = EscFwCode::ENTER_BOOTLDR;
-    s_status.phase = EscFwPhase::RESTARTING;
-    ok = true;
-  }
+  const bool complete = s_phase == EscFwPhase::RECEIVING && !s_preparing &&
+      !s_abortRequested && (s_buf || s_flashStaged) &&
+      s_received >= s_bufSize && s_bufSize >= HEADER_SIZE;
+  const bool staged = s_flashStaged;
+  if (complete && !staged) memcpy(header, s_buf, sizeof(header));
   portEXIT_CRITICAL(&s_mux);
-  if (ok) {
-    s_phaseStartMs = platform::millis32();
-    s_lastSendMs = 0;  // force first restart send on next tick
-    platform::console.format("ESC FW relay: end, flashing hwId=0x%04X sizeKb=%u chunks=%u\n",
-                     s_hwId, s_sizeKb, s_totalChunks);
-  } else {
-    platform::console.line("ESC FW relay: end rejected (incomplete image)");
+  if (!complete || (staged && eppg_stage_read(0, header, sizeof(header)) != 0)) return false;
+  const uint16_t image_hw = header[0] | (static_cast<uint16_t>(header[1]) << 8);
+  if (image_hw != s_hwId || image_hw != escTelemetryData.hardware_id) {
+    s_abortRequested = true;
+    setStatus(EscFwCode::REJECTED_HWID, EscFwPhase::RECEIVING, s_status.progressPermille);
+    return false;
   }
-  return ok;
+  if (staged && eppg_stage_finish() != 0) return false;
+  portENTER_CRITICAL(&s_mux);
+  if (s_abortRequested || s_phase != EscFwPhase::RECEIVING) {
+    portEXIT_CRITICAL(&s_mux);
+    return false;
+  }
+  s_hwId = image_hw;
+  s_sizeKb = header[4] | (static_cast<uint16_t>(header[5]) << 8);
+  s_crc = header[6] | (static_cast<uint16_t>(header[7]) << 8);
+  const uint32_t fwBytes = s_bufSize - HEADER_SIZE;
+  s_totalChunks = static_cast<uint16_t>((fwBytes + FW_CHUNK_SIZE - 1) / FW_CHUNK_SIZE);
+  s_curChunk = 0;
+  s_retries = 0;
+  s_gotResponse = false;
+  s_phase = EscFwPhase::RESTARTING;
+  s_status.code = EscFwCode::ENTER_BOOTLDR;
+  s_status.phase = EscFwPhase::RESTARTING;
+  portEXIT_CRITICAL(&s_mux);
+  s_phaseStartMs = platform::millis32();
+  s_lastSendMs = 0;
+  platform::console.format("ESC FW relay: end, flashing hwId=0x%04X sizeKb=%u chunks=%u\n",
+                           s_hwId, s_sizeKb, s_totalChunks);
+  return true;
 }
 
 void escFlasherRelayAbort() {
@@ -373,8 +449,7 @@ void escFlasherRelayServiceTick() {
   if (!escFlasherRelayIsActive()) return;
 
   if (s_abortRequested) {
-    finishFail(EscFwCode::FAILED);
-    s_abortRequested = false;
+    if (finishFail(EscFwCode::FAILED)) s_abortRequested = false;
     return;
   }
 
@@ -382,7 +457,7 @@ void escFlasherRelayServiceTick() {
 
   // RECEIVING: no CAN traffic; just guard against an app that stalls.
   if (s_phase == EscFwPhase::RECEIVING) {
-    if (now - s_lastRxMs > RX_TIMEOUT_MS) {
+    if (!s_preparing && now - s_lastRxMs > RX_TIMEOUT_MS) {
       platform::console.line("ESC FW relay: receive timeout");
       finishFail(EscFwCode::TIMEOUT);
     }
@@ -504,7 +579,7 @@ void escFlasherRelayServiceTick() {
     case EscFwPhase::ENDING:
       if (s_gotResponse) {
         if (s_responseState == 0) {
-          freeBuffer();
+          if (!freeBuffer()) break;
           escAdapter().setLocalNodeId(CTRL_NORMAL_NODE_ID);  // restore normal CAN identity
           setStatus(EscFwCode::SUCCESS, EscFwPhase::DONE_OK, 1000);
           s_phase = EscFwPhase::DONE_OK;

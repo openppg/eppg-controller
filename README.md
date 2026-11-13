@@ -2,7 +2,8 @@
 
 [![Build](https://github.com/openppg/eppg-controller/actions/workflows/config.yml/badge.svg)](https://github.com/openppg/eppg-controller/actions/workflows/config.yml)
 
-Arduino based logic for OpenPPG SP140 Throttle Controller
+Native ESP-IDF firmware for the ESP32-S3 OpenPPG SP140 Throttle Controller.
+The application is C++, uses FreeRTOS directly, and has no Arduino SDK dependency.
 
 ### Key Features
 
@@ -37,57 +38,79 @@ For batch 2 (Arduino nano based) controllers please see the [batch-2 branch](htt
 
 ## Build and flash firmware
 
-OpenPPG supports flashing the firmware PlatformIO. Older versions were also compatible with Arduino IDE.
+Install [ESP-IDF 5.5.3](https://docs.espressif.com/projects/esp-idf/en/v5.5.3/esp32s3/get-started/index.html)
+with its ESP32-S3 tools, then activate its `export.sh` environment. Dependencies
+are vendored under `components/`; PlatformIO and Arduino are not used.
 
-## Using PlatformIO
-
-(Mac, Windows, and Linux)
-
-### Setup
-
-1. Follow the instructions here for using with VSCode https://platformio.org/install/ide?install=vscode
-2. Extract the downloaded code from the repo [here](https://github.com/openppg/eppg-controller/archive/master.zip) (or `git clone` it)
-3. Open the folder using the PlatformIO "open project" option inside of VSCode.
-4. The first time you build the project it will download the libraries.
-
-#### Flash the OpenPPG Code
-
-1. First make sure the code compiles by hitting the check button in the bottom left "Build".
-2. Connect the controller to your computer by using the USB port on the bottom of the controller.
-3. Flash the firmware by clicking "Upload" in the bottom left.
-
-### Building binary update files
-
-Use `.pio/build/OpenPPG-CESP32S3-CAN-SP140/firmware.bin` for BLE OTA updates.
-Only build the merged image when you need a full-flash recovery image.
-
-#### Full-flash image
-
-ESP32 uses esptool to build a merged image from the compiled app plus bootloader and partitions:
-
-```bash
-$ esptool.py --chip esp32s3 merge_bin \
-  -o .pio/build/OpenPPG-CESP32S3-CAN-SP140/merged-firmware.bin \
-  --flash_mode dio \
-  --flash_freq 80m \
-  --flash_size 8MB \
-  0x0 .pio/build/OpenPPG-CESP32S3-CAN-SP140/bootloader.bin \
-  0x8000 .pio/build/OpenPPG-CESP32S3-CAN-SP140/partitions.bin \
-  0xe000 /Users/username/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin \
-  0x10000 .pio/build/OpenPPG-CESP32S3-CAN-SP140/firmware.bin
+```sh
+IDF_COMPONENT_MANAGER=0 idf.py -B build-idf build
+python3 tools/check_native_release.py build-idf
+idf.py -B build-idf -p PORT flash monitor
 ```
+
+The active 8 MB partition layout, NVS types/keys, BLE UUIDs and packet formats
+are preserved. Firmware starts in `src/sp140/main.cpp:app_main`. The native
+platform boundary is `inc/platform/`, implemented in `components/controller_platform/`.
+[Dependency versions and licenses](components/README.md) describe the retained C libraries.
+
+Use `build-idf/openppg_controller.bin` for existing BLE OTA clients. Keep its
+matching `.elf` and `.map` for crash decoding. A complete recovery image is separate:
+
+```sh
+python3 simulator/tools/merge_idf_flash.py build-idf build-idf/openppg-full-recovery.bin
+```
+
+The recovery image contains erased data regions; normal OTA and developer flash
+commands preserve NVS. Application OTA does not replace an installed bootloader.
+ESC firmware uploads retain their 256 KiB limit with a flash staging fallback
+when RAM is insufficient; [staging ownership and interruption behavior](components/README.md#esc-image-staging)
+protect unknown existing partition data.
 
 ## Testing
 
-Unit tests use [Google Test](https://github.com/google/googletest) and run natively (no hardware required):
+Host tests compile production controller logic, protocol codecs and LVGL screens.
+They need a C/C++ compiler and CMake; GoogleTest 1.15.2 is fetched if `GTEST_DIR`
+is not supplied. No board, ESP-IDF or Arduino installation is required for host tests.
 
-```bash
-pio test -e native-test
+```sh
+cmake -S tools/host-native-tests -B build-host-native-tests
+cmake --build build-host-native-tests --parallel
+ctest --test-dir build-host-native-tests --output-on-failure
+./simulator/run.sh --test-only
+cmake -S tools/host-can-protocol-probe -B build-host-can-protocol
+cmake --build build-host-can-protocol --parallel
+./build-host-can-protocol/host_can_protocol_probe
+cmake -S tools/host-screenshot-offline -B build-host-screenshots
+cmake --build build-host-screenshots --parallel
+ctest --test-dir build-host-screenshots --output-on-failure
 ```
 
-Test suites cover ESC error handling, throttle processing, hysteresis logic, sensor monitoring, and logging.
+`./simulator/verify.sh` runs the firmware build and all host gates from an active
+IDF environment. CI performs the same checks and retains release ELF/map files.
 
-CI automatically runs cpplint, unit tests, and a full firmware build on every push.
+## ESP32-S3 instruction-level emulator
+
+The QEMU variant executes this application's actual ESP32-S3 instructions,
+FreeRTOS tasks, control logic, monitoring, display driver and protocol adapters.
+MCP2515/ST7735/BMP3xx registers and a separate DroneCAN ESC peer provide modeled
+peripherals. BLE/Wi-Fi RF and electrical timing need physical hardware validation.
+
+```sh
+IDF_COMPONENT_MANAGER=0 idf.py -B build-idf-qemu \
+  -D EPPG_QEMU=ON -D SDKCONFIG=build-idf-qemu/sdkconfig \
+  -D 'SDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.qemu.defaults' build
+python3 simulator/tools/merge_idf_flash.py build-idf-qemu build-idf-qemu/qemu-flash.bin
+python3 simulator/tools/qemu_smoke.py --image build-idf-qemu/qemu-flash.bin \
+  --qemu /path/to/qemu-system-xtensa --timeout 30 \
+  --expect '=== Boot complete ===' --expect 'pwm_01us=16000' \
+  --report build-idf-qemu/qemu-smoke.json
+```
+
+Use Espressif's QEMU with the `esp32s3` machine. The emulator image uses DIO and
+UART0 because the QEMU NOR/USB models differ from the board; physical firmware
+continues to use its configured QIO flash and USB Serial/JTAG console. The smoke
+scenario drives the real click/hold arming gesture and raw ADC throttle ramp.
+Reports retain full UART output and the input image hash.
 
 ## Config tool
 

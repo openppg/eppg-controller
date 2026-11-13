@@ -123,7 +123,9 @@ def main() -> int:
     parser.add_argument("--timeout", type=float, default=30)
     parser.add_argument("--flash-size", type=int, default=8 * 1024 * 1024)
     parser.add_argument("--expect", action="append", default=[])
-    parser.add_argument("--reject", action="append", default=["Guru Meditation Error", "assert failed", "ABORTED"])
+    parser.add_argument("--reject", action="append", default=[
+        "Guru Meditation Error", "assert failed", "ABORTED", "stack overflow",
+        "panic_abort", "Task watchdog got triggered"])
     parser.add_argument("--send", help="one UART command to send after --send-after marker")
     parser.add_argument("--send-after", default="=== Boot complete ===")
     parser.add_argument("--report", type=Path)

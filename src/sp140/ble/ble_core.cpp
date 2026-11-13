@@ -85,7 +85,7 @@ class ConnectionCallbacks : public platform::BleServerCallbacks {
     ESP_LOGI(kTag, "MTU=%u handle=%u", mtu, connection.getConnHandle());
   }
 };
-}
+}  // namespace
 
 void setupBLE() {
   std::string uniqueId;

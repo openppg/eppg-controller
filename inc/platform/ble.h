@@ -28,10 +28,11 @@ constexpr uint32_t WRITE_ENC = BLE_GATT_CHR_F_WRITE_ENC;
 
 class BleUuid {
  public:
-  BleUuid(const char* text);
-  BleUuid(const std::string& text) : BleUuid(text.c_str()) {}
-  BleUuid(uint16_t value);
+  explicit BleUuid(const char* text);
+  explicit BleUuid(const std::string& text) : BleUuid(text.c_str()) {}
+  explicit BleUuid(uint16_t value);
   const ble_uuid_t* native() const { return &value_.u; }
+
  private:
   ble_uuid_any_t value_{};
 };
@@ -40,6 +41,7 @@ class BleAddress {
   explicit BleAddress(const ble_addr_t& address) : address_(address) {}
   std::string toString() const;
   const ble_addr_t* native() const { return &address_; }
+
  private:
   ble_addr_t address_{};
 };
@@ -53,6 +55,7 @@ class BleConnection {
   uint8_t getSecKeySize() const { return desc_.sec_state.key_size; }
   BleAddress getAddress() const { return BleAddress(desc_.peer_ota_addr); }
   BleAddress getIdAddress() const { return BleAddress(desc_.peer_id_addr); }
+
  private:
   ble_gap_conn_desc desc_{};
 };
@@ -92,6 +95,7 @@ class BleCharacteristic {
   uint16_t handle() const { return handle_; }
   static int access(uint16_t connection, uint16_t attribute,
                     ble_gatt_access_ctxt* context, void* argument);
+
  private:
   friend class BleService;
   friend class BleServer;
@@ -110,6 +114,7 @@ class BleService {
   explicit BleService(BleUuid uuid) : uuid_(uuid) {}
   BleCharacteristic* createCharacteristic(BleUuid uuid, uint32_t properties);
   void start() {}  // Registration happens atomically with the complete server.
+
  private:
   friend class BleServer;
   BleUuid uuid_;
@@ -135,6 +140,7 @@ class BleServer {
   bool pairingAllowed() const { return pairing_allowed_.load(); }
   void setPairingAllowed(bool allowed) { pairing_allowed_.store(allowed); }
   static int gapEvent(ble_gap_event* event, void* argument);
+
  private:
   static void onSync();
   static void hostTask(void* argument);
@@ -147,4 +153,4 @@ class BleServer {
   uint8_t address_type_ = BLE_OWN_ADDR_PUBLIC;
   bool registered_ = false;
 };
-}
+}  // namespace platform

@@ -25,6 +25,12 @@ int eppg_qemu_adc_read(int pin);
 int eppg_qemu_spi_transfer(void*, const uint8_t*, uint8_t*, size_t);
 int eppg_qemu_i2c_read(uint8_t, uint8_t, uint8_t*, size_t);
 int eppg_qemu_i2c_write(uint8_t, uint8_t, const uint8_t*, size_t);
+void eppg_qemu_pwm_config(int, int, uint32_t);
+void eppg_qemu_pwm_write(int, uint32_t);
+void eppg_qemu_pwm_frequency(int, uint32_t);
+void eppg_qemu_pixel_write(int, uint32_t);
+void eppg_qemu_console_start();
+int eppg_qemu_usb_read(uint8_t*, size_t);
 }
 #endif
 
@@ -88,6 +94,7 @@ extern "C" int eppg_adc_read(int pin) {
 }
 extern "C" int eppg_pwm_config(int channel, int pin, uint32_t hz) {
 #ifdef EPPG_QEMU
+  eppg_qemu_pwm_config(channel, pin, hz);
   return ESP_OK;
 #else
   // Each feedback output owns a timer; changing a note never changes vibration.
@@ -109,18 +116,23 @@ extern "C" int eppg_pwm_config(int channel, int pin, uint32_t hz) {
 #endif
 }
 extern "C" void eppg_pwm_write(int channel, uint32_t duty) {
-#ifndef EPPG_QEMU
+#ifdef EPPG_QEMU
+  eppg_qemu_pwm_write(channel, duty);
+#else
   ledc_set_duty(LEDC_LOW_SPEED_MODE, static_cast<ledc_channel_t>(channel), std::min<uint32_t>(duty, 255));
   ledc_update_duty(LEDC_LOW_SPEED_MODE, static_cast<ledc_channel_t>(channel));
 #endif
 }
 extern "C" void eppg_pwm_frequency(int channel, uint32_t hz) {
-#ifndef EPPG_QEMU
+#ifdef EPPG_QEMU
+  eppg_qemu_pwm_frequency(channel, hz);
+#else
   ledc_set_freq(LEDC_LOW_SPEED_MODE, static_cast<ledc_timer_t>(channel), hz);
 #endif
 }
 extern "C" int eppg_pixel_write(int pin, uint32_t rgb) {
 #ifdef EPPG_QEMU
+  eppg_qemu_pixel_write(pin, rgb);
   return ESP_OK;
 #else
   static rmt_channel_handle_t channel = nullptr;
@@ -234,7 +246,9 @@ extern "C" int eppg_usb_init() {
   config.stop_bits = UART_STOP_BITS_1;
   config.flow_ctrl = UART_HW_FLOWCTRL_DISABLE;
   uart_param_config(UART_NUM_0, &config);
-  return uart_driver_install(UART_NUM_0, 2048, 2048, 0, nullptr, 0);
+  const esp_err_t err = uart_driver_install(UART_NUM_0, 2048, 2048, 0, nullptr, 0);
+  if (err == ESP_OK) eppg_qemu_console_start();
+  return err;
 #else
   usb_serial_jtag_driver_config_t config{};
   config.rx_buffer_size = config.tx_buffer_size = 2048;
@@ -243,7 +257,7 @@ extern "C" int eppg_usb_init() {
 }
 extern "C" int eppg_usb_read(uint8_t* data, size_t length) {
 #ifdef EPPG_QEMU
-  return uart_read_bytes(UART_NUM_0, data, length, 0);
+  return eppg_qemu_usb_read(data, length);
 #else
   return usb_serial_jtag_read_bytes(data, length, 0);
 #endif

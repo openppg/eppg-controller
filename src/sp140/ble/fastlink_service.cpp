@@ -12,7 +12,6 @@
 #include "sp140/esc_flasher_relay.h"  // ... and firmware relay
 #include "platform/runtime.h"
 #include "platform/ble.h"
-#include "platform/ble.h"
 
 namespace {
 platform::BleCharacteristic *pFastLinkCharacteristic = nullptr;
@@ -242,15 +241,15 @@ void initFastLinkBleService(platform::BleServer *pServer) {
   if (pServer == nullptr)
     return;
 
-  auto *pService = pServer->createService(FAST_LINK_TELEMETRY_SERVICE_UUID);
+  auto *pService = pServer->createService(platform::BleUuid(FAST_LINK_TELEMETRY_SERVICE_UUID));
 
   pFastLinkCharacteristic = pService->createCharacteristic(
-      FAST_LINK_TELEMETRY_UUID,
+      platform::BleUuid(FAST_LINK_TELEMETRY_UUID),
       kFastLinkTelemetryProperties);
   pFastLinkCharacteristic->setCallbacks(&telemetryCallbacks);
 
   // Set initial value so GATT reads before the first notify return a valid
-  // version uint8_t instead of all-zeros (which the app rejects as version 0).
+  // version byte instead of all-zeros (which the app rejects as version 0).
   BLE_FastLink_Telemetry initialData = {};
   initialData.version = FASTLINK_PROTOCOL_VERSION;
   pFastLinkCharacteristic->setValue(
@@ -259,7 +258,7 @@ void initFastLinkBleService(platform::BleServer *pServer) {
 
   // Write-without-response command channel: app sends 0x01 to request ESC hw info
   auto *pCommandCharacteristic = pService->createCharacteristic(
-      FAST_LINK_COMMAND_UUID,
+      platform::BleUuid(FAST_LINK_COMMAND_UUID),
       kFastLinkCommandProperties);
   pCommandCharacteristic->setCallbacks(&commandCallbacks);
 

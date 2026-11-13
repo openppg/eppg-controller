@@ -50,6 +50,9 @@
 // FreeRTOS task utilities for stack watermark logging
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#ifdef EPPG_QEMU
+extern "C" void eppg_qemu_boot_complete();
+#endif
 
 // Forward declarations
 void disarmSystem();
@@ -171,6 +174,13 @@ void changeDeviceState(DeviceState newState) {
   // blocking other tasks that read currentState. BLE notify is handled in
   // bleNotifyTask.
   if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
+    // Recheck under the same authority lock used to reserve ESC maintenance.
+    // This closes the check/arm race before a staging erase can begin.
+    if (currentState == DISARMED && newState != DISARMED &&
+        (isOtaInProgress() || escConfigRelayIsActive() || escFlasherRelayIsActive())) {
+      xSemaphoreGive(stateMutex);
+      return;
+    }
     oldState = currentState;
     currentState = newState;
 
@@ -782,7 +792,10 @@ void setupTasks() {
                           &throttleTaskHandle, 0);
   xTaskCreatePinnedToCore(uiTask, "UI", 5888, NULL, 2, &uiTaskHandle, 1);
   if (!wirelessIsRemote()) {
-    xTaskCreatePinnedToCore(bmsTask, "BMS", 2304, NULL, 2, &bmsTaskHandle, 1);
+    // Native SPI transactions and formatted diagnostics need more headroom
+    // than the former wrapper. The instruction-level scenario exercises this
+    // path continuously, including the modeled controller register accesses.
+    xTaskCreatePinnedToCore(bmsTask, "BMS", 4096, NULL, 2, &bmsTaskHandle, 1);
     xTaskCreate(ctrlSensorTask, "CtrlSensor", 4096, NULL, 2,
                 &ctrlSensorTaskHandle);
   }
@@ -1001,6 +1014,9 @@ extern "C" void app_main() {
   }
 
   platform::console.line("=== Boot complete ===");
+#ifdef EPPG_QEMU
+  eppg_qemu_boot_complete();
+#endif
 }
 
 // Add new button handler task

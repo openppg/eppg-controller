@@ -1,27 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 project_root="$(cd "$script_dir/.." && pwd)"
 cd "$project_root"
 
-echo "[1/5] Building real ESP32-S3 firmware and merged QEMU flash"
-pio run -e OpenPPG-CESP32S3-CAN-SP140 --target mergebin
+printf '%s\n' '[1/5] Build native ESP32-S3 firmware and validate the release image'
+IDF_COMPONENT_MANAGER=0 idf.py -B build-idf build
+python3 tools/check_native_release.py build-idf
 
-echo "[2/5] Running native production-logic tests"
-pio test -e native-test
+printf '%s\n' '[2/5] Run production controller regressions'
+cmake -S tools/host-native-tests -B build-host-native-tests ${GTEST_DIR:+-DGTEST_DIR="$GTEST_DIR"}
+cmake --build build-host-native-tests --parallel
+ctest --test-dir build-host-native-tests --output-on-failure
 
-echo "[3/5] Building and testing deterministic whole-controller simulator"
+printf '%s\n' '[3/5] Test deterministic controller and register-level device models'
 ./simulator/run.sh --test-only
 
-echo "[4/5] Exercising real SINE/DroneCAN and ANT BMS byte protocols"
-cmake -S tools/host-can-protocol-probe -B build-host-can-protocol \
-  -DCMAKE_BUILD_TYPE=RelWithDebInfo
-cmake --build build-host-can-protocol --parallel \
-  "$(sysctl -n hw.ncpu 2>/dev/null || getconf _NPROCESSORS_ONLN || echo 4)"
+printf '%s\n' '[4/5] Exercise pinned SINE/DroneCAN and ANT BMS byte protocols'
+cmake -S tools/host-can-protocol-probe -B build-host-can-protocol
+cmake --build build-host-can-protocol --parallel
 ./build-host-can-protocol/host_can_protocol_probe
 
-echo "[5/5] Rendering and comparing all real LVGL screens offline"
-./test/test_screenshots/build_and_run.sh --local
-
-echo "All controller emulation/build checks passed."
+printf '%s\n' '[5/5] Compare production LVGL screenshots with existing references'
+cmake -S tools/host-screenshot-offline -B build-host-screenshots ${GTEST_DIR:+-DGTEST_DIR="$GTEST_DIR"}
+cmake --build build-host-screenshots --parallel
+ctest --test-dir build-host-screenshots --output-on-failure
+printf '%s\n' 'All native firmware and host verification gates passed.'

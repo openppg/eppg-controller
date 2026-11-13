@@ -19,3 +19,4 @@ build-native*/
 sdkconfig
 sdkconfig.old
 release-artifacts/
+__pycache__/

@@ -14,116 +14,63 @@ jobs:
     runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
-          token: ${{ github.token }}
-          show-progress: false
-      - name: Setup Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: 3.x
+          python-version: '3.x'
       - run: pip install cpplint
       - run: cpplint --linelength 140 --filter=-legal/copyright,-runtime/int,-build/include_subdir,-readability/casting,-readability/todo,-build/include_order,-build/include_what_you_use,-whitespace/newline --recursive ./inc/ ./lib/ ./src/
 
-  pio-test:
-    name: PlatformIO Tests
+  native-tests:
+    name: Native controller, CAN, device and display tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-        with:
-          token: ${{ secrets.GH_TOKEN || github.token }}
-          persist-credentials: true
-          show-progress: false
-      - name: Setup Git Credentials
+      - name: Install native test tools
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build g++ libgtest-dev
+      - name: Controller regressions
         run: |
-          git config --global credential.helper store
-          echo "https://oauth2:${{ secrets.GH_TOKEN || github.token }}@github.com" > ~/.git-credentials
-      - name: Setup Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.13"
-      - name: Cache PlatformIO
-        uses: actions/cache@v6
-        with:
-          path: ~/.platformio
-          key: pio-${{ hashFiles('platformio.ini') }}
-          restore-keys: pio-
-      - name: Install PlatformIO
+          cmake -S tools/host-native-tests -B build-host-native-tests -DGTEST_DIR=/usr/src/googletest
+          cmake --build build-host-native-tests --parallel
+          ctest --test-dir build-host-native-tests --output-on-failure
+      - name: Controller and register-level device models
+        run: ./simulator/run.sh --test-only
+      - name: Pinned CAN protocol oracle
         run: |
-          python -m pip install --upgrade pip
-          pip install -U platformio
-      - name: Run Unit Tests
-        run: platformio test -e native-test
-
-  screenshot-tests:
-    name: Screenshot Regression Tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          token: ${{ github.token }}
-          show-progress: false
-      - name: Install Dependencies
-        run: sudo apt-get update && sudo apt-get install -y cmake g++
-      - name: Build & Run Screenshot Tests
-        run: ./test/test_screenshots/build_and_run.sh
-      - name: Upload Screenshots on Failure
+          cmake -S tools/host-can-protocol-probe -B build-host-can-protocol
+          cmake --build build-host-can-protocol --parallel
+          ./build-host-can-protocol/host_can_protocol_probe
+      - name: Native production UI screenshot regressions
+        run: |
+          cmake -S tools/host-screenshot-offline -B build-host-screenshots -DGTEST_DIR=/usr/src/googletest
+          cmake --build build-host-screenshots --parallel
+          ctest --test-dir build-host-screenshots --output-on-failure
+      - uses: actions/upload-artifact@v7
         if: failure()
-        uses: actions/upload-artifact@v7
         with:
           name: screenshot-regression-output
           path: test/test_screenshots/output/
 
-  pio-build:
-    # Dependabot PRs cannot access private library repos; push CI still validates the full build.
-    if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'dependabot/') }}
-    name: PlatformIO Build
+  idf-build:
+    name: Native ESP-IDF ESP32-S3 firmware
     runs-on: ubuntu-latest
+    container: espressif/idf:v5.5.3
+    env:
+      IDF_COMPONENT_MANAGER: '0'
     steps:
       - uses: actions/checkout@v7
-        with:
-          token: ${{ secrets.GH_TOKEN || github.token }}
-          persist-credentials: true
-          show-progress: false
-      - name: Setup Git Credentials
+      - name: Build, validate and export firmware
+        shell: bash
         run: |
-          git config --global credential.helper store
-          echo "https://oauth2:${{ secrets.GH_TOKEN || github.token }}@github.com" > ~/.git-credentials
-      - name: Setup Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.13"
-      - name: Cache PlatformIO
-        uses: actions/cache@v6
-        with:
-          path: ~/.platformio
-          key: pio-${{ hashFiles('platformio.ini') }}
-          restore-keys: pio-
-      - name: Install PlatformIO
-        run: |
-          python -m pip install --upgrade pip
-          pip install -U platformio
-      - name: Build ESP32S3
-        run: platformio run -e OpenPPG-CESP32S3-CAN-SP140
-      - name: Install esptool
-        run: pip install esptool
-      - name: Merge Binaries
-        run: |
-          esptool.py --chip esp32s3 merge_bin \
-            -o .pio/build/OpenPPG-CESP32S3-CAN-SP140/full-controller-firmware.bin \
-            --flash_mode dio \
-            --flash_freq 80m \
-            --flash_size 8MB \
-            0x0 .pio/build/OpenPPG-CESP32S3-CAN-SP140/bootloader.bin \
-            0x8000 .pio/build/OpenPPG-CESP32S3-CAN-SP140/partitions.bin \
-            0xe000 /home/runner/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin \
-            0x10000 .pio/build/OpenPPG-CESP32S3-CAN-SP140/firmware.bin
-      - name: Stage Firmware Artifacts
-        run: |
+          . /opt/esp/idf/export.sh
+          idf.py -B build-idf build
+          python3 tools/check_native_release.py build-idf
           mkdir -p release-artifacts
-          cp .pio/build/OpenPPG-CESP32S3-CAN-SP140/firmware.bin release-artifacts/openppg-sp140-ota-firmware.bin
-          cp .pio/build/OpenPPG-CESP32S3-CAN-SP140/full-controller-firmware.bin release-artifacts/openppg-sp140-full-flash.bin
-      - name: Archive ESP32S3 Firmware
-        uses: actions/upload-artifact@v7
+          cp build-idf/openppg_controller.bin release-artifacts/openppg-sp140-ota-firmware.bin
+          cp build-idf/openppg_controller.elf release-artifacts/
+          cp build-idf/openppg_controller.map release-artifacts/
+          cp build-idf/partition_table/partition-table.bin release-artifacts/
+          python3 simulator/tools/merge_idf_flash.py build-idf release-artifacts/openppg-sp140-full-flash.bin
+      - uses: actions/upload-artifact@v7
         with:
           name: OpenPPG-CESP32S3-CAN-SP140-firmware
           path: release-artifacts/

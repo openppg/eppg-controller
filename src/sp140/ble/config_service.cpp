@@ -52,7 +52,7 @@ class MetricAltCallbacks : public platform::BleCharacteristicCallbacks {
     (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.length() != 1) {
-      platform::console.line("Invalid value length - expected 1 uint8_t");
+      platform::console.line("Invalid value length - expected 1 byte");
       return;
     }
 
@@ -67,7 +67,7 @@ class PerformanceModeCallbacks : public platform::BleCharacteristicCallbacks {
     (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.length() != 1) {
-      platform::console.line("Invalid value length - expected 1 uint8_t");
+      platform::console.line("Invalid value length - expected 1 byte");
       return;
     }
 
@@ -88,7 +88,7 @@ class ScreenRotationCallbacks : public platform::BleCharacteristicCallbacks {
     (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.length() != 1) {
-      platform::console.line("Invalid value length - expected 1 uint8_t");
+      platform::console.line("Invalid value length - expected 1 byte");
       return;
     }
 
@@ -203,7 +203,7 @@ class ThemeCallbacks : public platform::BleCharacteristicCallbacks {
     (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.length() != 1) {
-      platform::console.line("Invalid value length - expected 1 uint8_t");
+      platform::console.line("Invalid value length - expected 1 byte");
       return;
     }
 
@@ -261,7 +261,7 @@ class MetricTempCallbacks : public platform::BleCharacteristicCallbacks {
     (void)connInfo;
     std::string value = characteristic->getValue();
     if (value.length() != 1) {
-      platform::console.line("Invalid value length - expected 1 uint8_t");
+      platform::console.line("Invalid value length - expected 1 byte");
       return;
     }
 

@@ -30,6 +30,7 @@ bool validCalibration(bmp3_dev* sensor) {
 bool Barometer::initialize() {
   sensor_ = {};
   sensor_.intf = BMP3_I2C_INTF;
+  sensor_.intf_ptr = this;
   sensor_.read = read;
   sensor_.write = write;
   sensor_.delay_us = wait;

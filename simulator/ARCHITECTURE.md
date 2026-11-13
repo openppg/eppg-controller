@@ -8,7 +8,7 @@
 | ESC | internal TWAI, 1 Mbit/s DroneCAN | RX 3, TX 2 | command/telemetry at 20 ms |
 | BMS | MCP2515, 250 kbit/s CAN on shared HSPI | CS 5; SCLK 12, MOSI 11, MISO 13 | 100 ms / 10 Hz |
 | Display | ST7735, 160×128 RGB565 on shared HSPI | CS 10, DC 14, reset 15 | 33 ms / ~30 Hz |
-| Altimeter | BMP3XX I2C, 25 Hz ODR | SDA 44, SCL 41; GPIO 9/40/42 setup | altitude at ~30 Hz; pressure/temperature published at 10 Hz |
+| Altimeter | BMP3XX I2C, 25 Hz ODR | SDA 44, SCL 41; active GPIO40/42 setup; GPIO9 helper unused | altitude at ~30 Hz; pressure/temperature published at 10 Hz |
 | Button | active-low digital input | GPIO 1 | 10 ms, 50 ms debounce |
 | Buzzer | LEDC channel 1 | GPIO 8 | queued notes |
 | Vibration | LEDC channel 0 | GPIO 46 | queued patterns |
@@ -50,14 +50,14 @@ represented only by state/counters or remain at the fidelity boundary.
    checks the real SINE DroneCAN and ANT BMS byte parsers over minimal fake
    transports; the screenshot test runs the real LVGL screens into a
    framebuffer.
-3. **Instruction execution**: the normal PlatformIO build produces the actual
+3. **Instruction execution**: the native ESP-IDF 5.5.3 build produces the actual
    dual-core Xtensa ELF and an 8 MB merged QEMU image. The firmware inspector
    exposes sections, symbols, hashes, and source-interleaved disassembly.
 
 These tiers avoid conflating functional correctness with electrical or
 cycle-accurate timing. The CAN and behavioral tiers are now joined at the wire
 frame boundary. The next useful fidelity increments are compiling more
-production tasks against stateful host FreeRTOS/Arduino shims, modeling CAN
+production logic against host platform interfaces, modeling CAN
 arbitration/error counters at sampled-bit level where needed, and adding missing
 QEMU devices only where instruction-level behavior changes a result.
 
@@ -81,11 +81,14 @@ QEMU devices only where instruction-level behavior changes a result.
 Espressif's official support matrix lists dual-core Xtensa, flash/MMU, interrupt
 matrix, SysTimer, timer groups, GDMA, crypto and TWAI/CAN for ESP32-S3. It lists
 Wi-Fi, Bluetooth, USB, GP-SPI, I2C, LEDC and GPIO matrix/IOMUX as unsupported.
-The current project is also pinned to ESP-IDF 4.4.7; the official QEMU smoke
-test reaches bootloader/application loading but that old IDF build asserts in
-default flash initialization before `app_main`. Consequently QEMU is valuable
-for bytecode, CPU, boot and supported-device work, while the native tiers are
-the executable whole-controller path today.
+The native firmware targets ESP-IDF 5.5.3. Its explicit `EPPG_QEMU` variant
+runs the actual `app_main`, FreeRTOS tasks, control/monitor code and protocol
+adapters. The platform layer dispatches unsupported physical peripherals to
+register-level MCP2515/ST7735/BMP3xx models and a libcanard ESC peer. QEMU uses
+DIO flash and UART0 because its NOR model lacks the QIO-enable register and its
+S3 machine has no USB Serial/JTAG device. Native board builds retain QIO/USB.
+BLE/Wi-Fi RF are explicitly disabled in the QEMU build; no RF fidelity is claimed.
+The UART smoke report retains boot, framebuffer/checksum and decoded CAN output.
 
 Sources:
 

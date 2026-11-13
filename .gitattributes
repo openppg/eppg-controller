@@ -1,2 +1,11 @@
 # Ignore all differences in line endings
 *        -crlf
+
+# Pinned dependencies remain auditable but collapse in implementation reviews.
+components/lvgl/** linguist-vendored=true
+components/bmp3/** linguist-vendored=true
+components/dronecan/src/*.c linguist-vendored=true
+components/dronecan/src/*.h linguist-vendored=true
+components/dronecan/src/canard/** linguist-vendored=true
+simulator/reference-can/** linguist-vendored=true
+test/vendor/** linguist-vendored=true

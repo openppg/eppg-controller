@@ -1,7 +1,6 @@
 {
-  "name": "Ubuntu Development Environment",
-  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
-
+  "name": "OpenPPG native ESP-IDF 5.5.3",
+  "image": "espressif/idf:v5.5.3",
   "features": {
     "ghcr.io/devcontainers/features/python:1": {
       "version": "3.12"
@@ -11,11 +10,10 @@
       "version": "20"
     }
   },
-
   "customizations": {
     "vscode": {
       "extensions": [
-        "platformio.platformio-ide",
+        "espressif.esp-idf-extension",
         "ms-vscode.cpptools-extension-pack",
         "ms-python.python"
       ],
@@ -25,23 +23,17 @@
         "editor.tabSize": 2,
         "editor.insertSpaces": true,
         "files.associations": {
-          "*.ino": "cpp",
           "*.h": "c",
           "*.hpp": "cpp"
         }
       }
     }
   },
-
   "postCreateCommand": "bash .devcontainer/setup.sh",
-
-  "remoteUser": "vscode",
-
+  "remoteUser": "root",
   "mounts": [
-    "source=/dev,target=/dev,type=bind,consistency=cached",
-    "source=/Users/zach/.claude-code-router,target=/home/vscode/.claude-code-router,type=bind"
+    "source=/dev,target=/dev,type=bind,consistency=cached"
   ],
-
   "runArgs": [
     "--privileged"
   ]

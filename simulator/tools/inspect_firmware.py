@@ -15,11 +15,7 @@ def find_objdump() -> str:
     direct = shutil.which("xtensa-esp32s3-elf-objdump")
     if direct:
         return direct
-    candidate = (Path.home() / ".platformio/packages/toolchain-xtensa-esp32s3/bin/"
-                 "xtensa-esp32s3-elf-objdump")
-    if candidate.exists():
-        return str(candidate)
-    raise SystemExit("xtensa-esp32s3-elf-objdump not found; build with PlatformIO first")
+    raise SystemExit("xtensa-esp32s3-elf-objdump not found; activate the ESP-IDF export.sh environment")
 
 
 def command(tool: str, *args: str) -> str:
@@ -31,13 +27,13 @@ def command(tool: str, *args: str) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "elf", nargs="?", default=".pio/build/OpenPPG-CESP32S3-CAN-SP140/firmware.elf"
+        "elf", nargs="?", default="build-idf/openppg_controller.elf"
     )
     parser.add_argument("--disassembly", help="write complete annotated disassembly here")
     args = parser.parse_args()
     elf = Path(args.elf).resolve()
     if not elf.exists():
-        raise SystemExit(f"firmware ELF not found: {elf}; run pio run first")
+        raise SystemExit(f"firmware ELF not found: {elf}; run idf.py -B build-idf build first")
 
     objdump = find_objdump()
     headers = command(objdump, "-h", str(elf))

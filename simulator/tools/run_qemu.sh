@@ -3,9 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 project_root="$(cd "$script_dir/../.." && pwd)"
-environment="OpenPPG-CESP32S3-CAN-SP140"
-flash_image="$project_root/.pio/build/$environment/firmware-merged.bin"
-qemu_flash_image="$project_root/.pio/build/$environment/qemu-flash-8mb.bin"
+qemu_flash_image="$project_root/build-idf-qemu/qemu-flash-8mb.bin"
 
 qemu_binary="${QEMU_BIN:-}"
 qemu_args=()
@@ -32,15 +30,10 @@ if [[ -z "$qemu_binary" ]]; then
 fi
 
 cd "$project_root"
-pio run -e "$environment" --target mergebin
-
-if [[ ! -f "$flash_image" ]]; then
-  echo "merged flash image was not created: $flash_image" >&2
-  exit 1
-fi
-
-python3 "$script_dir/prepare_qemu_flash.py" \
-  "$flash_image" "$qemu_flash_image"
+IDF_COMPONENT_MANAGER=0 idf.py -B build-idf-qemu \
+  -D EPPG_QEMU=ON -D SDKCONFIG=build-idf-qemu/sdkconfig \
+  -D 'SDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.qemu.defaults' build
+python3 "$script_dir/merge_idf_flash.py" build-idf-qemu "$qemu_flash_image"
 
 exec "$qemu_binary" -nographic \
   -machine esp32s3 \

@@ -15,6 +15,7 @@ class Mcp2515 {
   explicit Mcp2515(int cs) : cs_(cs) {}
   bool initialize();
   bool receive(CanFrame* frame);
+
  private:
   uint8_t readRegister(uint8_t reg);
   void writeRegister(uint8_t reg, uint8_t value);
@@ -22,4 +23,4 @@ class Mcp2515 {
   int cs_;
   void* device_ = nullptr;
 };
-}
+}  // namespace platform

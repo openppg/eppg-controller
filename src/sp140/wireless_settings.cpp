@@ -122,7 +122,12 @@ void loadWirelessSettings() {
 }
 
 bool applyWirelessSettingsJson(const cJSON* settings) {
-  using namespace platform::json;
+  using platform::json::Document;
+  using platform::json::field;
+  using platform::json::get;
+  using platform::json::has;
+  using platform::json::set;
+  using platform::json::string;
   WirelessSettings candidate = wirelessSettings;
 
   if (has(settings, "role") &&

@@ -10,6 +10,11 @@ set(STUBS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../screenshot_stubs)
 set(LVGL_DIR "" CACHE PATH "Path to LVGL source (e.g., /tmp/lvgl)")
 set(GTEST_DIR "" CACHE PATH "Path to GoogleTest source (e.g., /tmp/googletest)")
 
+# Use the exact production LVGL source; host rendering needs no SDK/download.
+if(NOT LVGL_DIR AND EXISTS ${PROJECT_ROOT}/components/lvgl/lvgl.h)
+  set(LVGL_DIR ${PROJECT_ROOT}/components/lvgl)
+endif()
+
 # Prefer PlatformIO's already-downloaded dependencies. This keeps the local
 # screenshot emulator usable offline after its CMake build directory is reset.
 if(NOT LVGL_DIR AND EXISTS ${PROJECT_ROOT}/.pio/libdeps/native-screenshot/lvgl/CMakeLists.txt)

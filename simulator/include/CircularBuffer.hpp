@@ -5,7 +5,7 @@
 
 // API-compatible subset of rlogiacco/CircularBuffer used by throttle.cpp.
 // Keeping this tiny compatibility header local makes the simulator build
-// offline; production still uses the real PlatformIO dependency.
+// offline; native production uses platform::RingBuffer backed by std::array.
 template <typename T, std::size_t Capacity>
 class CircularBuffer {
  public:
