@@ -73,8 +73,13 @@ pub fn spawn(
                         }
                         if *byte == b'\n' {
                             if len > 0 {
-                                if let Ok(v) = serde_json::from_slice::<Value>(&line[..len]) {
-                                    handle(v, &shared, &commands, &mut radio, &diagnostics);
+                                // The parser recurses per nesting level; refuse deep
+                                // input before it can exhaust this task's stack.
+                                use controller_protocols::jsonguard;
+                                if jsonguard::depth_within(&line[..len], jsonguard::MAX_DEPTH) {
+                                    if let Ok(v) = serde_json::from_slice::<Value>(&line[..len]) {
+                                        handle(v, &shared, &commands, &mut radio, &diagnostics);
+                                    }
                                 }
                                 len = 0;
                             }
