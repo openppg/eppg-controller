@@ -2,7 +2,7 @@
 #pragma once
 
 #define VERSION_MAJOR 8
-#define VERSION_MINOR 1
+#define VERSION_MINOR 2
 
 // Monotonic build counter, independent of MAJOR/MINOR. Injected at build time
 // by extra_script.py (git commit count) so it climbs on every release. The

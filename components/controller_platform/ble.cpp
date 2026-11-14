@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
 #include <stdexcept>
 #include "esp_bt.h"
 #include "esp_log.h"
@@ -28,6 +29,22 @@ BleServer* gServer = nullptr;
 BleUuid::BleUuid(const char* text) {
   if (!text || ble_uuid_from_str(&value_, text) != 0)
     throw std::invalid_argument("Invalid GATT UUID");
+  // ble_uuid_from_str shortens a Bluetooth-base UUID to 16 or 32 bits. Releases up
+  // to 8.1 sent every UUID that the firmware writes out in full as 128 bits, and
+  // phones match on what arrives: iOS reports a shortened one as "8020", which the
+  // apps do not recognise as the update service. Keep the written form on the air.
+  if (std::strlen(text) == 36 && value_.u.type != BLE_UUID_TYPE_128) {
+    const uint32_t shortValue = value_.u.type == BLE_UUID_TYPE_16
+        ? value_.u16.value : value_.u32.value;
+    static const uint8_t base[12] = {0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00,
+                                     0x00, 0x80, 0x00, 0x10, 0x00, 0x00};
+    value_.u128.u.type = BLE_UUID_TYPE_128;
+    std::memcpy(value_.u128.value, base, sizeof(base));
+    value_.u128.value[12] = shortValue & 0xff;
+    value_.u128.value[13] = (shortValue >> 8) & 0xff;
+    value_.u128.value[14] = (shortValue >> 16) & 0xff;
+    value_.u128.value[15] = (shortValue >> 24) & 0xff;
+  }
 }
 BleUuid::BleUuid(uint16_t value) {
   value_.u16.u.type = BLE_UUID_TYPE_16;
@@ -84,9 +101,13 @@ bool BleCharacteristic::notify() {
     BleConnection connection(subscription.first);
     if ((properties_ & (BleProperty::READ_ENC | BleProperty::WRITE_ENC)) &&
         !connection.isEncrypted()) continue;
+    // A value longer than the link can carry is cut to fit, as releases up to 8.1
+    // did. Telemetry keeps its older fields at the front, so a phone on a small
+    // MTU still gets them instead of nothing.
     const auto mtu = ble_att_mtu(subscription.first);
-    if (mtu < 3 || bytes.size() > static_cast<size_t>(mtu - 3)) continue;
-    auto* buffer = ble_hs_mbuf_from_flat(bytes.data(), bytes.size());
+    if (mtu <= 3) continue;
+    const size_t length = std::min(bytes.size(), static_cast<size_t>(mtu - 3));
+    auto* buffer = ble_hs_mbuf_from_flat(bytes.data(), length);
     if (!buffer) continue;
     // Both APIs consume the mbuf, including on failure.
     const int rc = (subscription.second & 1)
@@ -138,7 +159,12 @@ bool BleServer::start(const std::string& name) {
   ble_hs_cfg.sm_bonding = 1;
   ble_hs_cfg.sm_mitm = 0;
   ble_hs_cfg.sm_sc = 1;
-  ble_hs_cfg.sm_sc_only = 1;
+  // Not secure-connections-only. Pairing is Just Works (no display or keys), which
+  // never produces an authenticated link, and in that mode the stack refuses every
+  // encrypted read and write on a link that is not authenticated: settings,
+  // firmware version, commands and the ESC relay would all fail after pairing.
+  // Secure Connections is still used whenever the phone supports it.
+  ble_hs_cfg.sm_sc_only = 0;
   ble_hs_cfg.sm_our_key_dist = BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID;
   ble_hs_cfg.sm_their_key_dist = BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID;
   ble_svc_gap_init();

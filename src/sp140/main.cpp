@@ -823,11 +823,22 @@ void setupTasks() {
  * No tasks are created until all their dependencies exist.
  */
 extern "C" void app_main() {
-  ESP_ERROR_CHECK(nvs_flash_init());
+  // A full or newer-format NVS partition is erased and rebuilt, as the Arduino
+  // core did up to 8.1. Aborting here would restart forever on a controller the
+  // pilot can only recover by USB. Settings then fall back to defaults.
+  esp_err_t nvsStatus = nvs_flash_init();
+  if (nvsStatus == ESP_ERR_NVS_NO_FREE_PAGES || nvsStatus == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+    nvs_flash_erase();
+    nvsStatus = nvs_flash_init();
+  }
   // =========================================================================
   // PHASE 1: Serial and Early Config
   // =========================================================================
   platform::console.init();
+  if (nvsStatus != ESP_OK) {
+    platform::console.format("NVS unavailable (0x%x): settings will not persist\n",
+                             static_cast<unsigned>(nvsStatus));
+  }
   platform::console.text("Build date/time: ");
   platform::console.line(buildDate);
   diagnosticsInit();
