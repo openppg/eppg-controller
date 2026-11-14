@@ -211,8 +211,8 @@ extern "C" int eppg_spi_transfer(void* device, const uint8_t* tx, uint8_t* rx, s
 namespace {
 i2c_master_bus_handle_t sensor_bus = nullptr;
 std::array<i2c_master_dev_handle_t, 128> sensor_devices{};
-// Application I2C belongs to the single barometer owner (UI in C++, sensor task
-// in Rust). Cache device handles; synchronous transactions are serialized by IDF.
+// Application I2C belongs to the sensor task in both implementations. Cache
+// device handles; synchronous transactions are serialized by IDF.
 esp_err_t sensor_device(uint8_t address, i2c_master_dev_handle_t* out) {
   if (!sensor_bus || address >= sensor_devices.size()) return ESP_ERR_INVALID_ARG;
   if (!sensor_devices[address]) {
