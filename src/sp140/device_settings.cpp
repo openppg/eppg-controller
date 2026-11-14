@@ -285,6 +285,27 @@ void parse_serial_command_line(const char* json_line) {
   using platform::json::has;
   using platform::json::set;
   using platform::json::string;
+  // cJSON recurses once per nesting level (limit 1000); a line of '[' characters
+  // overflowed this task's stack and restarted the controller on the bench. No
+  // real message nests deeper than two levels, so refuse anything deeper than six.
+  // Brackets inside string values are not counted.
+  {
+    int depth = 0;
+    bool inString = false, escaped = false;
+    for (const char* c = json_line; *c != '\0'; ++c) {
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (*c == '\\') escaped = true;
+        else if (*c == '"') inString = false;
+      } else if (*c == '"') {
+        inString = true;
+      } else if (*c == '{' || *c == '[') {
+        if (++depth > 6) return;
+      } else if ((*c == '}' || *c == ']') && depth > 0) {
+        --depth;
+      }
+    }
+  }
   Document doc(cJSON_Parse(json_line));
   if (!doc || !cJSON_IsObject(doc.get())) return;
   const char* command = string(doc.get(), "command");
