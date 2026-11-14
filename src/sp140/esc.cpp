@@ -1,5 +1,6 @@
 #include "platform/runtime.h"
 #include "sp140/esc.h"
+#include "sp140/esc_command.h"
 #include "sp140/globals.h"
 #include "sp140/esc_config_relay.h"
 #include "sp140/esc_flasher_relay.h"
@@ -186,10 +187,18 @@ void syncEscOutputs() {
 }  // namespace
 
 static TwaiBusHealth sTwaiHealth = {};
-// True from the moment we see BUS_OFF until the post-recovery restart succeeds.
-// Gates the STOPPED->start transition so we only auto-start a driver that WE
-// took down for recovery, never one something else stopped on purpose.
-static bool sTwaiRecoveryPending = false;
+// Pending from the moment we see BUS_OFF until the post-recovery restart succeeds.
+static EscBusRecovery sTwaiRecovery;
+
+static EscBusState escBusState(twai_state_t state) {
+  switch (state) {
+    case TWAI_STATE_STOPPED: return EscBusState::STOPPED;
+    case TWAI_STATE_BUS_OFF: return EscBusState::BUS_OFF;
+    case TWAI_STATE_RECOVERING: return EscBusState::RECOVERING;
+    case TWAI_STATE_RUNNING:
+    default: return EscBusState::RUNNING;
+  }
+}
 
 const char* twaiBusStateName(uint8_t state) {
   switch (static_cast<twai_state_t>(state)) {
@@ -257,26 +266,20 @@ static void serviceTwaiBusHealth() {
                      (unsigned long)status.bus_error_count);
   }
 
-  switch (status.state) {
-    case TWAI_STATE_BUS_OFF:
-      if (!sTwaiRecoveryPending) {
-        sTwaiRecoveryPending = true;
-        platform::console.line("[TWAI] Initiating bus-off recovery");
-        twai_initiate_recovery();
-      }
+  switch (sTwaiRecovery.step(escBusState(status.state))) {
+    case EscBusAction::INITIATE_RECOVERY:
+      platform::console.line("[TWAI] Initiating bus-off recovery");
+      twai_initiate_recovery();
       break;
-    case TWAI_STATE_RECOVERING:
-      break;  // Recovery in progress — wait for STOPPED
-    case TWAI_STATE_STOPPED:
-      if (sTwaiRecoveryPending && twai_start() == ESP_OK) {
-        sTwaiRecoveryPending = false;
+    case EscBusAction::START:
+      if (twai_start() == ESP_OK) {
+        sTwaiRecovery.started();
         sTwaiHealth.recovery_count++;
         platform::console.line("[TWAI] Driver restarted after bus-off recovery");
       }
       break;
-    case TWAI_STATE_RUNNING:
+    case EscBusAction::NONE:
     default:
-      sTwaiRecoveryPending = false;
       break;
   }
 }
@@ -322,38 +325,8 @@ void initESC() {
  * Important: The ESC requires messages at least every 300ms or it will reset
  */
 void setESCThrottle(int throttlePWM) {
-  // libcanard has no instance until esc.begin succeeds.
-  if (!escTwaiInitialized) return;
-  // Input validation
-  if (throttlePWM < 1000 || throttlePWM > 2000) {
-    return;  // Ignore invalid throttle values
-  }
-
-  // Commands are queued FIFO and retried until acknowledged. When the ESC stops
-  // acknowledging (unpowered, connector open) or the controller is bus-off, the
-  // driver queue and the transport behind it fill with old commands, which would be
-  // replayed oldest-first on reconnect while new ones are dropped. A healthy bus
-  // sends each frame in well under a millisecond, so frames still waiting on two
-  // consecutive 20 ms cycles are not going out: discard them and keep only current
-  // commands. (During bus-off recovery the driver queue reads empty and rejects
-  // frames, so the transport queue is checked too.)
-  static uint8_t pendingCycles = 0;
-  twai_status_info_t status;
-  const bool driverPending = twai_get_status_info(&status) == ESP_OK &&
-                             (status.msgs_to_tx > 0 || status.state != TWAI_STATE_RUNNING);
-  if (driverPending || adapter.hasPendingTx()) {
-    if (pendingCycles < 2) pendingCycles++;
-  } else {
-    pendingCycles = 0;
-  }
-  if (pendingCycles >= 2) {
-    twai_clear_transmit_queue();
-    adapter.flushTx();
-  }
-
-  // Direct calculation: multiply by 10 to convert μs to 0.1μs resolution
-  uint16_t scaledThrottle = throttlePWM * 10;
-  esc.setThrottleSettings2(scaledThrottle);
+  static EscTxStall stall;
+  escQueueThrottle(escTwaiInitialized, adapter, esc, stall, throttlePWM);
 }
 
 /**

@@ -61,3 +61,17 @@ target_include_directories(test_altimeter PRIVATE
 target_compile_options(test_altimeter PRIVATE "-include" "platform/peripheral.h")
 target_link_libraries(test_altimeter PRIVATE gtest eppg_test_platform)
 add_test(NAME altimeter COMMAND test_altimeter)
+
+# Production ESC command path and DroneCAN transport against a TWAI driver model
+# whose acknowledgement and bus state the tests control.
+file(GLOB DRONECAN_C "${PROJECT_ROOT}/components/dronecan/src/*.c")
+add_executable(test_esc_command
+  "${HOST_TEST_ROOT}/test/test_esc_command/test_esc_command.cpp"
+  "${PROJECT_ROOT}/src/sp140/esc_command.cpp"
+  "${PROJECT_ROOT}/components/dronecan/src/CanardAdapter.cpp"
+  "${PROJECT_ROOT}/components/dronecan/src/SineEsc.cpp"
+  ${DRONECAN_C})
+target_include_directories(test_esc_command PRIVATE
+  "${HOST_TEST_ROOT}/test/test_esc_command/stubs" "${PROJECT_ROOT}/components/dronecan/src")
+target_link_libraries(test_esc_command PRIVATE gtest eppg_test_platform)
+add_test(NAME esc_command COMMAND test_esc_command)

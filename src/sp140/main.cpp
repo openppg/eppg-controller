@@ -28,6 +28,7 @@
 #include "../../inc/sp140/ble/fastlink_service.h"
 #include "../../inc/sp140/bms.h"
 #include "../../inc/sp140/esc.h"
+#include "../../inc/sp140/esc_command.h"
 #include "../../inc/sp140/esc_config_relay.h"
 #include "../../inc/sp140/esc_flasher_relay.h"
 #include "../../inc/sp140/globals.h"  // device config
@@ -1419,8 +1420,9 @@ void handleThrottle() {
   // throttle frame per write. Never suppress the command unless DISARMED.
   // readESCTelemetry() still runs — it pumps the bus and drives the relay state
   // machine.
-  if (currentState != DISARMED ||
-      (!escConfigRelayIsActive() && !escFlasherRelayIsActive())) {
+  if (escThrottleCommandAllowed(
+          currentState == DISARMED,
+          escConfigRelayIsActive() || escFlasherRelayIsActive())) {
     setESCThrottle(finalPwm);
   }
 
