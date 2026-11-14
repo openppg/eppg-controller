@@ -307,3 +307,22 @@ fn relay_status_encode_into_matches_encode_and_reuses_the_buffer() {
     assert_eq!(out.capacity(), capacity);
     assert_eq!(Relay::default().status.encode().len(), 7);
 }
+
+#[test]
+fn armed_relay_command_is_refused_without_activating_or_quieting() {
+    let mut r = Relay::default();
+    r.reject_armed();
+    assert!(
+        !r.active(),
+        "an active session would suppress a throttle frame"
+    );
+    assert!(!r.settle(0), "no quiet period while flying");
+    assert_eq!(r.status.code, 0x81);
+    assert_eq!(r.status.phase, RelayPhase::Failed);
+    // A later disarmed command still starts normally.
+    assert!(r.command(0x30, &[], false));
+    assert!(r.active());
+    // A session already running is not disturbed by a stray rejection.
+    r.reject_armed();
+    assert!(r.active());
+}

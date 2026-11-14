@@ -366,7 +366,14 @@ fn main() {
                         }
                         Request::Relay(op, data) => {
                             if let Some(e) = esc.as_mut() {
-                                e.relay.command(op, &data, e.flasher.active());
+                                if controller.state != State::Disarmed {
+                                    // An accepted command marks the session active for a
+                                    // tick, and an active session suppresses that tick's
+                                    // throttle frame. Refuse it here instead.
+                                    e.relay.reject_armed();
+                                } else {
+                                    e.relay.command(op, &data, e.flasher.active());
+                                }
                             }
                         }
                         Request::FlashBegin(hw, size) => {
@@ -439,12 +446,18 @@ fn main() {
                 }
                 if let Some(e) = esc.as_mut() {
                     // Maintenance transfers legitimately keep the driver busy for many
-                    // ticks, so only normal control traffic counts towards a stall.
-                    let stalled = can_stall.update(now, !e.active() && platform::can_tx_pending());
+                    // ticks, so only normal control traffic counts towards a stall. Frames
+                    // still held by the transport were refused by the driver last tick;
+                    // that is the only sign during bus-off, when recovery empties the
+                    // driver queue and it rejects new frames.
+                    let pending = platform::can_tx_pending() || e.transport.peek_frame().is_some();
+                    let stalled = can_stall.update(now, !e.active() && pending);
                     if output.send_throttle {
                         if stalled {
                             // The bus stopped accepting frames. Keep only the newest
-                            // command so a reconnect never replays old throttle values.
+                            // command so a reconnect does not replay a backlog. The one
+                            // frame already in the controller's transmit buffer cannot be
+                            // withdrawn and is still sent first.
                             platform::can_flush_tx();
                             e.transport.clear_tx();
                         }
@@ -522,16 +535,22 @@ fn main() {
                 }
                 if now.wrapping_sub(last_monitor) >= 100 {
                     last_monitor = now;
-                    let s = shared.lock().unwrap().clone();
-                    let d = monitor_data(&s);
-                    if role == Role::Remote {
+                    // Copy out only what the monitors need: cloning the whole snapshot
+                    // would allocate its ESC maintenance buffers (up to 3 KiB) every 100 ms.
+                    let (d, masks) = {
+                        let s = shared.lock().unwrap();
                         let f = &s.telemetry;
-                        let masks = [
-                            f.esc_warning_alerts,
-                            f.esc_critical_alerts,
-                            f.bms_warning_alerts,
-                            f.bms_critical_alerts,
-                        ];
+                        (
+                            monitor_data(&s),
+                            [
+                                f.esc_warning_alerts,
+                                f.esc_critical_alerts,
+                                f.bms_warning_alerts,
+                                f.bms_critical_alerts,
+                            ],
+                        )
+                    };
+                    if role == Role::Remote {
                         for id in 0..41 {
                             let group = if id < 26 { 0 } else { 2 };
                             let bit = if id < 26 { id } else { id - 26 };
@@ -687,6 +706,6 @@ fn copy_bms(to: &mut FastLink, from: &FastLink) {
     to.bms_type = from.bms_type.clone();
     to.bms_cell_voltages_mV = from.bms_cell_voltages_mV.clone();
     to.bms_temp_sensors_C = from.bms_temp_sensors_C.clone();
-    to.bms_warning_alerts = from.bms_warning_alerts.clone();
-    to.bms_critical_alerts = from.bms_critical_alerts.clone();
+    // bms_warning_alerts / bms_critical_alerts are owned by the control task's monitors.
+    // The BMS decoder never sets them, so copying them here would zero the published masks.
 }

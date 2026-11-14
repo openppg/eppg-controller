@@ -97,6 +97,16 @@ impl Relay {
         self.start_pending
             || !matches!(self.status.phase, Phase::Idle | Phase::Done | Phase::Failed)
     }
+    /// Refuse a command that arrived while the motor is armed. Reports the same 0x81
+    /// failure an armed session gets, without the session becoming active (which would
+    /// suppress a throttle frame) or starting the post-session quiet period.
+    pub fn reject_armed(&mut self) {
+        if !self.active() {
+            self.status.code = 0x81;
+            self.status.phase = Phase::Failed;
+            self.status.detail = 0;
+        }
+    }
     pub fn settle(&self, now: u32) -> bool {
         self.terminal
             .map(|at| now.wrapping_sub(at) < 9000)
