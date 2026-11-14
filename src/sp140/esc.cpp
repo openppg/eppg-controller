@@ -329,6 +329,28 @@ void setESCThrottle(int throttlePWM) {
     return;  // Ignore invalid throttle values
   }
 
+  // Commands are queued FIFO and retried until acknowledged. When the ESC stops
+  // acknowledging (unpowered, connector open) or the controller is bus-off, the
+  // driver queue and the transport behind it fill with old commands, which would be
+  // replayed oldest-first on reconnect while new ones are dropped. A healthy bus
+  // sends each frame in well under a millisecond, so frames still waiting on two
+  // consecutive 20 ms cycles are not going out: discard them and keep only current
+  // commands. (During bus-off recovery the driver queue reads empty and rejects
+  // frames, so the transport queue is checked too.)
+  static uint8_t pendingCycles = 0;
+  twai_status_info_t status;
+  const bool driverPending = twai_get_status_info(&status) == ESP_OK &&
+                             (status.msgs_to_tx > 0 || status.state != TWAI_STATE_RUNNING);
+  if (driverPending || adapter.hasPendingTx()) {
+    if (pendingCycles < 2) pendingCycles++;
+  } else {
+    pendingCycles = 0;
+  }
+  if (pendingCycles >= 2) {
+    twai_clear_transmit_queue();
+    adapter.flushTx();
+  }
+
   // Direct calculation: multiply by 10 to convert μs to 0.1μs resolution
   uint16_t scaledThrottle = throttlePWM * 10;
   esc.setThrottleSettings2(scaledThrottle);
@@ -505,6 +527,9 @@ bool setupTWAI() {
                                       (gpio_num_t)ESC_TX_PIN,
                                       (gpio_num_t)ESC_RX_PIN,
                                       TWAI_MODE_NORMAL);
+  // One telemetry reply is five frames, which is the default receive queue. Leave
+  // room for a second transfer arriving in the same 20 ms cycle.
+  g_config.rx_queue_len = 32;
   twai_timing_config_t t_config = TWAI_TIMING_CONFIG_1MBITS();
   twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 

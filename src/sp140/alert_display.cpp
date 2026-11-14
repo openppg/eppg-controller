@@ -89,7 +89,10 @@ EscBmsAlertMasks getEscBmsAlertMasks() {
 // ------------ Public helpers -------------
 void initAlertDisplay() {
   // Create queues – small, non-blocking
-  alertEventQueue  = xQueueCreate(20, sizeof(AlertEvent));
+  // An ESC disconnect clears all 25 ESC monitors in one loop and events are dropped
+  // when the queue is full, which would leave a cleared alert on screen. Size for a
+  // full ESC + BMS burst.
+  alertEventQueue  = xQueueCreate(64, sizeof(AlertEvent));
   alertCarouselQueue = xQueueCreate(1, sizeof(AlertSnapshot));
   alertUIQueue = xQueueCreate(1, sizeof(AlertUIUpdate));  // Unified queue for synchronized updates
 

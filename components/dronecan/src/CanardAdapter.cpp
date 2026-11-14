@@ -71,6 +71,18 @@ void CanardAdapter::setLocalNodeId(uint8_t selfNodeId)
     canardSetLocalNodeID(&_canard, selfNodeId);
 }
 
+bool CanardAdapter::hasPendingTx(void)
+{
+    return canardPeekTxQueue(&_canard) != NULL;
+}
+
+void CanardAdapter::flushTx(void)
+{
+    while (canardPeekTxQueue(&_canard) != NULL) {
+        canardPopTxQueue(&_canard);
+    }
+}
+
 void CanardAdapter::processTxRxOnce(void)
 {
     uint32_t alerts_triggered;

@@ -43,6 +43,12 @@ public:
 
     void processTxRxOnce(void);
 
+    // True while frames queued by earlier calls have not been handed to the driver.
+    bool hasPendingTx(void);
+
+    // Discard every frame still waiting to be handed to the driver.
+    void flushTx(void);
+
 private:
     friend CanardAdapterNode;
 

@@ -307,7 +307,14 @@ extern "C" int eppg_usb_write(const uint8_t* data, size_t length) {
 #ifdef EPPG_QEMU
   return uart_write_bytes(UART_NUM_0, data, length);
 #else
-  return usb_serial_jtag_write_bytes(data, length, pdMS_TO_TICKS(20));
+  // With no host reading (in flight on battery) the transmit buffer fills and every
+  // write would wait out its full timeout. Callers include the throttle task, so
+  // after one timeout stop waiting until a write goes through again.
+  static bool stalled = false;
+  const int written =
+      usb_serial_jtag_write_bytes(data, length, stalled ? 0 : pdMS_TO_TICKS(20));
+  stalled = written <= 0;
+  return written;
 #endif
 }
 extern "C" float eppg_cpu_temperature() {
