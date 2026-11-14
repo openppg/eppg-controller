@@ -57,6 +57,13 @@ bool Barometer::sample() {
   pressure_ = data.pressure;
   return true;
 }
+bool Barometer::readSample(float* temperature_c, float* pressure_hpa) {
+  if (!sample() || !std::isfinite(temperature_) ||
+      !std::isfinite(pressure_) || pressure_ <= 0) return false;
+  *temperature_c = static_cast<float>(temperature_);
+  *pressure_hpa = static_cast<float>(pressure_) / 100.0f;
+  return true;
+}
 float Barometer::readAltitude(float sea_pressure_hpa) {
   sample();
   const float atmospheric = static_cast<float>(pressure_) / 100.0f;

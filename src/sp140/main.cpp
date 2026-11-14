@@ -332,16 +332,16 @@ void throttleTask(void *pvParameters) {
 void ctrlSensorTask(void *pvParameters) {
   (void)pvParameters;
   TickType_t lastWake = xTaskGetTickCount();
-  const TickType_t sensorTicks = pdMS_TO_TICKS(100);  // 10 Hz
+  const TickType_t sensorTicks = pdMS_TO_TICKS(40);  // 25 Hz barometer producer
 
   for (;;) {
     const unsigned long now = platform::millis32();
-    float alt = getCachedAltitude();
-    // Direct read for baro temp (at 10Hz) — cheap I2C call, keeps the
-    // cached value fresh for the Baro_Temp monitor which reads the cache.
-    float bt = getBaroTemperature();
-    float bp = getBaroPressure();
-    float vs = getCachedVerticalSpeed();
+    sampleBarometer(deviceData);
+    const BarometerSnapshot sample = getBarometerSnapshot();
+    const float alt = sample.altitude;
+    const float bt = sample.temperature;
+    const float bp = sample.pressure;
+    const float vs = sample.verticalSpeed;
     float mt = getCachedCpuTemperature();
     uint16_t pr = wirelessIsReceiver()
         ? readControlThrottleRaw()
@@ -514,10 +514,8 @@ void refreshDisplay() {
     return;
   }
 
-  // Read barometer OUTSIDE lvglMutex. uiTask is the designated sole I2C
-  // barometer reader — this call populates the cached* globals in altimeter.cpp
-  // that other tasks read via getCachedAltitude()/etc. Taking i2cMutex inside
-  // lvglMutex was a nested-lock deadlock risk.
+  // The sensor task owns periodic conversions. Display work only reads the
+  // published snapshot and never waits for an I2C transaction.
   static float lastGoodAltitude = 0.0f;
   const float rawAltitude = getAltitude(deviceData);
   if (rawAltitude != __FLT_MIN__) {

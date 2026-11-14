@@ -18,111 +18,81 @@ struct AltitudeReading {
 // Buffer to store altitude readings with timestamps
 platform::RingBuffer<AltitudeReading, VARIO_BUFFER_SIZE> altitudeBuffer;
 
-// Cached values — written by the designated I2C reader (uiTask via getAltitude),
-// safe to read from any task (32-bit float reads are atomic on Xtensa).
-static float cachedAltitude = 0.0f;
-static float cachedBaroTemperature = __FLT_MIN__;
-static float cachedVerticalSpeed = 0.0f;
+// Publish complete samples so consumers never mix readings from different cycles.
+static portMUX_TYPE snapshotMux = portMUX_INITIALIZER_UNLOCKED;
+static BarometerSnapshot cachedSample = {
+    0.0f, __FLT_MIN__, __FLT_MIN__, 0.0f, 0, false};
 
-// Recompute vertical speed from the altitude buffer. Must be called from the
-// same task that pushes to altitudeBuffer (uiTask) to avoid CircularBuffer races.
 static float computeVerticalSpeed() {
-  if (altitudeBuffer.size() < 2) {
-    return 0.0f;
+  if (altitudeBuffer.size() < 2) return 0.0f;
+  const auto& oldest = altitudeBuffer.first();
+  const auto& newest = altitudeBuffer.last();
+  const float seconds = (newest.timestamp - oldest.timestamp) / 1000.0f;
+  if (seconds <= 0) return 0.0f;
+  return platform::clamp((newest.altitude - oldest.altitude) / seconds,
+                         -MAX_VERTICAL_SPEED, MAX_VERTICAL_SPEED);
+}
+
+BarometerSnapshot getBarometerSnapshot() {
+  portENTER_CRITICAL(&snapshotMux);
+  const BarometerSnapshot result = cachedSample;
+  portEXIT_CRITICAL(&snapshotMux);
+  return result;
+}
+
+static void publishSample(const BarometerSnapshot& sample) {
+  portENTER_CRITICAL(&snapshotMux);
+  cachedSample = sample;
+  portEXIT_CRITICAL(&snapshotMux);
+}
+
+// Caller holds i2cMutex, which also protects the datum and vario ring buffer.
+static bool readSample(const STR_DEVICE_DATA_140_V1& deviceData, bool zero) {
+  float temperature = 0, pressure = 0;
+  if (!bmp.readSample(&temperature, &pressure) ||
+      !std::isfinite(deviceData.sea_pressure) || deviceData.sea_pressure <= 0) {
+    return false;
   }
-  const AltitudeReading& oldest = altitudeBuffer.first();
-  const AltitudeReading& newest = altitudeBuffer.last();
-  float timeDiff = (newest.timestamp - oldest.timestamp) / 1000.0f;
-  if (timeDiff <= 0) {
-    return 0.0f;
+  const float absolute = 44330.0f *
+      (1.0f - std::pow(pressure / deviceData.sea_pressure, 0.1903f));
+  if (zero) {
+    groundAltitude = absolute;
+    altitudeBuffer.clear();
   }
-  float verticalSpeed = (newest.altitude - oldest.altitude) / timeDiff;
-  return platform::clamp(verticalSpeed, -MAX_VERTICAL_SPEED, MAX_VERTICAL_SPEED);
+  const float relative = absolute - groundAltitude;
+  const uint32_t now = platform::millis32();
+  altitudeBuffer.push({relative, now});
+  publishSample({relative, temperature, pressure, computeVerticalSpeed(), now, true});
+  return true;
+}
+
+bool sampleBarometer(const STR_DEVICE_DATA_140_V1& deviceData) {
+  if (!bmpPresent || i2cMutex == nullptr ||
+      xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(20)) != pdTRUE) return false;
+  const bool ok = readSample(deviceData, false);
+  xSemaphoreGive(i2cMutex);
+  return ok;
 }
 
 float getAltitude(const STR_DEVICE_DATA_140_V1& deviceData) {
-  if (bmpPresent && i2cMutex != nullptr) {
-    if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
-      const float altitude = bmp.readAltitude(deviceData.sea_pressure);
-      xSemaphoreGive(i2cMutex);
-      float relativeAltitude = altitude - groundAltitude;
-
-      // Add new reading to buffer with timestamp
-      AltitudeReading reading = {relativeAltitude, platform::millis32()};
-      altitudeBuffer.push(reading);
-
-      // Update caches (atomic 32-bit float writes on Xtensa)
-      cachedAltitude = relativeAltitude;
-      cachedVerticalSpeed = computeVerticalSpeed();
-
-      return relativeAltitude;
-    }
-  }
-  return __FLT_MIN__;
+  (void)deviceData;
+  const auto sample = getBarometerSnapshot();
+  return sample.valid ? sample.altitude : __FLT_MIN__;
 }
+float getVerticalSpeed() { return getCachedVerticalSpeed(); }
 
-float getVerticalSpeed() {
-  if (altitudeBuffer.size() < 2) {
-    return 0.0f;  // Not enough readings yet
-  }
-
-  // Get oldest and newest readings
-  const AltitudeReading& oldest = altitudeBuffer.first();
-  const AltitudeReading& newest = altitudeBuffer.last();
-
-  // Calculate time difference in seconds
-  float timeDiff = (newest.timestamp - oldest.timestamp) / 1000.0f;
-  if (timeDiff <= 0) {
-    return 0.0f;  // Avoid division by zero
-  }
-
-  // Calculate vertical speed in meters per second
-  float verticalSpeed = (newest.altitude - oldest.altitude) / timeDiff;
-
-  // Constrain to max vertical speed
-  return platform::clamp(verticalSpeed, -MAX_VERTICAL_SPEED, MAX_VERTICAL_SPEED);
-}
-
-// set the ground altitude to the current altitude
 void setGroundAltitude(const STR_DEVICE_DATA_140_V1& deviceData) {
-  if (bmpPresent && i2cMutex != nullptr) {
-    if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-      groundAltitude = bmp.readAltitude(deviceData.sea_pressure);
-      xSemaphoreGive(i2cMutex);
-      altitudeBuffer.clear();  // Clear the buffer when resetting ground altitude
-    }
-  }
+  if (!bmpPresent || i2cMutex == nullptr ||
+      xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(50)) != pdTRUE) return;
+  readSample(deviceData, true);
+  xSemaphoreGive(i2cMutex);
 }
 
-// Get the temperature in degrees Celsius
-float getBaroTemperature() {
-  if (bmpPresent && i2cMutex != nullptr) {
-    if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
-      float temp = bmp.readTemperature();
-      xSemaphoreGive(i2cMutex);
-      cachedBaroTemperature = temp;  // Update cache for cross-task reads
-      return temp;
-    }
-  }
-  return __FLT_MIN__;
-}
-
-// Cached getters — safe to call from any task (atomic float reads on Xtensa).
-float getCachedAltitude() { return cachedAltitude; }
-float getCachedBaroTemperature() { return cachedBaroTemperature; }
-float getCachedVerticalSpeed() { return cachedVerticalSpeed; }
-
-// Get the pressure in hPa
-float getBaroPressure() {
-  if (bmpPresent && i2cMutex != nullptr) {
-    if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
-      float pressure = bmp.readPressure() / 100.0f;
-      xSemaphoreGive(i2cMutex);
-      return pressure;
-    }
-  }
-  return __FLT_MIN__;
-}
+float getBaroTemperature() { return getCachedBaroTemperature(); }
+float getBaroPressure() { return getBarometerSnapshot().pressure; }
+float getCachedAltitude() { return getBarometerSnapshot().altitude; }
+float getCachedBaroTemperature() { return getBarometerSnapshot().temperature; }
+float getCachedVerticalSpeed() { return getBarometerSnapshot().verticalSpeed; }
 
 // Start the bmp3XX sensor
 bool setupAltimeter() {
@@ -157,7 +127,7 @@ bool setupAltimeter() {
   bmp.readPressure();  // throw away first reading
   // Seed the temperature cache so monitors and telemetry don't see __FLT_MIN__
   // until the first periodic read populates it.
-  cachedBaroTemperature = bmp.readTemperature();
+  cachedSample.temperature = bmp.readTemperature();
   bmpPresent = true;
   return true;
 }
