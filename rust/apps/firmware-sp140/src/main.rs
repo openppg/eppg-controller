@@ -174,18 +174,18 @@ fn main() {
             shared.lock().unwrap().bms_initialized = can.is_some();
             let mut bms = AntBms::default();
             let mut last = unsafe { sys::xTaskGetTickCount() };
-            // The MCP2515 holds only two received frames and has no interrupt line here, so
-            // it is drained every tick: at 250 kbit/s a third back-to-back frame finishes
-            // ~1.1 ms after the first. An empty poll is one 4-byte SPI transfer. Decoded
-            // data is still published to the rest of the system at 10 Hz. The emulator
-            // polls slower to keep its CPU budget; it models the same two-frame buffer.
-            let poll_ms = if can.is_none() {
-                100
-            } else if cfg!(feature = "qemu") {
-                10
-            } else {
-                1
-            };
+            // The MCP2515 holds only two received frames and has no interrupt line here. At
+            // 250 kbit/s a third back-to-back frame finishes ~1.1 ms after the first, so
+            // while the BMS is talking the chip is drained every tick. Each poll is a SPI
+            // transaction on the bus the display shares: measured on the board, polling at
+            // 1 kHz costs ~5% of this core when idle and ~12% of full-redraw frame rate. With
+            // no traffic for 500 ms (no BMS, or it stopped) the poll therefore drops to
+            // 10 ms; the first frame of a new burst restores the fast rate. Decoded data
+            // is still published to the rest of the system at 10 Hz. The emulator stays
+            // at 10 ms to keep its CPU budget; it models the same two-frame buffer.
+            const FAST_MS: u32 = if cfg!(feature = "qemu") { 10 } else { 1 };
+            const IDLE_MS: u32 = 10;
+            let mut last_frame: Option<u32> = None;
             let mut published = 0u32.wrapping_sub(100);
             loop {
                 let now = platform::now();
@@ -193,11 +193,19 @@ fn main() {
                     for _ in 0..8 {
                         if let Some((id, data, n)) = can.receive() {
                             bms.packet(id, &data[..n], now);
+                            last_frame = Some(now);
                         } else {
                             break;
                         }
                     }
                 }
+                let poll_ms = if can.is_none() {
+                    100
+                } else if last_frame.is_some_and(|at| now.wrapping_sub(at) < 500) {
+                    FAST_MS
+                } else {
+                    IDLE_MS
+                };
                 if now.wrapping_sub(published) >= 100 {
                     published = now;
                     let data = bms.snapshot(now);
