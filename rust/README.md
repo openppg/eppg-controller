@@ -58,6 +58,9 @@ remains size-oriented: measured `-O2`/`-O3` experiments were slower on this boar
 Failed LVGL allocations abort explicitly. CI runs the C rendering boundaries under
 AddressSanitizer as well as the screen goldens and firmware/emulator checks.
 
+Measured board results, raw counters, build settings and limits are recorded in the
+[device runtime benchmark](../docs/device-runtime-performance-2026-11-13.json).
+
 ## Compatibility and limits
 
 The BLE UUIDs, signed 32-bit time wire value, FastLink v4 offsets, existing NVS types, USB JSON keys, OTA sector framing, wireless sessions/timeouts and ESC maintenance services are preserved. Full 256 KiB ESC uploads use a bounded scratch buffer and the existing unused reserved flash partition. An ownership marker protects unknown pre-existing partition data: uploads fail without erasing data if it is neither virgin nor owned by this staging format.
