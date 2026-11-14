@@ -47,7 +47,7 @@ void addAltimeterMonitors() {
   monitors.push_back(bmpInitFailure);
 
   // Barometer Temperature — reads cached float (no I2C), safe from any task.
-  // Cache is populated by uiTask's getAltitude/getBaroTemperature calls.
+  // Cache is published by ctrlSensorTask after one complete sensor sample.
   static SensorMonitor* baroTemp = new SensorMonitor(
     SensorID::Baro_Temp,
     SensorCategory::ALTIMETER,

@@ -14,7 +14,20 @@
 // Set up the barometer
 bool setupAltimeter();
 
-// Get the altitude (in meters)
+struct BarometerSnapshot {
+  float altitude;
+  float temperature;
+  float pressure;
+  float verticalSpeed;
+  uint32_t sampledAt;
+  bool valid;
+};
+
+// One conversion supplies every consumer; only ctrlSensorTask samples periodically.
+bool sampleBarometer(const STR_DEVICE_DATA_140_V1 &deviceData);
+BarometerSnapshot getBarometerSnapshot();
+
+// Get cached altitude (in meters), without accessing the sensor.
 float getAltitude(const STR_DEVICE_DATA_140_V1 &deviceData);
 
 // Get the vertical speed in meters per second
@@ -29,8 +42,7 @@ float getBaroTemperature();
 // Get the pressure in hPa
 float getBaroPressure();
 
-// Cached getters — safe to call from any task (atomic float reads on Xtensa).
-// Populated by the designated I2C reader (uiTask via getAltitude()).
+// Cached getters copy a snapshot under a cross-core critical section.
 float getCachedAltitude();
 float getCachedBaroTemperature();
 float getCachedVerticalSpeed();

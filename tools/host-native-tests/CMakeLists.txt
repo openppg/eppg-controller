@@ -51,3 +51,13 @@ if(EXISTS "${PROJECT_ROOT}/components/image_staging/image_staging.c")
   target_link_libraries(test_image_staging PRIVATE gtest)
   add_test(NAME image_staging COMMAND test_image_staging)
 endif()
+
+# Exercise the production sampler and cross-core snapshot with a deterministic sensor.
+add_executable(test_altimeter
+  "${HOST_TEST_ROOT}/test/test_altimeter/test_altimeter.cpp"
+  "${PROJECT_ROOT}/src/sp140/altimeter.cpp")
+target_include_directories(test_altimeter PRIVATE
+  "${HOST_TEST_ROOT}/test/test_altimeter/stubs" "${PROJECT_ROOT}/components/bmp3")
+target_compile_options(test_altimeter PRIVATE "-include" "platform/peripheral.h")
+target_link_libraries(test_altimeter PRIVATE gtest eppg_test_platform)
+add_test(NAME altimeter COMMAND test_altimeter)

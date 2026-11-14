@@ -6,6 +6,7 @@ namespace platform {
 class Barometer {
  public:
   bool initialize();
+  bool readSample(float* temperature_c, float* pressure_hpa);
   float readAltitude(float sea_pressure_hpa);
   float readTemperature();
   float readPressure();
