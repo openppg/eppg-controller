@@ -18,7 +18,9 @@
  *=========================*/
 
 /*Use LVGL's built-in memory manager*/
+#ifndef LV_USE_STDLIB_MALLOC
 #define LV_USE_STDLIB_MALLOC LV_STDLIB_BUILTIN
+#endif
 
 /*Size of the memory available for `lv_malloc()` in bytes (>= 2kB)*/
 #define LV_MEM_SIZE (48U * 1024U)

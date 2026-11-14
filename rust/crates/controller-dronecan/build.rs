@@ -6,7 +6,9 @@ fn main() {
     let mut build = cc::Build::new();
     if std::env::var("TARGET").unwrap().contains("xtensa-esp32s3") {
         // cc's generic Xtensa clang selection does not establish the S3 little-endian ABI.
+        // IDF firmware uses static code; cc otherwise enables PIC for espidf.
         build
+            .pic(false)
             .compiler("xtensa-esp32s3-elf-gcc")
             .archiver("xtensa-esp32s3-elf-ar")
             .flag("-mlongcalls");

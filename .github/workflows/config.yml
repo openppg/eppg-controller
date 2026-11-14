@@ -150,6 +150,22 @@ jobs:
           fi
           cargo +1.100.0 clippy --locked --workspace --exclude firmware-sp140 --all-targets -- -D warnings
           cargo +1.100.0 build --locked -p controller-sim
+      - name: Check C rendering boundaries with AddressSanitizer
+        working-directory: rust
+        shell: bash
+        run: |
+          unset LIBCLANG_PATH
+          export CARGO_TARGET_DIR="$PWD/target/asan"
+          export CFLAGS='-fsanitize=address -fno-omit-frame-pointer'
+          export RUSTFLAGS='-Clink-arg=-lasan'
+          cargo +1.100.0 test --locked -p controller-ui --no-run --message-format=json > /tmp/ui-asan-executables.jsonl
+          asan_runtime=$(gcc -print-file-name=libasan.so)
+          test -f "$asan_runtime"
+          jq -r 'select(.reason == "compiler-artifact" and .profile.test) | .executable // empty' /tmp/ui-asan-executables.jsonl > /tmp/ui-asan-executables.txt
+          test -s /tmp/ui-asan-executables.txt
+          while IFS= read -r executable; do
+            LD_PRELOAD="$asan_runtime" ASAN_OPTIONS=detect_leaks=1 "$executable"
+          done < /tmp/ui-asan-executables.txt
       - name: Browser lab build and live controller API
         working-directory: simulator/ui
         env:

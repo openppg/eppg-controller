@@ -160,7 +160,7 @@ fn main() {
                     s.cpu_temperature = cpu;
                     s.telemetry.mcu_temp_dC = (cpu * 10.).round() as i16;
                 }
-                periodic(&mut last, 100);
+                periodic(&mut last, 40);
             }
         });
     }
@@ -216,7 +216,7 @@ fn main() {
             let mut old_rotation = settings.screen_rotation;
             loop {
                 let now = platform::now();
-                let s = shared.lock().unwrap().clone();
+                let s = shared.lock().unwrap().ui_snapshot();
                 while let Ok(e) = ui_rx.try_recv() {
                     if e.contains(Effects::ARM_FAIL) {
                         ui.flash_arm_failure(now);

@@ -27,6 +27,7 @@ mod sys {
     include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 }
 use sys::*;
+
 unsafe extern "C" {
     fn eppg_lvgl_size(kind: u32) -> usize;
     fn eppg_lvgl_align(kind: u32) -> usize;
@@ -129,8 +130,59 @@ unsafe fn visible(obj: *mut lv_obj_t, show: bool) {
         lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN)
     }
 }
+// Numeric display formatting stays on the UI stack. LVGL copies changed text;
+// unchanged labels require neither a Rust allocation nor an LVGL allocation.
+struct SmallText {
+    bytes: [u8; 64],
+    len: usize,
+}
+impl Default for SmallText {
+    fn default() -> Self {
+        Self {
+            bytes: [0; 64],
+            len: 0,
+        }
+    }
+}
+impl std::fmt::Write for SmallText {
+    fn write_str(&mut self, value: &str) -> std::fmt::Result {
+        let end = self.len.checked_add(value.len()).ok_or(std::fmt::Error)?;
+        if end > self.bytes.len() {
+            return Err(std::fmt::Error);
+        }
+        self.bytes[self.len..end].copy_from_slice(value.as_bytes());
+        self.len = end;
+        Ok(())
+    }
+}
+impl std::ops::Deref for SmallText {
+    type Target = str;
+    fn deref(&self) -> &str {
+        std::str::from_utf8(&self.bytes[..self.len]).unwrap()
+    }
+}
+impl From<&str> for SmallText {
+    fn from(value: &str) -> Self {
+        fmt_text(format_args!("{value}"))
+    }
+}
+fn fmt_text(args: std::fmt::Arguments<'_>) -> SmallText {
+    use std::fmt::Write;
+    let mut text = SmallText::default();
+    text.write_fmt(args)
+        .expect("numeric display text fits its bounded buffer");
+    text
+}
 unsafe fn text(obj: *mut lv_obj_t, value: &str) {
-    if CStr::from_ptr(lv_label_get_text(obj)).to_bytes() != value.as_bytes() {
+    if CStr::from_ptr(lv_label_get_text(obj)).to_bytes() == value.as_bytes() {
+        return;
+    }
+    assert!(!value.as_bytes().contains(&0), "UI text has no NUL");
+    if value.len() < 96 {
+        let mut buffer = [0u8; 96];
+        buffer[..value.len()].copy_from_slice(value.as_bytes());
+        lv_label_set_text(obj, buffer.as_ptr().cast());
+    } else {
         let c = CString::new(value).expect("UI text has no NUL");
         lv_label_set_text(obj, c.as_ptr());
     }
@@ -177,12 +229,13 @@ unsafe extern "C" fn flush(display: *mut lv_display_t, area: *const lv_area_t, p
     }
     lv_display_flush_ready(display);
 }
+const DRAW_BUFFER_BYTES: usize = 160 * 64 * 2;
 /// Single-owner screen, with Rust-owned widgets, geometry, animation state and buffers.
 pub struct Ui {
     w: Widgets,
     display: *mut lv_display_t,
     sink: Box<Sink>,
-    _buffers: [Box<[u8]>; 1],
+    _draw_buffer: Box<[u32]>,
     keepalive_points: Vec<Box<[lv_point_precise_t]>>,
     climb_points: Box<[[lv_point_precise_t; 2]; 13]>,
     // LVGL retains these addresses; moving Ui must not move its styles.
@@ -253,16 +306,17 @@ impl Ui {
                 },
                 panel: None,
             });
-            // The panel flush is synchronous; a second buffer cannot overlap DMA.
-            // Sixteen RGB565 rows leave internal RAM available to BLE and services.
-            let mut buffers = [vec![0u8; 160 * 16 * 2].into_boxed_slice()];
+            // Synchronous transport needs one buffer. Sixty-four rows avoid
+            // rebuilding draw tasks eight times for each full-screen refresh.
+            // u32 backing guarantees the four-byte alignment LVGL requires.
+            let mut draw_buffer = vec![0u32; DRAW_BUFFER_BYTES / 4].into_boxed_slice();
             lv_display_set_user_data(display, (&mut *sink as *mut Sink).cast());
             lv_display_set_flush_cb(display, Some(flush));
             lv_display_set_buffers(
                 display,
-                buffers[0].as_mut_ptr().cast(),
+                draw_buffer.as_mut_ptr().cast(),
                 std::ptr::null_mut(),
-                (160 * 16 * 2) as u32,
+                DRAW_BUFFER_BYTES as u32,
                 LV_DISPLAY_RENDER_MODE_PARTIAL,
             );
             lv_display_set_color_format(display, LV_COLOR_FORMAT_RGB565);
@@ -278,7 +332,7 @@ impl Ui {
                 w: Widgets::default(),
                 display,
                 sink,
-                _buffers: buffers,
+                _draw_buffer: draw_buffer,
                 keepalive_points: Vec::new(),
                 climb_points: Box::new(std::mem::zeroed()),
                 style_warning: Box::new(std::mem::zeroed()),
@@ -439,6 +493,49 @@ impl Drop for Ui {
 }
 
 #[cfg(test)]
+mod allocation_probe {
+    use std::alloc::{GlobalAlloc, Layout, System};
+    use std::cell::Cell;
+    thread_local! {
+        static ENABLED: Cell<bool> = const { Cell::new(false) };
+        static COUNT: Cell<usize> = const { Cell::new(0) };
+    }
+    struct Probe;
+    fn record() {
+        let _ = ENABLED.try_with(|enabled| {
+            if enabled.get() {
+                let _ = COUNT.try_with(|n| n.set(n.get() + 1));
+            }
+        });
+    }
+    unsafe impl GlobalAlloc for Probe {
+        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+            record();
+            System.alloc(layout)
+        }
+        unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+            record();
+            System.alloc_zeroed(layout)
+        }
+        unsafe fn realloc(&self, p: *mut u8, layout: Layout, size: usize) -> *mut u8 {
+            record();
+            System.realloc(p, layout, size)
+        }
+        unsafe fn dealloc(&self, p: *mut u8, layout: Layout) {
+            System.dealloc(p, layout);
+        }
+    }
+    #[global_allocator]
+    static ALLOCATOR: Probe = Probe;
+    pub fn measure(f: impl FnOnce()) -> usize {
+        COUNT.with(|n| n.set(0));
+        ENABLED.with(|v| v.set(true));
+        f();
+        ENABLED.with(|v| v.set(false));
+        COUNT.with(Cell::get)
+    }
+}
+#[cfg(test)]
 mod tests {
     use super::*;
     static UI_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -481,6 +578,32 @@ mod tests {
         moved.show_splash(&settings, 1100);
         moved.render_at(1350);
         assert!(moved.framebuffer().iter().any(|pixel| *pixel != 0));
+    }
+    #[test]
+    fn steady_telemetry_and_alert_updates_allocate_no_rust_heap() {
+        let _guard = UI_TEST_LOCK.lock().unwrap();
+        let settings = Settings::default();
+        let packet = FastLink {
+            bms_status: 1,
+            esc_status: 1,
+            device_state: 1,
+            bms_soc: 72,
+            bms_volts_dV: 885,
+            esc_warning_alerts: 1,
+            esc_critical_alerts: 8,
+            ..FastLink::default()
+        };
+        let mut ui = Ui::with_settings(&settings);
+        ui.update(&packet, &settings, false, 1000);
+        let allocations = allocation_probe::measure(|| {
+            for now in 1001..1101 {
+                ui.update(&packet, &settings, false, now);
+            }
+        });
+        assert_eq!(
+            allocations, 0,
+            "steady UI work must not churn the Rust heap"
+        );
     }
     #[test]
     fn production_abbreviations_preserve_sensor_id_and_direction() {

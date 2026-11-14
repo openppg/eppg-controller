@@ -35,7 +35,7 @@ impl Settings {
         if !matches!(self.screen_rotation, 1 | 3) {
             self.screen_rotation = 3;
         }
-        if self.sea_pressure < 300. || self.sea_pressure > 1200. {
+        if !self.sea_pressure.is_finite() || self.sea_pressure < 300. || self.sea_pressure > 1200. {
             self.sea_pressure = 1013.25;
         }
         if self.performance_mode > 1 {
@@ -43,6 +43,30 @@ impl Settings {
         }
         if self.theme > 1 {
             self.theme = 0;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn invalid_pressure_cannot_poison_altitude_and_vario() {
+        for sea_pressure in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, 0., 299., 1201.] {
+            let mut settings = Settings {
+                sea_pressure,
+                ..Settings::default()
+            };
+            settings.sanitize();
+            assert_eq!(settings.sea_pressure, 1013.25);
+        }
+        for sea_pressure in [300., 1013.25, 1200.] {
+            let mut settings = Settings {
+                sea_pressure,
+                ..Settings::default()
+            };
+            settings.sanitize();
+            assert_eq!(settings.sea_pressure, sea_pressure);
         }
     }
 }

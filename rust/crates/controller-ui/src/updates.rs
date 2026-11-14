@@ -57,12 +57,18 @@ impl Ui {
                     LVGL_RED()
                 };
                 bg(self.w.battery_bar, c, LV_PART_INDICATOR);
-                text(self.w.battery_label, &format!("{}%", soc as i32));
+                text(
+                    self.w.battery_label,
+                    &fmt_text(format_args!("{}%", soc as i32)),
+                );
                 text_color(self.w.battery_label, fg);
             } else {
                 lv_bar_set_value(self.w.battery_bar, 0, LV_ANIM_OFF);
                 if esc {
-                    text(self.w.battery_label, &format!("{volts:2.1}v"));
+                    text(
+                        self.w.battery_label,
+                        &fmt_text(format_args!("{volts:2.1}v")),
+                    );
                     text_color(self.w.battery_label, fg);
                 } else {
                     text(self.w.battery_label, "NO DATA");
@@ -79,7 +85,7 @@ impl Ui {
             if bms {
                 text(
                     self.w.voltage_left_label,
-                    &format!("{:2.2}v", p.bms_cell_min_mV as f32 / 1000.),
+                    &fmt_text(format_args!("{:2.2}v", p.bms_cell_min_mV as f32 / 1000.)),
                 );
                 text_color(self.w.voltage_left_label, fg);
             } else if esc {
@@ -100,11 +106,14 @@ impl Ui {
                 self.last_voltage_mode = voltage_mode;
             }
             if bms {
-                text(self.w.voltage_right_label, &format!("{volts:2.0}v"));
+                text(
+                    self.w.voltage_right_label,
+                    &fmt_text(format_args!("{volts:2.0}v")),
+                );
             } else {
                 text(self.w.voltage_right_label, "");
             }
-            let mut power_text: [String; 4] = Default::default();
+            let mut power_text: [SmallText; 4] = Default::default();
             if bms || esc {
                 let amps = if bms { p.bms_amps_dA } else { p.esc_amps_dA } as f32 / 10.;
                 let kw = self
@@ -114,11 +123,11 @@ impl Ui {
                 let total = (kw * 10. + 0.5) as i32;
                 let whole = total / 10;
                 if whole >= 10 {
-                    power_text[0] = (whole / 10).to_string();
+                    power_text[0] = fmt_text(format_args!("{}", (whole / 10)));
                 }
-                power_text[1] = (whole % 10).to_string();
+                power_text[1] = fmt_text(format_args!("{}", (whole % 10)));
                 power_text[2] = ".".into();
-                power_text[3] = (total % 10).to_string();
+                power_text[3] = fmt_text(format_args!("{}", (total % 10)));
             }
             for (i, t) in power_text.iter().enumerate() {
                 text(self.w.power_char_labels[i], t);
@@ -138,14 +147,14 @@ impl Ui {
             };
             text(
                 self.w.armed_time_label,
-                &format!("{:02}:{:02}", secs / 60, secs % 60),
+                &fmt_text(format_args!("{:02}:{:02}", secs / 60, secs % 60)),
             );
             let altitude = self.altitude_override.unwrap_or(if armed {
                 p.altitude_cm as f32 / 100.
             } else {
                 0.
             });
-            let mut digits: [String; 7] = Default::default();
+            let mut digits: [SmallText; 7] = Default::default();
             if s.metric_alt {
                 let display = if altitude > -0.05 && altitude < 0. {
                     0.
@@ -169,17 +178,17 @@ impl Ui {
                     digits[left - 1] = "-".into();
                 }
                 if whole / 1000 > 0 {
-                    digits[0] = (whole / 1000).to_string();
+                    digits[0] = fmt_text(format_args!("{}", (whole / 1000)));
                 }
                 if whole >= 100 {
-                    digits[1] = ((whole / 100) % 10).to_string();
+                    digits[1] = fmt_text(format_args!("{}", ((whole / 100) % 10)));
                 }
                 if whole >= 10 {
-                    digits[2] = ((whole / 10) % 10).to_string();
+                    digits[2] = fmt_text(format_args!("{}", ((whole / 10) % 10)));
                 }
-                digits[3] = (whole % 10).to_string();
+                digits[3] = fmt_text(format_args!("{}", (whole % 10)));
                 digits[4] = ".".into();
-                digits[5] = decimal.to_string();
+                digits[5] = fmt_text(format_args!("{}", decimal));
                 digits[6] = "m".into();
                 lv_obj_set_size(self.w.altitude_char_labels[4], 8, 30);
             } else {
@@ -196,7 +205,7 @@ impl Ui {
                 }
                 for (i, scale) in [10000, 1000, 100, 10, 1].into_iter().enumerate() {
                     if feet >= scale || scale == 1 {
-                        digits[i] = ((feet / scale) % 10).to_string();
+                        digits[i] = fmt_text(format_args!("{}", ((feet / scale) % 10)));
                     }
                 }
                 digits[6] = "f".into();
@@ -258,7 +267,7 @@ impl Ui {
             ];
             for (i, (label, tile, temp, warn, crit)) in tiles.into_iter().enumerate() {
                 let level = if let Some(t) = temp {
-                    text(label, &(t as i32).to_string());
+                    text(label, &fmt_text(format_args!("{}", (t as i32))));
                     if t >= crit {
                         2
                     } else if t >= warn {
@@ -440,28 +449,33 @@ impl Ui {
                 };
             }
         }
-        let warns: Vec<_> = self
-            .alert_levels
-            .iter()
-            .enumerate()
-            .filter_map(|(i, l)| l.warning().then_some(i))
-            .collect();
-        let crits: Vec<_> = self
-            .alert_levels
-            .iter()
-            .enumerate()
-            .filter_map(|(i, l)| l.critical().then_some(i))
-            .collect();
-        let changed = warns != self.warn_ids || crits != self.crit_ids;
+        let mut warning_ids = [0; 44];
+        let mut critical_ids = [0; 44];
+        let (mut warning_len, mut critical_len) = (0, 0);
+        for (id, level) in self.alert_levels.iter().enumerate() {
+            if level.warning() {
+                warning_ids[warning_len] = id;
+                warning_len += 1;
+            }
+            if level.critical() {
+                critical_ids[critical_len] = id;
+                critical_len += 1;
+            }
+        }
+        let warns = &warning_ids[..warning_len];
+        let crits = &critical_ids[..critical_len];
+        let changed = warns != self.warn_ids.as_slice() || crits != self.crit_ids.as_slice();
         if changed {
-            if warns != self.warn_ids {
+            if warns != self.warn_ids.as_slice() {
                 self.warn_idx = 0;
             }
-            if crits != self.crit_ids {
+            if crits != self.crit_ids.as_slice() {
                 self.crit_idx = 0;
             }
-            self.warn_ids = warns;
-            self.crit_ids = crits;
+            self.warn_ids.clear();
+            self.warn_ids.extend_from_slice(warns);
+            self.crit_ids.clear();
+            self.crit_ids.extend_from_slice(crits);
             self.alert_rotation_at = now;
         } else if now.wrapping_sub(self.alert_rotation_at) >= 2000 {
             if !self.warn_ids.is_empty() {
@@ -491,9 +505,9 @@ impl Ui {
                 text(
                     label,
                     &if count > 9 {
-                        "9+".to_string()
+                        SmallText::from("9+")
                     } else {
-                        count.to_string()
+                        fmt_text(format_args!("{}", count))
                     },
                 );
             }

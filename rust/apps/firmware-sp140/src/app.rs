@@ -35,7 +35,25 @@ pub struct Snapshot {
     pub baro_temperature: f32,
     pub cpu_temperature: f32,
 }
+pub struct UiSnapshot {
+    pub bms_temperatures: [f32; 6],
+    pub settings: Settings,
+    pub telemetry: FastLink,
+    pub levels: [Level; 44],
+    pub connected: bool,
+    pub pairing: bool,
+}
 impl Snapshot {
+    pub fn ui_snapshot(&self) -> UiSnapshot {
+        UiSnapshot {
+            bms_temperatures: self.bms_temperatures,
+            settings: self.settings.clone(),
+            telemetry: self.telemetry.clone(),
+            levels: self.levels,
+            connected: self.connected,
+            pairing: self.pairing,
+        }
+    }
     pub fn new(settings: Settings, _role: Role) -> Self {
         Self {
             bms_temperatures: [f32::NAN; 6],

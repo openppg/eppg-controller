@@ -43,6 +43,21 @@ python3 simulator/tools/qemu_smoke.py --help
 
 The QEMU image executes the actual Xtensa-compiled Rust firmware and production tasks. Its shared device model supplies ADC/button/SPI/I2C/PWM/TWAI peers. QEMU cannot emulate the ESP32 radio, so the QEMU profile explicitly skips physical BLE/WiFi initialization; host protocol tests exercise radio framing and mobile OTA packet sequences. Physical builds initialize both radios normally.
 
+## Runtime performance and memory
+
+The renderer owns one four-byte-aligned 64-row RGB565 buffer. LVGL widgets use the
+ESP-IDF allocator instead of reserving a separate 48 KiB arena. Numeric formatting
+uses bounded stack buffers; stable telemetry/alert updates have an allocation-budget
+regression test. UI snapshots copy only display fields, avoiding maintenance-buffer
+allocations while the control mutex is held. The single sensor owner publishes at
+25 Hz, while the control task retains its 100 Hz period.
+
+LVGL and libcanard are compiled without PIC on ESP-IDF to match its static firmware
+link model. Host libraries keep their normal PIC settings. Rust release optimization
+remains size-oriented: measured `-O2`/`-O3` experiments were slower on this board.
+Failed LVGL allocations abort explicitly. CI runs the C rendering boundaries under
+AddressSanitizer as well as the screen goldens and firmware/emulator checks.
+
 ## Compatibility and limits
 
 The BLE UUIDs, signed 32-bit time wire value, FastLink v4 offsets, existing NVS types, USB JSON keys, OTA sector framing, wireless sessions/timeouts and ESC maintenance services are preserved. Full 256 KiB ESC uploads use a bounded scratch buffer and the existing unused reserved flash partition. An ownership marker protects unknown pre-existing partition data: uploads fail without erasing data if it is neither virgin nor owned by this staging format.

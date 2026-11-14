@@ -27,6 +27,10 @@ fn main() {
         .clang_arg(format!("-I{}", lvgl.display()))
         .clang_arg(format!("-I{}", config.display()))
         .clang_arg("-DLV_CONF_INCLUDE_SIMPLE")
+        .clang_arg("-DLV_USE_STDLIB_MALLOC=LV_STDLIB_CLIB")
+        .clang_arg("-DLV_USE_ASSERT_MALLOC=1")
+        .clang_arg("-DLV_ASSERT_HANDLER_INCLUDE=<stdlib.h>")
+        .clang_arg("-DLV_ASSERT_HANDLER=abort();")
         .prepend_enum_name(false)
         .layout_tests(false)
         .generate_comments(false)
@@ -44,8 +48,16 @@ fn main() {
     cc.include(&lvgl)
         .include(&config)
         .define("LV_CONF_INCLUDE_SIMPLE", None)
+        // Share IDF's allocator with radio/services; do not hide 48 KiB in
+        // a second arena. Failed C allocations abort before a null dereference.
+        .define("LV_USE_STDLIB_MALLOC", Some("LV_STDLIB_CLIB"))
+        .define("LV_USE_ASSERT_MALLOC", Some("1"))
+        .define("LV_ASSERT_HANDLER_INCLUDE", Some("<stdlib.h>"))
+        .define("LV_ASSERT_HANDLER", Some("abort();"))
         .define("LV_LVGL_H_INCLUDE_SIMPLE", None)
-        .warnings(false);
+        .warnings(false)
+        .flag("-fno-builtin-memcpy")
+        .flag("-fno-builtin-memset");
     if env::var("TARGET").unwrap().contains("espidf") {
         let compiler = env::var("CC").unwrap_or_else(|_| "xtensa-esp32s3-elf-gcc".into());
         let output = std::process::Command::new(&compiler)
@@ -54,7 +66,8 @@ fn main() {
             .expect("Xtensa compiler required");
         let sysroot = String::from_utf8(output.stdout).unwrap();
         bindings = bindings.clang_arg(format!("--sysroot={}", sysroot.trim()));
-        cc.compiler(compiler)
+        cc.pic(false)
+            .compiler(compiler)
             .archiver("xtensa-esp32s3-elf-ar")
             .flag("-mlongcalls");
     }
