@@ -96,9 +96,10 @@ void Mcp2515::transfer(const uint8_t* tx, uint8_t* rx, size_t length) {
     const uint8_t status = (flags & 3) | ((flags & 4) << 1) |
                            ((flags & 8) << 2) | ((flags & 16) << 3);
     if (rx) for (size_t i = 1; i < length; ++i) rx[i] = status;
-  } else if ((command & 0xfc) == 0x90) {
-    const unsigned n = (command >> 1) & 1;
-    const uint8_t start = (n ? 0x71 : 0x61) + ((command & 1) ? 5 : 0);
+  } else if ((command & 0xf9) == 0x90) {
+    // READ RX BUFFER is 1001 0nm0: n selects the buffer, m starts at the data bytes.
+    const unsigned n = (command >> 2) & 1;
+    const uint8_t start = (n ? 0x71 : 0x61) + ((command & 2) ? 5 : 0);
     if (rx) for (size_t i = 1; i < length; ++i) rx[i] = registers_[uint8_t(start + i - 1)];
     registers_[0x2c] &= ~uint8_t(1 << n);
   } else if ((command & 0xf8) == 0x80) {

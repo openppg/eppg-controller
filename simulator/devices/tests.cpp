@@ -34,6 +34,18 @@ static void test_mcp_registers_and_buffers() {
         "MCP RX identifier/data register encoding incorrect");
   check((mcp.reg(0x2c) & 3) == 2, "READ_RX_BUFFER did not clear only the selected flag");
   check(mcp.receive(frame), "MCP freed buffer did not accept next frame");
+  CanFrame second = frame; second.id = 0x18fe28f4; second.data[0] = 0x42;
+  Mcp2515 both; mcp_write(both, 0x0f, 0);
+  check(both.receive(frame) && both.receive(second), "MCP did not fill two receive buffers");
+  const uint8_t read_second[14] = {0x94};
+  both.transfer(read_second, result, sizeof(read_second));
+  check(result[3] == uint8_t(second.id >> 8) && result[6] == 0x42,
+        "READ_RX_BUFFER 0x94 did not return RXB1");
+  check((both.reg(0x2c) & 3) == 1, "READ_RX_BUFFER 0x94 did not clear only RX1IF");
+  const uint8_t read_data[10] = {0x92};
+  both.transfer(read_data, result, sizeof(read_data));
+  check(result[1] == frame.data[0] && (both.reg(0x2c) & 3) == 0,
+        "READ_RX_BUFFER 0x92 did not start at RXB0 data");
   const uint8_t modify[] = {5,0x2c,3,0};
   mcp.transfer(modify, nullptr, sizeof(modify));
   check((mcp.reg(0x2c) & 3) == 0, "MCP bit modify did not preserve mask semantics");
