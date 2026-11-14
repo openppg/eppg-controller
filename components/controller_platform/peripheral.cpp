@@ -11,6 +11,7 @@
 #include "driver/spi_master.h"
 #include "driver/usb_serial_jtag.h"
 #include "driver/usb_serial_jtag_vfs.h"
+#include "hal/usb_serial_jtag_ll.h"
 #include "driver/uart.h"
 #include "driver/temperature_sensor.h"
 #include "driver/rmt_tx.h"
@@ -280,6 +281,14 @@ extern "C" int eppg_usb_init() {
 #else
   usb_serial_jtag_driver_config_t config{};
   config.rx_buffer_size = config.tx_buffer_size = 2048;
+  // The USB peripheral is not reset with the CPU, so interrupt enables left by an
+  // earlier boot or a previous firmware survive a restart. The driver's handler services
+  // only its own two sources; any other enabled source that is pending, such as a bus
+  // reset from the host, is never acknowledged and re-enters the handler until the
+  // interrupt watchdog restarts the chip, on every boot. Turn every source off and let
+  // the driver enable what it handles. The status flags must stay as they are: the
+  // driver relies on the pending transmit-empty flag to start sending.
+  usb_serial_jtag_ll_disable_intr_mask(UINT32_MAX);
   const esp_err_t err = usb_serial_jtag_driver_install(&config);
   // SDK stdout and application USB traffic must use the same interrupt-driven
   // transport rather than concurrently touching the hardware FIFO.
