@@ -365,15 +365,17 @@ TEST_F(OtaEmu, StartAcceptedWith0x0000) {
   EXPECT_TRUE(isOtaInProgress());
 }
 
-TEST_F(OtaEmu, ConnParamsRequestedBeforeErase) {
+// The request must not be in flight while esp_ota_begin() erases: the phone
+// applies the change mid-erase and the link is lost (bench, Pixel 9 Pro).
+TEST_F(OtaEmu, ConnParamsRequestedAfterEraseBeforeAccept) {
   ASSERT_EQ(start(8192), 0x0000);
   const int fast = emu::indexOf("conn_fast");
   const int begin = emu::indexOf("ota_begin");
   const int response = emu::indexOf("notify 8022");
   ASSERT_GE(fast, 0);
   ASSERT_GE(begin, 0);
-  EXPECT_LT(fast, begin);
-  EXPECT_LT(begin, response);
+  EXPECT_LT(begin, fast);
+  EXPECT_LT(fast, response);
   EXPECT_EQ(emu::countOf("conn_fast"), 1);
 }
 

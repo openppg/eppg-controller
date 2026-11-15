@@ -212,10 +212,6 @@ void handleCmdStart(const uint8_t* data) {
         return;
     }
 
-    // Ask for the OTA connection parameters (longer supervision timeout)
-    // before the erase, so the stall in esp_ota_begin() doesn't drop the link.
-    requestFastConnParams();
-
     esp_err_t err = esp_ota_begin(updatePartition, imageLen, &updateHandle);
     if (err != ESP_OK) {
         USBSerial.printf("OTA Error: Begin failed 0x%x\n", err);
@@ -227,6 +223,13 @@ void handleCmdStart(const uint8_t* data) {
 
     imageTotalLen = imageLen;
     lastOtaActivityMs = timeMillis();
+
+    // Ask for the OTA connection parameters only after the erase, as 8.0 did.
+    // Requested before it, the phone schedules the change while the erase in
+    // esp_ota_begin() has the radio stalled; the two sides then disagree on the
+    // connection timing and the link is lost for good (seen on a Pixel 9 Pro:
+    // 3 of 5 starts died exactly one supervision timeout later).
+    requestFastConnParams();
     sendCommandResponse(CMD_START, 0x0000);  // Accept
 }
 
