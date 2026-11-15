@@ -377,7 +377,15 @@ void announceGattLayoutIfFirmwareChanged() {
   const bool sameBuild =
       nvs_get_blob(handle, kKey, stored, &length) == ESP_OK &&
       length == sizeof(stored) && memcmp(stored, current, sizeof(current)) == 0;
-  if (!sameBuild) {
+  // The record alone misses one case: this build ran here before, an older
+  // firmware that keeps no record (8.0) was installed and paired with, and this
+  // build was then installed again. The first boot after any over-the-air
+  // update is still unconfirmed at this point, so announce then as well.
+  esp_ota_img_states_t imageState = ESP_OTA_IMG_UNDEFINED;
+  const bool firstBootAfterUpdate =
+      esp_ota_get_state_partition(esp_ota_get_running_partition(), &imageState) == ESP_OK &&
+      imageState == ESP_OTA_IMG_PENDING_VERIFY;
+  if (!sameBuild || firstBootAfterUpdate) {
     if (NimBLEDevice::getNumBonds() > 0 && pServer != nullptr) {
       pServer->start();
       pServer->sendServiceChangedIndication();
