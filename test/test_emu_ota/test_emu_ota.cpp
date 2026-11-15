@@ -1114,6 +1114,407 @@ TEST_F(OtaEmu, ArmGuardTimesOutInsteadOfBlockingWhileStartHoldsLock) {
   EXPECT_EQ(emu::deadlocks, 0);
 }
 
+// ---------------------------------------------------------------------------
+// Sector re-send characterisation (input to the phone apps' retry policy).
+//
+// A phone that gets no sector ACK re-sends the whole sector. These tests pin
+// down what the controller answers to each re-send, mid-transfer at sector 3
+// of a 6-sector image, with 9 packets per sector (8 x 500 bytes + 96) as seen
+// on the bench. They do not change firmware behaviour.
+//
+// The fake notify() records every call. On the device NimBLE-Arduino's
+// notify() only marks the characteristic and the host sends its *current*
+// value later, so ACKs set while a burst of packets is being processed can
+// collapse into one notification carrying the last of them. The sequences
+// below are therefore what the controller tries to send; the phone sees a
+// subset that always includes the last ACK of each burst.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+struct PacketAck {
+  size_t packet;  // index of the packet (within the call) that produced it
+  FwAck ack;
+};
+
+bool operator==(const FwAck& a, const FwAck& b) {
+  return a.sector == b.sector && a.status == b.status && a.expected == b.expected;
+}
+bool operator==(const PacketAck& a, const PacketAck& b) {
+  return a.packet == b.packet && a.ack == b.ack;
+}
+void PrintTo(const FwAck& a, std::ostream* os) {
+  *os << "[sector " << a.sector << " status " << a.status << " expected " << a.expected << "]";
+}
+void PrintTo(const PacketAck& p, std::ostream* os) {
+  *os << "pkt " << p.packet << " ";
+  PrintTo(p.ack, os);
+}
+
+const uint16_t kAckOk = 0x0000;
+const uint16_t kAckCrc = 0x0001;
+const uint16_t kAckSector = 0x0002;
+const uint16_t kAckLen = 0x0003;
+
+// Sector index no image can reach (0xFFFF * 4096 > any app slot).
+const uint16_t kProbeSector = 0xFFFF;
+
+}  // namespace
+
+class OtaResendEmu : public OtaEmu {
+ protected:
+  static constexpr uint16_t kN = 3;
+  static constexpr size_t kChunk = 500;  // 9 packets per 4096-byte sector
+
+  static std::vector<Bytes> packetsOf(const Bytes& img, size_t s, size_t chunk = kChunk) {
+    return sectorPackets(static_cast<uint16_t>(s), sectorOf(img, s), chunk);
+  }
+
+  static std::vector<Bytes> without(std::vector<Bytes> packets, size_t idx) {
+    packets.erase(packets.begin() + static_cast<long>(idx));
+    return packets;
+  }
+
+  static std::vector<PacketAck> repeat(size_t count, FwAck ack) {
+    std::vector<PacketAck> out;
+    for (size_t i = 0; i < count; ++i) out.push_back({i, ack});
+    return out;
+  }
+
+  // Sends `packets` in order and returns every ACK, tagged with the index of
+  // the packet whose write produced it.
+  std::vector<PacketAck> play(const std::vector<Bytes>& packets) {
+    std::vector<PacketAck> out;
+    for (size_t i = 0; i < packets.size(); ++i) {
+      const size_t before = data_->notifications.size();
+      sendData(packets[i]);
+      for (size_t k = before; k < data_->notifications.size(); ++k) {
+        const Bytes& n = data_->notifications[k];
+        EXPECT_EQ(n.size(), 6u) << "sector ACKs are 6 bytes";
+        if (n.size() < 6) continue;
+        out.push_back({i, {static_cast<uint16_t>(n[0] | (n[1] << 8)),
+                           static_cast<uint16_t>(n[2] | (n[3] << 8)),
+                           static_cast<uint16_t>(n[4] | (n[5] << 8))}});
+      }
+    }
+    return out;
+  }
+
+  // 3-byte data write with an unreachable sector index.
+  std::vector<PacketAck> probe() { return play({{lo(kProbeSector), hi(kProbeSector), 0x00}}); }
+
+  // START, then sectors 0..n-1, each answered with a success ACK.
+  ::testing::AssertionResult startAndSendUpTo(const Bytes& img, size_t n, size_t chunk = kChunk) {
+    const uint16_t s = start(static_cast<uint32_t>(img.size()));
+    if (s != kAckOk) return ::testing::AssertionFailure() << "START status " << s;
+    return sendSectors(img, 0, n, chunk);
+  }
+
+  ::testing::AssertionResult sendSectors(const Bytes& img, size_t from, size_t to,
+                                         size_t chunk = kChunk) {
+    for (size_t i = from; i < to; ++i) {
+      const std::vector<PacketAck> acks = play(packetsOf(img, i, chunk));
+      const FwAck want = {static_cast<uint16_t>(i), kAckOk, 0};
+      if (acks.size() != 1 || !(acks[0].ack == want)) {
+        return ::testing::AssertionFailure() << "sector " << i << ": " << ::testing::PrintToString(acks);
+      }
+    }
+    return ::testing::AssertionSuccess();
+  }
+
+  // Sends sectors from..end, then END; checks the image reached flash once,
+  // in order, with the declared total. priorWrites: esp_ota_write calls made
+  // in earlier (aborted) sessions.
+  ::testing::AssertionResult finishFrom(const Bytes& img, size_t from, size_t chunk = kChunk,
+                                        int priorWrites = 0) {
+    ::testing::AssertionResult sent = sendSectors(img, from, sectorCount(img), chunk);
+    if (!sent) return sent;
+    if (receivedBytes != img.size()) {
+      return ::testing::AssertionFailure() << "receivedBytes " << receivedBytes << " != " << img.size();
+    }
+    const uint16_t e = end();
+    if (e != kAckOk) return ::testing::AssertionFailure() << "END status " << e;
+    if (emu::flashImage != img) return ::testing::AssertionFailure() << "flash image differs";
+    if (emu::writeCalls - priorWrites != static_cast<int>(sectorCount(img))) {
+      return ::testing::AssertionFailure() << emu::writeCalls - priorWrites
+                                           << " esp_ota_write calls for " << sectorCount(img)
+                                           << " sectors";
+    }
+    return ::testing::AssertionSuccess();
+  }
+
+  // Every success ACK corresponds to exactly one esp_ota_write, and they name
+  // sectors 0, 1, 2, ... in order: no success ACK for data that was not written.
+  ::testing::AssertionResult successAcksMatchWrites() const {
+    uint16_t next = 0;
+    for (const FwAck& a : fwAcks()) {
+      if (a.status != kAckOk) continue;
+      if (a.sector != next) {
+        return ::testing::AssertionFailure() << "success ACK for sector " << a.sector
+                                             << ", expected " << next;
+      }
+      ++next;
+    }
+    if (next != emu::writeCalls) {
+      return ::testing::AssertionFailure() << next << " success ACKs, " << emu::writeCalls << " writes";
+    }
+    return ::testing::AssertionSuccess();
+  }
+};
+
+// (a) Sector 3 written and ACKed, ACK lost; the phone re-sends sector 3, twice.
+// Each re-sent packet is refused on its own: 9 x [3, ERR_SECTOR, expected 4].
+// No success ACK for sector 3 ever comes again, so the phone must take
+// ERR_SECTOR with expected == N+1 as "N is already written".
+TEST_F(OtaResendEmu, AckLostResendNackedPerPacketWithNextSectorExpected) {
+  const Bytes img = makeImage(6 * kSector);
+  ASSERT_TRUE(startAndSendUpTo(img, kN + 1));  // sector 3's [3, OK] is the lost ACK
+  ASSERT_EQ(emu::writeCalls, 4);
+  const std::vector<Bytes> pk = packetsOf(img, kN);
+  ASSERT_EQ(pk.size(), 9u);
+
+  const std::vector<PacketAck> nack = repeat(9, {kN, kAckSector, kN + 1});
+  EXPECT_EQ(play(pk), nack);  // re-send 1
+  EXPECT_EQ(emu::writeCalls, 4);
+  EXPECT_EQ(currentSectorIndex, kN + 1);
+  EXPECT_EQ(sectorBufferLen, 0u);
+  EXPECT_EQ(receivedBytes, 4 * kSector);
+  EXPECT_EQ(play(pk), nack);  // re-send 2: identical
+  EXPECT_EQ(emu::writeCalls, 4);
+  EXPECT_TRUE(isOtaInProgress());
+
+  EXPECT_TRUE(finishFrom(img, kN + 1));
+  EXPECT_TRUE(successAcksMatchWrites());
+}
+
+// (b) Last packet (seq 0xFF) of sector 3 lost: no ACK at all. The 8 packets
+// that did arrive stay buffered, so re-send 1 lands on top of them: its first
+// packet overflows the 4096-byte buffer (ERR_LEN, expected 0, packet dropped,
+// buffer cleared) and its last packet fails the CRC (ERR_CRC, expected 0).
+// Only re-send 2 succeeds: 3 whole-sector sends in total.
+TEST_F(OtaResendEmu, LastPacketLostFirstResendFailsSecondSucceeds) {
+  const Bytes img = makeImage(6 * kSector);
+  ASSERT_TRUE(startAndSendUpTo(img, kN));
+  const std::vector<Bytes> pk = packetsOf(img, kN);
+  EXPECT_TRUE(play(without(pk, 8)).empty());
+  EXPECT_EQ(sectorBufferLen, 4000u);
+  EXPECT_EQ(emu::writeCalls, 3);
+
+  const std::vector<PacketAck> resend1 = {{0, {kN, kAckLen, 0}}, {8, {kN, kAckCrc, 0}}};
+  EXPECT_EQ(play(pk), resend1);
+  EXPECT_EQ(emu::writeCalls, 3);
+  EXPECT_EQ(sectorBufferLen, 0u);
+  EXPECT_EQ(currentSectorIndex, kN);
+
+  const std::vector<PacketAck> resend2 = {{8, {kN, kAckOk, 0}}};
+  EXPECT_EQ(play(pk), resend2);
+  EXPECT_EQ(emu::writeCalls, 4);
+
+  EXPECT_TRUE(finishFrom(img, kN + 1));
+  EXPECT_TRUE(successAcksMatchWrites());
+}
+
+// (b) with 512-byte packets (7 x 512 + 512): the stale 3584 bytes plus re-sent
+// packet 0 fill the buffer exactly, so the overflow comes at packet 1. Same
+// outcome: ERR_LEN then ERR_CRC, success on the third send.
+TEST_F(OtaResendEmu, LastPacketLostWith512BytePacketsOverflowsOnSecondPacket) {
+  const Bytes img = makeImage(6 * kSector);
+  ASSERT_TRUE(startAndSendUpTo(img, kN, 512));
+  const std::vector<Bytes> pk = packetsOf(img, kN, 512);
+  ASSERT_EQ(pk.size(), 8u);
+  EXPECT_TRUE(play(without(pk, 7)).empty());
+
+  const std::vector<PacketAck> resend1 = {{1, {kN, kAckLen, 0}}, {7, {kN, kAckCrc, 0}}};
+  EXPECT_EQ(play(pk), resend1);
+  const std::vector<PacketAck> resend2 = {{7, {kN, kAckOk, 0}}};
+  EXPECT_EQ(play(pk), resend2);
+
+  EXPECT_TRUE(finishFrom(img, kN + 1, 512));
+  EXPECT_TRUE(successAcksMatchWrites());
+}
+
+// (b) on a short final sector (1000 bytes = 500 + last 500): the stale 500
+// bytes plus the re-send fit in the buffer, so re-send 1 gives only ERR_CRC.
+// Re-send 2 succeeds and END completes.
+TEST_F(OtaResendEmu, LastPacketOfShortFinalSectorLostFirstResendGetsCrcError) {
+  const Bytes img = makeImage(5 * kSector + 1000);
+  ASSERT_TRUE(startAndSendUpTo(img, 5));
+  const std::vector<Bytes> pk = packetsOf(img, 5);
+  ASSERT_EQ(pk.size(), 2u);
+  EXPECT_TRUE(play(without(pk, 1)).empty());
+
+  const std::vector<PacketAck> resend1 = {{1, {5, kAckCrc, 0}}};
+  EXPECT_EQ(play(pk), resend1);
+  const std::vector<PacketAck> resend2 = {{1, {5, kAckOk, 0}}};
+  EXPECT_EQ(play(pk), resend2);
+
+  EXPECT_TRUE(finishFrom(img, 6));
+  EXPECT_TRUE(successAcksMatchWrites());
+}
+
+// (c) First packet of sector 3 lost: the last packet's CRC check fails at once
+// (ERR_CRC, expected 0) and clears the buffer, so the phone is not left
+// waiting. One re-send succeeds. If that success ACK is lost too, a second
+// re-send gets 9 x [3, ERR_SECTOR, expected 4] like (a).
+TEST_F(OtaResendEmu, FirstPacketLostNackedWithCrcErrorThenOneResendSucceeds) {
+  const Bytes img = makeImage(6 * kSector);
+  ASSERT_TRUE(startAndSendUpTo(img, kN));
+  const std::vector<Bytes> pk = packetsOf(img, kN);
+
+  const std::vector<PacketAck> lossy = {{7, {kN, kAckCrc, 0}}};
+  EXPECT_EQ(play(without(pk, 0)), lossy);
+  EXPECT_EQ(sectorBufferLen, 0u);
+  EXPECT_EQ(emu::writeCalls, 3);
+
+  const std::vector<PacketAck> resend1 = {{8, {kN, kAckOk, 0}}};
+  EXPECT_EQ(play(pk), resend1);
+  EXPECT_EQ(play(pk), repeat(9, {kN, kAckSector, kN + 1}));  // its ACK lost: re-send 2
+  EXPECT_EQ(emu::writeCalls, 4);
+
+  EXPECT_TRUE(finishFrom(img, kN + 1));
+  EXPECT_TRUE(successAcksMatchWrites());
+}
+
+// (d) A middle packet (index 4) lost: same as (c).
+TEST_F(OtaResendEmu, MiddlePacketLostNackedWithCrcErrorThenOneResendSucceeds) {
+  const Bytes img = makeImage(6 * kSector);
+  ASSERT_TRUE(startAndSendUpTo(img, kN));
+  const std::vector<Bytes> pk = packetsOf(img, kN);
+
+  const std::vector<PacketAck> lossy = {{7, {kN, kAckCrc, 0}}};
+  EXPECT_EQ(play(without(pk, 4)), lossy);
+  EXPECT_EQ(sectorBufferLen, 0u);
+
+  const std::vector<PacketAck> resend1 = {{8, {kN, kAckOk, 0}}};
+  EXPECT_EQ(play(pk), resend1);
+  EXPECT_EQ(play(pk), repeat(9, {kN, kAckSector, kN + 1}));
+  EXPECT_EQ(emu::writeCalls, 4);
+
+  EXPECT_TRUE(finishFrom(img, kN + 1));
+  EXPECT_TRUE(successAcksMatchWrites());
+}
+
+// (e) Everything the controller sends for sector 3 when the phone re-sends on
+// a short timer without reading the ACKs in between: attempt 1 loses its last
+// packet (silence), attempt 2 draws ERR_LEN + ERR_CRC, attempt 3 succeeds,
+// attempt 4 (sent because the phone took attempt 2's stale errors as attempt
+// 3's answer) draws 9 x ERR_SECTOR/expected 4. Exactly one write; the only
+// success ACK for sector 3 follows that write. A success ACK for sector N
+// always means N's CRC-checked bytes were written once, whichever attempt
+// carried them (all attempts carry the same bytes).
+TEST_F(OtaResendEmu, AckStreamAcrossFourAttemptsHasOneSuccessForOneWrite) {
+  const Bytes img = makeImage(6 * kSector);
+  ASSERT_TRUE(startAndSendUpTo(img, kN));
+  const size_t before = fwAcks().size();
+  const std::vector<Bytes> pk = packetsOf(img, kN);
+
+  play(without(pk, 8));  // attempt 1
+  play(pk);              // attempt 2
+  play(pk);              // attempt 3
+  play(pk);              // attempt 4
+
+  std::vector<FwAck> expected = {{kN, kAckLen, 0}, {kN, kAckCrc, 0}, {kN, kAckOk, 0}};
+  for (int i = 0; i < 9; ++i) expected.push_back({kN, kAckSector, kN + 1});
+  const std::vector<FwAck> all = fwAcks();
+  EXPECT_EQ(std::vector<FwAck>(all.begin() + static_cast<long>(before), all.end()), expected);
+  EXPECT_EQ(emu::writeCalls, 4);
+
+  EXPECT_TRUE(finishFrom(img, kN + 1));
+  EXPECT_TRUE(successAcksMatchWrites());
+}
+
+// (e) The phone moves to sector 4 on the first [3, ERR_SECTOR, 4] while the
+// rest of its sector-3 re-send is still queued. On one link they arrive before
+// sector 4 and only draw more stale [3, ERR_SECTOR, 4] ACKs (which the phone
+// must drop: their sector field is 3). Even if a stale sector-3 packet landed
+// in the middle of sector 4, it would only clear the buffer: sector 4 then
+// fails its CRC (ERR_CRC) and is re-sent; nothing wrong is written.
+TEST_F(OtaResendEmu, StaleResendPacketsBeforeOrInsideNextSectorNeverWriteWrongData) {
+  const Bytes img = makeImage(6 * kSector);
+  ASSERT_TRUE(startAndSendUpTo(img, kN + 1));
+  const std::vector<Bytes> s3 = packetsOf(img, kN);
+  const std::vector<Bytes> s4 = packetsOf(img, kN + 1);
+
+  EXPECT_EQ(play(s3), repeat(9, {kN, kAckSector, kN + 1}));  // queued re-send drains
+
+  std::vector<Bytes> mixed(s4.begin(), s4.begin() + 4);
+  mixed.push_back(s3[2]);  // hypothetical stale packet mid-sector
+  mixed.insert(mixed.end(), s4.begin() + 4, s4.end());
+  const std::vector<PacketAck> acks = {{4, {kN, kAckSector, kN + 1}}, {9, {kN + 1, kAckCrc, 0}}};
+  EXPECT_EQ(play(mixed), acks);
+  EXPECT_EQ(emu::writeCalls, 4);
+
+  EXPECT_TRUE(finishFrom(img, kN + 1));
+  EXPECT_TRUE(successAcksMatchWrites());
+}
+
+// (f) Sector 3's last packet lost, then nothing for OTA_TIMEOUT_MS: the idle
+// timer aborts the session and nothing at all is notified on either
+// characteristic (the only outward sign is the request for normal connection
+// parameters). A late re-send, a probe or END after that get no ACK / 0x0001;
+// the phone must START again (full erase) and send from sector 0.
+TEST_F(OtaResendEmu, ResendAfterIdleAbortIsSilentAndNeedsFreshStartFromSectorZero) {
+  const Bytes img = makeImage(6 * kSector);
+  ASSERT_TRUE(startAndSendUpTo(img, kN));
+  const std::vector<Bytes> pk = packetsOf(img, kN);
+  play(without(pk, 8));
+  const size_t dataNotes = data_->notifications.size();
+  const size_t cmdNotes = cmd_->notifications.size();
+  emu::events.clear();
+
+  runNotifyTask(OTA_TIMEOUT_MS + 40);
+  EXPECT_FALSE(isOtaInProgress());
+  EXPECT_EQ(emu::abortCalls, 1);
+  EXPECT_EQ(emu::countOf("conn_normal"), 1);
+  EXPECT_EQ(data_->notifications.size(), dataNotes);
+  EXPECT_EQ(cmd_->notifications.size(), cmdNotes);
+
+  EXPECT_TRUE(play(pk).empty());
+  EXPECT_TRUE(probe().empty());
+  EXPECT_EQ(emu::writeCalls, 3);
+  EXPECT_EQ(end(), 0x0001);
+
+  ASSERT_EQ(start(static_cast<uint32_t>(img.size())), kAckOk);
+  EXPECT_EQ(emu::beginCalls, 2);
+  EXPECT_EQ(play(pk), repeat(9, {kN, kAckSector, 0}));  // new session expects 0
+  EXPECT_TRUE(finishFrom(img, 0, kChunk, /*priorWrites=*/3));
+  EXPECT_EQ(emu::writeCalls, 9);  // 3 in the aborted session + 6
+}
+
+// A 3-byte data write naming an unreachable sector is answered with
+// [0xFFFF, ERR_SECTOR, expected = next sector to send], clears any partial
+// sector buffer and counts as activity for the idle timer; it writes nothing.
+// Data handling is the same in 8.0, so this works on both.
+TEST_F(OtaResendEmu, ProbeReportsExpectedSectorClearsPartialBufferAndKeepsSessionAlive) {
+  const Bytes img = makeImage(6 * kSector);
+  ASSERT_TRUE(startAndSendUpTo(img, kN));
+  const std::vector<Bytes> pk = packetsOf(img, kN);
+
+  // Last packet lost: probe says "still expecting 3" and drops the stale bytes,
+  // so a single re-send succeeds (2 sends in total instead of 3).
+  play(without(pk, 8));
+  ASSERT_EQ(sectorBufferLen, 4000u);
+  const std::vector<PacketAck> expecting3 = {{0, {kProbeSector, kAckSector, kN}}};
+  EXPECT_EQ(probe(), expecting3);
+  EXPECT_EQ(sectorBufferLen, 0u);
+  const std::vector<PacketAck> ok = {{8, {kN, kAckOk, 0}}};
+  EXPECT_EQ(play(pk), ok);
+
+  // ACK lost: probe says "expecting 4", i.e. sector 3 is already written.
+  const std::vector<PacketAck> expecting4 = {{0, {kProbeSector, kAckSector, kN + 1}}};
+  EXPECT_EQ(probe(), expecting4);
+
+  // Probes keep the session alive past OTA_TIMEOUT_MS.
+  runNotifyTask(OTA_TIMEOUT_MS - 1000);
+  EXPECT_EQ(probe(), expecting4);
+  runNotifyTask(OTA_TIMEOUT_MS - 1000);
+  EXPECT_TRUE(isOtaInProgress());
+
+  EXPECT_EQ(emu::writeCalls, 4);
+  EXPECT_TRUE(finishFrom(img, kN + 1));
+  EXPECT_TRUE(successAcksMatchWrites());
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
