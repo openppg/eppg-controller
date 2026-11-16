@@ -1252,7 +1252,7 @@ void handleCruisingThrottle(int potVal) {
  * - ARMED: Normal throttle control with ramping and performance mode limits
  */
 void handleThrottle() {
-  static uint16_t currentCruiseThrottlePWM = ESC_MIN_PWM;
+  static uint16_t cruiseSetpointPWM = ESC_MIN_PWM;
   static int prevPwm = ESC_MIN_PWM;  // Previous PWM for ramping
   static bool wasCruising = false;
   uint16_t newPWM;
@@ -1262,25 +1262,15 @@ void handleThrottle() {
 
   // Entering cruise: hold exactly the output this task was already sending.
   // Latching here (not via the queue from another task) means no tick can run
-  // cruise on a stale setpoint. toggleCruise() refused anything above
-  // CRUISE_MAX_PWM; the min() only covers output that rose in the one tick
-  // since that check.
+  // cruise on a stale setpoint. See cruiseOutputTick().
   const bool cruising = (state == ARMED_CRUISING);
-  if (cruising && !wasCruising) {
-    currentCruiseThrottlePWM = min(prevPwm, CRUISE_MAX_PWM);
-    USBSerial.print("Cruise PWM latched at: ");
-    USBSerial.println(currentCruiseThrottlePWM);
-  }
+  const bool enteringCruise = cruising && !wasCruising;
   wasCruising = cruising;
 
-  // Check for cruise setpoint updates (BLE)
-  if (xQueueReceive(throttleUpdateQueue, &newPWM, 0) == pdTRUE) {
-    if (state == ARMED_CRUISING) {
-      currentCruiseThrottlePWM = newPWM;
-      USBSerial.print("Cruise PWM updated to: ");
-      USBSerial.println(currentCruiseThrottlePWM);
-    }
-  }
+  // Cruise setpoint written over BLE. Drained every tick so a write left over
+  // from an earlier cruise is never applied; used only while cruising.
+  const bool haveBleSetpoint =
+      xQueueReceive(throttleUpdateQueue, &newPWM, 0) == pdTRUE;
 
   int finalPwm = ESC_DISARMED_PWM;
 
@@ -1293,11 +1283,23 @@ void handleThrottle() {
     finalPwm = ESC_DISARMED_PWM;
     break;
 
-  case ARMED_CRUISING:
+  case ARMED_CRUISING: {
     handleCruisingThrottle(readThrottleRaw());
-    finalPwm = currentCruiseThrottlePWM;  // Use cruise PWM
-    prevPwm = finalPwm;  // Leaving cruise ramps from the output actually held
+    // A new setpoint is range-checked and reached through the mode ramp, like
+    // the lever; prevPwm tracks the output so leaving cruise ramps from it.
+    const uint16_t heldSetpoint = cruiseSetpointPWM;
+    finalPwm = cruiseOutputTick(enteringCruise, haveBleSetpoint ? &newPWM : nullptr,
+                                cruiseSetpointPWM, prevPwm,
+                                deviceData.performance_mode);
+    if (enteringCruise) {
+      USBSerial.print("Cruise PWM latched at: ");
+      USBSerial.println(cruiseSetpointPWM);
+    } else if (cruiseSetpointPWM != heldSetpoint) {
+      USBSerial.print("Cruise setpoint updated to: ");
+      USBSerial.println(cruiseSetpointPWM);
+    }
     break;
+  }
 
   case ARMED:
     int smoothedPwm = getSmoothedThrottlePwm(deviceData.performance_mode);

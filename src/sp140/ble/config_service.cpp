@@ -125,8 +125,9 @@ class ThrottleValueCallbacks : public NimBLECharacteristicCallbacks {
     }
 
     uint16_t newPWM = (static_cast<uint16_t>(value[0]) << 8) | static_cast<uint16_t>(value[1]);
-    // Same cruise max as button-set cruise: refuse, don't clamp
-    if (newPWM < ESC_MIN_PWM || !isCruiseOutputAllowed(newPWM)) {
+    // Same cruise max as button-set cruise: refuse, don't clamp. The throttle
+    // task checks again and ramps to it (cruiseOutputTick).
+    if (!isCruiseSetpointAllowed(newPWM)) {
       return;
     }
 

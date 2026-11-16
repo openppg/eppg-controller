@@ -152,6 +152,24 @@ bool isCruiseOutputAllowed(uint16_t pwm) {
   return pwm <= CRUISE_MAX_PWM;
 }
 
+bool isCruiseSetpointAllowed(uint16_t pwm) {
+  return pwm >= ESC_MIN_PWM && isCruiseOutputAllowed(pwm);
+}
+
+int cruiseOutputTick(bool entering, const uint16_t* requested, uint16_t& setpoint,
+                     int& prevPwm, uint8_t performance_mode) {
+  if (entering) {
+    // Hold exactly the output already being flown. The button refused anything
+    // above CRUISE_MAX_PWM; the cap only covers output that rose in the one
+    // tick since that check.
+    setpoint = (prevPwm < CRUISE_MAX_PWM) ? prevPwm : CRUISE_MAX_PWM;
+  }
+  if (requested != nullptr && isCruiseSetpointAllowed(*requested)) {
+    setpoint = *requested;
+  }
+  return applyModeRampClamp(setpoint, prevPwm, performance_mode);
+}
+
 /**
  * Check if pot value should trigger cruise disengagement.
  * Returns true when current pot >= threshold percentage of activation value.
