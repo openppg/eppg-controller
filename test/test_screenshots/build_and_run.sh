@@ -131,6 +131,7 @@ if [ "$UPDATE_REFS" = 1 ]; then
 fi
 
 "$BUILD_DIR/screenshot_tests" "${PASS_TO_TEST[@]}"
+"$BUILD_DIR/ota_service_tests"
 
 echo ""
 echo "--- Screenshots ---"

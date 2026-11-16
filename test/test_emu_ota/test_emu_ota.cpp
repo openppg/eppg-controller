@@ -162,6 +162,11 @@ class OtaEmu : public ::testing::Test {
     pCommandChar = nullptr;
     pCustomerChar = nullptr;
     currentState = DISARMED;
+    delete otaStatusQueue;
+    otaStatusQueue = nullptr;
+    otaStatus = OtaStatus{};
+    emu::nvsU32.clear();
+    emu::lastInvalidPartition = nullptr;
   }
 
   // Mirrors toggleArm() in main.cpp: from DISARMED it holds OtaArmGuard across
@@ -1513,6 +1518,102 @@ TEST_F(OtaResendEmu, ProbeReportsExpectedSectorClearsPartialBufferAndKeepsSessio
   EXPECT_EQ(emu::writeCalls, 4);
   EXPECT_TRUE(finishFrom(img, kN + 1));
   EXPECT_TRUE(successAcksMatchWrites());
+}
+
+// ---------------------------------------------------------------------------
+// Update-screen status (PR 134 port). Status reporting must not change any of
+// the wire behaviour above, and nothing may write NVS from a BLE callback.
+// ---------------------------------------------------------------------------
+
+TEST_F(OtaEmu, ArmedStartPublishesNoUpdateScreen) {
+  currentState = ARMED;
+  EXPECT_EQ(start(2 * kSector), 0x0002);
+  OtaStatus status;
+  EXPECT_FALSE(readOtaStatus(status));
+  EXPECT_FALSE(otaBlocksInput());
+}
+
+TEST_F(OtaEmu, BootReceiptWrittenAtRebootNotInEndCallback) {
+  ASSERT_TRUE(completeTransfer(makeImage(2 * kSector)));
+  EXPECT_EQ(emu::indexOf("nvs_put ota-ui/target"), -1) << "NVS write inside the END callback";
+  OtaStatus status;
+  ASSERT_TRUE(readOtaStatus(status));
+  EXPECT_EQ(status.phase, OtaPhase::Restarting);
+  runNotifyTask(2000);
+  ASSERT_EQ(emu::restartCount, 1);
+  const int put = emu::indexOf("nvs_put ota-ui/target");
+  ASSERT_GE(put, 0);
+  EXPECT_LT(put, emu::indexOf("restart"));
+  EXPECT_EQ(emu::nvsU32["ota-ui/target"], emu::updatePartition.address);
+}
+
+TEST_F(OtaEmu, FailedUpdateWritesNoReceipt) {
+  emu::faults.endErr = ESP_ERR_OTA_VALIDATE_FAILED;
+  const Bytes img = makeImage(kSector);
+  ASSERT_EQ(start(static_cast<uint32_t>(img.size())), 0x0000);
+  ASSERT_TRUE(sendImage(img));
+  EXPECT_EQ(end(), 0x0001);
+  runNotifyTask(2000);
+  EXPECT_TRUE(emu::nvsU32.empty());
+  OtaStatus status;
+  ASSERT_TRUE(readOtaStatus(status));
+  EXPECT_EQ(status.phase, OtaPhase::Failed);
+  EXPECT_EQ(status.error, OtaError::Verification);
+}
+
+TEST_F(OtaEmu, DisconnectDuringRebootWindowKeepsRestartScreen) {
+  ASSERT_TRUE(completeTransfer(makeImage(kSector)));
+  disconnect();
+  OtaStatus status;
+  ASSERT_TRUE(readOtaStatus(status));
+  EXPECT_EQ(status.phase, OtaPhase::Restarting);
+}
+
+TEST_F(OtaEmu, RefusedStartsKeepStatusCodesAndShowReason) {
+  EXPECT_EQ(start(kSlotSize + 1), 0x0003);
+  OtaStatus status;
+  ASSERT_TRUE(readOtaStatus(status));
+  EXPECT_EQ(status.error, OtaError::InvalidSize);
+  emu::faults.noUpdatePartition = true;
+  EXPECT_EQ(start(8192), 0x0004);
+  ASSERT_TRUE(readOtaStatus(status));
+  EXPECT_EQ(status.error, OtaError::NoPartition);
+  emu::faults.noUpdatePartition = false;
+  emu::faults.beginErr = ESP_FAIL;
+  EXPECT_EQ(start(8192), 0x0004);
+  ASSERT_TRUE(readOtaStatus(status));
+  EXPECT_EQ(status.error, OtaError::Begin);
+}
+
+TEST_F(OtaEmu, BootReceiptForRunningSlotShowsCompleteOnce) {
+  emu::nvsU32["ota-ui/target"] = emu::runningPartition.address;
+  finishOtaBoot(true);
+  OtaStatus status;
+  ASSERT_TRUE(readOtaStatus(status));
+  EXPECT_EQ(status.phase, OtaPhase::Complete);
+  EXPECT_TRUE(emu::nvsU32.empty());
+  const uint32_t revision = status.revision;
+  finishOtaBoot(true);
+  ASSERT_TRUE(readOtaStatus(status));
+  EXPECT_EQ(status.revision, revision);
+}
+
+TEST_F(OtaEmu, BootReceiptRollbackNeedsBootloaderInvalidMark) {
+  emu::nvsU32["ota-ui/target"] = emu::updatePartition.address;
+  emu::lastInvalidPartition = &emu::updatePartition;
+  finishOtaBoot(true);
+  OtaStatus status;
+  ASSERT_TRUE(readOtaStatus(status));
+  EXPECT_EQ(status.phase, OtaPhase::Failed);
+  EXPECT_EQ(status.error, OtaError::RolledBack);
+}
+
+TEST_F(OtaEmu, StaleBootReceiptIsClearedWithoutAScreen) {
+  emu::nvsU32["ota-ui/target"] = emu::updatePartition.address;  // not running, not invalid
+  finishOtaBoot(true);
+  OtaStatus status;
+  EXPECT_FALSE(readOtaStatus(status));
+  EXPECT_TRUE(emu::nvsU32.empty());
 }
 
 int main(int argc, char** argv) {

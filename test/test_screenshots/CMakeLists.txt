@@ -59,6 +59,7 @@ target_compile_options(lvgl PRIVATE -w)
 
 # Project UI source files (the actual code under test)
 set(UI_SOURCES
+  ${PROJECT_ROOT}/src/sp140/lvgl/lvgl_ota.cpp
   ${PROJECT_ROOT}/src/sp140/lvgl/lvgl_splash.cpp
   ${PROJECT_ROOT}/src/sp140/lvgl/lvgl_main_screen.cpp
   ${PROJECT_ROOT}/src/sp140/lvgl/lvgl_updates.cpp
@@ -146,3 +147,9 @@ add_executable(climb_eff_replay
   ${PROJECT_ROOT}/tools/hc_emulator/climb_eff_replay.cpp
 )
 target_include_directories(climb_eff_replay PRIVATE ${PROJECT_ROOT}/inc)
+
+# Host coverage of the production BLE OTA callbacks and wire protocol. Keep the
+# flash/BLE fakes separate from the display emulator's stubs.
+add_executable(ota_service_tests ../test_ota_service/test_ota_service.cpp)
+target_include_directories(ota_service_tests PRIVATE ../test_ota_service/stubs ${PROJECT_ROOT}/inc)
+target_link_libraries(ota_service_tests PRIVATE gtest gtest_main)

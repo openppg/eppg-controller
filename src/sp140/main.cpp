@@ -42,6 +42,7 @@
 #include "../../inc/sp140/lvgl/lvgl_core.h"
 #include "../../inc/sp140/lvgl/lvgl_main_screen.h"
 #include "../../inc/sp140/lvgl/lvgl_updates.h"
+#include "sp140/lvgl/lvgl_ota.h"
 #include "../../inc/sp140/simple_monitor.h"
 #include "../../inc/sp140/telemetry_hub.h"
 
@@ -439,6 +440,37 @@ void refreshDisplay() {
   // Guard against calls before main_screen is set up
   if (main_screen == NULL) {
     return;
+  }
+
+  // Full-screen firmware update. Only this (UI) task touches the OTA screen; it
+  // reads a status copy without taking the OTA lock. Never shown while armed:
+  // an armed controller keeps its flight display (OTA START is refused then).
+  static OtaScreen otaScreen;
+  static uint32_t lastOtaPaintMs = 0;
+  OtaStatus ota;
+  const uint32_t now = timeMillis();
+  const bool showOta = currentState == DISARMED && readOtaStatus(ota) &&
+                       otaStatusVisible(ota, now);
+  if (showOta || otaScreen.screen) {
+    if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(40)) != pdTRUE) return;
+    if (showOta) {
+      const bool phaseChanged = !otaScreen.screen || otaScreen.phase != ota.phase ||
+                                otaScreen.error != ota.error;
+      if (phaseChanged || now - lastOtaPaintMs >= 250) {
+        if (phaseChanged) {
+          USBSerial.printf("OTA screen: %s (%s) %u%%\n", otaPhaseName(ota.phase),
+                           otaErrorName(ota.error), otaProgressPercent(ota));
+        }
+        showOtaScreen(otaScreen, ota, deviceData.theme == 1);
+        lastOtaPaintMs = now;
+      }
+      updateLvgl();
+    } else {
+      hideOtaScreen(otaScreen, main_screen);
+      USBSerial.println("OTA screen: closed");
+    }
+    xSemaphoreGive(lvglMutex);
+    if (showOta) return;
   }
 
   // Snapshot outside lvglMutex. This is a short memory copy and never takes the
@@ -925,7 +957,8 @@ void setup() {
   // =========================================================================
   USBSerial.println("Starting external interfaces...");
 
-  // Start BLE advertising (now safe - UI is ready, tasks are running)
+  // Start BLE advertising (now safe - UI is ready, tasks are running). Kept
+  // before the validation below so a new image that can't advertise rolls back.
   restartBLEAdvertising();
   USBSerial.println("BLE advertising started");
 
@@ -934,14 +967,18 @@ void setup() {
 
   // Check if this is first boot after OTA update and validate if needed
   esp_ota_img_states_t ota_state;
+  bool firmwareValid = true;
   if (esp_ota_get_state_partition(running, &ota_state) == ESP_OK) {
     if (ota_state == ESP_OTA_IMG_PENDING_VERIFY) {
       // First boot after OTA - if we made it this far, firmware is good
       USBSerial.println("OTA: First boot after update - validating firmware");
-      esp_ota_mark_app_valid_cancel_rollback();
-      USBSerial.println("OTA: Firmware marked valid - Rollback protection active");
+      firmwareValid = esp_ota_mark_app_valid_cancel_rollback() == ESP_OK;
+      USBSerial.println(firmwareValid ? "OTA: Firmware marked valid - Rollback protection active" :
+                                       "OTA: Firmware validation failed");
     }
   }
+  // Update result screen (one-shot receipt written before the OTA reboot).
+  finishOtaBoot(firmwareValid);
 
   USBSerial.println("=== Boot complete ===");
 }
@@ -958,10 +995,25 @@ void buttonHandlerTask(void *parameter) {
   bool lastButtonState = HIGH;
   bool buttonState;
   bool pairingHoldHandled = false;
+  bool consumeUpdateRelease = false;
 
   while (true) {
     buttonState = digitalRead(board_config.button_top);
     uint32_t currentTime = timeMillis();
+
+    // Consume all gestures during the update, including a held button's final
+    // release. No stale click/hold may arm, change mode, or clear BLE bonds.
+    // Only while disarmed: the button must always be able to disarm.
+    if ((currentState == DISARMED && otaBlocksInput()) || consumeUpdateRelease) {
+      consumeUpdateRelease = buttonState == LOW;
+      armSequenceStarted = false;
+      buttonPressed = false;
+      pairingHoldHandled = false;
+      lastButtonState = buttonState;
+      lastDebounceTime = currentTime;
+      vTaskDelay(pdMS_TO_TICKS(10));
+      continue;
+    }
 
     // Debounce
     if ((currentTime - lastDebounceTime) > BUTTON_DEBOUNCE_TIME_MS) {
@@ -1125,6 +1177,12 @@ void toggleArm() {
     OtaArmGuard otaGuard(pdMS_TO_TICKS(100));
     if (!otaGuard.held() || isOtaInProgress()) {
       USBSerial.println("Arm blocked: OTA update in progress");
+      return;
+    }
+    // An update result is still on screen (the button task normally swallows
+    // the gesture first).
+    if (otaBlocksInput()) {
+      USBSerial.println("Arm blocked: OTA result on screen");
       return;
     }
 
