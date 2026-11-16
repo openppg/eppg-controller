@@ -449,8 +449,7 @@ void refreshDisplay() {
   static uint32_t lastOtaPaintMs = 0;
   OtaStatus ota;
   const uint32_t now = timeMillis();
-  const bool showOta = currentState == DISARMED && readOtaStatus(ota) &&
-                       otaStatusVisible(ota, now);
+  const bool showOta = currentState == DISARMED && readOtaScreen(ota);
   if (showOta || otaScreen.screen) {
     if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(40)) != pdTRUE) return;
     if (showOta) {
@@ -1003,9 +1002,9 @@ void buttonHandlerTask(void *parameter) {
 
     // Consume all gestures during the update, including a held button's final
     // release. No stale click/hold may arm, change mode, or clear BLE bonds.
+    // On a result screen a press only dismisses it; input is normal after it.
     // Only while disarmed: the button must always be able to disarm.
-    if ((currentState == DISARMED && otaBlocksInput()) || consumeUpdateRelease) {
-      consumeUpdateRelease = buttonState == LOW;
+    if (otaFilterButton(currentState == DISARMED, buttonState == LOW, consumeUpdateRelease)) {
       armSequenceStarted = false;
       buttonPressed = false;
       pairingHoldHandled = false;

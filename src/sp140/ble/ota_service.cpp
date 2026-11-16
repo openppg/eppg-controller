@@ -80,6 +80,10 @@ volatile unsigned long otaRebootAtMs = 0;
 // lock and nothing here waits on the display.
 QueueHandle_t otaStatusQueue = nullptr;
 OtaStatus otaStatus;
+// Revision of the result screen the pilot dismissed with the button. Written
+// by the button task, read by the UI task; atomic like otaInProgress, so
+// neither waits on the OTA lock. A newer status has a newer revision and shows.
+std::atomic<uint32_t> dismissedOtaRevision{0};
 
 // One-shot NVS receipt for the result screen after the post-update reboot. Its
 // own namespace; no 8.1 settings key is touched.
@@ -492,9 +496,35 @@ bool readOtaStatus(OtaStatus& status) {
     return otaStatusQueue && xQueuePeek(otaStatusQueue, &status, 0) == pdTRUE;
 }
 
+namespace {
+bool isOtaResult(OtaPhase phase) {
+    return phase == OtaPhase::Failed || phase == OtaPhase::Complete;
+}
+}  // namespace
+
+bool readOtaScreen(OtaStatus& status) {
+    return readOtaStatus(status) && otaStatusVisible(status, timeMillis()) &&
+           !(isOtaResult(status.phase) && status.revision == dismissedOtaRevision);
+}
+
 bool otaBlocksInput() {
     OtaStatus status;
-    return isOtaInProgress() || (readOtaStatus(status) && otaStatusVisible(status, timeMillis()));
+    return isOtaInProgress() || readOtaScreen(status);
+}
+
+bool otaFilterButton(bool disarmed, bool buttonDown, bool& holdUntilRelease) {
+    if (!(disarmed && otaBlocksInput()) && !holdUntilRelease) return false;
+    // A fresh press on a result screen (no transfer running) dismisses it; the
+    // UI task closes the screen on its next tick. The press itself is still
+    // consumed through its release. A press held since the transfer is not.
+    if (disarmed && buttonDown && !holdUntilRelease && !isOtaInProgress()) {
+        OtaStatus status;
+        if (readOtaScreen(status) && isOtaResult(status.phase)) {
+            dismissedOtaRevision = status.revision;
+        }
+    }
+    holdUntilRelease = buttonDown;
+    return true;
 }
 
 void finishOtaBoot(bool firmwareValid) {

@@ -37,9 +37,12 @@ Existing main-screen and splash references are unchanged.
   bootloader marked the target slot invalid (rollback). A receipt for a slot
   that is neither running nor invalid is cleared without a screen. Receipt
   storage failure does not fail an otherwise successful installation.
-- Button gestures are consumed while the update/result screen is visible and
-  the controller is disarmed. A button held across the transition must be
-  released before a new gesture.
+- While disarmed, button gestures are consumed during a transfer (preparing
+  through restarting). On a result screen the first fresh press dismisses it
+  and is consumed through its release; the next gesture, including arming,
+  works normally. A button held across the transition must be released first
+  and does not dismiss. Undismissed results still close after their timeouts.
+  `test_emu_ota` covers this through `otaFilterButton()`.
 - The existing app UUIDs, commands, packet formats, and ACK values are unchanged,
   including 8.1's START refusal codes (2 armed, 3 too large, 4 flash).
 

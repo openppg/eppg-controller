@@ -32,6 +32,7 @@ class OtaServiceTest : public ::testing::Test {
     runningPartition.address = 0x10000;
     lastInvalidPartition = nullptr;
     otaStatus = OtaStatus{};
+    dismissedOtaRevision = 0;
     otaInProgress = false;
     otaRebootAtMs = 0;
     resetOtaState();

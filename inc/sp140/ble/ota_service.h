@@ -50,8 +50,20 @@ void abortOta(OtaError error = OtaError::Disconnected);
 // OTA state lock, so the UI task can't wait on a flash operation.
 bool readOtaStatus(OtaStatus& status);
 
+// Status for the update screen when it should be on screen now: not expired
+// and, for a result, not dismissed with the button. Nonblocking.
+bool readOtaScreen(OtaStatus& status);
+
 // True while an update runs or its result is still on screen. Nonblocking.
 bool otaBlocksInput();
+
+// Button-task filter for the update screen, called with every button sample.
+// Returns true when the sample belongs to the update screen and must not reach
+// the normal gesture handling. While a transfer runs every gesture is consumed;
+// on a result screen a fresh press dismisses it and is consumed, after which
+// input is normal. `holdUntilRelease` is the caller's flag for a press that is
+// consumed through its release. Only while disarmed. Nonblocking.
+bool otaFilterButton(bool disarmed, bool buttonDown, bool& holdUntilRelease);
 
 // Called once at the end of setup(), after the first-boot validation, with
 // whether esp_ota_mark_app_valid_cancel_rollback() succeeded (true when the

@@ -165,6 +165,7 @@ class OtaEmu : public ::testing::Test {
     delete otaStatusQueue;
     otaStatusQueue = nullptr;
     otaStatus = OtaStatus{};
+    dismissedOtaRevision = 0;
     emu::nvsU32.clear();
     emu::lastInvalidPartition = nullptr;
   }
@@ -1614,6 +1615,159 @@ TEST_F(OtaEmu, StaleBootReceiptIsClearedWithoutAScreen) {
   OtaStatus status;
   EXPECT_FALSE(readOtaStatus(status));
   EXPECT_TRUE(emu::nvsU32.empty());
+}
+
+// ---------------------------------------------------------------------------
+// The button on the update screen. otaFilterButton() is the button task's
+// filter (buttonHandlerTask() in main.cpp); each sample() is one 10 ms button
+// sample. A true return means the sample never reaches the gesture handling.
+// ---------------------------------------------------------------------------
+
+namespace {
+bool sample(bool down, bool& hold) {
+  return otaFilterButton(currentState == DISARMED, down, hold);
+}
+}  // namespace
+
+TEST_F(OtaEmu, PressOnFailureResultDismissesItAndIsConsumed) {
+  ASSERT_EQ(start(2 * kSector), 0x0000);
+  disconnect();
+  OtaStatus status;
+  ASSERT_TRUE(readOtaScreen(status));
+  ASSERT_EQ(status.phase, OtaPhase::Failed);
+  ASSERT_TRUE(otaBlocksInput());
+  bool hold = false;
+  EXPECT_TRUE(sample(true, hold)) << "the dismissing press reached the gesture handling";
+  EXPECT_FALSE(readOtaScreen(status)) << "result still on screen after a press";
+  EXPECT_FALSE(otaBlocksInput()) << "input still blocked after the result was dismissed";
+  EXPECT_TRUE(sample(true, hold)) << "the dismissing press must be consumed until released";
+  EXPECT_TRUE(sample(false, hold));
+  EXPECT_FALSE(hold);
+  // Back on the normal screen: the next press is an ordinary gesture.
+  EXPECT_FALSE(sample(true, hold)) << "the press after the dismissal was swallowed";
+  EXPECT_FALSE(sample(false, hold));
+}
+
+TEST_F(OtaEmu, ArmGestureWorksRightAfterDismissingAResult) {
+  emu::faults.endErr = ESP_ERR_OTA_VALIDATE_FAILED;
+  const Bytes img = makeImage(kSector);
+  ASSERT_EQ(start(static_cast<uint32_t>(img.size())), 0x0000);
+  ASSERT_TRUE(sendImage(img));
+  ASSERT_EQ(end(), 0x0001);
+  bool hold = false;
+  EXPECT_TRUE(sample(true, hold));
+  EXPECT_TRUE(sample(false, hold));
+  emu::advanceMs(100);
+  // toggleArm() in main.cpp refuses while isOtaInProgress() or otaBlocksInput().
+  EXPECT_FALSE(otaBlocksInput());
+  EXPECT_FALSE(sample(true, hold)) << "the arm gesture was swallowed";
+  EXPECT_TRUE(tryArm());
+  EXPECT_EQ(static_cast<DeviceState>(currentState), ARMED);
+}
+
+TEST_F(OtaEmu, PressOnCompletionScreenDismissesIt) {
+  emu::nvsU32["ota-ui/target"] = emu::runningPartition.address;
+  finishOtaBoot(true);
+  OtaStatus status;
+  ASSERT_TRUE(readOtaScreen(status));
+  ASSERT_EQ(status.phase, OtaPhase::Complete);
+  bool hold = false;
+  EXPECT_TRUE(sample(true, hold));
+  EXPECT_FALSE(readOtaScreen(status)) << "completion screen still up after a press";
+  EXPECT_TRUE(sample(false, hold));
+  EXPECT_FALSE(otaBlocksInput());
+  EXPECT_FALSE(sample(true, hold));
+}
+
+TEST_F(OtaEmu, PressDuringTransferStaysBlocked) {
+  const Bytes img = makeImage(2 * kSector);
+  bool hold = false;
+  bool erasePressConsumed = false;
+  // Mid-erase, with START holding the OTA lock: the filter must not wait on it.
+  emu::onBegin = [&] { erasePressConsumed = sample(true, hold) && sample(false, hold); };
+  ASSERT_EQ(start(static_cast<uint32_t>(img.size())), 0x0000);
+  EXPECT_TRUE(erasePressConsumed);
+  ASSERT_EQ(sendSector(0, sectorOf(img, 0)), 0x0000);
+  for (int i = 0; i < 3; ++i) {
+    EXPECT_TRUE(sample(true, hold));
+    EXPECT_TRUE(sample(false, hold));
+  }
+  OtaStatus status;
+  ASSERT_TRUE(readOtaScreen(status));
+  EXPECT_EQ(status.phase, OtaPhase::Receiving);
+  EXPECT_TRUE(otaBlocksInput());
+  EXPECT_FALSE(tryArm());
+  ASSERT_EQ(sendSector(1, sectorOf(img, 1)), 0x0000);
+  ASSERT_EQ(end(), 0x0000);
+  // Reboot window: the restart screen survives presses and arming stays refused.
+  EXPECT_TRUE(sample(true, hold));
+  EXPECT_TRUE(sample(false, hold));
+  ASSERT_TRUE(readOtaScreen(status));
+  EXPECT_EQ(status.phase, OtaPhase::Restarting);
+  EXPECT_FALSE(tryArm());
+  runNotifyTask(2000);
+  EXPECT_EQ(emu::restartCount, 1);
+}
+
+TEST_F(OtaEmu, ButtonHeldIntoAResultDoesNotDismissIt) {
+  ASSERT_EQ(start(2 * kSector), 0x0000);
+  bool hold = false;
+  EXPECT_TRUE(sample(true, hold));  // pressed during the transfer and held
+  disconnect();
+  EXPECT_TRUE(sample(true, hold));
+  OtaStatus status;
+  EXPECT_TRUE(readOtaScreen(status)) << "a press that began during the transfer dismissed the result";
+  EXPECT_TRUE(sample(false, hold));
+  EXPECT_TRUE(readOtaScreen(status));
+  EXPECT_TRUE(sample(true, hold));  // a fresh press dismisses
+  EXPECT_FALSE(readOtaScreen(status));
+}
+
+TEST_F(OtaEmu, UntouchedResultsStillTimeOut) {
+  ASSERT_EQ(start(2 * kSector), 0x0000);
+  disconnect();
+  OtaStatus status;
+  emu::advanceMs(9999);
+  EXPECT_TRUE(readOtaScreen(status));
+  EXPECT_TRUE(otaBlocksInput());
+  emu::advanceMs(1);
+  EXPECT_FALSE(readOtaScreen(status));
+  EXPECT_FALSE(otaBlocksInput());
+
+  emu::nvsU32["ota-ui/target"] = emu::runningPartition.address;
+  finishOtaBoot(true);
+  emu::advanceMs(3499);
+  EXPECT_TRUE(readOtaScreen(status));
+  EXPECT_TRUE(otaBlocksInput());
+  emu::advanceMs(1);
+  EXPECT_FALSE(readOtaScreen(status));
+  EXPECT_FALSE(otaBlocksInput());
+}
+
+TEST_F(OtaEmu, NextUpdateShowsAfterADismissedResult) {
+  ASSERT_EQ(start(2 * kSector), 0x0000);
+  disconnect();
+  bool hold = false;
+  sample(true, hold);
+  sample(false, hold);
+  ASSERT_EQ(start(2 * kSector), 0x0000);
+  OtaStatus status;
+  ASSERT_TRUE(readOtaScreen(status));
+  EXPECT_EQ(status.phase, OtaPhase::Receiving);
+  EXPECT_TRUE(sample(true, hold));
+  EXPECT_TRUE(readOtaScreen(status));
+}
+
+TEST_F(OtaEmu, ArmedPressIsNeitherFilteredNorADismissal) {
+  ASSERT_EQ(start(2 * kSector), 0x0000);
+  disconnect();
+  currentState = ARMED;
+  bool hold = false;
+  EXPECT_FALSE(sample(true, hold));  // reaches the gesture handling, so it can disarm
+  EXPECT_FALSE(sample(false, hold));
+  currentState = DISARMED;
+  OtaStatus status;
+  EXPECT_TRUE(readOtaScreen(status)) << "an armed press dismissed the result";
 }
 
 int main(int argc, char** argv) {
