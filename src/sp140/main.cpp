@@ -1452,6 +1452,10 @@ bool initBMSCAN(SPIClass *spi) {
     return false;
   }
   USBSerial.println("BMS CAN initialized successfully");
+  if (!configureBMSCANReceive(spi)) {
+    // Still usable with one receive buffer; dropped frames are still counted.
+    USBSerial.println("BMS CAN: receive rollover not enabled");
+  }
   bmsCanInitialized = true;  // BMS successfully initialized
   return true;
 }

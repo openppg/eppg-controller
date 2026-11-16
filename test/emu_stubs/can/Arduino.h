@@ -81,6 +81,7 @@ class Stream : public Print {
   virtual int read() = 0;
   virtual int peek() = 0;
   virtual void flush() {}
+  void setTimeout(unsigned long) {}
 };
 
 class EmuSerial : public Stream {

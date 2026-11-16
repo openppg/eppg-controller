@@ -91,5 +91,7 @@ extern BMS_CAN* bms_can;
 
 // BMS functions
 bool initBMSCAN(SPIClass* spi);
+// After bms_can->begin(): use both MCP2515 receive buffers (see bms_can_rx.h).
+bool configureBMSCANReceive(SPIClass* spi);
 void updateBMSData();
 void printBMSData();
