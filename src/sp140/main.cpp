@@ -991,6 +991,22 @@ void buttonHandlerTask(void *parameter) {
   bool consumeUpdateRelease = false;
 
   while (true) {
+#if defined(OPENPPG_USB_BENCH_PAIRING)
+    // Run on the same task as the physical button so pairing requests cannot
+    // race with each other or with arming.
+    if (takeUSBPairingRequest()) {
+      OtaArmGuard otaGuard(0);
+      if (currentState != DISARMED || !otaGuard.held() || otaBlocksInput() ||
+          escConfigRelayIsActive() || escFlasherRelayIsActive()) {
+        USBSerial.println("[BLE] USB pairing request refused");
+      } else if (isBLEPairingModeActive()) {
+        USBSerial.println("[BLE] USB pairing window already open");
+      } else {
+        enterBLEPairingMode();
+        USBSerial.println("[BLE] Pairing mode activated via USB");
+      }
+    }
+#endif
     buttonState = digitalRead(board_config.button_top);
     uint32_t currentTime = timeMillis();
 

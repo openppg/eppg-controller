@@ -92,6 +92,21 @@ CI automatically runs cpplint, unit tests, and a full firmware build on every pu
 
 The open source web based config tool for updating certain settings over USB (without needing to flash firmware) can be found at [config.openppg.com](https://config.openppg.com).
 
+## USB Bluetooth pairing for bench builds
+
+Enable `-D OPENPPG_USB_BENCH_PAIRING` in the SP140 build flags in `platformio.ini`
+when building firmware for a bench. After the controller has booted and is
+disarmed, send this JSON line over USB serial at 115200 baud with a newline:
+
+```json
+{"command":"ble_pair"}
+```
+
+The command clears the saved Bluetooth bond and opens the standard 60-second
+pairing window. A request during an active pairing window leaves that window
+open without restarting it. Keep the flag disabled in production builds so
+replacing a saved phone still requires the physical pairing button hold.
+
 ## Help improve these docs
 
 Pull requests are welcome for these instructions and code changes.

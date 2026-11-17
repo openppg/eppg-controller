@@ -3,6 +3,9 @@
 
 #include "Arduino.h"
 #include <ArduinoJson.h>
+#if defined(OPENPPG_USB_BENCH_PAIRING)
+#include <atomic>
+#endif
 #include "sp140/device_settings.h"
 #include "sp140/globals.h"
 #include "../../inc/sp140/esp32s3-config.h"
@@ -36,6 +39,8 @@
  * Available Commands:
  * - "rbl": Reboot to bootloader for firmware updates
  * - "sync": Request current device settings and state
+ * - "ble_pair": Bench builds only. Request the standard 60-second BLE pairing
+ *   window over USB while disarmed. Opening pairing clears the previous bond.
  *
  * Response Format for sync command:
  * {
@@ -99,8 +104,17 @@ constexpr size_t kWebSerialCommandBufferSize = 256;
 char gWebSerialCommandBuffer[kWebSerialCommandBufferSize] = {};
 size_t gWebSerialCommandLength = 0;
 bool gWebSerialCommandOverflow = false;
+#if defined(OPENPPG_USB_BENCH_PAIRING)
+std::atomic<bool> gUSBPairingRequested{false};
+#endif
 
 }  // namespace
+
+#if defined(OPENPPG_USB_BENCH_PAIRING)
+bool takeUSBPairingRequest() {
+  return gUSBPairingRequested.exchange(false, std::memory_order_relaxed);
+}
+#endif
 
 // Read saved data from NVS (same key layout the write path and older
 // Preferences-based firmware use, so field devices stay compatible).
@@ -289,6 +303,13 @@ void parse_serial_command_line(const char* json_line) {
 
   if (!doc["command"].isNull()) {
     String command = doc["command"].as<String>();
+
+#if defined(OPENPPG_USB_BENCH_PAIRING)
+    if (command == "ble_pair") {
+      gUSBPairingRequested.store(true, std::memory_order_relaxed);
+      return;
+    }
+#endif
 
     if (command == "reboot") {
       USBSerial.println("Rebooting");
