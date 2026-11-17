@@ -2,14 +2,26 @@
 #include "sp140/throttle.h"
 #include "sp140/shared-config.h"
 #include "sp140/esp32s3-config.h"
-#include <CircularBuffer.hpp>
+#include "sp140/ring_buffer.h"
 
 // Access board configuration from main unit
 extern HardwareConfig board_config;
 
 // Internal PWM smoothing buffer (8 samples)
-static CircularBuffer<int, 8> pwmBuffer;
+static FixedRingBuffer<int, 8> pwmBuffer;
 static volatile uint16_t last_pot_raw = 0;
+
+// Guards pwmBuffer. The throttle task pushes and averages it every tick while
+// the button task clears/refills it on disarm and cruise exit, and the buffer's
+// head/tail/count updates are not atomic. Sections are a few instructions long.
+#if defined(ARDUINO_ARCH_ESP32)
+static portMUX_TYPE pwmBufferMux = portMUX_INITIALIZER_UNLOCKED;
+#define PWM_BUFFER_LOCK() portENTER_CRITICAL(&pwmBufferMux)
+#define PWM_BUFFER_UNLOCK() portEXIT_CRITICAL(&pwmBufferMux)
+#else
+#define PWM_BUFFER_LOCK()
+#define PWM_BUFFER_UNLOCK()
+#endif
 
 /**
  * Throttle easing function based on threshold/performance mode
@@ -85,27 +97,8 @@ int applyModeRampClamp(int pwmAvg, int& prevPwm, uint8_t performance_mode) {
 }
 
 // Buffer helpers
-/** Clear all samples from the internal PWM smoothing buffer. */
-void throttleFilterClear() {
-  pwmBuffer.clear();
-}
-
-/** Clear and pre-fill the buffer with the given PWM value for smooth transitions. */
-void throttleFilterReset(int pwmValue) {
-  pwmBuffer.clear();
-  // Use while loop - cleaner for filling to capacity
-  while (!pwmBuffer.isFull()) {
-    pwmBuffer.push(pwmValue);
-  }
-}
-
-/** Push a new PWM sample into the smoothing buffer. */
-void throttleFilterPush(int pwmValue) {
-  pwmBuffer.push(pwmValue);
-}
-
-/** Average and return the current PWM from the smoothing buffer. */
-int throttleFilterAverage() {
+// Caller must hold the pwmBuffer lock.
+static int pwmBufferAverageLocked() {
   if (pwmBuffer.isEmpty()) return 0;
 
   // Use int32_t for clarity and avoid casts
@@ -114,6 +107,39 @@ int throttleFilterAverage() {
     sum += pwmBuffer[i];
   }
   return sum / pwmBuffer.size();  // Integer division is fine for PWM values
+}
+
+/** Clear all samples from the internal PWM smoothing buffer. */
+void throttleFilterClear() {
+  PWM_BUFFER_LOCK();
+  pwmBuffer.clear();
+  PWM_BUFFER_UNLOCK();
+}
+
+/** Clear and pre-fill the buffer with the given PWM value for smooth transitions. */
+void throttleFilterReset(int pwmValue) {
+  PWM_BUFFER_LOCK();
+  pwmBuffer.clear();
+  // Use while loop - cleaner for filling to capacity
+  while (!pwmBuffer.isFull()) {
+    pwmBuffer.push(pwmValue);
+  }
+  PWM_BUFFER_UNLOCK();
+}
+
+/** Push a new PWM sample into the smoothing buffer. */
+void throttleFilterPush(int pwmValue) {
+  PWM_BUFFER_LOCK();
+  pwmBuffer.push(pwmValue);
+  PWM_BUFFER_UNLOCK();
+}
+
+/** Average and return the current PWM from the smoothing buffer. */
+int throttleFilterAverage() {
+  PWM_BUFFER_LOCK();
+  int avg = pwmBufferAverageLocked();
+  PWM_BUFFER_UNLOCK();
+  return avg;
 }
 
 /**
@@ -130,9 +156,13 @@ int getSmoothedThrottlePwm(uint8_t performance_mode) {
   int potValRaw = readThrottleRaw();
   int targetPwm = potRawToModePwm(potValRaw, performance_mode);
 
-  // Smooth in PWM domain using ring buffer
-  throttleFilterPush(targetPwm);
-  return throttleFilterAverage();
+  // Smooth in PWM domain using ring buffer. Push and average under one lock
+  // so a clear from another task cannot land between them.
+  PWM_BUFFER_LOCK();
+  pwmBuffer.push(targetPwm);
+  int avg = pwmBufferAverageLocked();
+  PWM_BUFFER_UNLOCK();
+  return avg;
 }
 
 /**
@@ -150,6 +180,24 @@ void resetThrottleState(int& prevPwm) {
  */
 bool isCruiseOutputAllowed(uint16_t pwm) {
   return pwm <= CRUISE_MAX_PWM;
+}
+
+bool isCruiseSetpointAllowed(uint16_t pwm) {
+  return pwm >= ESC_MIN_PWM && isCruiseOutputAllowed(pwm);
+}
+
+int cruiseOutputTick(bool entering, const uint16_t* requested, uint16_t& setpoint,
+                     int& prevPwm, uint8_t performance_mode) {
+  if (entering) {
+    // Hold exactly the output already being flown. The button refused anything
+    // above CRUISE_MAX_PWM; the cap only covers output that rose in the one
+    // tick since that check.
+    setpoint = (prevPwm < CRUISE_MAX_PWM) ? prevPwm : CRUISE_MAX_PWM;
+  }
+  if (requested != nullptr && isCruiseSetpointAllowed(*requested)) {
+    setpoint = *requested;
+  }
+  return applyModeRampClamp(setpoint, prevPwm, performance_mode);
 }
 
 /**

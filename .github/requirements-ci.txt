@@ -1,0 +1,5 @@
+# Versions of the Python tools CI installs, used as a pip constraints file
+# (pip install -c). Dependabot keeps these current.
+platformio==6.2.0
+cpplint==2.0.2
+esptool==5.6.0

@@ -3,7 +3,6 @@
 #include "sp140/esc_config_relay.h"
 #include "sp140/esc_flasher_relay.h"
 #include "sp140/time_utils.h"
-#include <CircularBuffer.hpp>
 
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 #include "driver/twai.h"
@@ -17,6 +16,26 @@
 static CanardAdapter adapter;
 static uint8_t memory_pool[1024] __attribute__((aligned(8)));
 static SineEsc esc(adapter);
+
+// The pinned CanardAdapter has no call to drop queued transfers. A node
+// registered on it shares its libcanard instance, so this one does only that;
+// it accepts no incoming transfers.
+class EscTxQueueFlusher : public CanardAdapterNode {
+ public:
+  explicit EscTxQueueFlusher(CanardAdapter& a) : CanardAdapterNode(a) {}
+  void begin() { _beginNode(); }
+  void flush() {
+    if (_canard == NULL) { return; }  // NOLINT(whitespace/newline)
+    while (canardPeekTxQueue(_canard) != NULL) {
+      canardPopTxQueue(_canard);
+    }
+  }
+  bool shouldAcceptTransfer(uint64_t*, uint16_t, CanardTransferType, uint8_t) override {
+    return false;
+  }
+  void onTransferReceived(CanardRxTransfer*) override {}
+};
+static EscTxQueueFlusher txQueueFlusher(adapter);
 
 // Expose the single shared adapter to the ESC config relay module.
 CanardAdapter& escAdapter() { return adapter; }
@@ -38,11 +57,8 @@ static unsigned long sLastStatusLightSendMs = 0;
 static bool sHaveSentStatusLight = false;
 static volatile PendingEscTone sPendingEscTone = PendingEscTone::NONE;
 
-// ESC runtime accumulation — unwraps the uint16 time_10ms counter (~10.9 min period)
-// Unsigned subtraction naturally handles wrap: (uint16_t)(current - last) is correct even across rollover.
-static uint16_t sEscLastTime10ms = 0;
-static uint32_t sEscAccumulatedRuntimeMs = 0;
-static bool sEscFirstUpdate = true;
+// ESC runtime accumulation + stale-data guard (see esc_telemetry_logic.h)
+static EscRuntimeTracker sEscRuntime;
 
 namespace {
 
@@ -206,6 +222,7 @@ void initESC() {
   adapter.begin(memory_pool, sizeof(memory_pool));
   adapter.setLocalNodeId(LOCAL_NODE_ID);
   esc.begin(0x20);  // Default ID for the ESC
+  txQueueFlusher.begin();
 
   // Set idle throttle only if ESC is found
   const uint16_t IdleThrottle_us = 10000;  // 1000us (0.1us resolution)
@@ -242,13 +259,32 @@ void setESCThrottle(int throttlePWM) {
   // are not going out: discard them and keep only current commands.
   static uint8_t pendingCycles = 0;
   twai_status_info_t status;
-  if (twai_get_status_info(&status) == ESP_OK && status.msgs_to_tx > 0) {
+  const bool haveStatus = twai_get_status_info(&status) == ESP_OK;
+  if (haveStatus && status.msgs_to_tx > 0) {
     if (pendingCycles < 2) { pendingCycles++; }  // NOLINT(whitespace/newline)
   } else {
     pendingCycles = 0;
   }
   if (pendingCycles >= 2) {
-    twai_clear_transmit_queue();
+    // twai_clear_transmit_queue() leaves the frame already loaded in the
+    // controller's transmit buffer, which is retried until something
+    // acknowledges it: the ESC would act on that command, from when it went
+    // silent, as soon as it is back. twai_stop() puts the controller in reset
+    // mode, which halts that transmission and empties the queue (IDF 4.4.7
+    // twai_stop/twai_hal_stop); twai_start() puts it straight back on the bus.
+    // Only valid while RUNNING; otherwise bus-off recovery owns the driver.
+    if (twai_stop() == ESP_OK) {
+      twai_start();
+    } else {
+      twai_clear_transmit_queue();
+    }
+  }
+  // The transport keeps every transfer the driver refused; while the
+  // controller is off the bus (bus-off, recovering, stopped) that is every
+  // command, so the 1 KiB pool fills with old ones, the current one is refused,
+  // and the old ones go out first once the driver is back. Drop them too.
+  if (pendingCycles >= 2 || (haveStatus && status.state != TWAI_STATE_RUNNING)) {
+    txQueueFlusher.flush();
   }
 
   // Direct calculation: multiply by 10 to convert μs to 0.1μs resolution
@@ -287,22 +323,12 @@ void readESCTelemetry() {
   if (model.hasSetThrottleSettings2Response) {
     const sine_esc_SetThrottleSettings2Response *res = &model.setThrottleSettings2Response;
 
-    uint16_t rawTime10ms = res->time_10ms;
-
-    // Check if the timestamp from the ESC has actually changed (stale-data guard)
-    if (rawTime10ms != sEscLastTime10ms) {
-      // Unwrap the uint16 counter using unsigned subtraction — naturally correct across rollover.
-      // e.g. last=65000, current=100: (uint16_t)(100-65000) = 636 ticks = 6360ms elapsed.
-      if (!sEscFirstUpdate) {
-        uint16_t deltaTicks = rawTime10ms - sEscLastTime10ms;
-        sEscAccumulatedRuntimeMs += (uint32_t)deltaTicks * 10UL;
-      }
-      sEscFirstUpdate = false;
-      sEscLastTime10ms = rawTime10ms;
-
+    // Only a changed time_10ms counter means a new frame (stale-data guard);
+    // it also accumulates runtime across the uint16 rollover.
+    if (escRuntimeOnFrame(sEscRuntime, res->time_10ms)) {
       // Timestamp is new, process the telemetry data
-      escTelemetryData.lastUpdateMs = sEscAccumulatedRuntimeMs;
-      escTelemetryData.esc_runtime_ms = sEscAccumulatedRuntimeMs;
+      escTelemetryData.lastUpdateMs = sEscRuntime.accumulatedMs;
+      escTelemetryData.esc_runtime_ms = sEscRuntime.accumulatedMs;
 
       // Update telemetry data
       escTelemetryData.volts = res->voltage / 10.0f;
@@ -310,15 +336,8 @@ void readESCTelemetry() {
       escTelemetryData.mos_temp = res->mos_temp / 10.0f;
       escTelemetryData.cap_temp = res->cap_temp / 10.0f;
       escTelemetryData.mcu_temp = res->mcu_temp / 10.0f;
-      // Filter motor temp - only update if sensor is connected (valid range: -20°C to 140°C)
-      // Disconnected sensor reads ~149°C (thermistor pulled high)
-      float rawMotorTemp = res->motor_temp / 10.0f;
-      if (isMotorTempValidC(rawMotorTemp)) {
-        escTelemetryData.motor_temp = rawMotorTemp;
-      } else {
-        // Store invalid motor temp as NaN. Downstream consumers can skip on isnan().
-        escTelemetryData.motor_temp = NAN;
-      }
+      // Disconnected motor thermistor (~149°C) or out-of-range -> NaN
+      escTelemetryData.motor_temp = sanitizeMotorTempC(res->motor_temp / 10.0f);
       escTelemetryData.phase_current = res->current / 10.0f;
       escTelemetryData.eRPM = res->speed;
       escTelemetryData.inPWM = res->recv_pwm / 10.0f;
@@ -341,16 +360,14 @@ void readESCTelemetry() {
 
   // Update connection state based on time since last successful communication
   unsigned long currentTimeMs = timeMillis();
-  if (lastSuccessfulCommTimeMs == 0 || (currentTimeMs - lastSuccessfulCommTimeMs) > TELEMETRY_TIMEOUT_MS) {
+  if (escTelemetryTimedOut(currentTimeMs, lastSuccessfulCommTimeMs, TELEMETRY_TIMEOUT_MS)) {
     if (escTelemetryData.escState != TelemetryState::NOT_CONNECTED) {
       // Log state change only if it actually changed
       USBSerial.printf("ESC State: %d -> NOT_CONNECTED (Timeout)\n", static_cast<int>(escTelemetryData.escState));
       escTelemetryData.escState = TelemetryState::NOT_CONNECTED;
-      // Reset runtime accumulator so it restarts from zero on reconnect.
-      // Keep sEscLastTime10ms at its last real value so the stale-data guard
-      // continues to reject the unchanged res->time_10ms from the SINE library.
-      sEscAccumulatedRuntimeMs = 0;
-      sEscFirstUpdate = true;
+      // Restart runtime from zero on reconnect; the stale-data guard keeps
+      // rejecting the unchanged res->time_10ms from the SINE library.
+      escRuntimeOnDisconnect(sEscRuntime);
     }
   } else {
     if (escTelemetryData.escState != TelemetryState::CONNECTED) {
@@ -477,335 +494,4 @@ bool setupTWAI() {
   }
 
   return true;
-}
-
-/**
- * Debug function to dump ESC throttle response data to serial
- * @param res Pointer to the throttle response structure from ESC
- */
-void dumpThrottleResponse(const sine_esc_SetThrottleSettings2Response *res) {
-  USBSerial.println("Got SetThrottleSettings2 response");
-
-  USBSerial.print("\trecv_pwm: ");
-  USBSerial.println(res->recv_pwm);
-
-  USBSerial.print("\tcomm_pwm: ");
-  USBSerial.println(res->comm_pwm);
-
-  USBSerial.print("\tspeed: ");
-  USBSerial.println(res->speed);
-
-  USBSerial.print("\tcurrent: ");
-  USBSerial.println(res->current);
-
-  USBSerial.print("\tbus_current: ");
-  USBSerial.println(res->bus_current);
-
-  USBSerial.print("\tvoltage: ");
-  USBSerial.println(res->voltage);
-
-  USBSerial.print("\tv_modulation: ");
-  USBSerial.println(res->v_modulation);
-
-  USBSerial.print("\tmos_temp: ");
-  USBSerial.println(res->mos_temp);
-
-  USBSerial.print("\tcap_temp: ");
-  USBSerial.println(res->cap_temp);
-
-  USBSerial.print("\tmcu_temp: ");
-  USBSerial.println(res->mcu_temp);
-
-  USBSerial.print("\trunning_error: ");
-  USBSerial.print(res->running_error);
-  USBSerial.print(" (");
-  USBSerial.print(decodeRunningError(res->running_error));
-  USBSerial.println(")");
-
-  USBSerial.print("\tselfcheck_error: ");
-  USBSerial.print(res->selfcheck_error);
-  USBSerial.print(" (");
-  USBSerial.print(decodeSelfCheckError(res->selfcheck_error));
-  USBSerial.println(")");
-
-  USBSerial.print("\tmotor_temp: ");
-  USBSerial.println(res->motor_temp);
-
-  USBSerial.print("\ttime_10ms: ");
-  USBSerial.println(res->time_10ms);
-}
-
-/**
- * Debug function to dump all available ESC messages to serial
- * Displays hardware info, throttle response, and rotation speed settings if available
- */
-void dumpESCMessages(void) {
-  const SineEscModel &model = esc.getModel();
-
-  if (model.hasGetHardwareInfoResponse) {
-    USBSerial.println("Got HwInfo response");
-
-    const sine_esc_GetHwInfoResponse *b = &model.getHardwareInfoResponse;
-    USBSerial.print("\thardware_id: ");
-    USBSerial.println(b->hardware_id, HEX);
-    USBSerial.print("\tbootloader_version: ");
-    USBSerial.println(b->bootloader_version, HEX);
-    USBSerial.print("\tapp_version: ");
-    USBSerial.println(b->app_version, HEX);
-  }
-
-  if (model.hasSetThrottleSettings2Response) {
-    dumpThrottleResponse(&model.setThrottleSettings2Response);
-  }
-
-  if (model.hasSetRotationSpeedSettingsResponse) {
-    USBSerial.println("Got SetRotationSpeedSettings response");
-  }
-}
-
-/**
- * Map a double value from one range to another
- * @param x Input value to map
- * @param in_min Minimum of input range
- * @param in_max Maximum of input range
- * @param out_min Minimum of output range
- * @param out_max Maximum of output range
- * @return Mapped value in output range
- */
-double mapDouble(double x, double in_min, double in_max, double out_min, double out_max) {
-  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
-}
-
-/**
- * Decode running error bitmask into human-readable string
- * @param errorCode 16-bit running error code from ESC
- * @return String containing decoded error messages
- */
-String decodeRunningError(uint16_t errorCode) {
-  if (errorCode == 0) {
-    return "no_errors";
-  }
-
-  String result = "";
-  bool firstError = true;
-
-  // Define error messages for each bit
-  const char* errorMessages[] = {
-    "over_current_protect",           // Bit 0: Over current/short circuit protection occurs
-    "locked_rotor_protect",           // Bit 1: Locked-rotor protection occurs
-    "over_temp_protect",              // Bit 2: Over-temperature protection
-    "pwm_throttle_lost",              // Bit 3: PWM throttle lost pulse
-    "no_load",                        // Bit 4: No load
-    "throttle_saturation",            // Bit 5: Throttle saturation
-    "over_volt_protect",              // Bit 6: Over voltage protection
-    "voltage_drop",                   // Bit 7: Voltage drop
-    "comm_throttle_loss",             // Bit 8: Communication throttle loss
-    "undef_9",                        // Bit 9: Undefined
-    "undef_10",                       // Bit 10: Undefined
-    "undef_11",                       // Bit 11: Undefined
-    "undef_12",                       // Bit 12: Undefined
-    "undef_13",                       // Bit 13: Undefined
-    "undef_14",                       // Bit 14: Undefined
-    "undef_15"                        // Bit 15: Undefined
-  };
-
-  for (int i = 0; i < 16; i++) {
-    if (errorCode & (1 << i)) {
-      if (!firstError) {
-        result += ", ";
-      }
-      result += errorMessages[i];
-      firstError = false;
-    }
-  }
-
-  return result;
-}
-
-/**
- * Decode self-check error bitmask into human-readable string
- * @param errorCode 16-bit self-check error code from ESC
- * @return String containing decoded error messages
- */
-String decodeSelfCheckError(uint16_t errorCode) {
-  if (errorCode == 0) {
-    return "no_errors";
-  }
-
-  String result = "";
-  bool firstError = true;
-
-  // Define error messages for each bit
-  const char* errorMessages[] = {
-    "motor_i_out_bad",                     // Bit 0: Motor line current output abnormal
-    "total_i_out_bad",                     // Bit 1: Total current output abnormal
-    "motor_v_out_bad",                     // Bit 2: Motor line voltage abnormal
-    "cap_ntc_bad",                         // Bit 3: Electrolytic capacitor NTC output abnormal
-    "mos_ntc_bad",                         // Bit 4: MOS Tube NTC output abnormal
-    "bus_v_range",                         // Bit 5: Bus voltage over/under voltage
-    "bus_v_sample_bad",                    // Bit 6: Bus voltage sampling abnormal
-    "motor_z_too_low",                     // Bit 7: Motor wire loop impedance too low
-    "motor_z_too_high",                    // Bit 8: Motor wire loop impedance too large
-    "motor_v_det1_bad",                    // Bit 9: Motor line voltage detection circuit abnormal 1
-    "motor_v_det2_bad",                    // Bit 10: Motor line voltage detection circuit abnormal 2
-    "motor_i_det2_bad",                    // Bit 11: Motor line current detection circuit abnormal 02
-    "undef_12",                            // Bit 12: undefined
-    "sw_hw_incompatible",                  // Bit 13: Software and hardware versions incompatible
-    "bootloader_unsupported",              // Bit 14: Boot loader unsupported
-    "undef_15"                             // Bit 15: Undefined
-  };
-
-  for (int i = 0; i < 16; i++) {
-    if (errorCode & (1 << i)) {
-      if (!firstError) {
-        result += ", ";
-      }
-      result += errorMessages[i];
-      firstError = false;
-    }
-  }
-
-  return result;
-}
-
-/**
- * Check if there are any running errors
- * @param errorCode 16-bit running error code from ESC
- * @return true if any error bits are set
- */
-bool hasRunningError(uint16_t errorCode) {
-  return errorCode != 0;
-}
-
-/**
- * Check if there are any self-check errors
- * @param errorCode 16-bit self-check error code from ESC
- * @return true if any error bits are set
- */
-bool hasSelfCheckError(uint16_t errorCode) {
-  return errorCode != 0;
-}
-
-/**
- * Check if there are any critical running errors
- * Critical errors are high-priority faults that require immediate attention
- * @param errorCode 16-bit running error code from ESC
- * @return true if any critical error bits are set
- */
-bool hasCriticalRunningError(uint16_t errorCode) {
-  // Define critical error bits (High level errors from documentation)
-  // Bits 0,1,2,6,7 are High priority and relevant for CAN communication
-  const uint16_t criticalBits = 0x00C7;  // Bits 0,1,2,6,7 (High priority)
-  // Excluded bits:
-  // - Bit 3 (pwm_throttle_lost): Not relevant for CAN communication
-  // - Bit 4 (no_load): Low priority
-  // - Bit 5 (throttle_saturation): Middle priority
-  // - Bit 8 (comm_throttle_loss): Low priority, expected with CAN
-
-  return (errorCode & criticalBits) != 0;
-}
-
-/**
- * Check if there are any warning-level running errors
- * Warning errors are middle-priority faults that should be monitored but aren't critical
- * @param errorCode 16-bit running error code from ESC
- * @return true if any warning error bits are set
- */
-bool hasWarningRunningError(uint16_t errorCode) {
-  // Bit 5 (throttle_saturation) is Middle priority - treat as warning
-  const uint16_t warningBits = 0x0020;  // Bit 5 only
-
-  return (errorCode & warningBits) != 0;
-}
-
-/**
- * Check if there are any critical self-check errors
- * All self-check errors are considered critical as they indicate hardware issues
- * @param errorCode 16-bit self-check error code from ESC
- * @return true if any error bits are set (all self-check errors are critical)
- */
-bool hasCriticalSelfCheckError(uint16_t errorCode) {
-  return errorCode != 0;  // All self-check errors are critical
-}
-
-// Individual error bit checkers for specific monitoring
-bool hasOverCurrentError(uint16_t errorCode) {
-  return (errorCode & 0x0001) != 0;  // Bit 0
-}
-
-bool hasLockedRotorError(uint16_t errorCode) {
-  return (errorCode & 0x0002) != 0;  // Bit 1
-}
-
-bool hasOverTempError(uint16_t errorCode) {
-  return (errorCode & 0x0004) != 0;  // Bit 2
-}
-
-bool hasOverVoltError(uint16_t errorCode) {
-  return (errorCode & 0x0040) != 0;  // Bit 6
-}
-
-bool hasVoltagDropError(uint16_t errorCode) {
-  return (errorCode & 0x0080) != 0;  // Bit 7
-}
-
-bool hasThrottleSatWarning(uint16_t errorCode) {
-  return (errorCode & 0x0020) != 0;  // Bit 5
-}
-
-// Individual self-check error bit checkers
-bool hasMotorCurrentOutError(uint16_t errorCode) {
-  return (errorCode & 0x0001) != 0;  // Bit 0
-}
-
-bool hasTotalCurrentOutError(uint16_t errorCode) {
-  return (errorCode & 0x0002) != 0;  // Bit 1
-}
-
-bool hasMotorVoltageOutError(uint16_t errorCode) {
-  return (errorCode & 0x0004) != 0;  // Bit 2
-}
-
-bool hasCapNTCError(uint16_t errorCode) {
-  return (errorCode & 0x0008) != 0;  // Bit 3
-}
-
-bool hasMosNTCError(uint16_t errorCode) {
-  return (errorCode & 0x0010) != 0;  // Bit 4
-}
-
-bool hasBusVoltRangeError(uint16_t errorCode) {
-  return (errorCode & 0x0020) != 0;  // Bit 5
-}
-
-bool hasBusVoltSampleError(uint16_t errorCode) {
-  return (errorCode & 0x0040) != 0;  // Bit 6
-}
-
-bool hasMotorZLowError(uint16_t errorCode) {
-  return (errorCode & 0x0080) != 0;  // Bit 7
-}
-
-bool hasMotorZHighError(uint16_t errorCode) {
-  return (errorCode & 0x0100) != 0;  // Bit 8
-}
-
-bool hasMotorVDet1Error(uint16_t errorCode) {
-  return (errorCode & 0x0200) != 0;  // Bit 9
-}
-
-bool hasMotorVDet2Error(uint16_t errorCode) {
-  return (errorCode & 0x0400) != 0;  // Bit 10
-}
-
-bool hasMotorIDet2Error(uint16_t errorCode) {
-  return (errorCode & 0x0800) != 0;  // Bit 11
-}
-
-bool hasSwHwIncompatError(uint16_t errorCode) {
-  return (errorCode & 0x2000) != 0;  // Bit 13
-}
-
-bool hasBootloaderBadError(uint16_t errorCode) {
-  return (errorCode & 0x4000) != 0;  // Bit 14
 }

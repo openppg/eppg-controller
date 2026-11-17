@@ -11,6 +11,7 @@
 #include "freertos/semphr.h"
 #include "../../inc/sp140/throttle.h"
 #include "../../inc/sp140/diagnostics.h"
+#include "../../inc/sp140/factory_settings.h"
 
 /**
  * WebSerial Protocol Documentation
@@ -298,6 +299,16 @@ void parse_serial_command_line(const char* json_line) {
     } else if (command == "sync") {
       send_device_data();
       return;
+    } else if (command == "run_qc") {
+      // Deliberate bench/field-service action: set the factory rerun flag and
+      // reboot. The QC gate consumes the flag on the next boot — this is one
+      // of exactly two QC entry paths (the other is truly fresh NVS).
+      USBSerial.println(F("QC rerun requested - rebooting into factory QC"));
+      factorySetRerunFlag();
+      diagnosticsMarkPlannedRestart(
+          PlannedRestartReason::USB_COMMAND_REBOOT);
+      ESP.restart();
+      return;
     } else if (command == "diag_sync") {
       diagnosticsSendJson(USBSerial);
       USBSerial.println();
@@ -428,7 +439,8 @@ bool sanitizeDeviceData() {
   // Ensure sea pressure is within acceptable limits, default to 1013.25
   // 337 is the air pressure at the top of Mt. Everest
   // 1065 is the air pressure at the dead sea. Pad both a bit
-  if (deviceData.sea_pressure < 300 || deviceData.sea_pressure > 1200) {
+  // Written as a "within range" test so NaN fails it too.
+  if (!(deviceData.sea_pressure >= 300 && deviceData.sea_pressure <= 1200)) {
     deviceData.sea_pressure = 1013.25;
     changed = true;
   }
@@ -453,39 +465,4 @@ bool sanitizeDeviceData() {
     changed = true;
   }
   return changed;
-}
-
-/**
- * Prints the hardware configuration to the Serial monitor.
- *
- * @param config The HardwareConfig object containing the hardware configuration.
- */
-void debugHardwareConfig(const HardwareConfig& config) {
-  USBSerial.println("Hardware Configuration:");
-  USBSerial.print("button_top: ");
-  USBSerial.println(config.button_top);
-  USBSerial.print("buzzer_pin: ");
-  USBSerial.println(config.buzzer_pin);
-  USBSerial.print("led_sw: ");
-  USBSerial.println(config.led_sw);
-  USBSerial.print("throttle_pin: ");
-  USBSerial.println(config.throttle_pin);
-  USBSerial.print("bmp_pin: ");
-  USBSerial.println(config.bmp_pin);
-  USBSerial.print("tft_rst: ");
-  USBSerial.println(config.tft_rst);
-  USBSerial.print("tft_cs: ");
-  USBSerial.println(config.tft_cs);
-  USBSerial.print("tft_dc: ");
-  USBSerial.println(config.tft_dc);
-  USBSerial.print("spi_mosi: ");
-  USBSerial.println(config.spi_mosi);
-  USBSerial.print("spi_miso: ");
-  USBSerial.println(config.spi_miso);
-  USBSerial.print("spi_sclk: ");
-  USBSerial.println(config.spi_sclk);
-  USBSerial.print("enable_vib: ");
-  USBSerial.println(config.enable_vib ? "true" : "false");
-  USBSerial.print("enable_neopixel: ");
-  USBSerial.println(config.enable_neopixel ? "true" : "false");
 }

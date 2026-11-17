@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SP140 Controller Emulator</title>
+<style>
+  :root {
+    --bg: #0e1014;
+    --panel: #161920;
+    --panel-2: #1c2029;
+    --line: #2a303c;
+    --text: #e7e9ee;
+    --muted: #8a93a5;
+    --accent: #45b5ff;
+    --good: #3ddc97;
+    --warn: #f5b942;
+    --bad: #ff6b6b;
+    --violet: #b48cff;
+    --radius: 10px;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 18px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  header .sub { color: var(--muted); }
+  .chip {
+    font: 12px var(--mono);
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--muted);
+  }
+  .chip.good { color: var(--good); border-color: #1f5d45; }
+  .chip.warn { color: var(--warn); border-color: #6b5320; }
+  .chip.bad { color: var(--bad); border-color: #6b2a2a; }
+  .spacer { flex: 1; }
+  main {
+    display: grid;
+    grid-template-columns: 520px minmax(0, 1fr);
+    gap: 14px;
+    padding: 14px;
+  }
+  @media (max-width: 1100px) { main { grid-template-columns: 1fr; } }
+  .col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+  }
+  .panel h2 {
+    margin: 0 0 10px;
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .device {
+    display: flex;
+    justify-content: center;
+    padding: 22px 0;
+    background: radial-gradient(ellipse at top, #20242e, #12141a 70%);
+  }
+  .bezel {
+    padding: 14px;
+    border-radius: 18px;
+    background: #050506;
+    box-shadow: 0 0 0 2px #2b2f38, 0 18px 40px rgba(0,0,0,.55);
+  }
+  #screen {
+    display: block;
+    width: 480px;
+    height: 384px;
+    image-rendering: pixelated;
+    border-radius: 2px;
+  }
+  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 6px 0; }
+  .row label.name { width: 108px; color: var(--muted); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    background: var(--panel-2);
+    color: var(--muted);
+    border: 0;
+    border-right: 1px solid var(--line);
+    padding: 5px 10px;
+    font: inherit;
+    cursor: pointer;
+  }
+  .seg button:last-child { border-right: 0; }
+  .seg button.on { background: #1e3a52; color: var(--text); }
+  button.btn {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 5px 12px;
+    font: inherit;
+    cursor: pointer;
+  }
+  button.btn:hover, .seg button:hover { filter: brightness(1.25); }
+  select, input[type=number], input[type=file] {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 4px 6px;
+    font: inherit;
+  }
+  input[type=range] { flex: 1; min-width: 120px; accent-color: var(--accent); }
+  .val { font: 12px var(--mono); min-width: 64px; text-align: right; color: var(--text); }
+  table.read { width: 100%; border-collapse: collapse; font: 12px var(--mono); }
+  table.read th { text-align: left; color: var(--muted); font-weight: 400; padding: 3px 0; font-family: system-ui, sans-serif; }
+  table.read td { text-align: right; padding: 3px 0 3px 10px; }
+  table.read thead th { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  table.read tr + tr th, table.read tr + tr td { border-top: 1px solid #20242d; }
+  .good { color: var(--good); }
+  .warn { color: var(--warn); }
+  .bad { color: var(--bad); }
+  .muted { color: var(--muted); }
+  .charts { display: grid; grid-template-columns: 1fr; gap: 10px; }
+  .chart { width: 100%; height: 150px; display: block; }
+  .curves { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 800px) { .curves { grid-template-columns: 1fr; } }
+  .curve { width: 100%; height: 240px; display: block; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+  .hidden { display: none !important; }
+  details.panel > summary { cursor: pointer; color: var(--muted); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; }
+  details.panel[open] > summary { margin-bottom: 8px; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 4px 24px; }
+  .progress { flex: 1; height: 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; cursor: pointer; position: relative; min-width: 160px; }
+  .progress > div { position: absolute; inset: 0 auto 0 0; background: var(--accent); border-radius: 999px; }
+  .note { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+  .meta { font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>SP140 hand controller emulator</h1>
+  <span class="sub">real firmware UI · climb efficiency lab</span>
+  <span class="spacer"></span>
+  <span class="chip" id="chipTime">t 00:00</span>
+  <span class="chip" id="chipPhase">NO_DATA</span>
+  <span class="chip" id="chipConn">connecting…</span>
+</header>
+
+<main>
+  <section class="col">
+    <div class="panel device">
+      <div class="bezel"><canvas id="screen" width="160" height="128"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <h2>Climb efficiency power bar</h2>
+      <div class="row">
+        <label class="name">Power bar</label>
+        <div class="seg" id="barSeg"><button data-v="1">On</button><button data-v="0">Off</button></div>
+      </div>
+      <div class="row">
+        <label class="name">Theme</label>
+        <div class="seg" id="themeSeg"><button data-v="1">Dark</button><button data-v="0">Light</button></div>
+        <label class="name" style="width:auto">Units</label>
+        <div class="seg" id="unitSeg"><button data-v="1">m</button><button data-v="0">ft</button></div>
+        <div class="seg" id="perfSeg"><button data-v="0">Chill</button><button data-v="1">Sport</button></div>
+      </div>
+      <p class="note">Under the kW: the <span style="color:#3ddc97">green band</span> is the power range within 5% of the best climb per Wh,
+        the <span style="color:#ff50be">pink tick</span> (with certainty brackets) is the power that holds level flight,
+        <span style="color:#f5b942">yellow</span> / <span style="color:#ff6b6b">red</span> are powers that would reach a warning / critical
+        temperature if held for a sustained climb, and the white tick is current power.</p>
+    </div>
+
+    <div class="panel">
+      <h2>Estimator vs truth</h2>
+      <table class="read">
+        <thead><tr><th></th><td class="muted">firmware</td><td class="muted">truth (sim)</td></tr></thead>
+        <tbody>
+          <tr><th>Phase</th><td id="rPhase">–</td><td></td></tr>
+          <tr><th>Climb, window (m/s)</th><td id="rClimb">–</td><td id="tClimb">–</td></tr>
+          <tr><th>Power, window (kW)</th><td id="rPower">–</td><td id="tPower">–</td></tr>
+          <tr><th>Power spread (CV)</th><td id="rCv">–</td><td></td></tr>
+          <tr><th>Climb yield (m/Wh)</th><td id="rYield">–</td><td id="tYield">–</td></tr>
+          <tr><th>Yield vs best</th><td id="rRel">–</td><td id="tRel">–</td></tr>
+          <tr><th>Best-climb power (kW)</th><td id="rBest">–</td><td id="tBest">–</td></tr>
+          <tr><th>Sweet-spot band (kW)</th><td id="rBand">–</td><td id="tBand">–</td></tr>
+          <tr><th>Level-flight power (kW)</th><td id="rLevel">–</td><td id="tLevel">–</td></tr>
+          <tr><th>Hold 5 min → warn / crit</th><td id="rHeat">–</td><td id="tHeat"></td></tr>
+          <tr><th>Learned points</th><td id="rLearned">–</td><td></td></tr>
+        </tbody>
+      </table>
+      <h2 style="margin-top:14px">Bar markers</h2>
+      <table class="read">
+        <tbody>
+          <tr><th>Pink tick first shown</th><td id="sLevelAt">–</td></tr>
+          <tr><th>Green band first shown</th><td id="sBandAt">–</td></tr>
+          <tr><th>Pink tick drift, last 60 s (kW)</th><td id="sLevelDrift">–</td></tr>
+          <tr><th>Band edge drift, last 60 s (kW)</th><td id="sBandDrift">–</td></tr>
+          <tr><th>Level error vs truth (kW)</th><td id="sLevelErr">–</td></tr>
+          <tr><th>Best-power error vs truth (kW)</th><td id="sBestErr">–</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="col">
+    <div class="panel">
+      <div class="tabs">
+        <div class="seg" id="sourceSeg"><button data-v="sim">Simulator</button><button data-v="replay">Replay flight log</button></div>
+        <span class="spacer"></span>
+        <button class="btn" id="playBtn">Pause</button>
+        <div class="seg" id="speedSeg">
+          <button data-v="1">1×</button><button data-v="2">2×</button><button data-v="5">5×</button><button data-v="10">10×</button><button data-v="30">30×</button>
+        </div>
+        <select id="spanSel" title="Chart span">
+          <option value="120">2 min</option>
+          <option value="300" selected>5 min</option>
+          <option value="600">10 min</option>
+          <option value="1800">30 min</option>
+        </select>
+      </div>
+
+      <div id="simControls">
+        <div class="row">
+          <label class="name">Scenario</label>
+          <select id="scenarioSel"></select>
+          <label><input type="checkbox" id="armChk" checked> Armed</label>
+          <span class="spacer"></span>
+          <label class="muted">seed <input type="number" id="seedIn" value="1" style="width:64px"></label>
+          <button class="btn" id="resetBtn">Restart flight</button>
+        </div>
+        <div class="row">
+          <label class="name">Throttle</label>
+          <input type="range" id="throttle" min="0" max="22" step="0.1" value="10">
+          <span class="val" id="throttleVal">10.0 kW</span>
+        </div>
+        <div class="row">
+          <label class="name">Wing trim</label>
+          <div class="seg" id="trimSeg"><button data-v="-1">Slow</button><button data-v="0">Neutral</button><button data-v="1">Fast</button></div>
+          <label class="name" style="width:auto">Brake</label>
+          <input type="range" id="brake" min="0" max="1" step="0.05" value="0">
+          <span class="val" id="brakeVal">0 %</span>
+        </div>
+      </div>
+
+      <div id="replayControls" class="hidden">
+        <div class="row">
+          <label class="name">Log</label>
+          <select id="logSel"><option value="">– server logs –</option></select>
+          <input type="file" id="logFile" accept=".csv">
+        </div>
+        <div class="row">
+          <div class="progress" id="progress"><div id="progressBar" style="width:0%"></div></div>
+          <span class="val" id="replayPos">–</span>
+        </div>
+        <div class="meta" id="logMeta">Pick a CSV exported by the OpenPPG app (same format as the Flight Data dashboard).</div>
+      </div>
+    </div>
+
+    <div class="panel charts">
+      <canvas class="chart" id="cPower"></canvas>
+      <canvas class="chart" id="cClimb"></canvas>
+      <canvas class="chart" id="cYield"></canvas>
+      <canvas class="chart" id="cBest"></canvas>
+    </div>
+
+    <div class="panel curves">
+      <canvas class="curve" id="cCurve"></canvas>
+      <canvas class="curve" id="cYieldCurve"></canvas>
+    </div>
+
+    <details class="panel" open>
+      <summary>Air, pilot &amp; wing (simulator)</summary>
+      <div class="grid2" id="envSliders"></div>
+    </details>
+
+    <details class="panel">
+      <summary>Estimator tuning (firmware ClimbEfficiencyConfig)</summary>
+      <div class="grid2" id="cfgSliders"></div>
+      <div class="row"><button class="btn" id="cfgApply">Apply to firmware estimator (resets it)</button></div>
+    </details>
+  </section>
+</main>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

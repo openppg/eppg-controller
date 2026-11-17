@@ -1,4 +1,6 @@
 #include "sp140/bms.h"
+#include <Adafruit_SPIDevice.h>
+#include "sp140/bms_can_rx.h"
 #include "sp140/structs.h"
 #include "sp140/globals.h"
 #include "sp140/lvgl/lvgl_core.h"  // for spiBusMutex
@@ -45,6 +47,17 @@ extern int8_t bmsCS;
 
 // BMS initialization is now handled in sp140.ino
 
+// Second handle on the BMS MCP2515 for the receive registers BMS_CAN does not
+// expose. Same chip select and SPI settings as the library's own device.
+static Adafruit_SPIDevice* bmsMcpRegs = nullptr;
+// Receive buffers found overflowed; each means at least one BMS frame dropped.
+static uint32_t bmsRxOverflows = 0;
+
+bool configureBMSCANReceive(SPIClass* spi) {
+  bmsMcpRegs = new Adafruit_SPIDevice(bmsCS, 10000000, SPI_BITORDER_MSBFIRST, SPI_MODE0, spi);
+  return bmsCanRxEnableRollover(*bmsMcpRegs);
+}
+
 // Update BMS data and populate unified battery data
 void updateBMSData() {
   // Check if BMS is currently connected and the object exists
@@ -69,13 +82,27 @@ void updateBMSData() {
   // USBSerial.println("Updating BMS Data");
   unsigned long tStart = timeMillis();
   bms_can->update();
+  // The MCP2515 holds two frames between these 100 ms drains; any more are
+  // dropped by the chip. That cannot be prevented from here, so count it.
+  const uint8_t rxOverflows =
+      (bmsMcpRegs != nullptr) ? bmsCanRxTakeOverflows(*bmsMcpRegs) : 0;
 
-  // All SPI traffic happens inside update() — the getters below only read
+  // All SPI traffic happens above — the getters below only read
   // values the library cached in RAM. Release the bus first so a pending
   // display flush waits only for the CAN drain, not the whole copy-out.
   digitalWrite(bmsCS, HIGH);
   if (spiBusMutex != NULL) {
     xSemaphoreGive(spiBusMutex);
+  }
+
+  if (rxOverflows > 0) {
+    bmsRxOverflows += rxOverflows;
+    static unsigned long lastOverflowLogMs = 0;
+    if (lastOverflowLogMs == 0 || tStart - lastOverflowLogMs >= 10000) {
+      USBSerial.printf("[BMS] CAN receive overflow, frames dropped (%lu total)\n",
+                       static_cast<unsigned long>(bmsRxOverflows));
+      lastOverflowLogMs = tStart;
+    }
   }
 
   // Basic measurements
@@ -129,31 +156,17 @@ void updateBMSData() {
     bms_can->getTemperature(4),
     bms_can->getTemperature(5)
   };
-  // Latched: once a temperature frame has ever been parsed, keep applying the
-  // disconnect policy. Re-testing the live readings every cycle would mean a
-  // later all-NaN frame (BMS temperature subsystem failed, or the BMS rebooting
-  // and broadcasting zeros) silently disables the too-many-probes-disconnected
-  // critical — total loss of the temperature path must not be silent.
+  // Latched disconnect policy (see applyCellProbeTempPolicy in bms.h).
   static bool tempFrameSeen = false;
-  if (!tempFrameSeen &&
-      bmsTempFrameSeen(bmsTelemetryData.mos_temperature,
-                       bmsTelemetryData.balance_temperature, cellTemps)) {
-    tempFrameSeen = true;
-  }
-
   float sanitizedCellTemps[BMS_CELL_PROBE_COUNT];
-  if (tempFrameSeen) {
-    sanitizeCellProbeTemps(cellTemps, sanitizedCellTemps);
+  if (applyCellProbeTempPolicy(tempFrameSeen,
+                               bmsTelemetryData.mos_temperature,
+                               bmsTelemetryData.balance_temperature,
+                               cellTemps, sanitizedCellTemps)) {
     // Emit transition logs to help field-debug intermittent probe wiring
     // issues. Only once real temp data exists — otherwise every boot would
     // log a spurious "reconnected" burst when the first frame arrives.
     logBmsCellProbeConnectionTransitions(sanitizedCellTemps);
-  } else {
-    // No temperature frame parsed yet: pass NaN through so temp monitors
-    // stay silent instead of firing the -40 disconnect sentinel.
-    for (uint8_t i = 0; i < BMS_CELL_PROBE_COUNT; i++) {
-      sanitizedCellTemps[i] = cellTemps[i];
-    }
   }
   bmsTelemetryData.t1_temperature = sanitizedCellTemps[0];
   bmsTelemetryData.t2_temperature = sanitizedCellTemps[1];
@@ -170,70 +183,5 @@ void updateBMSData() {
     USBSerial.print("Warn: BMS update slow ");
     USBSerial.print(dur);
     USBSerial.println("ms");
-  }
-  // printBMSData();
-}
-
-void printBMSData() {
-  // Check if BMS is currently connected and the object exists
-  if (bms_can == nullptr || !bmsCanInitialized) return;
-
-
-  // USBSerial.println("BMS Data:");
-  USBSerial.print("SOC: ");  // State of Charge
-  USBSerial.print(bms_can->getSOC());
-  USBSerial.println(" %");
-
-  USBSerial.print("Battery Voltage: ");
-  USBSerial.print(bms_can->getBatteryVoltage());
-  USBSerial.println(" V");
-
-  USBSerial.print("Battery Current: ");
-  USBSerial.print(bms_can->getBatteryCurrent());
-  USBSerial.println(" A");
-
-  USBSerial.print("Power: ");
-  USBSerial.print(bms_can->getPower());
-  USBSerial.println(" kW");
-
-  USBSerial.print("Highest Cell Voltage: ");
-  USBSerial.print(bms_can->getHighestCellVoltage(), 3);
-  USBSerial.println(" V");
-
-  USBSerial.print("Lowest Cell Voltage: ");
-  USBSerial.print(bms_can->getLowestCellVoltage(), 3);
-  USBSerial.println(" V");
-
-  USBSerial.print("Voltage Differential: ");
-  USBSerial.print(bms_can->getHighestCellVoltage() - bms_can->getLowestCellVoltage(), 3);
-  USBSerial.println(" V");
-
-  USBSerial.print("Discharge MOS Status: ");
-  USBSerial.println(bms_can->isDischargeMOSStatus() ? "OPEN" : "CLOSED");
-
-  USBSerial.print("Charge MOS Status: ");
-  USBSerial.println(bms_can->isChargeMOSStatus() ? "OPEN" : "CLOSED");
-
-  USBSerial.print("Battery Charging: ");
-  USBSerial.println(bms_can->isBatteryCharging() ? "YES" : "NO");
-
-  // Log each temperature sensor value
-  // The first 2 are for the BMS (mosfet and balance resistors)
-  // The next 4 are for the cell probes
-  for (uint8_t i = 0; i < 6; i++) {
-    USBSerial.print("Temperature Sensor ");
-    USBSerial.print(i);
-    USBSerial.print(": ");
-    USBSerial.print(bms_can->getTemperature(i));
-    USBSerial.println(" °C");
-  }
-
-  // Print all cell voltages
-  for (uint8_t i = 0; i < 24; i++) {
-    USBSerial.print("Cell ");
-    USBSerial.print(i + 1);
-    USBSerial.print(": ");
-    USBSerial.print(bms_can->getCellVoltage(i), 3);
-    USBSerial.println(" V");
   }
 }

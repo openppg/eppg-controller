@@ -1,6 +1,8 @@
 #ifndef INC_SP140_BLE_BLE_CORE_H_
 #define INC_SP140_BLE_BLE_CORE_H_
 
+#include <cstdint>
+
 // Core BLE helpers for initializing and maintaining the server.
 
 void setupBLE();
@@ -18,5 +20,10 @@ void requestNormalConnParams();
 // Advertising reopens for ~60 seconds then whitelisting is restored.
 void enterBLEPairingMode();
 bool isBLEPairingModeActive();
+
+// Negotiated ATT MTU of the active connection: 23 (BLE default) from connect
+// until the MTU exchange completes, then the negotiated value; 0 while
+// disconnected. Full Fast-Link telemetry notifies need MTU >= payload + 3.
+uint16_t getNegotiatedBLEMtu();
 
 #endif  // INC_SP140_BLE_BLE_CORE_H_

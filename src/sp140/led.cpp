@@ -7,12 +7,25 @@
 extern HardwareConfig board_config;
 byte ledState = LOW;
 
+// Single WS2812 status LED (GRB). Driven with the core's neopixelWrite()
+// (rgbLedWrite() on core 3),
+// which lazily claims one RMT channel on first use.
+static constexpr uint8_t kStatusNeoPixelPin = 21;
+
+static void writeStatusPixel(uint32_t color) {
+  const RgbColor rgb = unpackRgb(color);
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+  rgbLedWrite(kStatusNeoPixelPin, rgb.r, rgb.g, rgb.b);  // core 3 name
+#else
+  neopixelWrite(kStatusNeoPixelPin, rgb.r, rgb.g, rgb.b);
+#endif
+}
+
 // Set LED color for NeoPixel
 void setLEDColor(uint32_t color) {
   if (board_config.enable_neopixel) {
     led_color = color;
-    pixels.setPixelColor(0, color);
-    pixels.show();
+    writeStatusPixel(color);
   }
 }
 
@@ -27,12 +40,7 @@ void setLEDColor(uint32_t color) {
  */
 void setLEDs(byte state) {
   if (board_config.enable_neopixel) {
-    if (state == HIGH) {
-      pixels.setPixelColor(0, led_color);
-    } else {
-      pixels.clear();
-    }
-    pixels.show();
+    writeStatusPixel(state == HIGH ? led_color : 0);
   } else {
     digitalWrite(board_config.led_sw, state);
   }
