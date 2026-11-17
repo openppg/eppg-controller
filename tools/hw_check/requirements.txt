@@ -1,0 +1,5 @@
+pyserial>=3.5
+# Optional: only for --ble
+bleak>=0.22
+# Optional: only for --esptool
+esptool>=4.7
