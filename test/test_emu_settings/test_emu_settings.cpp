@@ -216,7 +216,8 @@ static void emuPowerOn() {
   s_contextCaptured = false;
   s_checkRow = 0;
   gWebSerialCommandLength = 0;
-  gWebSerialCommandOverflow = false;
+  gWebSerialDiscardLine = false;
+  takeUSBPairingRequest();
   deviceData = STR_DEVICE_DATA_140_V1();
   escTelemetryData = STR_ESC_TELEMETRY_140();
   bmsTelemetryData = STR_BMS_TELEMETRY_140();
@@ -897,6 +898,31 @@ TEST_F(SettingsEmu, SerialSettingsCommandSanitizesAndPersists) {
   EXPECT_TRUE(SameSettings(expected, readSettingsAs80()));
 }
 
+TEST_F(SettingsEmu, SerialPairingCommandQueuesOneRequestWhileDisarmed) {
+  USBSerial.feed("{\"command\":\"ble_pair\"}\n");
+  poll_serial_commands(true);
+  EXPECT_TRUE(takeUSBPairingRequest());
+  EXPECT_FALSE(takeUSBPairingRequest());
+}
+
+TEST_F(SettingsEmu, ArmedSerialInputDoesNotQueuePairingAfterDisarm) {
+  USBSerial.feed("{\"command\":\"ble_pair\"}\n");
+  poll_serial_commands(false);
+  poll_serial_commands(true);
+  EXPECT_FALSE(takeUSBPairingRequest());
+
+  USBSerial.feed("{\"command\":\"ble");
+  poll_serial_commands(true);
+  poll_serial_commands(false);
+  USBSerial.feed("_pair\"}\n");
+  poll_serial_commands(true);
+  EXPECT_FALSE(takeUSBPairingRequest());
+
+  USBSerial.feed("{\"command\":\"ble_pair\"}\n");
+  poll_serial_commands(true);
+  EXPECT_TRUE(takeUSBPairingRequest());
+}
+
 // ===========================================================================
 // First-boot QC gate (#118), booting in main.cpp order
 // ===========================================================================
@@ -1114,7 +1140,7 @@ TEST_F(QcGateEmu, RunQcSerialCommandRunsQcExactlyOnceAndClearsFlag) {
   const auto userBefore = emuNvsSnapshot(kUserNs);
 
   USBSerial.feed("{\"command\":\"run_qc\"}\n");
-  poll_serial_commands();
+  poll_serial_commands(true);
   EXPECT_EQ(ESP.restartCount(), 1);
   EXPECT_EQ(factoryU8("qc_rerun"), 1);
 
@@ -1137,7 +1163,7 @@ TEST_F(QcGateEmu, RunQcRerunThatFailsRetriesOnEveryBootUntilPass) {
   writeSettingsAs80(kAllNonDefault);
   ASSERT_FALSE(emuBoot().qcRan);
   USBSerial.feed("{\"command\":\"run_qc\"}\n");
-  poll_serial_commands();
+  poll_serial_commands(true);
 
   g_emu.op.pressesButton = false;
   ASSERT_TRUE(emuBoot().qcRan);

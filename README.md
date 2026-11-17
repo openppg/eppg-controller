@@ -92,6 +92,19 @@ CI automatically runs cpplint, unit tests, and a full firmware build on every pu
 
 The open source web based config tool for updating certain settings over USB (without needing to flash firmware) can be found at [config.openppg.com](https://config.openppg.com).
 
+## Pair Bluetooth over USB
+
+With the SP140 controller disarmed, send this JSON line over USB serial at
+115200 baud. End the command with a newline.
+
+```json
+{"command":"ble_pair"}
+```
+
+Like holding the pairing button, this disconnects the current phone, clears
+the saved Bluetooth bond, and opens a 60-second window to pair a phone.
+A request during an open pairing window leaves the timer running.
+
 ## Help improve these docs
 
 Pull requests are welcome for these instructions and code changes.

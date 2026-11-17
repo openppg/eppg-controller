@@ -3,6 +3,7 @@
 
 #include "Arduino.h"
 #include <ArduinoJson.h>
+#include <atomic>
 #include "sp140/device_settings.h"
 #include "sp140/globals.h"
 #include "../../inc/sp140/esp32s3-config.h"
@@ -36,6 +37,8 @@
  * Available Commands:
  * - "rbl": Reboot to bootloader for firmware updates
  * - "sync": Request current device settings and state
+ * - "ble_pair": Open the standard 60-second BLE pairing window over USB while
+ *   disarmed. Opening pairing clears the previous bond.
  *
  * Response Format for sync command:
  * {
@@ -98,9 +101,14 @@ namespace {
 constexpr size_t kWebSerialCommandBufferSize = 256;
 char gWebSerialCommandBuffer[kWebSerialCommandBufferSize] = {};
 size_t gWebSerialCommandLength = 0;
-bool gWebSerialCommandOverflow = false;
+bool gWebSerialDiscardLine = false;
+std::atomic<bool> gUSBPairingRequested{false};
 
 }  // namespace
+
+bool takeUSBPairingRequest() {
+  return gUSBPairingRequested.exchange(false, std::memory_order_relaxed);
+}
 
 // Read saved data from NVS (same key layout the write path and older
 // Preferences-based firmware use, so field devices stay compatible).
@@ -290,6 +298,11 @@ void parse_serial_command_line(const char* json_line) {
   if (!doc["command"].isNull()) {
     String command = doc["command"].as<String>();
 
+    if (command == "ble_pair") {
+      gUSBPairingRequested.store(true, std::memory_order_relaxed);
+      return;
+    }
+
     if (command == "reboot") {
       USBSerial.println("Rebooting");
       diagnosticsMarkPlannedRestart(
@@ -356,8 +369,15 @@ void parse_serial_command_line(const char* json_line) {
   }
 }
 
-void poll_serial_commands() {
-  while (USBSerial.available()) {
+void poll_serial_commands(bool acceptCommands) {
+  // Drain the input while armed rather than deferring it until disarm.
+  // Drop any line interrupted by arming.
+  if (!acceptCommands && gWebSerialCommandLength > 0) {
+    gWebSerialCommandLength = 0;
+    gWebSerialDiscardLine = true;
+  }
+
+  for (int remaining = USBSerial.available(); remaining > 0; --remaining) {
     const int byte_read = USBSerial.read();
     if (byte_read < 0) {
       return;
@@ -368,11 +388,8 @@ void poll_serial_commands() {
       continue;
     }
 
-    if (gWebSerialCommandOverflow) {
-      if (ch == '\n') {
-        gWebSerialCommandOverflow = false;
-        gWebSerialCommandLength = 0;
-      }
+    if (!acceptCommands || gWebSerialDiscardLine) {
+      gWebSerialDiscardLine = ch != '\n';
       continue;
     }
 
@@ -388,7 +405,7 @@ void poll_serial_commands() {
     }
 
     if (gWebSerialCommandLength + 1 >= kWebSerialCommandBufferSize) {
-      gWebSerialCommandOverflow = true;
+      gWebSerialDiscardLine = true;
       gWebSerialCommandLength = 0;
       continue;
     }

@@ -991,6 +991,21 @@ void buttonHandlerTask(void *parameter) {
   bool consumeUpdateRelease = false;
 
   while (true) {
+    // Run on the same task as the physical button so pairing requests cannot
+    // race with each other or with arming.
+    if (takeUSBPairingRequest()) {
+      OtaArmGuard otaGuard(0);
+      if (currentState != DISARMED || armSequenceStarted ||
+          !otaGuard.held() || otaBlocksInput() ||
+          escConfigRelayIsActive() || escFlasherRelayIsActive()) {
+        USBSerial.println("[BLE] USB pairing request refused");
+      } else if (isBLEPairingModeActive()) {
+        USBSerial.println("[BLE] USB pairing window already open");
+      } else {
+        enterBLEPairingMode();
+        USBSerial.println("[BLE] Pairing mode activated via USB");
+      }
+    }
     buttonState = digitalRead(board_config.button_top);
     uint32_t currentTime = timeMillis();
 
@@ -1500,12 +1515,7 @@ bool initBMSCAN(SPIClass *spi) {
 // WebSerial command handling task
 void webSerialTask(void *pvParameters) {
   while (true) {
-    if (USBSerial.available()) {
-      // Check if we're allowed to process commands
-      if (currentState == DISARMED) {
-        poll_serial_commands();
-      }
-    }
+    poll_serial_commands(currentState == DISARMED);
     vTaskDelay(pdMS_TO_TICKS(100));  // Check every 100ms
   }
 }
