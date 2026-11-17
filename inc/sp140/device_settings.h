@@ -9,10 +9,8 @@ extern const unsigned int DEFAULT_SCREEN_ROTATION;
 void refreshDeviceData();
 void writeDeviceData();
 void resetDeviceData();
-void poll_serial_commands();
-#if defined(OPENPPG_USB_BENCH_PAIRING)
+void poll_serial_commands(bool acceptCommands);
 bool takeUSBPairingRequest();
-#endif
 void send_device_data();
 bool sanitizeDeviceData();
 
