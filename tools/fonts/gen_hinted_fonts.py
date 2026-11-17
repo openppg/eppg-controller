@@ -45,6 +45,25 @@ def prefix_locals(text, prefix):
     return text
 
 
+def lvgl96_field_order(text):
+    """Move dsc/fallback/user_data to the top of the lv_font_t initializer.
+
+    LVGL 9.6 declares them first, and the firmware compiles these files as
+    C++, which rejects designators that are out of declaration order.
+    lv_font_conv 1.5.3 still writes them last.
+    """
+    tail = re.search(
+        r"(    \.dsc = &\w+,[^\n]*\n)"
+        r"#if LV_VERSION_CHECK\(8, 2, 0\) \|\| LVGL_VERSION_MAJOR >= 9\n"
+        r"(    \.fallback = NULL,\n)#endif\n(    \.user_data = NULL,\n)", text)
+    text = text[:tail.start()] + text[tail.end():]
+    head = "#endif\n    .get_glyph_dsc = "
+    assert text.count(head) == 1
+    moved = ("    /* LVGL 9.6 moved dsc/fallback/user_data to the top of lv_font_t;"
+             " C++ needs declaration order */\n" + "".join(tail.groups()))
+    return text.replace(head, "#endif\n" + moved + "    .get_glyph_dsc = ")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--lv-font-conv", required=True, help="path to lv_font_conv.js")
@@ -72,6 +91,7 @@ def main():
         text = re.sub(r"--font \S*[/\\](Montserrat-Medium\.ttf)", r"--font \1", text)
         text = re.sub(r"--font \S*[/\\](FontAwesome5-Solid\+Brands\+Regular\.woff)", r"--font \1", text)
         text = prefix_locals(text, name)
+        text = lvgl96_field_order(text)
         open(out, "w", encoding="utf-8", newline="\n").write(text)
         print(f"wrote {os.path.relpath(out)}")
 
