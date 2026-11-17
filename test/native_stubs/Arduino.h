@@ -25,6 +25,11 @@ class String {
     return true;
   }
 
+  String& operator+=(const char* s) {
+    concat(s);
+    return *this;
+  }
+
   const char* c_str() const { return data_.c_str(); }
   size_t length() const { return data_.size(); }
 

@@ -207,7 +207,6 @@ void changeDeviceState(DeviceState newState) {
 }
 
 uint32_t armedAtMillis = 0;
-uint32_t cruisedAtMillisMilis = 0;
 unsigned long armedSecs = 0;
 
 TaskHandle_t blinkLEDTaskHandle = NULL;
@@ -1107,11 +1106,6 @@ void buttonHandlerTask(void *parameter) {
   }
 }
 
-void printTime(const char *label) {
-  USBSerial.print(label);
-  USBSerial.println(timeMillis());
-}
-
 void disarmESC() {
   // Throttle task sends ESC_DISARMED_PWM on its next 20ms cycle
   // when it sees DISARMED state — no direct CAN write needed here
@@ -1267,18 +1261,14 @@ bool shouldDisengageCruise(int potVal) {
 
   // Only check for disengagement *after* the grace period has passed
   if (timeSinceCruiseStart > CRUISE_DISENGAGE_GRACE_PERIOD_MS) {
-    // Calculate the disengagement threshold based on the *raw potentiometer
-    // value* when cruise was engaged
-    int disengageThresholdPotVal =
-        (int)(cruisedPotVal * CRUISE_DISENGAGE_POT_THRESHOLD_PERCENTAGE);
-
-    // If the *current raw potentiometer value* is greater than or equal to the
-    // threshold
-    if (potVal >= disengageThresholdPotVal) {
+    // Compare the *current raw potentiometer value* against a threshold
+    // derived from the raw value captured when cruise was engaged
+    if (shouldPotDisengageCruise(potVal, cruisedPotVal,
+                                 CRUISE_DISENGAGE_POT_THRESHOLD_PERCENTAGE)) {
       USBSerial.print("Cruise override: potVal ");
       USBSerial.print(potVal);
-      USBSerial.print(" >= threshold ");
-      USBSerial.println(disengageThresholdPotVal);
+      USBSerial.print(" vs engaged at ");
+      USBSerial.println(cruisedPotVal);
       return true;
     }
   }
@@ -1460,13 +1450,6 @@ void afterCruiseEnd() {
 
   cruisedPotVal = 0;
   // pulseVibeMotor();
-}
-
-void playCruiseSound() {
-  if (ENABLE_BUZZ) {
-    uint16_t notify_melody[] = {1976};
-    playMelody(notify_melody, 1);
-  }
 }
 
 void audioTask(void *parameter) {

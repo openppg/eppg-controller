@@ -12,6 +12,5 @@ void resetDeviceData();
 void poll_serial_commands();
 void send_device_data();
 bool sanitizeDeviceData();
-void debugHardwareConfig(const HardwareConfig& config);
 
 #endif  // INC_SP140_DEVICE_SETTINGS_H_
