@@ -1,4 +1,5 @@
 #include "../../../inc/sp140/lvgl/lvgl_updates.h"
+#include "sp140/usb_serial.h"
 #include "../../../inc/sp140/esp32s3-config.h"
 #include "../../../inc/sp140/time_utils.h"
 #include "../../../inc/sp140/monitor_config.h"  // For direct threshold access

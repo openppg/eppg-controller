@@ -6,3 +6,4 @@ diagnostics-logs/
 build-screenshot/
 test/test_screenshots/output/*.bmp
 test/test_screenshots/output/png/
+managed_components/

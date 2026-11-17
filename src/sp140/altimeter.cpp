@@ -1,4 +1,5 @@
 #include "sp140/altimeter.h"
+#include "sp140/usb_serial.h"
 #include "sp140/structs.h"
 #include "sp140/time_utils.h"
 

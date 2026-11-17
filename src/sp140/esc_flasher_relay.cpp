@@ -1,4 +1,5 @@
 #include "sp140/esc_flasher_relay.h"
+#include "sp140/usb_serial.h"
 
 #include <Arduino.h>
 #include "sp140/time_utils.h"
@@ -300,7 +301,7 @@ bool escFlasherRelayBegin(uint16_t hardwareId, uint32_t totalSize) {
   portEXIT_CRITICAL(&s_mux);
   s_lastRxMs = timeMillis();
   s_hwId = hardwareId;
-  USBSerial.printf("ESC FW relay: begin hwId=0x%04X size=%u\n", hardwareId, totalSize);
+  USBSerial.printf("ESC FW relay: begin hwId=0x%04X size=%" PRIu32 "\n", hardwareId, totalSize);
   return true;
 }
 

@@ -397,7 +397,10 @@ static void beginReadSession() {
   s_resultLen = 0;
   s_retries = 0;
   s_reUnlocked = false;
-  s_gotSet = s_gotGet = s_gotSave = s_gotUnlock = false;
+  s_gotSet = false;
+  s_gotGet = false;
+  s_gotSave = false;
+  s_gotUnlock = false;
   if (s_requireUnlock) {
     s_phase = EscRelayPhase::UNLOCK;
     setStatus(EscRelayStatusCode::READING, EscRelayPhase::UNLOCK, 0);
@@ -423,7 +426,10 @@ static void beginSession(uint16_t id, const uint8_t* data, uint8_t len) {
   memcpy(s_expData, data, s_expLen);
   s_retries = 0;
   s_reUnlocked = false;
-  s_gotSet = s_gotGet = s_gotSave = s_gotUnlock = false;
+  s_gotSet = false;
+  s_gotGet = false;
+  s_gotSave = false;
+  s_gotUnlock = false;
 
   if (s_requireUnlock) {
     s_phase = EscRelayPhase::UNLOCK;
@@ -448,7 +454,10 @@ static void beginBatchSession() {
   s_batchMismatch = 0;
   s_retries = 0;
   s_reUnlocked = false;
-  s_gotSet = s_gotGet = s_gotSave = s_gotUnlock = false;
+  s_gotSet = false;
+  s_gotGet = false;
+  s_gotSave = false;
+  s_gotUnlock = false;
 
   // First staged tuple is the working target (used as the post-reboot probe id).
   uint16_t id = 0; const uint8_t* d = nullptr; uint8_t len = 0;

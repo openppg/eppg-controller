@@ -1,4 +1,5 @@
 #include "sp140/esc.h"
+#include "sp140/usb_serial.h"
 #include "sp140/globals.h"
 #include "sp140/esc_config_relay.h"
 #include "sp140/esc_flasher_relay.h"

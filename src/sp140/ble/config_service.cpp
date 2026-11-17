@@ -1,4 +1,5 @@
 #include "sp140/ble/config_service.h"
+#include "sp140/usb_serial.h"
 
 #include <Arduino.h>
 #include <ctime>
@@ -394,7 +395,7 @@ class EscFwCtrlCallbacks : public NimBLECharacteristicCallbacks {
                         (static_cast<uint32_t>(static_cast<uint8_t>(value[5])) << 16) |
                         (static_cast<uint32_t>(static_cast<uint8_t>(value[6])) << 24);
         bool ok = escFlasherRelayBegin(hwId, size);
-        USBSerial.printf("ESC FW START hwId=0x%04X size=%u ok=%d\n", hwId, size, ok);
+        USBSerial.printf("ESC FW START hwId=0x%04X size=%" PRIu32 " ok=%d\n", hwId, size, ok);
         break;
       }
       case 0x21:  // FW_END

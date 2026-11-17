@@ -23,20 +23,21 @@ def merge_bin_action(source, target, env):
     ]
     print(f"Flash images to merge: {flash_images}")
     flash_images = [str(image) for image in flash_images]
+    # espressif32 >= 8 ships esptool v5 as a native executable ($OBJCOPY), not
+    # a Python script, and v5 spells commands/options with dashes.
     merge_cmd = " ".join(
         [
-            '"$PYTHONEXE"',
             '"$OBJCOPY"',
             "--chip",
             board_config.get("build.mcu", "esp32"),
-            "merge_bin",
+            "merge-bin",
             "-o",
             merged_bin,
-            "--flash_mode",
+            "--flash-mode",
             board_config.get("build.flash_mode", "dio"),
-            "--flash_freq",
+            "--flash-freq",
             "${__get_board_f_flash(__env__)}",
-            "--flash_size",
+            "--flash-size",
             board_config.get("upload.flash_size", "4MB"),
             *flash_images,
         ]

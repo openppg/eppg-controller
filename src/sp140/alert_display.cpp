@@ -1,4 +1,5 @@
 #include "../../inc/sp140/alert_display.h"
+#include "sp140/usb_serial.h"
 #include "../../inc/sp140/time_utils.h"
 #include <Arduino.h>
 #include <freertos/queue.h>

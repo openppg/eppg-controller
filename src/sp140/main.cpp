@@ -1,6 +1,7 @@
 // Copyright 2020 <Zach Whitehead>
 // OpenPPG
 #include "Arduino.h"
+#include "sp140/usb_serial.h"
 #include "sp140/device_settings.h"
 #include "sp140/time_utils.h"
 #include "sp140/ble/ota_service.h"
@@ -589,7 +590,21 @@ void setupWatchdog() {
   // exactly the tasks that explicitly subscribe (throttleTask + watchdogTask).
   // Otherwise any non-safety task (UI/BMS/BLE) monopolizing a core for >5 s
   // would panic-reboot a flying device — the opposite of the intent.
-  ESP_ERROR_CHECK(esp_task_wdt_init(WDT_TIMEOUT_SECONDS, true));
+  //
+  // IDF 5.x: init takes a config struct and returns ESP_ERR_INVALID_STATE if
+  // the TWDT is already running (CONFIG_ESP_TASK_WDT_INIT=y starts it at boot),
+  // so reconfigure it in that case. IDF 4.4's esp_task_wdt_init() did this
+  // implicitly. idle_core_mask = 0 matches the sdkconfig idle-check setting.
+  const esp_task_wdt_config_t wdt_config = {
+    .timeout_ms = WDT_TIMEOUT_SECONDS * 1000,
+    .idle_core_mask = 0,
+    .trigger_panic = true,
+  };
+  esp_err_t wdt_err = esp_task_wdt_reconfigure(&wdt_config);
+  if (wdt_err == ESP_ERR_INVALID_STATE) {
+    wdt_err = esp_task_wdt_init(&wdt_config);
+  }
+  ESP_ERROR_CHECK(wdt_err);
 #endif  // OPENPPG_DEBUG
 }
 

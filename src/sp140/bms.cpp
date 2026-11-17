@@ -1,4 +1,5 @@
 #include "sp140/bms.h"
+#include "sp140/usb_serial.h"
 #include "sp140/structs.h"
 #include "sp140/globals.h"
 #include "sp140/lvgl/lvgl_core.h"  // for spiBusMutex

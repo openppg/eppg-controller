@@ -1,4 +1,5 @@
 #include "sp140/diagnostics.h"
+#include "sp140/usb_serial.h"
 
 #include <new>
 #include <stdio.h>
