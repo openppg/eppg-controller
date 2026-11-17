@@ -18,6 +18,26 @@ static CanardAdapter adapter;
 static uint8_t memory_pool[1024] __attribute__((aligned(8)));
 static SineEsc esc(adapter);
 
+// The pinned CanardAdapter has no call to drop queued transfers. A node
+// registered on it shares its libcanard instance, so this one does only that;
+// it accepts no incoming transfers.
+class EscTxQueueFlusher : public CanardAdapterNode {
+ public:
+  explicit EscTxQueueFlusher(CanardAdapter& a) : CanardAdapterNode(a) {}
+  void begin() { _beginNode(); }
+  void flush() {
+    if (_canard == NULL) { return; }  // NOLINT(whitespace/newline)
+    while (canardPeekTxQueue(_canard) != NULL) {
+      canardPopTxQueue(_canard);
+    }
+  }
+  bool shouldAcceptTransfer(uint64_t*, uint16_t, CanardTransferType, uint8_t) override {
+    return false;
+  }
+  void onTransferReceived(CanardRxTransfer*) override {}
+};
+static EscTxQueueFlusher txQueueFlusher(adapter);
+
 // Expose the single shared adapter to the ESC config relay module.
 CanardAdapter& escAdapter() { return adapter; }
 static unsigned long lastSuccessfulCommTimeMs = 0;  // Store timeMillis() of last successful ESC comm
@@ -206,6 +226,7 @@ void initESC() {
   adapter.begin(memory_pool, sizeof(memory_pool));
   adapter.setLocalNodeId(LOCAL_NODE_ID);
   esc.begin(0x20);  // Default ID for the ESC
+  txQueueFlusher.begin();
 
   // Set idle throttle only if ESC is found
   const uint16_t IdleThrottle_us = 10000;  // 1000us (0.1us resolution)
@@ -231,9 +252,62 @@ void setESCThrottle(int throttlePWM) {
     return;  // Ignore invalid throttle values
   }
 
+  // initESC() returns before esc.begin() when the driver fails to install.
+  if (!escTwaiInitialized) { return; }  // NOLINT(whitespace/newline)
+
+  // Commands are queued FIFO and retried until acknowledged. When the ESC stops
+  // acknowledging (unpowered, connector open) the driver queue and the transport
+  // behind it fill with old commands, which would be replayed oldest-first on
+  // reconnect while new ones are dropped. A healthy bus sends each frame in well
+  // under a millisecond, so frames still waiting on two consecutive 20 ms cycles
+  // are not going out: discard them and keep only current commands.
+  static uint8_t pendingCycles = 0;
+  twai_status_info_t status;
+  const bool haveStatus = twai_get_status_info(&status) == ESP_OK;
+  if (haveStatus && status.msgs_to_tx > 0) {
+    if (pendingCycles < 2) { pendingCycles++; }  // NOLINT(whitespace/newline)
+  } else {
+    pendingCycles = 0;
+  }
+  if (pendingCycles >= 2) {
+    // twai_clear_transmit_queue() leaves the frame already loaded in the
+    // controller's transmit buffer, which is retried until something
+    // acknowledges it: the ESC would act on that command, from when it went
+    // silent, as soon as it is back. twai_stop() puts the controller in reset
+    // mode, which halts that transmission and empties the queue (IDF 4.4.7
+    // twai_stop/twai_hal_stop); twai_start() puts it straight back on the bus.
+    // Only valid while RUNNING; otherwise bus-off recovery owns the driver.
+    if (twai_stop() == ESP_OK) {
+      twai_start();
+    } else {
+      twai_clear_transmit_queue();
+    }
+  }
+  // The transport keeps every transfer the driver refused; while the
+  // controller is off the bus (bus-off, recovering, stopped) that is every
+  // command, so the 1 KiB pool fills with old ones, the current one is refused,
+  // and the old ones go out first once the driver is back. Drop them too.
+  if (pendingCycles >= 2 || (haveStatus && status.state != TWAI_STATE_RUNNING)) {
+    txQueueFlusher.flush();
+  }
+
   // Direct calculation: multiply by 10 to convert μs to 0.1μs resolution
   uint16_t scaledThrottle = throttlePWM * 10;
   esc.setThrottleSettings2(scaledThrottle);
+}
+
+/**
+ * Bring the CAN controller back after a bus-off (wiring fault, noise burst).
+ * Without this the controller stays off the bus until the next power cycle.
+ */
+static void recoverTwaiIfNeeded() {
+  twai_status_info_t status;
+  if (twai_get_status_info(&status) != ESP_OK) { return; }  // NOLINT(whitespace/newline)
+  if (status.state == TWAI_STATE_BUS_OFF) {
+    twai_initiate_recovery();
+  } else if (status.state == TWAI_STATE_STOPPED) {
+    twai_start();
+  }
 }
 
 /**
@@ -245,6 +319,8 @@ void setESCThrottle(int throttlePWM) {
 void readESCTelemetry() {
   // Only proceed if TWAI is initialized
   if (!escTwaiInitialized) { return; }  // NOLINT(whitespace/newline)
+
+  recoverTwaiIfNeeded();
 
   const SineEscModel &model = esc.getModel();
 
@@ -404,6 +480,9 @@ bool setupTWAI() {
                                       (gpio_num_t)ESC_TX_PIN,
                                       (gpio_num_t)ESC_RX_PIN,
                                       TWAI_MODE_NORMAL);
+  // One telemetry reply is five frames, which is the default receive queue. Leave
+  // room for a second transfer arriving in the same 20 ms cycle.
+  g_config.rx_queue_len = 32;
   twai_timing_config_t t_config = TWAI_TIMING_CONFIG_1MBITS();
   twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 

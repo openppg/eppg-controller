@@ -2,10 +2,13 @@
 
 #include <Arduino.h>
 #include <cstdio>
+#include <cstring>
 #include <esp_mac.h>
+#include <esp_ota_ops.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/timers.h>
+#include <nvs.h>
 
 #include "sp140/ble.h"
 #include "sp140/ble/ble_ids.h"
@@ -351,6 +354,53 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
   }
 };
 
+// A firmware update can move characteristics: 8.1 added the ESC relay ones ahead
+// of telemetry and the update service. A bonded phone caches where everything was
+// and is entitled to, unless told otherwise, so after an update it can subscribe
+// to the wrong place and never see telemetry. Tell bonded phones once per new
+// build that the layout changed. The stack records it against each stored bond
+// and sends the indication when that phone next reconnects.
+void announceGattLayoutIfFirmwareChanged() {
+  static const char kNamespace[] = "ble_gatt";
+  static const char kKey[] = "build";
+  uint8_t current[8];
+  memcpy(current, esp_ota_get_app_description()->app_elf_sha256, sizeof(current));
+
+  nvs_handle_t handle;
+  const esp_err_t opened = nvs_open(kNamespace, NVS_READWRITE, &handle);
+  if (opened != ESP_OK) {
+    USBSerial.printf("[BLE] GATT layout record unavailable (0x%x)\n", static_cast<unsigned>(opened));
+    return;
+  }
+  uint8_t stored[sizeof(current)] = {};
+  size_t length = sizeof(stored);
+  const bool sameBuild =
+      nvs_get_blob(handle, kKey, stored, &length) == ESP_OK &&
+      length == sizeof(stored) && memcmp(stored, current, sizeof(current)) == 0;
+  // The record alone misses one case: this build ran here before, an older
+  // firmware that keeps no record (8.0) was installed and paired with, and this
+  // build was then installed again. The first boot after any over-the-air
+  // update is still unconfirmed at this point, so announce then as well.
+  esp_ota_img_states_t imageState = ESP_OTA_IMG_UNDEFINED;
+  const bool firstBootAfterUpdate =
+      esp_ota_get_state_partition(esp_ota_get_running_partition(), &imageState) == ESP_OK &&
+      imageState == ESP_OTA_IMG_PENDING_VERIFY;
+  if (!sameBuild || firstBootAfterUpdate) {
+    if (NimBLEDevice::getNumBonds() > 0 && pServer != nullptr) {
+      pServer->start();
+      pServer->sendServiceChangedIndication();
+      USBSerial.println("[BLE] New firmware build: told bonded phones the GATT layout changed");
+    }
+    const esp_err_t saved = nvs_set_blob(handle, kKey, current, sizeof(current));
+    if (saved == ESP_OK) {
+      nvs_commit(handle);
+    } else {
+      USBSerial.printf("[BLE] GATT layout record not saved (0x%x)\n", static_cast<unsigned>(saved));
+    }
+  }
+  nvs_close(handle);
+}
+
 }  // namespace
 
 void setupBLE() {
@@ -396,6 +446,8 @@ void setupBLE() {
   initConfigBleService(pServer, uniqueId);
   initFastLinkBleService(pServer);
   initOtaBleService(pServer);
+
+  announceGattLayoutIfFirmwareChanged();
 
   USBSerial.println("BLE device ready");
 

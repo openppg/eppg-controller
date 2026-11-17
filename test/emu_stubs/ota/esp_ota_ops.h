@@ -91,6 +91,17 @@ inline esp_err_t esp_ota_abort(esp_ota_handle_t handle) {
   return ESP_OK;
 }
 
+// Boot-side queries used by finishOtaBoot(). Not flash writes.
+namespace emu {
+inline esp_partition_t runningPartition = {
+    nullptr, ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_0,
+    0x10000, 0x330000, 0x1000, "app0", false};
+inline const esp_partition_t* lastInvalidPartition = nullptr;
+}  // namespace emu
+
+inline const esp_partition_t* esp_ota_get_running_partition() { return &emu::runningPartition; }
+inline const esp_partition_t* esp_ota_get_last_invalid_partition() { return emu::lastInvalidPartition; }
+
 inline esp_err_t esp_ota_set_boot_partition(const esp_partition_t* partition) {
   emu::checkLockedFlashCall();
   emu::recordEvent("set_boot_partition");

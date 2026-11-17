@@ -57,6 +57,8 @@ jobs:
         run: platformio test -e native-emu-ota
       - name: Run Settings and Factory QC Emulation Tests
         run: platformio test -e native-emu-settings
+      - name: Run CAN Bus Emulation Tests
+        run: platformio test -e native-emu-can
 
   screenshot-tests:
     name: Screenshot Regression Tests

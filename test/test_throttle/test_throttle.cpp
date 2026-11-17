@@ -1,5 +1,7 @@
 // Use the native Arduino stubs provided by the repo and the real CircularBuffer
 #include <gtest/gtest.h>
+#include <algorithm>
+#include <cstdlib>
 #include "../native_stubs/Arduino.h"
 
 // Include the real implementations under test
@@ -353,6 +355,90 @@ TEST(ThrottleTest, ShouldPotDisengageCruiseVariousActivations) {
     // Very low cruise (10% pot = 409), threshold = 327
     EXPECT_FALSE(shouldPotDisengageCruise(326, 409, thresholdPct));
     EXPECT_TRUE(shouldPotDisengageCruise(327, 409, thresholdPct));
+}
+
+// Runs cruise for `ticks` 20 ms ticks with no new setpoint; returns the
+// largest change in output between consecutive ticks.
+static int cruiseTicks(int ticks, uint16_t& setpoint, int& prevPwm, uint8_t mode, int* lastOut) {
+    int maxStep = 0;
+    for (int i = 0; i < ticks; i++) {
+        const int before = prevPwm;
+        *lastOut = cruiseOutputTick(false, nullptr, setpoint, prevPwm, mode);
+        maxStep = std::max(maxStep, std::abs(*lastOut - before));
+    }
+    return maxStep;
+}
+
+TEST(ThrottleTest, CruiseEntryHoldsTheOutputBeingFlown) {
+    uint16_t setpoint = 0;
+    int prevPwm = 1500;
+    EXPECT_EQ(cruiseOutputTick(true, nullptr, setpoint, prevPwm, 1), 1500);
+    EXPECT_EQ(setpoint, 1500);
+    EXPECT_EQ(prevPwm, 1500);
+
+    // Output rose one tick past the cruise max after the button check.
+    prevPwm = CRUISE_MAX_PWM + CHILL_MODE_RAMP_RATE;
+    EXPECT_EQ(cruiseOutputTick(true, nullptr, setpoint, prevPwm, 0), CRUISE_MAX_PWM);
+}
+
+// A setpoint written over BLE must reach the motor through the same ramp as
+// the throttle lever, in both modes, up and down.
+TEST(ThrottleTest, BleCruiseSetpointFollowsTheModeRamp) {
+    for (uint8_t mode = 0; mode <= 1; mode++) {
+        const int rate = (mode == 0) ? CHILL_MODE_RAMP_RATE : SPORT_MODE_RAMP_RATE;
+        uint16_t setpoint = 0;
+        int prevPwm = 1100;
+        cruiseOutputTick(true, nullptr, setpoint, prevPwm, mode);
+
+        const uint16_t up = 1600;
+        const int first = cruiseOutputTick(false, &up, setpoint, prevPwm, mode);
+        EXPECT_EQ(first, 1100 + rate) << "mode " << int(mode) << ": BLE setpoint stepped the output";
+        int out = first;
+        const int maxUp = cruiseTicks(200, setpoint, prevPwm, mode, &out);
+        EXPECT_LE(maxUp, rate);
+        EXPECT_EQ(out, 1600) << "setpoint must still be reached";
+
+        const uint16_t down = ESC_MIN_PWM;
+        const int firstDown = cruiseOutputTick(false, &down, setpoint, prevPwm, mode);
+        EXPECT_EQ(firstDown, 1600 - rate * DECEL_MULTIPLIER);
+        const int maxDown = cruiseTicks(200, setpoint, prevPwm, mode, &out);
+        EXPECT_LE(maxDown, rate * DECEL_MULTIPLIER);
+        EXPECT_EQ(out, ESC_MIN_PWM);
+    }
+}
+
+// The throttle task applies the same range the BLE handler checks.
+TEST(ThrottleTest, CruiseSetpointOutsideCruiseRangeIsIgnored) {
+    EXPECT_TRUE(isCruiseSetpointAllowed(ESC_MIN_PWM));
+    EXPECT_TRUE(isCruiseSetpointAllowed(CRUISE_MAX_PWM));
+    EXPECT_FALSE(isCruiseSetpointAllowed(ESC_MIN_PWM - 1));
+    EXPECT_FALSE(isCruiseSetpointAllowed(CRUISE_MAX_PWM + 1));
+    EXPECT_FALSE(isCruiseSetpointAllowed(0));
+
+    uint16_t setpoint = 0;
+    int prevPwm = 1300;
+    cruiseOutputTick(true, nullptr, setpoint, prevPwm, 1);
+    for (uint16_t bad : {static_cast<uint16_t>(CRUISE_MAX_PWM + 1),
+                         static_cast<uint16_t>(ESC_MAX_PWM),
+                         static_cast<uint16_t>(ESC_DISARMED_PWM),
+                         static_cast<uint16_t>(0xFFFF)}) {
+        EXPECT_EQ(cruiseOutputTick(false, &bad, setpoint, prevPwm, 1), 1300) << bad;
+        EXPECT_EQ(setpoint, 1300) << bad;
+    }
+}
+
+// Changing performance mode while armed with the throttle off is deliberate
+// (the BLE mode write is accepted in any state): the next tick uses the new
+// mode's ramp and ceiling.
+TEST(ThrottleTest, PerformanceModeChangeWhileArmedAtIdleTakesEffect) {
+    int prevPwm = ESC_MIN_PWM;
+    EXPECT_EQ(applyModeRampClamp(ESC_MIN_PWM, prevPwm, 0), ESC_MIN_PWM);
+    EXPECT_EQ(applyModeRampClamp(ESC_MAX_PWM, prevPwm, 0), ESC_MIN_PWM + CHILL_MODE_RAMP_RATE);
+    prevPwm = ESC_MIN_PWM;
+    EXPECT_EQ(applyModeRampClamp(ESC_MAX_PWM, prevPwm, 1), ESC_MIN_PWM + SPORT_MODE_RAMP_RATE);
+    int out = 0;
+    for (int i = 0; i < 100; i++) out = applyModeRampClamp(ESC_MAX_PWM, prevPwm, 1);
+    EXPECT_EQ(out, ESC_MAX_PWM);
 }
 
 int main(int argc, char **argv) {
