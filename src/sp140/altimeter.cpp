@@ -1,6 +1,7 @@
 #include "sp140/altimeter.h"
 #include "sp140/structs.h"
 #include "sp140/time_utils.h"
+#include "sp140/ring_buffer.h"
 
 #include <Adafruit_BMP3XX.h>
 
@@ -16,7 +17,7 @@ struct AltitudeReading {
 };
 
 // Buffer to store altitude readings with timestamps
-CircularBuffer<AltitudeReading, VARIO_BUFFER_SIZE> altitudeBuffer;
+static FixedRingBuffer<AltitudeReading, VARIO_BUFFER_SIZE> altitudeBuffer;
 
 // Readers copy this entire structure inside a very short cross-core critical
 // section. Independent atomic float loads would still permit mixed samples.
@@ -24,7 +25,7 @@ static BarometerSnapshot cachedSample = {
     0.0f, 0.0f, __FLT_MIN__, __FLT_MIN__, 0.0f, 0, false};
 
 // Recompute vertical speed from the altitude buffer. Must be called from the
-// same task that pushes to altitudeBuffer to avoid CircularBuffer races.
+// same task that pushes to altitudeBuffer to avoid ring buffer races.
 static float computeVerticalSpeed() {
   if (altitudeBuffer.size() < 2) {
     return 0.0f;

@@ -85,6 +85,34 @@ inline void sanitizeCellProbeTemps(
   }
 }
 
+// Cell probe temperatures as published to monitors and the UI.
+//
+// Latched: once a temperature frame has ever been parsed, keep applying the
+// disconnect policy. Re-testing the live readings every cycle would mean a
+// later all-NaN frame (BMS temperature subsystem failed, or the BMS rebooting
+// and broadcasting zeros) silently disables the too-many-probes-disconnected
+// critical — total loss of the temperature path must not be silent.
+// Before the first frame, NaN passes through so temp monitors stay silent
+// instead of firing the -40 disconnect sentinel at every boot.
+//
+// Returns true when the disconnect policy was applied (latch set).
+inline bool applyCellProbeTempPolicy(bool& tempFrameSeenLatch,
+                                     float mosTemp, float balanceTemp,
+                                     const float cellTemps[BMS_CELL_PROBE_COUNT],
+                                     float out[BMS_CELL_PROBE_COUNT]) {
+  if (!tempFrameSeenLatch && bmsTempFrameSeen(mosTemp, balanceTemp, cellTemps)) {
+    tempFrameSeenLatch = true;
+  }
+  if (tempFrameSeenLatch) {
+    sanitizeCellProbeTemps(cellTemps, out);
+  } else {
+    for (uint8_t i = 0; i < BMS_CELL_PROBE_COUNT; i++) {
+      out[i] = cellTemps[i];
+    }
+  }
+  return tempFrameSeenLatch;
+}
+
 // External declarations
 extern STR_BMS_TELEMETRY_140 bmsTelemetryData;
 extern BMS_CAN* bms_can;
