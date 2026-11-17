@@ -28,6 +28,9 @@ CONFIG_ESP_TASK_WDT_PANIC=y
 # field crash backtrace can be pulled over USB (espcoredump.py) during testing.
 CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
 CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF=y
+# Optimize production firmware for runtime performance. Assertions remain
+# enabled at level 2 in the environment-specific sdkconfig.
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
 # Watchdog scope: only the throttle control loop + its watchdog task explicitly
 # subscribe to the Task WDT (see main.cpp). Do NOT also watch the idle tasks —
 # with idle-task checking on, ANY non-safety task (UI/BMS/BLE/a cache-disabled

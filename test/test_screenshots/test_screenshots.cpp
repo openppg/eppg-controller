@@ -708,3 +708,175 @@ TEST_F(ScreenshotTest, SplashScreen_Dark) {
   emulator_init_display(true);
   render_splash("splash_dark", true);
 }
+
+// ============================================================
+// FIRST_BOOT_QC screen states
+// ============================================================
+
+#include "sp140/lvgl/lvgl_qc_screen.h"
+
+// Render the current QC screen state, save + compare like render_and_save.
+static void qc_render_and_save(const char* name) {
+  emulator_render_frame();
+
+  char out_path[256];
+  snprintf(out_path, sizeof(out_path), "%s/%s.bmp", OUTPUT_DIR, name);
+  ASSERT_TRUE(emulator_save_bmp(out_path)) << "Failed to save " << out_path;
+
+  char ref_path[256];
+  snprintf(ref_path, sizeof(ref_path), "%s/%s.bmp", REFERENCE_DIR, name);
+  if (file_exists(ref_path)) {
+    int diff = emulator_compare_bmp(ref_path, out_path);
+    if (diff > 0) {
+      char diff_path[256];
+      snprintf(diff_path, sizeof(diff_path), "%s/%s_diff.bmp", OUTPUT_DIR, name);
+      emulator_save_diff_bmp(ref_path, out_path, diff_path);
+      EXPECT_EQ(0, diff)
+        << "Screenshot regression: " << name << " has " << diff << " differing pixels";
+    }
+  } else {
+    printf("  [INFO] No reference for '%s' - generating initial reference\n", name);
+    FILE* src = fopen(out_path, "rb");
+    FILE* dst = fopen(ref_path, "wb");
+    if (src && dst) { char buf[4096]; size_t n; while ((n = fread(buf, 1, sizeof(buf), src)) > 0) fwrite(buf, 1, n, dst); }
+    if (src) fclose(src);
+    if (dst) fclose(dst);
+  }
+
+  teardownQcScreen(NULL);
+}
+
+TEST_F(ScreenshotTest, QcScreen_ChecklistInProgress) {
+  emulator_init_display(false);
+  setupQcScreen(false);
+  qcScreenSetCheck(0, "display", QcCheckStatus::PASS, nullptr);
+  qcScreenSetCheck(1, "i2c baro", QcCheckStatus::PASS, "1002");
+  qcScreenSetCheck(2, "spi bms", QcCheckStatus::PASS, nullptr);
+  qcScreenSetCheck(3, "can esc", QcCheckStatus::SKIP, nullptr);
+  qcScreenSetCheck(4, "can bms", QcCheckStatus::FAIL, nullptr);
+  qcScreenSetCheck(5, "cpu", QcCheckStatus::PASS, "41C");
+  qcScreenSetCheck(6, "nvs", QcCheckStatus::NOT_RUN, nullptr);
+  qc_render_and_save("qc_checklist_progress");
+}
+
+TEST_F(ScreenshotTest, QcScreen_CalSqueezePrompt) {
+  emulator_init_display(false);
+  setupQcScreen(false);
+  qcScreenPrompt("SQUEEZE FULL", "hold steady until captured");
+  qcScreenPromptValue("3987");
+  qcScreenPromptProgress(64);
+  qc_render_and_save("qc_prompt_squeeze");
+}
+
+TEST_F(ScreenshotTest, QcScreen_BannerPassed) {
+  emulator_init_display(false);
+  setupQcScreen(false);
+  qcScreenBanner(true, "");
+  qc_render_and_save("qc_banner_passed");
+}
+
+TEST_F(ScreenshotTest, QcScreen_BannerFailed) {
+  emulator_init_display(false);
+  setupQcScreen(false);
+  qcScreenBanner(false, "esc(skip) cal buzzer");
+  qc_render_and_save("qc_banner_failed");
+}
+
+// Production OTA renderer: every phase, both themes, and real transitions.
+#include "sp140/lvgl/lvgl_ota.h"
+
+class OtaScreenshotTest : public ScreenshotTest,
+                          public ::testing::WithParamInterface<bool> {};
+
+TEST_P(OtaScreenshotTest, UpdateFlow) {
+  const bool dark = GetParam();
+  emulator_init_display(dark);
+  setupMainScreen(dark);
+  OtaScreen ui;
+  struct Case {
+    const char* name;
+    OtaPhase phase;
+    OtaError error;
+    uint32_t written;
+    const char* title;
+    const char* value;
+  };
+  const Case cases[] = {
+    {"preparing", OtaPhase::Preparing, OtaError::None, 0, "Preparing update", "..."},
+    {"progress_0", OtaPhase::Receiving, OtaError::None, 0, "Receiving firmware", "0%"},
+    {"progress_42", OtaPhase::Receiving, OtaError::None, 420, "Receiving firmware", "42%"},
+    {"progress_100", OtaPhase::Receiving, OtaError::None, 1000, "Receiving firmware", "100%"},
+    {"verifying", OtaPhase::Verifying, OtaError::None, 1000, "Checking firmware", "..."},
+    {"restarting", OtaPhase::Restarting, OtaError::None, 1000, "Restarting...", "..."},
+    {"complete", OtaPhase::Complete, OtaError::None, 1000, "Update complete", "v" VERSION_STRING},
+    {"disconnected", OtaPhase::Failed, OtaError::Disconnected, 420, "Update interrupted", "Connection lost"},
+    {"timeout", OtaPhase::Failed, OtaError::Timeout, 420, "Update interrupted", "Transfer timed out"},
+    {"invalid_firmware", OtaPhase::Failed, OtaError::Verification, 1000, "Update failed", "Firmware not valid"},
+    {"write_failed", OtaPhase::Failed, OtaError::Write, 420, "Update failed", "Could not save"},
+    {"rollback", OtaPhase::Failed, OtaError::RolledBack, 0, "Update failed", "Previous version kept"},
+  };
+  for (const auto& item : cases) {
+    SCOPED_TRACE(item.name);
+    OtaStatus status;
+    status.phase = item.phase;
+    status.error = item.error;
+    status.written = item.written;
+    status.total = 1000;
+    showOtaScreen(ui, status, dark);
+    ASSERT_EQ(lv_screen_active(), ui.screen);
+    EXPECT_STREQ(lv_label_get_text(ui.title), item.title);
+    EXPECT_STREQ(lv_label_get_text(ui.value), item.value);
+    EXPECT_STREQ(lv_label_get_text(ui.footer), item.phase == OtaPhase::Failed ? "Retry in app" :
+                 item.phase == OtaPhase::Complete ? "" : "Keep power on");
+    emulator_render_frame();
+    // Assert layout as well as pixels: no labels may clip or wrap off-panel.
+    for (lv_obj_t* obj : {ui.title, ui.value, ui.footer}) {
+      lv_area_t bounds;
+      lv_obj_get_coords(obj, &bounds);
+      EXPECT_GE(bounds.x1, 0);
+      EXPECT_GE(bounds.y1, 0);
+      EXPECT_LT(bounds.x2, SCREEN_WIDTH);
+      EXPECT_LT(bounds.y2, SCREEN_HEIGHT);
+    }
+    char name[96];
+    snprintf(name, sizeof(name), "ota_%s_%s", item.name, dark ? "dark" : "light");
+    save_and_compare(name);
+  }
+  // Retrying after an error restores the bar and the large percentage font.
+  OtaStatus retry;
+  retry.phase = OtaPhase::Receiving;
+  retry.total = 100;
+  retry.written = 7;
+  showOtaScreen(ui, retry, dark);
+  EXPECT_FALSE(lv_obj_has_flag(ui.bar, LV_OBJ_FLAG_HIDDEN));
+  EXPECT_EQ(lv_bar_get_value(ui.bar), 7);
+  EXPECT_STREQ(lv_label_get_text(ui.value), "7%");
+  hideOtaScreen(ui, main_screen);
+  EXPECT_EQ(lv_screen_active(), main_screen);
+  EXPECT_EQ(ui.screen, nullptr);
+  // A second update can create a fresh view without dangling widget pointers.
+  showOtaScreen(ui, retry, dark);
+  EXPECT_STREQ(lv_label_get_text(ui.value), "7%");
+  hideOtaScreen(ui, main_screen);
+}
+
+INSTANTIATE_TEST_SUITE_P(Themes, OtaScreenshotTest, ::testing::Bool());
+
+TEST(OtaStatusTest, ProgressAndTerminalExpiry) {
+  OtaStatus status;
+  EXPECT_EQ(otaProgressPercent(status), 0u);
+  status.total = UINT32_MAX;
+  status.written = UINT32_MAX;
+  EXPECT_EQ(otaProgressPercent(status), 100u);
+  status.total = 10;
+  EXPECT_EQ(otaProgressPercent(status), 100u);
+  status.phase = OtaPhase::Failed;
+  status.changedAtMs = UINT32_MAX - 5000;
+  EXPECT_TRUE(otaStatusVisible(status, status.changedAtMs + 9999));
+  EXPECT_FALSE(otaStatusVisible(status, status.changedAtMs + 10000));
+  status.phase = OtaPhase::Complete;
+  EXPECT_TRUE(otaStatusVisible(status, status.changedAtMs + 3499));
+  EXPECT_FALSE(otaStatusVisible(status, status.changedAtMs + 3500));
+  status.phase = OtaPhase::Restarting;
+  EXPECT_TRUE(otaStatusVisible(status, status.changedAtMs + 100000));
+}

@@ -2,10 +2,13 @@
 
 #include <Arduino.h>
 #include "sp140/time_utils.h"
+#include <Preferences.h>
+#include <atomic>
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "freertos/queue.h"
 #include "sp140/ble/ble_core.h"
 #include "sp140/ble/ble_ids.h"
 #include "sp140/device_state.h"
@@ -53,8 +56,69 @@ const uint16_t ACK_ERR_CRC = 0x0001;
 const uint16_t ACK_ERR_SECTOR = 0x0002;
 const uint16_t ACK_ERR_LEN = 0x0003;
 
+// CMD_START refusal reasons, sent as the command-ACK status so the app can tell
+// the pilot why. Firmware 8.0 sent 0x0001 for all of them.
+const uint16_t START_ERR_GENERIC = 0x0001;
+const uint16_t START_ERR_ARMED = 0x0002;
+const uint16_t START_ERR_TOO_LARGE = 0x0003;
+const uint16_t START_ERR_FLASH = 0x0004;
+
+// Delay between the END ACK and the reboot. The reboot runs from
+// checkOtaTimeout() (bleNotifyTask), not the write callback, so NimBLE can
+// send the END write response and the ACK notification first.
+const unsigned long OTA_REBOOT_DELAY_MS = 1000;
+
 // State
-volatile bool otaInProgress = false;
+std::atomic<bool> otaInProgress{false};
+// Non-zero once a verified image is set as the boot partition; holds the
+// timeMillis() at which to reboot. While set, the session can't be aborted and
+// arming stays blocked.
+volatile unsigned long otaRebootAtMs = 0;
+
+// Update-screen status. Written only under otaStateMutex; the UI task reads
+// copies from a one-slot queue (xQueuePeek, no wait), so it never takes the OTA
+// lock and nothing here waits on the display.
+QueueHandle_t otaStatusQueue = nullptr;
+OtaStatus otaStatus;
+// Revision of the result screen the pilot dismissed with the button. Written
+// by the button task, read by the UI task; atomic like otaInProgress, so
+// neither waits on the OTA lock. A newer status has a newer revision and shows.
+std::atomic<uint32_t> dismissedOtaRevision{0};
+
+// One-shot NVS receipt for the result screen after the post-update reboot. Its
+// own namespace; no 8.1 settings key is touched.
+const char* const OTA_RECEIPT_NAMESPACE = "ota-ui";
+const char* const OTA_RECEIPT_KEY = "target";
+// Slot address of the image staged by a successful END, written to NVS from
+// checkOtaTimeout() just before the reboot (never from the BLE write callback).
+uint32_t pendingReceiptAddress = 0;
+
+// Called under otaStateMutex. Logs phase/error changes only, not every sector.
+void publishStatus(OtaPhase phase, OtaError error = OtaError::None) {
+    const bool changed = phase != otaStatus.phase || error != otaStatus.error;
+    otaStatus.phase = phase;
+    otaStatus.error = error;
+    otaStatus.changedAtMs = timeMillis();
+    ++otaStatus.revision;
+    if (otaStatusQueue) xQueueOverwrite(otaStatusQueue, &otaStatus);
+    if (changed) {
+        USBSerial.printf("OTA status: %s (%s) %u/%u bytes\n", otaPhaseName(phase),
+                         otaErrorName(error), static_cast<unsigned>(otaStatus.written),
+                         static_cast<unsigned>(otaStatus.total));
+    }
+}
+
+// Store the target slot so a rollback can't be mistaken for a successful
+// new-firmware boot. A failed write only loses the result screen.
+void saveBootReceipt(uint32_t address) {
+    Preferences prefs;
+    if (prefs.begin(OTA_RECEIPT_NAMESPACE, false)) {
+        if (prefs.putUInt(OTA_RECEIPT_KEY, address) != sizeof(address)) {
+            USBSerial.println("OTA: Could not save update-screen boot receipt");
+        }
+        prefs.end();
+    }
+}
 volatile size_t imageTotalLen = 0;
 esp_ota_handle_t updateHandle = 0;
 const esp_partition_t* updatePartition = nullptr;
@@ -100,6 +164,7 @@ void resetOtaState() {
     currentSectorIndex = 0;
     receivedBytes = 0;
     packetCount = 0;
+    pendingReceiptAddress = 0;
 }
 
 void sendAck(uint16_t sector, uint16_t status, uint16_t expectedSector = 0) {
@@ -147,7 +212,7 @@ void sendCommandResponse(uint16_t ackId, uint16_t status) {
 }
 
 // Forward declaration
-void abortOtaImpl();
+void abortOtaImpl(OtaError error = OtaError::None);
 
 void handleCmdStart(const uint8_t* data) {
     USBSerial.println("OTA: CMD_START");
@@ -161,19 +226,33 @@ void handleCmdStart(const uint8_t* data) {
         abortOtaImpl();
     }
 
+    // Clean slate before acquiring new partition/handle
+    resetOtaState();
+
+    // Claim the session before checking the arm state: toggleArm() refuses
+    // while isOtaInProgress(), so arming can't slip in during the multi-second
+    // erase in esp_ota_begin() below.
+    otaInProgress = true;
+    lastOtaActivityMs = timeMillis();
+
     if (currentState == ARMED || currentState == ARMED_CRUISING) {
         USBSerial.println("OTA Blocked: Device ARMED");
-        sendCommandResponse(CMD_START, 0x0001);
+        // No status: an armed controller keeps its flight display and button.
+        abortOtaImpl();
+        sendCommandResponse(CMD_START, START_ERR_ARMED);
         return;
     }
 
-    // Clean slate before acquiring new partition/handle
-    resetOtaState();
+    // Disarmed and claimed: only now may the update screen take over.
+    otaStatus.written = 0;
+    otaStatus.total = 0;
+    publishStatus(OtaPhase::Preparing);
 
     updatePartition = esp_ota_get_next_update_partition(nullptr);
     if (!updatePartition) {
         USBSerial.println("OTA Error: No partition");
-        sendCommandResponse(CMD_START, 0x0001);
+        abortOtaImpl(OtaError::NoPartition);
+        sendCommandResponse(CMD_START, START_ERR_FLASH);
         return;
     }
 
@@ -183,20 +262,30 @@ void handleCmdStart(const uint8_t* data) {
                       | (static_cast<uint32_t>(data[5]) << 24);
     if (imageLen > updatePartition->size) {
         USBSerial.printf("OTA Error: Image size %u > partition %u\n", imageLen, updatePartition->size);
-        sendCommandResponse(CMD_START, 0x0001);
+        abortOtaImpl(OtaError::InvalidSize);
+        sendCommandResponse(CMD_START, START_ERR_TOO_LARGE);
         return;
     }
 
     esp_err_t err = esp_ota_begin(updatePartition, imageLen, &updateHandle);
     if (err != ESP_OK) {
         USBSerial.printf("OTA Error: Begin failed 0x%x\n", err);
-        sendCommandResponse(CMD_START, 0x0001);
+        updateHandle = 0;
+        abortOtaImpl(OtaError::Begin);
+        sendCommandResponse(CMD_START, START_ERR_FLASH);
         return;
     }
 
-    otaInProgress = true;
     imageTotalLen = imageLen;
+    otaStatus.total = imageLen;
+    publishStatus(OtaPhase::Receiving);
     lastOtaActivityMs = timeMillis();
+
+    // Ask for the OTA connection parameters only after the erase, as 8.0 did.
+    // Requested before it, the phone schedules the change while the erase in
+    // esp_ota_begin() has the radio stalled; the two sides then disagree on the
+    // connection timing and the link is lost for good (seen on a Pixel 9 Pro:
+    // 3 of 5 starts died exactly one supervision timeout later).
     requestFastConnParams();
     sendCommandResponse(CMD_START, 0x0000);  // Accept
 }
@@ -204,6 +293,7 @@ void handleCmdStart(const uint8_t* data) {
 class OtaCommandCallback : public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic* pChar, NimBLEConnInfo& connInfo) override {
         OtaStateLock lock(portMAX_DELAY);  // serialize vs checkOtaTimeout (other task)
+        if (!lock.held()) return;
         std::string value = pChar->getValue();
         // Command Packet: ID(2) + Payload(16) + CRC(2) = 20 bytes
         if (value.length() < 20) {
@@ -221,7 +311,13 @@ class OtaCommandCallback : public NimBLECharacteristicCallbacks {
         uint16_t calcCrc = crc16_ccitt(data, 18);
         if (rxCrc != calcCrc) {
             USBSerial.printf("OTA Error: CMD CRC Fail Exp %04X Got %04X\n", calcCrc, rxCrc);
-            sendCommandResponse(cmdId, 0x0001);  // Reject (Status 1)
+            sendCommandResponse(cmdId, START_ERR_GENERIC);  // Reject (Status 1)
+            return;
+        }
+
+        // A verified image is already staged and the reboot is imminent.
+        if (otaRebootAtMs != 0) {
+            sendCommandResponse(cmdId, cmdId == CMD_END ? 0x0000 : START_ERR_GENERIC);
             return;
         }
 
@@ -234,25 +330,34 @@ class OtaCommandCallback : public NimBLECharacteristicCallbacks {
                 if (receivedBytes != imageTotalLen) {
                     USBSerial.printf("OTA Error: Size Mismatch Rx:%u Exp:%u\n", receivedBytes, imageTotalLen);
                     sendCommandResponse(CMD_END, 0x0001);  // Fail
-                    abortOtaImpl();
+                    abortOtaImpl(OtaError::SizeMismatch);
                     return;
                 }
 
+                // Status only; nothing here waits for the display.
+                publishStatus(OtaPhase::Verifying);
+                OtaError failure = OtaError::Verification;
                 if (esp_ota_end(updateHandle) == ESP_OK) {
                     if (esp_ota_set_boot_partition(updatePartition) == ESP_OK) {
                         USBSerial.println("OTA Success. Restarting...");
+                        // Reboot from checkOtaTimeout() once this callback has
+                        // returned and the write response + ACK have gone out.
+                        otaRebootAtMs = timeMillis() + OTA_REBOOT_DELAY_MS;
+                        if (otaRebootAtMs == 0) otaRebootAtMs = 1;
+                        // The NVS receipt is written there too, not on this task.
+                        pendingReceiptAddress = updatePartition->address;
+                        publishStatus(OtaPhase::Restarting);
                         sendCommandResponse(CMD_END, 0x0000);  // Success
-                        timeDelay(1000);  // Allow BLE flush
-                        ESP.restart();
                         return;
                     } else {
                         USBSerial.println("OTA Error: Set Boot Partition Failed");
+                        failure = OtaError::BootPartition;
                     }
                 } else {
                     USBSerial.println("OTA Error: OTA End Failed");
                 }
                 sendCommandResponse(CMD_END, 0x0001);  // Fail
-                abortOtaImpl();
+                abortOtaImpl(failure);
             } else {
                 sendCommandResponse(CMD_END, 0x0001);  // Not in progress
             }
@@ -263,7 +368,8 @@ class OtaCommandCallback : public NimBLECharacteristicCallbacks {
 class OtaDataCallback : public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic* pChar, NimBLEConnInfo& connInfo) override {
         OtaStateLock lock(portMAX_DELAY);  // serialize vs checkOtaTimeout (other task)
-        if (!otaInProgress) return;
+        if (!lock.held()) return;
+        if (!otaInProgress || otaRebootAtMs != 0) return;
 
         std::string valStr = pChar->getValue();
         size_t len = valStr.length();
@@ -314,6 +420,8 @@ class OtaDataCallback : public NimBLECharacteristicCallbacks {
                 esp_err_t err = esp_ota_write(updateHandle, sectorBuffer, sectorBufferLen);
                 if (err == ESP_OK) {
                     receivedBytes += sectorBufferLen;
+                    otaStatus.written = receivedBytes;
+                    publishStatus(OtaPhase::Receiving);
                     sendAck(sector, ACK_SUCCESS);
                     USBSerial.printf("OTA: Sector %u written (%u bytes total)\n",
                                      static_cast<unsigned int>(currentSectorIndex),
@@ -326,7 +434,7 @@ class OtaDataCallback : public NimBLECharacteristicCallbacks {
                     // Must abort: the OTA handle's internal write offset may
                     // have advanced partially, so retrying this sector would
                     // write data at the wrong position and corrupt the image.
-                    abortOtaImpl();
+                    abortOtaImpl(OtaError::Write);
                 }
             } else {
                 USBSerial.printf("OTA Error: CRC fail exp 0x%04X got 0x%04X\n",
@@ -349,7 +457,12 @@ class OtaDataCallback : public NimBLECharacteristicCallbacks {
     }
 };
 
-void abortOtaImpl() {
+void abortOtaImpl(OtaError error) {
+    // The new image is already the boot partition; nothing to abort. Keep the
+    // session flag set so arming stays blocked until the reboot.
+    if (otaRebootAtMs != 0) return;
+    // Keep the last progress/error snapshot after resetting the transport.
+    if (error != OtaError::None) publishStatus(OtaPhase::Failed, error);
     if (otaInProgress) {
         if (updateHandle) esp_ota_abort(updateHandle);
         otaInProgress = false;
@@ -364,10 +477,99 @@ static OtaDataCallback dataCallback;
 
 }  // namespace
 
-void abortOta() {
+// Arduino's initArduino() marks a freshly flashed image valid before setup()
+// unless the app overrides this weak hook, which would leave rollback with
+// nothing to catch. Returning true defers validation to the end of setup()
+// (main.cpp), so an image that crashes or hangs while booting rolls back to the
+// previous firmware.
+extern "C" bool verifyRollbackLater() { return true; }
+
+void abortOta(OtaError error) {
     // Called from the BLE disconnect callback (host task); lock vs checkOtaTimeout.
+    // During the reboot window abortOtaImpl() returns before publishing, so the
+    // restart screen stays up.
     OtaStateLock lock(portMAX_DELAY);
-    abortOtaImpl();
+    abortOtaImpl(otaInProgress ? error : OtaError::None);
+}
+
+bool readOtaStatus(OtaStatus& status) {
+    return otaStatusQueue && xQueuePeek(otaStatusQueue, &status, 0) == pdTRUE;
+}
+
+namespace {
+bool isOtaResult(OtaPhase phase) {
+    return phase == OtaPhase::Failed || phase == OtaPhase::Complete;
+}
+}  // namespace
+
+bool readOtaScreen(OtaStatus& status) {
+    return readOtaStatus(status) && otaStatusVisible(status, timeMillis()) &&
+           !(isOtaResult(status.phase) && status.revision == dismissedOtaRevision);
+}
+
+bool otaBlocksInput() {
+    OtaStatus status;
+    return isOtaInProgress() || readOtaScreen(status);
+}
+
+bool otaFilterButton(bool disarmed, bool buttonDown, bool& holdUntilRelease) {
+    if (!(disarmed && otaBlocksInput()) && !holdUntilRelease) return false;
+    // A fresh press on a result screen (no transfer running) dismisses it; the
+    // UI task closes the screen on its next tick. The press itself is still
+    // consumed through its release. A press held since the transfer is not.
+    if (disarmed && buttonDown && !holdUntilRelease && !isOtaInProgress()) {
+        OtaStatus status;
+        if (readOtaScreen(status) && isOtaResult(status.phase)) {
+            dismissedOtaRevision = status.revision;
+        }
+    }
+    holdUntilRelease = buttonDown;
+    return true;
+}
+
+void finishOtaBoot(bool firmwareValid) {
+    // NVS work stays outside the OTA lock; only the publish needs it. Opened
+    // read-write (as the PR did): a read-only open of a namespace that doesn't
+    // exist yet logs an nvs_open error on every boot at CORE_DEBUG_LEVEL=2.
+    uint32_t target = 0;
+    {
+        Preferences prefs;
+        if (prefs.begin(OTA_RECEIPT_NAMESPACE, false)) {
+            target = prefs.getUInt(OTA_RECEIPT_KEY, 0);
+            if (target != 0) prefs.remove(OTA_RECEIPT_KEY);
+            prefs.end();
+        }
+    }
+    if (target == 0) return;
+
+    // The bootloader's otadata is the authority on what happened; the receipt
+    // only says an update was staged for `target`. A rollback is reported only
+    // when the bootloader marked that slot invalid, so a stale receipt (e.g. an
+    // update to firmware without this code, then a USB flash) shows nothing.
+    const esp_partition_t* running = esp_ota_get_running_partition();
+    const esp_partition_t* invalid = esp_ota_get_last_invalid_partition();
+    bool show = true;
+    OtaPhase phase = OtaPhase::Failed;
+    OtaError error = OtaError::None;
+    if (running != nullptr && running->address == target) {
+        phase = firmwareValid ? OtaPhase::Complete : OtaPhase::Failed;
+        error = firmwareValid ? OtaError::None : OtaError::Verification;
+    } else if (invalid != nullptr && invalid->address == target) {
+        error = OtaError::RolledBack;
+    } else {
+        show = false;
+    }
+    USBSerial.printf("OTA: Boot receipt for 0x%06lx, running 0x%06lx: %s\n",
+                     static_cast<unsigned long>(target),
+                     static_cast<unsigned long>(running ? running->address : 0),
+                     !show ? "stale, not shown"
+                           : phase == OtaPhase::Complete ? "update complete" : otaErrorName(error));
+    if (!show) return;
+
+    OtaStateLock lock(portMAX_DELAY);
+    // A new update that already started owns the screen.
+    if (otaInProgress) return;
+    publishStatus(phase, error);
 }
 
 void checkOtaTimeout() {
@@ -375,9 +577,19 @@ void checkOtaTimeout() {
     // device is clearly not idle, so skip this tick rather than block or race.
     OtaStateLock lock(0);
     if (!lock.held()) return;
+    if (otaRebootAtMs != 0) {
+        if (static_cast<long>(timeMillis() - otaRebootAtMs) >= 0) {
+            // One short NVS write on this task right before the reboot.
+            if (pendingReceiptAddress != 0) saveBootReceipt(pendingReceiptAddress);
+            USBSerial.println("OTA: Rebooting into new firmware");
+            USBSerial.flush();
+            ESP.restart();
+        }
+        return;
+    }
     if (otaInProgress && (timeMillis() - lastOtaActivityMs > OTA_TIMEOUT_MS)) {
         USBSerial.println("OTA: Idle timeout, aborting.");
-        abortOtaImpl();
+        abortOtaImpl(OtaError::Timeout);
     }
 }
 
@@ -385,18 +597,37 @@ bool isOtaInProgress() {
     return otaInProgress;
 }
 
+OtaArmGuard::OtaArmGuard(TickType_t timeout) {
+    if (otaStateMutex == nullptr) {
+        held_ = true;  // OTA service not started: no START can race arming
+        return;
+    }
+    taken_ = (xSemaphoreTake(otaStateMutex, timeout) == pdTRUE);
+    held_ = taken_;
+}
+
+OtaArmGuard::~OtaArmGuard() {
+    if (taken_) xSemaphoreGive(otaStateMutex);
+}
+
 void initOtaBleService(NimBLEServer* pServer) {
     if (otaStateMutex == nullptr) {
         otaStateMutex = xSemaphoreCreateMutex();
     }
 
+    if (!otaStatusQueue) otaStatusQueue = xQueueCreate(1, sizeof(OtaStatus));
+
     NimBLEService* pService = pServer->createService(OTA_SERVICE_UUID);
+
+    // Writes need an encrypted (bonded) link, like every config write, so only
+    // a paired phone can flash firmware.
 
     // Firmware data (Write No Response + Indicate for ACKs)
     pRecvFwChar = pService->createCharacteristic(
         OTA_RECV_FW_UUID,
         NIMBLE_PROPERTY::WRITE |
         NIMBLE_PROPERTY::WRITE_NR |
+        NIMBLE_PROPERTY::WRITE_ENC |
         NIMBLE_PROPERTY::NOTIFY |
         NIMBLE_PROPERTY::INDICATE);
     pRecvFwChar->setCallbacks(&dataCallback);
@@ -411,6 +642,7 @@ void initOtaBleService(NimBLEServer* pServer) {
     pCommandChar = pService->createCharacteristic(
         OTA_COMMAND_UUID,
         NIMBLE_PROPERTY::WRITE |
+        NIMBLE_PROPERTY::WRITE_ENC |
         NIMBLE_PROPERTY::NOTIFY |
         NIMBLE_PROPERTY::INDICATE);
     pCommandChar->setCallbacks(&cmdCallback);

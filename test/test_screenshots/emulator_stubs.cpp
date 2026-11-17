@@ -65,57 +65,8 @@ void customVibePattern(const uint8_t[], const uint16_t[], int) {}
 void pulseVibration(uint16_t, uint8_t) {}
 void stopVibration() {}
 
-// --- Sensor ID string functions ---
-const char* sensorIDToString(SensorID id) {
-  switch (id) {
-    case SensorID::ESC_MOS_Temp:     return "ESC MOS Temp";
-    case SensorID::ESC_MCU_Temp:     return "ESC MCU Temp";
-    case SensorID::ESC_CAP_Temp:     return "ESC CAP Temp";
-    case SensorID::Motor_Temp:       return "Motor Temp";
-    case SensorID::BMS_MOS_Temp:     return "BMS MOS Temp";
-    case SensorID::BMS_T1_Temp:      return "BMS T1";
-    case SensorID::BMS_SOC:          return "BMS SOC";
-    case SensorID::CPU_Temp:         return "CPU Temp";
-    default:                         return "Unknown";
-  }
-}
-
-const char* sensorIDToAbbreviation(SensorID id) {
-  switch (id) {
-    case SensorID::ESC_MOS_Temp:     return "E.MOS";
-    case SensorID::ESC_MCU_Temp:     return "E.MCU";
-    case SensorID::ESC_CAP_Temp:     return "E.CAP";
-    case SensorID::Motor_Temp:       return "MOT";
-    case SensorID::BMS_MOS_Temp:     return "B.MOS";
-    case SensorID::BMS_Balance_Temp: return "B.BAL";
-    case SensorID::BMS_T1_Temp:      return "B.T1";
-    case SensorID::BMS_T2_Temp:      return "B.T2";
-    case SensorID::BMS_T3_Temp:      return "B.T3";
-    case SensorID::BMS_T4_Temp:      return "B.T4";
-    case SensorID::BMS_High_Cell_Voltage: return "HiCell";
-    case SensorID::BMS_Low_Cell_Voltage:  return "LoCell";
-    case SensorID::BMS_SOC:          return "SOC";
-    case SensorID::BMS_Total_Voltage: return "BatV";
-    case SensorID::BMS_Voltage_Differential: return "Vdiff";
-    case SensorID::Baro_Temp:        return "BARO";
-    case SensorID::CPU_Temp:         return "CPU";
-    default:                         return "???";
-  }
-}
-
-const char* sensorIDToAbbreviationWithLevel(SensorID id, AlertLevel level) {
-  // For the emulator, just return the basic abbreviation with a suffix
-  static char buf[16];
-  const char* abbr = sensorIDToAbbreviation(id);
-  switch (level) {
-    case AlertLevel::WARN_HIGH: snprintf(buf, sizeof(buf), "%s Hi", abbr); break;
-    case AlertLevel::WARN_LOW:  snprintf(buf, sizeof(buf), "%s Lo", abbr); break;
-    case AlertLevel::CRIT_HIGH: snprintf(buf, sizeof(buf), "%s HI", abbr); break;
-    case AlertLevel::CRIT_LOW:  snprintf(buf, sizeof(buf), "%s LO", abbr); break;
-    default:                    snprintf(buf, sizeof(buf), "%s", abbr); break;
-  }
-  return buf;
-}
+// Sensor names (sensorIDToString, sensorIDToAbbreviation...) come from the
+// real src/sp140/sensor_names.cpp, so alert labels match the controller.
 
 SensorCategory getSensorCategory(SensorID) { return SensorCategory::ESC; }
 void initSimpleMonitor() {}

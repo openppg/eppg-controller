@@ -33,6 +33,7 @@ esptool.py --chip esp32s3 merge_bin \
 **Testing:**
 - Basic test files exist in `/test/` directory
 - No automated test framework configured - testing is primarily hardware-in-the-loop
+- Hand-controller emulator: `tools/hc_emulator/` runs the real LVGL main screen natively, driven by a browser dashboard (flight simulator + app CSV log replay). See its README.
 
 ## Code Architecture
 

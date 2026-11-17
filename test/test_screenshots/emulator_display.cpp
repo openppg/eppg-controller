@@ -7,6 +7,7 @@
 // Include project headers that define the display globals
 #include "sp140/lvgl/lvgl_core.h"
 #include "sp140/lvgl/lvgl_main_screen.h"
+#include "sp140/lvgl/lvgl_climb_efficiency.h"
 #include "sp140/structs.h"
 
 // Full-screen framebuffer: 160 x 128 pixels, RGB565
@@ -337,6 +338,7 @@ void emulator_teardown() {
   for (int i = 0; i < 13; i++) climb_rate_divider_lines[i] = NULL;
   for (int i = 0; i < 12; i++) climb_rate_fill_sections[i] = NULL;
   critical_border = NULL;
+  clearClimbEfficiencyWidgets();
 
   // Reset alert UI pointers (declared in lvgl_alerts.h)
   extern lv_obj_t* warning_counter_circle;

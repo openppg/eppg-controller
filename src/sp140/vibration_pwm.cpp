@@ -53,6 +53,16 @@ bool initVibeMotor() {
 }
 
 /**
+ * Directly set motor PWM, bypassing the queue/task. Pre-task contexts only
+ * (factory QC): vibeTask does not exist yet, so queued requests would sit
+ * unserviced until Phase 6.
+ */
+void vibeDirectSet(uint8_t intensity) {
+  if (!ENABLE_VIBE) return;
+  ledcWrite(VIBE_PWM_CHANNEL, intensity);
+}
+
+/**
  * Pulse the vibration motor with a single 400ms pulse (non-blocking)
  */
 void pulseVibeMotor() {

@@ -23,26 +23,33 @@
 #include "../../inc/sp140/alert_display.h"
 #include "../../inc/sp140/altimeter.h"
 #include "../../inc/sp140/system_monitors.h"
+#include "../../inc/sp140/task_timing.h"
 #include "../../inc/sp140/ble.h"
 #include "../../inc/sp140/ble/ble_core.h"
 #include "../../inc/sp140/ble/ble_utils.h"
 #include "../../inc/sp140/ble/config_service.h"
 #include "../../inc/sp140/ble/fastlink_service.h"
 #include "../../inc/sp140/bms.h"
+#include "../../inc/sp140/climb_efficiency.h"
+#include "../../inc/sp140/monitor_config.h"
+#include "../../inc/sp140/thermal_headroom.h"
 #include "../../inc/sp140/esc.h"
 #include "../../inc/sp140/esc_config_relay.h"
 #include "../../inc/sp140/esc_flasher_relay.h"
 #include "../../inc/sp140/globals.h"  // device config
 #include "../../inc/sp140/lvgl/lvgl_alerts.h"
+#include "../../inc/sp140/lvgl/lvgl_climb_efficiency.h"
 #include "../../inc/sp140/lvgl/lvgl_core.h"
 #include "../../inc/sp140/lvgl/lvgl_main_screen.h"
 #include "../../inc/sp140/lvgl/lvgl_updates.h"
+#include "sp140/lvgl/lvgl_ota.h"
 #include "../../inc/sp140/simple_monitor.h"
 #include "../../inc/sp140/telemetry_hub.h"
 
 #include "../../inc/sp140/buzzer.h"
 #include "../../inc/sp140/device_state.h"
 #include "../../inc/sp140/diagnostics.h"
+#include "../../inc/sp140/first_boot_qc.h"
 #include "../../inc/sp140/led.h"
 #include "../../inc/sp140/mode.h"
 #include "../../inc/sp140/throttle.h"
@@ -308,11 +315,33 @@ void throttleTask(void *pvParameters) {
   vTaskDelete(NULL);  // should never reach this
 }
 
+// Keep a periodic task locked to its original phase while skipping every slot
+// that elapsed during an overrun. Resetting the base to now would turn cadence
+// into work time + period and halve a near-budget UI frame rate.
+static void delayUntilNextPeriod(TickType_t* lastWake, TickType_t period) {
+  const TickType_t now = xTaskGetTickCount();
+  *lastWake = static_cast<TickType_t>(phaseAlignedWakeBase(
+      static_cast<uint32_t>(*lastWake), static_cast<uint32_t>(now),
+      static_cast<uint32_t>(period)));
+  vTaskDelayUntil(lastWake, period);
+}
+
+// Sole BMP3xx I2C producer. Each conversion supplies pressure and temperature;
+// all consumers read one coherent snapshot rather than forcing conversions.
+void barometerTask(void *pvParameters) {
+  (void)pvParameters;
+  TickType_t lastWake = xTaskGetTickCount();
+  const TickType_t sampleTicks = pdMS_TO_TICKS(40);  // 25 Hz
+  for (;;) {
+    sampleBarometer(deviceData);
+    delayUntilNextPeriod(&lastWake, sampleTicks);
+  }
+}
+
 // Lightweight task: reads controller sensors and writes to TelemetryHub at 10Hz.
-// Uses CACHED barometer/CPU values — uiTask is the sole I2C reader, and
-// getCachedCpuTemperature throttles tsens access. This avoids i2cMutex
-// contention and the "tsens: Do not configure..." error that arises when
-// multiple tasks call temperatureRead() concurrently.
+// Uses CACHED barometer/CPU values — barometerTask is the sole BMP reader, and
+// this task is the sole runtime owner of tsens refresh. Other tasks only
+// consume the atomically published CPU temperature.
 void ctrlSensorTask(void *pvParameters) {
   (void)pvParameters;
   TickType_t lastWake = xTaskGetTickCount();
@@ -320,15 +349,13 @@ void ctrlSensorTask(void *pvParameters) {
 
   for (;;) {
     const unsigned long now = timeMillis();
-    float alt = getCachedAltitude();
-    // Direct read for baro temp (at 10Hz) — cheap I2C call, keeps the
-    // cached value fresh for the Baro_Temp monitor which reads the cache.
-    float bt = getBaroTemperature();
-    float bp = getBaroPressure();
-    float vs = getCachedVerticalSpeed();
-    float mt = getCachedCpuTemperature();
+    BarometerSnapshot barometer = {};
+    getBarometerSnapshot(&barometer);
+    float mt = refreshCpuTemperature();
     uint16_t pr = getLastThrottleRaw();
-    telemetryHubWriteController(alt, bt, bp, vs, mt, pr, now);
+    telemetryHubWriteController(
+        barometer.relativeAltitude, barometer.temperatureC,
+        barometer.pressureHpa, barometer.verticalSpeedMps, mt, pr, now);
     vTaskDelayUntil(&lastWake, sensorTicks);
   }
 }
@@ -365,23 +392,103 @@ void bleNotifyTask(void *pvParameters) {
   }
 }
 
+// Climb yield (issue #57). Fed from the UI task only, from the published
+// barometer snapshot, so it needs no locking.
+static ClimbEfficiencyEstimator climbEfficiency;
+
+// Thermal headroom for the power bar, with the live alert thresholds.
+static ThermalHeadroom makeThermalHeadroom() {
+  ThermalHeadroomConfig c;
+  const Thresholds* limits[THERMAL_PART_COUNT] = {
+    &motorTempThresholds, &escMosTempThresholds, &escCapTempThresholds,
+    &escMcuTempThresholds, &bmsCellTempThresholds, &bmsTempThresholds,
+    &bmsTempThresholds};
+  for (int i = 0; i < THERMAL_PART_COUNT; ++i) {
+    c.parts[i].warnC = limits[i]->warnHigh;
+    c.parts[i].critC = limits[i]->critHigh;
+  }
+  return ThermalHeadroom(c);
+}
+static ThermalHeadroom thermalHeadroom = makeThermalHeadroom();
+
+static void updateThermalHeadroom(const TelemetryHub& hub) {
+  float temps[THERMAL_PART_COUNT];
+  for (float& t : temps) t = NAN;
+  if (hub.esc.escState == TelemetryState::CONNECTED) {
+    temps[THERMAL_MOTOR] = hub.esc.motor_temp;
+    temps[THERMAL_ESC_MOS] = hub.esc.mos_temp;
+    temps[THERMAL_ESC_CAP] = hub.esc.cap_temp;
+    temps[THERMAL_ESC_MCU] = hub.esc.mcu_temp;
+  }
+  float soc = NAN;
+  if (hub.bms.bmsState == TelemetryState::CONNECTED) {
+    const float cells[] = {hub.bms.t1_temperature, hub.bms.t2_temperature,
+                           hub.bms.t3_temperature, hub.bms.t4_temperature};
+    for (float c : cells) {
+      if (!isnan(c) && (isnan(temps[THERMAL_BATTERY]) || c > temps[THERMAL_BATTERY])) {
+        temps[THERMAL_BATTERY] = c;
+      }
+    }
+    temps[THERMAL_BMS_MOS] = hub.bms.mos_temperature;
+    temps[THERMAL_BMS_BALANCE] = hub.bms.balance_temperature;
+    soc = hub.bms.soc;
+  }
+  thermalHeadroom.update(timeMillis(), unifiedBatteryData.power, temps, soc);
+}
+
 void refreshDisplay() {
   // Guard against calls before main_screen is set up
   if (main_screen == NULL) {
     return;
   }
 
-  // Read barometer OUTSIDE lvglMutex. uiTask is the designated sole I2C
-  // barometer reader — this call populates the cached* globals in altimeter.cpp
-  // that other tasks read via getCachedAltitude()/etc. Taking i2cMutex inside
-  // lvglMutex was a nested-lock deadlock risk.
-  static float lastGoodAltitude = 0.0f;
-  const float rawAltitude = getAltitude(deviceData);
-  if (rawAltitude != __FLT_MIN__) {
-    lastGoodAltitude = rawAltitude;
+  // Full-screen firmware update. Only this (UI) task touches the OTA screen; it
+  // reads a status copy without taking the OTA lock. Never shown while armed:
+  // an armed controller keeps its flight display (OTA START is refused then).
+  static OtaScreen otaScreen;
+  static uint32_t lastOtaPaintMs = 0;
+  OtaStatus ota;
+  const uint32_t now = timeMillis();
+  const bool showOta = currentState == DISARMED && readOtaScreen(ota);
+  if (showOta || otaScreen.screen) {
+    if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(40)) != pdTRUE) return;
+    if (showOta) {
+      const bool phaseChanged = !otaScreen.screen || otaScreen.phase != ota.phase ||
+                                otaScreen.error != ota.error;
+      if (phaseChanged || now - lastOtaPaintMs >= 250) {
+        if (phaseChanged) {
+          USBSerial.printf("OTA screen: %s (%s) %u%%\n", otaPhaseName(ota.phase),
+                           otaErrorName(ota.error), otaProgressPercent(ota));
+        }
+        showOtaScreen(otaScreen, ota, deviceData.theme == 1);
+        lastOtaPaintMs = now;
+      }
+      updateLvgl();
+    } else {
+      hideOtaScreen(otaScreen, main_screen);
+      USBSerial.println("OTA screen: closed");
+    }
+    xSemaphoreGive(lvglMutex);
+    if (showOta) return;
   }
-  const float currentRelativeAltitude =
-      (rawAltitude != __FLT_MIN__) ? rawAltitude : lastGoodAltitude;
+
+  // Snapshot outside lvglMutex. This is a short memory copy and never takes the
+  // I2C mutex, preserving the no-nested-lock rule for display rendering.
+  static float lastGoodAltitude = 0.0f;
+  BarometerSnapshot barometer = {};
+  const bool barometerValid = getBarometerSnapshot(&barometer);
+  if (barometerValid) {
+    lastGoodAltitude = barometer.relativeAltitude;
+  }
+  const float currentRelativeAltitude = barometerValid
+      ? barometer.relativeAltitude
+      : lastGoodAltitude;
+
+  // A failed baro read is a gap, not a repeat of the last altitude: holding
+  // the value would read as level flight.
+  climbEfficiency.update(timeMillis(),
+                         barometerValid ? barometer.relativeAltitude : NAN,
+                         unifiedBatteryData.power, currentState != DISARMED);
 
   // Atomic snapshot of ESC/BMS telemetry from the hub. Reading the live globals
   // here would race the throttle task, which writes escTelemetryData
@@ -390,6 +497,7 @@ void refreshDisplay() {
   // this never blocks the UI task and never shows a half-updated struct.
   static TelemetryHub uiHub = {};
   telemetryHubRead(&uiHub, pdMS_TO_TICKS(5));
+  updateThermalHeadroom(uiHub);
 
   if (xSemaphoreTake(lvglMutex, pdMS_TO_TICKS(40)) == pdTRUE) {
     // Determine the altitude to show on the display
@@ -407,6 +515,14 @@ void refreshDisplay() {
       updateLvglMainScreen(deviceData, uiHub.esc, uiHub.bms,
                            unifiedBatteryData, altitudeToShow, isArmed,
                            isCruising, armedAtMillis);
+      {
+        const ThermalHeadroomResult& heat = thermalHeadroom.result();
+        const ClimbBarZones zones = climbBarZones(
+            climbEfficiency.result(), heat.valid ? heat.warnPowerKw : NAN,
+            heat.valid ? heat.critPowerKw : NAN, climbEfficiency.config());
+        updateClimbEfficiencyDisplay(climbEfficiency.result(), zones,
+                                     unifiedBatteryData.power, isArmed);
+      }
       break;
     // Add cases for other screens here later
     // case SETTINGS_SCREEN:
@@ -481,11 +597,11 @@ void uiTask(void *pvParameters) {
   for (;;) {
     refreshDisplay();
     lastUiRunMs = timeMillis();
-    vTaskDelayUntil(&lastWake, uiTicks);
+    delayUntilNextPeriod(&lastWake, uiTicks);
   }
 }
 
-// BMS task: 20 Hz polling and unified battery update
+// BMS task: 10 Hz polling and unified battery update
 void bmsTask(void *pvParameters) {
   TickType_t lastWake = xTaskGetTickCount();
   const TickType_t bmsTicks = pdMS_TO_TICKS(100);  // 10 Hz
@@ -640,6 +756,9 @@ void setupTasks() {
   xTaskCreate(blinkLEDTask, "blinkLed", 2560, NULL, 1, &blinkLEDTaskHandle);
   xTaskCreatePinnedToCore(throttleTask, "throttle", 4352, NULL, 3,
                           &throttleTaskHandle, 0);
+  // A low-priority producer sustains 25 Hz without starving BLE/OTA during an
+  // expensive display redraw.
+  xTaskCreatePinnedToCore(barometerTask, "Barometer", 3072, NULL, 1, NULL, 1);
   xTaskCreatePinnedToCore(uiTask, "UI", 5888, NULL, 2, &uiTaskHandle, 1);
   xTaskCreatePinnedToCore(bmsTask, "BMS", 2304, NULL, 2, &bmsTaskHandle, 1);
   xTaskCreate(ctrlSensorTask, "CtrlSensor", 4096, NULL, 2,
@@ -679,6 +798,11 @@ void setup() {
   USBSerial.print("Build date/time: ");
   USBSerial.println(buildDate);
   diagnosticsInit();
+
+  // Capture QC boot context BEFORE refreshDeviceData(): on a fresh unit
+  // refreshDeviceData() writes defaults into the "openppg" namespace, which
+  // would make a brand-new factory board look like an existing fleet unit.
+  qcCaptureBootContext();
 
   // Load device config from EEPROM first - may contain pin mappings
   refreshDeviceData();
@@ -799,6 +923,15 @@ void setup() {
   }
 
   // =========================================================================
+  // PHASE 4.5: Factory QC (fresh factory units / serial-requested rerun ONLY;
+  // the installed fleet is back-filled and never enters this flow). Blocking
+  // guided flow — display + hardware are up, no app tasks are running yet.
+  // =========================================================================
+  if (qcShouldRun()) {
+    runFirstBootQc();
+  }
+
+  // =========================================================================
   // PHASE 5: Services Initialization
   // =========================================================================
   USBSerial.println("Initializing services...");
@@ -823,7 +956,8 @@ void setup() {
   // =========================================================================
   USBSerial.println("Starting external interfaces...");
 
-  // Start BLE advertising (now safe - UI is ready, tasks are running)
+  // Start BLE advertising (now safe - UI is ready, tasks are running). Kept
+  // before the validation below so a new image that can't advertise rolls back.
   restartBLEAdvertising();
   USBSerial.println("BLE advertising started");
 
@@ -832,14 +966,18 @@ void setup() {
 
   // Check if this is first boot after OTA update and validate if needed
   esp_ota_img_states_t ota_state;
+  bool firmwareValid = true;
   if (esp_ota_get_state_partition(running, &ota_state) == ESP_OK) {
     if (ota_state == ESP_OTA_IMG_PENDING_VERIFY) {
       // First boot after OTA - if we made it this far, firmware is good
       USBSerial.println("OTA: First boot after update - validating firmware");
-      esp_ota_mark_app_valid_cancel_rollback();
-      USBSerial.println("OTA: Firmware marked valid - Rollback protection active");
+      firmwareValid = esp_ota_mark_app_valid_cancel_rollback() == ESP_OK;
+      USBSerial.println(firmwareValid ? "OTA: Firmware marked valid - Rollback protection active" :
+                                       "OTA: Firmware validation failed");
     }
   }
+  // Update result screen (one-shot receipt written before the OTA reboot).
+  finishOtaBoot(firmwareValid);
 
   USBSerial.println("=== Boot complete ===");
 }
@@ -856,10 +994,25 @@ void buttonHandlerTask(void *parameter) {
   bool lastButtonState = HIGH;
   bool buttonState;
   bool pairingHoldHandled = false;
+  bool consumeUpdateRelease = false;
 
   while (true) {
     buttonState = digitalRead(board_config.button_top);
     uint32_t currentTime = timeMillis();
+
+    // Consume all gestures during the update, including a held button's final
+    // release. No stale click/hold may arm, change mode, or clear BLE bonds.
+    // On a result screen a press only dismisses it; input is normal after it.
+    // Only while disarmed: the button must always be able to disarm.
+    if (otaFilterButton(currentState == DISARMED, buttonState == LOW, consumeUpdateRelease)) {
+      armSequenceStarted = false;
+      buttonPressed = false;
+      pairingHoldHandled = false;
+      lastButtonState = buttonState;
+      lastDebounceTime = currentTime;
+      vTaskDelay(pdMS_TO_TICKS(10));
+      continue;
+    }
 
     // Debounce
     if ((currentTime - lastDebounceTime) > BUTTON_DEBOUNCE_TIME_MS) {
@@ -1018,8 +1171,17 @@ void handleArmFail() {
 
 void toggleArm() {
   if (currentState == DISARMED) {
-    if (isOtaInProgress()) {
+    // Held through changeDeviceState(ARMED) so a BLE update START can't slip
+    // in between this check and the transition (see OtaArmGuard).
+    OtaArmGuard otaGuard(pdMS_TO_TICKS(100));
+    if (!otaGuard.held() || isOtaInProgress()) {
       USBSerial.println("Arm blocked: OTA update in progress");
+      return;
+    }
+    // An update result is still on screen (the button task normally swallows
+    // the gesture first).
+    if (otaBlocksInput()) {
+      USBSerial.println("Arm blocked: OTA result on screen");
       return;
     }
 
@@ -1034,6 +1196,13 @@ void toggleArm() {
     // Check if enough time has passed since last disarm
     if (timeMillis() - lastDisarmTime >= DISARM_COOLDOWN) {
       if (!throttleEngaged()) {
+        // Establish AGL from an already-published fresh conversion before the
+        // state transition. Never arm with an uninitialized/stale datum.
+        if (!setGroundAltitude(deviceData)) {
+          USBSerial.println("Arm blocked: no fresh barometer sample");
+          handleArmFail();
+          return;
+        }
         changeDeviceState(ARMED);
       } else {
         handleArmFail();
@@ -1140,7 +1309,7 @@ void handleCruisingThrottle(int potVal) {
  * - ARMED: Normal throttle control with ramping and performance mode limits
  */
 void handleThrottle() {
-  static uint16_t currentCruiseThrottlePWM = ESC_MIN_PWM;
+  static uint16_t cruiseSetpointPWM = ESC_MIN_PWM;
   static int prevPwm = ESC_MIN_PWM;  // Previous PWM for ramping
   static bool wasCruising = false;
   uint16_t newPWM;
@@ -1150,25 +1319,15 @@ void handleThrottle() {
 
   // Entering cruise: hold exactly the output this task was already sending.
   // Latching here (not via the queue from another task) means no tick can run
-  // cruise on a stale setpoint. toggleCruise() refused anything above
-  // CRUISE_MAX_PWM; the min() only covers output that rose in the one tick
-  // since that check.
+  // cruise on a stale setpoint. See cruiseOutputTick().
   const bool cruising = (state == ARMED_CRUISING);
-  if (cruising && !wasCruising) {
-    currentCruiseThrottlePWM = min(prevPwm, CRUISE_MAX_PWM);
-    USBSerial.print("Cruise PWM latched at: ");
-    USBSerial.println(currentCruiseThrottlePWM);
-  }
+  const bool enteringCruise = cruising && !wasCruising;
   wasCruising = cruising;
 
-  // Check for cruise setpoint updates (BLE)
-  if (xQueueReceive(throttleUpdateQueue, &newPWM, 0) == pdTRUE) {
-    if (state == ARMED_CRUISING) {
-      currentCruiseThrottlePWM = newPWM;
-      USBSerial.print("Cruise PWM updated to: ");
-      USBSerial.println(currentCruiseThrottlePWM);
-    }
-  }
+  // Cruise setpoint written over BLE. Drained every tick so a write left over
+  // from an earlier cruise is never applied; used only while cruising.
+  const bool haveBleSetpoint =
+      xQueueReceive(throttleUpdateQueue, &newPWM, 0) == pdTRUE;
 
   int finalPwm = ESC_DISARMED_PWM;
 
@@ -1181,11 +1340,23 @@ void handleThrottle() {
     finalPwm = ESC_DISARMED_PWM;
     break;
 
-  case ARMED_CRUISING:
+  case ARMED_CRUISING: {
     handleCruisingThrottle(readThrottleRaw());
-    finalPwm = currentCruiseThrottlePWM;  // Use cruise PWM
-    prevPwm = finalPwm;  // Leaving cruise ramps from the output actually held
+    // A new setpoint is range-checked and reached through the mode ramp, like
+    // the lever; prevPwm tracks the output so leaving cruise ramps from it.
+    const uint16_t heldSetpoint = cruiseSetpointPWM;
+    finalPwm = cruiseOutputTick(enteringCruise, haveBleSetpoint ? &newPWM : nullptr,
+                                cruiseSetpointPWM, prevPwm,
+                                deviceData.performance_mode);
+    if (enteringCruise) {
+      USBSerial.print("Cruise PWM latched at: ");
+      USBSerial.println(cruiseSetpointPWM);
+    } else if (cruiseSetpointPWM != heldSetpoint) {
+      USBSerial.print("Cruise setpoint updated to: ");
+      USBSerial.println(cruiseSetpointPWM);
+    }
     break;
+  }
 
   case ARMED:
     int smoothedPwm = getSmoothedThrottlePwm(deviceData.performance_mode);
@@ -1266,7 +1437,6 @@ bool armSystem() {
 
   armedAtMillis = timeMillis();
   armedSecs = 0;  // Reset armed seconds for new session
-  setGroundAltitude(deviceData);
 
   vTaskSuspend(blinkLEDTaskHandle);
   setLEDs(HIGH);  // solid LED while armed
@@ -1341,6 +1511,10 @@ bool initBMSCAN(SPIClass *spi) {
     return false;
   }
   USBSerial.println("BMS CAN initialized successfully");
+  if (!configureBMSCANReceive(spi)) {
+    // Still usable with one receive buffer; dropped frames are still counted.
+    USBSerial.println("BMS CAN: receive rollover not enabled");
+  }
   bmsCanInitialized = true;  // BMS successfully initialized
   return true;
 }

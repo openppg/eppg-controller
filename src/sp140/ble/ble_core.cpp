@@ -2,10 +2,13 @@
 
 #include <Arduino.h>
 #include <cstdio>
+#include <cstring>
 #include <esp_mac.h>
+#include <esp_ota_ops.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/timers.h>
+#include <nvs.h>
 
 #include "sp140/ble.h"
 #include "sp140/ble/ble_ids.h"
@@ -31,6 +34,13 @@ bool pairingModeTransitionActive = false;
 
 // Store the active connection handle for conn param updates
 uint16_t activeConnHandle = 0;
+
+// Negotiated ATT MTU for the active connection. Starts at the BLE default (23)
+// on connect and is updated by onMTUChange; 0 while disconnected. iOS offers
+// no app-side MTU control, so this is the only place either side can see
+// whether the link carries full 198-byte telemetry notifies (needs >= 201).
+constexpr uint16_t kDefaultAttMtu = 23;
+volatile uint16_t gNegotiatedMtu = 0;
 
 bool shouldAdvertiseWhilePowered();
 bool startAdvertising(NimBLEServer *server);
@@ -241,6 +251,7 @@ void onAdvertisingWatchdog(TimerHandle_t timer) {
 class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
   void onConnect(NimBLEServer *server, NimBLEConnInfo &connInfo) override {
     activeConnHandle = connInfo.getConnHandle();
+    gNegotiatedMtu = kDefaultAttMtu;
     deviceConnected = true;
     connectedHandle = connInfo.getConnHandle();
 
@@ -273,6 +284,7 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
     }
     deviceConnected = false;
     connectedHandle = BLE_HS_CONN_HANDLE_NONE;
+    gNegotiatedMtu = 0;
 
     if (isOtaInProgress()) {
       abortOta();
@@ -336,10 +348,58 @@ class BleServerConnectionCallbacks : public NimBLEServerCallbacks {
   }
 
   void onMTUChange(uint16_t MTU, NimBLEConnInfo &connInfo) override {
+    gNegotiatedMtu = MTU;
     USBSerial.printf("[BLE] MTU change mtu=%u handle=%u\n",
                      MTU, connInfo.getConnHandle());
   }
 };
+
+// A firmware update can move characteristics: 8.1 added the ESC relay ones ahead
+// of telemetry and the update service. A bonded phone caches where everything was
+// and is entitled to, unless told otherwise, so after an update it can subscribe
+// to the wrong place and never see telemetry. Tell bonded phones once per new
+// build that the layout changed. The stack records it against each stored bond
+// and sends the indication when that phone next reconnects.
+void announceGattLayoutIfFirmwareChanged() {
+  static const char kNamespace[] = "ble_gatt";
+  static const char kKey[] = "build";
+  uint8_t current[8];
+  memcpy(current, esp_ota_get_app_description()->app_elf_sha256, sizeof(current));
+
+  nvs_handle_t handle;
+  const esp_err_t opened = nvs_open(kNamespace, NVS_READWRITE, &handle);
+  if (opened != ESP_OK) {
+    USBSerial.printf("[BLE] GATT layout record unavailable (0x%x)\n", static_cast<unsigned>(opened));
+    return;
+  }
+  uint8_t stored[sizeof(current)] = {};
+  size_t length = sizeof(stored);
+  const bool sameBuild =
+      nvs_get_blob(handle, kKey, stored, &length) == ESP_OK &&
+      length == sizeof(stored) && memcmp(stored, current, sizeof(current)) == 0;
+  // The record alone misses one case: this build ran here before, an older
+  // firmware that keeps no record (8.0) was installed and paired with, and this
+  // build was then installed again. The first boot after any over-the-air
+  // update is still unconfirmed at this point, so announce then as well.
+  esp_ota_img_states_t imageState = ESP_OTA_IMG_UNDEFINED;
+  const bool firstBootAfterUpdate =
+      esp_ota_get_state_partition(esp_ota_get_running_partition(), &imageState) == ESP_OK &&
+      imageState == ESP_OTA_IMG_PENDING_VERIFY;
+  if (!sameBuild || firstBootAfterUpdate) {
+    if (NimBLEDevice::getNumBonds() > 0 && pServer != nullptr) {
+      pServer->start();
+      pServer->sendServiceChangedIndication();
+      USBSerial.println("[BLE] New firmware build: told bonded phones the GATT layout changed");
+    }
+    const esp_err_t saved = nvs_set_blob(handle, kKey, current, sizeof(current));
+    if (saved == ESP_OK) {
+      nvs_commit(handle);
+    } else {
+      USBSerial.printf("[BLE] GATT layout record not saved (0x%x)\n", static_cast<unsigned>(saved));
+    }
+  }
+  nvs_close(handle);
+}
 
 }  // namespace
 
@@ -387,6 +447,8 @@ void setupBLE() {
   initFastLinkBleService(pServer);
   initOtaBleService(pServer);
 
+  announceGattLayoutIfFirmwareChanged();
+
   USBSerial.println("BLE device ready");
 
 #ifdef BLE_PAIR_ON_BOOT
@@ -402,12 +464,16 @@ void requestFastConnParams() {
   if (pServer == nullptr || !deviceConnected) {
     return;
   }
-  // Tighten to 15ms interval for OTA throughput, but lengthen the supervision
-  // timeout to 8s (was 2s). A multi-second flash-erase stall or a sluggish phone
-  // must not drop the link at the link-layer level mid-flash. Slower recovery of
-  // a genuinely dead link is acceptable (OTA_TIMEOUT_MS=30s is the backstop);
-  // reliability of the flash matters more than fast dead-link detection.
-  pServer->updateConnParams(activeConnHandle, 12, 12, 0, 800);
+  // Tighten to 15-30ms interval for OTA throughput, with the supervision
+  // timeout lengthened to 6s (from the 2s post-connect value) so a multi-second
+  // flash-erase stall or a sluggish phone doesn't drop the link at the
+  // link-layer level mid-flash. Slower recovery of a genuinely dead link is
+  // acceptable (OTA_TIMEOUT_MS=30s is the backstop). 6s is Apple's accessory
+  // ceiling and 12/24 satisfies its "intervalMin + 15ms <= intervalMax" rule —
+  // iOS rejects peripheral update requests outside those bounds (a fixed 12/12
+  // interval or an 8s timeout loses both the tight interval and the stall
+  // protection on iOS).
+  pServer->updateConnParams(activeConnHandle, 12, 24, 0, 600);
 }
 
 void requestNormalConnParams() {
@@ -480,3 +546,5 @@ void enterBLEPairingMode() {
 }
 
 bool isBLEPairingModeActive() { return pairingModeActive; }
+
+uint16_t getNegotiatedBLEMtu() { return gNegotiatedMtu; }

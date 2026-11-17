@@ -137,6 +137,23 @@ void handleThrottle();
 bool isCruiseOutputAllowed(uint16_t pwm);
 
 /**
+ * Check a cruise setpoint written over BLE while cruising. Same output range
+ * button-set cruise can hold: not below idle, not above CRUISE_MAX_PWM.
+ */
+bool isCruiseSetpointAllowed(uint16_t pwm);
+
+/**
+ * One throttle-task tick while ARMED_CRUISING.
+ * On the first cruising tick (`entering`) the setpoint latches the output
+ * already being flown. A setpoint received this tick (`requested`, or nullptr)
+ * replaces it only if isCruiseSetpointAllowed(). The output then moves toward
+ * the setpoint through applyModeRampClamp(), the same ramp and clamp as armed
+ * throttle, so a new setpoint never steps the motor. Updates prevPwm.
+ */
+int cruiseOutputTick(bool entering, const uint16_t* requested, uint16_t& setpoint,
+                     int& prevPwm, uint8_t performance_mode);
+
+/**
  * Check if pot value should trigger cruise disengagement.
  * Disengages when current pot >= threshold percentage of activation value.
  *

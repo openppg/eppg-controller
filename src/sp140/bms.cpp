@@ -1,4 +1,6 @@
 #include "sp140/bms.h"
+#include <Adafruit_SPIDevice.h>
+#include "sp140/bms_can_rx.h"
 #include "sp140/structs.h"
 #include "sp140/globals.h"
 #include "sp140/lvgl/lvgl_core.h"  // for spiBusMutex
@@ -45,6 +47,17 @@ extern int8_t bmsCS;
 
 // BMS initialization is now handled in sp140.ino
 
+// Second handle on the BMS MCP2515 for the receive registers BMS_CAN does not
+// expose. Same chip select and SPI settings as the library's own device.
+static Adafruit_SPIDevice* bmsMcpRegs = nullptr;
+// Receive buffers found overflowed; each means at least one BMS frame dropped.
+static uint32_t bmsRxOverflows = 0;
+
+bool configureBMSCANReceive(SPIClass* spi) {
+  bmsMcpRegs = new Adafruit_SPIDevice(bmsCS, 10000000, SPI_BITORDER_MSBFIRST, SPI_MODE0, spi);
+  return bmsCanRxEnableRollover(*bmsMcpRegs);
+}
+
 // Update BMS data and populate unified battery data
 void updateBMSData() {
   // Check if BMS is currently connected and the object exists
@@ -69,13 +82,27 @@ void updateBMSData() {
   // USBSerial.println("Updating BMS Data");
   unsigned long tStart = timeMillis();
   bms_can->update();
+  // The MCP2515 holds two frames between these 100 ms drains; any more are
+  // dropped by the chip. That cannot be prevented from here, so count it.
+  const uint8_t rxOverflows =
+      (bmsMcpRegs != nullptr) ? bmsCanRxTakeOverflows(*bmsMcpRegs) : 0;
 
-  // All SPI traffic happens inside update() — the getters below only read
+  // All SPI traffic happens above — the getters below only read
   // values the library cached in RAM. Release the bus first so a pending
   // display flush waits only for the CAN drain, not the whole copy-out.
   digitalWrite(bmsCS, HIGH);
   if (spiBusMutex != NULL) {
     xSemaphoreGive(spiBusMutex);
+  }
+
+  if (rxOverflows > 0) {
+    bmsRxOverflows += rxOverflows;
+    static unsigned long lastOverflowLogMs = 0;
+    if (lastOverflowLogMs == 0 || tStart - lastOverflowLogMs >= 10000) {
+      USBSerial.printf("[BMS] CAN receive overflow, frames dropped (%lu total)\n",
+                       static_cast<unsigned long>(bmsRxOverflows));
+      lastOverflowLogMs = tStart;
+    }
   }
 
   // Basic measurements

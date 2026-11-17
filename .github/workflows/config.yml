@@ -53,6 +53,12 @@ jobs:
           pip install -U platformio
       - name: Run Unit Tests
         run: platformio test -e native-test
+      - name: Run BLE OTA Emulation Tests
+        run: platformio test -e native-emu-ota
+      - name: Run Settings and Factory QC Emulation Tests
+        run: platformio test -e native-emu-settings
+      - name: Run CAN Bus Emulation Tests
+        run: platformio test -e native-emu-can
 
   screenshot-tests:
     name: Screenshot Regression Tests
@@ -84,6 +90,9 @@ jobs:
           token: ${{ secrets.GH_TOKEN || github.token }}
           persist-credentials: true
           show-progress: false
+          # Full history: VERSION_BUILD is the commit count (extra_script.py),
+          # which a shallow clone reports as 1.
+          fetch-depth: 0
       - name: Setup Git Credentials
         run: |
           git config --global credential.helper store
