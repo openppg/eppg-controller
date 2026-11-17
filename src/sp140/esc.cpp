@@ -231,9 +231,43 @@ void setESCThrottle(int throttlePWM) {
     return;  // Ignore invalid throttle values
   }
 
+  // initESC() returns before esc.begin() when the driver fails to install.
+  if (!escTwaiInitialized) { return; }  // NOLINT(whitespace/newline)
+
+  // Commands are queued FIFO and retried until acknowledged. When the ESC stops
+  // acknowledging (unpowered, connector open) the driver queue and the transport
+  // behind it fill with old commands, which would be replayed oldest-first on
+  // reconnect while new ones are dropped. A healthy bus sends each frame in well
+  // under a millisecond, so frames still waiting on two consecutive 20 ms cycles
+  // are not going out: discard them and keep only current commands.
+  static uint8_t pendingCycles = 0;
+  twai_status_info_t status;
+  if (twai_get_status_info(&status) == ESP_OK && status.msgs_to_tx > 0) {
+    if (pendingCycles < 2) { pendingCycles++; }  // NOLINT(whitespace/newline)
+  } else {
+    pendingCycles = 0;
+  }
+  if (pendingCycles >= 2) {
+    twai_clear_transmit_queue();
+  }
+
   // Direct calculation: multiply by 10 to convert μs to 0.1μs resolution
   uint16_t scaledThrottle = throttlePWM * 10;
   esc.setThrottleSettings2(scaledThrottle);
+}
+
+/**
+ * Bring the CAN controller back after a bus-off (wiring fault, noise burst).
+ * Without this the controller stays off the bus until the next power cycle.
+ */
+static void recoverTwaiIfNeeded() {
+  twai_status_info_t status;
+  if (twai_get_status_info(&status) != ESP_OK) { return; }  // NOLINT(whitespace/newline)
+  if (status.state == TWAI_STATE_BUS_OFF) {
+    twai_initiate_recovery();
+  } else if (status.state == TWAI_STATE_STOPPED) {
+    twai_start();
+  }
 }
 
 /**
@@ -245,6 +279,8 @@ void setESCThrottle(int throttlePWM) {
 void readESCTelemetry() {
   // Only proceed if TWAI is initialized
   if (!escTwaiInitialized) { return; }  // NOLINT(whitespace/newline)
+
+  recoverTwaiIfNeeded();
 
   const SineEscModel &model = esc.getModel();
 
@@ -404,6 +440,9 @@ bool setupTWAI() {
                                       (gpio_num_t)ESC_TX_PIN,
                                       (gpio_num_t)ESC_RX_PIN,
                                       TWAI_MODE_NORMAL);
+  // One telemetry reply is five frames, which is the default receive queue. Leave
+  // room for a second transfer arriving in the same 20 ms cycle.
+  g_config.rx_queue_len = 32;
   twai_timing_config_t t_config = TWAI_TIMING_CONFIG_1MBITS();
   twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 

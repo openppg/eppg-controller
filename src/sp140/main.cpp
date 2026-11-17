@@ -1199,10 +1199,14 @@ void handleThrottle() {
   // session. setESCThrottle() pings the ESC every cycle and the ESC answers with
   // a burst of high-rate telemetry; that flood overruns the CAN RX buffer and the
   // SaveConfig reply gets dropped, so the write times out. flash-qc works because
-  // its bus is quiet. The device is always DISARMED during a session, so there is
-  // no throttle to send anyway. readESCTelemetry() still runs — it pumps the bus
-  // and drives the relay state machine.
-  if (!escConfigRelayIsActive() && !escFlasherRelayIsActive()) {
+  // its bus is quiet. A session only runs while DISARMED, but a relay request
+  // reports "active" from the moment it is queued, before the session rejects it
+  // for being armed — so a client writing relay commands in flight would drop a
+  // throttle frame per write. Never suppress the command unless DISARMED.
+  // readESCTelemetry() still runs — it pumps the bus and drives the relay state
+  // machine.
+  if (currentState != DISARMED ||
+      (!escConfigRelayIsActive() && !escFlasherRelayIsActive())) {
     setESCThrottle(finalPwm);
   }
 
